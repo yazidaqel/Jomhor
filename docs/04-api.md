@@ -53,11 +53,16 @@ returns the same representation as the matching GET.
 | GET | `/fan/events/{id}` | Event detail: zones with price, remaining, seated flag, gates per zone |
 | POST | `/fan/orders` | `{event_id, channel: APP\|WEB, items:[{price_category_id, qty}], holders:[{phone?}] (Lot 1)}` → `201 {id, status: RESERVED, reserved_until, total_mad, items:[{price_category_id, zone_id, name, qty, unit_price_mad}]}`. Held 8 min. Quota taken atomically. Σ qty over the user's `RESERVED`/`AWAITING_CASH`/`PAID` orders for the event ≤ `per_account_limit`. |
 | POST | `/fan/orders/{id}/pay` | `{method: CARD}` → `{payment_id, redirect_url}`: `redirect_url` is a browser page on this API (§Payments) that sends the buyer to the card gateway; each call creates a new payment attempt · `{method: CASH_AGENCY}` → `{cash_code, expires_at}` (Lot 3) · `{method: WALLET, phone}` → `{status}` (Lot 3) |
-| GET | `/fan/orders/{id}` | `{id, event_id, status, total_mad, reserved_until, paid_at, items[], ticket_ids[]}`. Status polling after payment. Owner only (404 otherwise). |
+| GET | `/fan/orders/{id}` | `{id, event_id, status, total_mad, reserved_until, paid_at, items[], ticket_ids[]}`. Status polling after payment. Owner only (404 otherwise). `items[]` has the same shape as in the POST response (only `unit_price_mad` is a snapshot), ordered by `price_category_id`. |
 | GET | `/fan/tickets` | My tickets (valid, upcoming first). Each: `{id, event, zone, gate_codes[], seat_label, k_t (base64url, only for the holder), ticket_no}` |
 | GET | `/fan/tickets/{id}/pdf` | Static-QR PDF |
 | POST | `/fan/tickets/{id}/transfer` | `{to_phone}` → ticket re-issued to recipient (new K_t), sender's QR invalid |
 | GET | `/fan/gates/{event_id}/load` | Live gate load `[{gate_code, wait_min}]` (from scan rate) |
+
+Order rules: item validation errors use `details.fields["items[i].price_category_id"]`-style
+keys; `channel` accepts `APP` and `WEB` only (`POS` is Lot 3); a `qty` above the account limit
+is answered with `PER_ACCOUNT_LIMIT`. The limit counts `RESERVED` orders until the expiry job
+(every 30 s) moves them to `EXPIRED`.
 
 ## Payments
 
@@ -99,7 +104,7 @@ caller holds the phone; the endpoint decides the token audience.
 | PATCH, DELETE | `/org/venues/{id}/gates/{gate_id}` | DELETE only if unreferenced (`GATE_IN_USE`) |
 | PUT | `/org/gates/{id}/zones` | `{zone_ids:[...]}` replaces the set. Zones must belong to the gate's venue. |
 | GET | `/org/events?status=&from=` | `[{id, title, event_type, starts_at, status, venue:{id, name}, quota, sold}]` by `starts_at` |
-| POST | `/org/events` | `{venue_id, event_type, title, starts_at, doors_open_at?, reentry_policy?, per_account_limit?, metadata?}` → `201` event in `DRAFT`. **K_e (32 random bytes) is generated and encrypted in the same transaction and never returned.** |
+| POST | `/org/events` | `{venue_id, event_type, title, starts_at, doors_open_at?, reentry_policy?, per_account_limit?, metadata?}` → `201` event in `DRAFT`. **K_e (32 random bytes) is generated and encrypted in the same transaction and never returned.** A `venue_id` that is unknown or another organizer's → 422 `VALIDATION_FAILED` on `venue_id`. Lot 0 has no version field: concurrent edits of one event are last-write-wins. |
 | GET, PATCH | `/org/events/{id}` | Event `{id, venue_id, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at, reentry_policy, per_account_limit, metadata, created_at}`. PATCH allowed in `DRAFT`/`ON_SALE`. `venue_id` and `event_type` are fixed after create (a different value → 422). Changing `starts_at` while `ON_SALE` recomputes `refund_cutoff_at`. `metadata` in a PATCH replaces the whole object. `doors_open_at` cannot be cleared in Lot 0. |
 | GET, POST | `/org/events/{id}/prices` | `{zone_id, name, price_mad, quota}` → `{id, zone_id, name, price_mad, quota, sold}`. The zone must be in the event's venue; Σ quota per zone ≤ zone capacity. A name already used for that zone in the event → 422 `VALIDATION_FAILED` on `name`. |
 | PATCH, DELETE | `/org/events/{id}/prices/{price_id}` | PATCH `{name?, price_mad?, quota?}`; `zone_id` is fixed after create (a different value → 422). `quota ≥ sold`. A price change applies to new orders only (snapshot in `order_items`). DELETE only if `sold = 0` (`PRICE_IN_USE`). |

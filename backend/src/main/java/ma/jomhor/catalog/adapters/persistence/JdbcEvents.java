@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.catalog.application.Events;
+import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -87,9 +88,12 @@ class JdbcEvents implements Events {
                 .param("org", org).param("id", eventId).query(byte[].class).optional();
     }
 
+    // for no key update, not for update: catalog writers still queue on the event, but an order's insert (its FK
+    // takes for key share on the event) isn't blocked. With for update, an order holding a price row and an
+    // organizer holding the event while writing that price row deadlock.
     @Override
     public Optional<Event> lock(UUID org, int eventId) {
-        return jdbc.sql("select " + EVENT_COLUMNS + " from events where organizer_id = :org and id = :id for update")
+        return jdbc.sql("select " + EVENT_COLUMNS + " from events where organizer_id = :org and id = :id for no key update")
                 .param("org", org).param("id", eventId).query(JdbcEvents::event).optional();
     }
 
@@ -180,6 +184,35 @@ class JdbcEvents implements Events {
         return jdbc.sql("delete from price_categories where organizer_id = :org and event_id = :event and id = :id"
                         + " and sold = 0")
                 .param("org", org).param("event", eventId).param("id", priceId).update() == 1;
+    }
+
+    @Override
+    public Optional<Inventory.SaleEvent> forSale(int eventId) {
+        return jdbc.sql("select organizer_id, status = 'ON_SALE' as on_sale, per_account_limit from events where id = :id")
+                .param("id", eventId)
+                .query((rs, n) -> new Inventory.SaleEvent(rs.getObject("organizer_id", UUID.class),
+                        rs.getBoolean("on_sale"), rs.getInt("per_account_limit")))
+                .optional();
+    }
+
+    // Check and increment in one statement under the row lock: two buyers can't both take the last place.
+    @Override
+    public Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty) {
+        return jdbc.sql("""
+                        update price_categories set sold = sold + :qty
+                        where organizer_id = :org and event_id = :event and id = :id and sold + :qty <= quota
+                        returning\s""" + PRICE_COLUMNS)
+                .param("org", org).param("event", eventId).param("id", priceId).param("qty", qty)
+                .query(JdbcEvents::price).optional();
+    }
+
+    @Override
+    public boolean giveBack(UUID org, int eventId, UUID priceId, int qty) {
+        return jdbc.sql("""
+                        update price_categories set sold = sold - :qty
+                        where organizer_id = :org and event_id = :event and id = :id and sold >= :qty
+                        """)
+                .param("org", org).param("event", eventId).param("id", priceId).param("qty", qty).update() == 1;
     }
 
     private static OffsetDateTime ts(Instant i) {

@@ -52,6 +52,18 @@ public interface Events {
     /** Null arguments are unchanged. Empty if the new quota is below sold (checked in the same statement). */
     Optional<PriceCategory> updatePrice(UUID org, int eventId, UUID priceId, String name, Long priceMad, Integer quota);
 
+    /**
+     * Fan side (sales): the event by id alone, since a fan request carries no organizer. The organizer comes
+     * back from the row and scopes every following call.
+     */
+    Optional<Inventory.SaleEvent> forSale(int eventId);
+
+    /** sold += qty if it stays within quota, in one statement. The only way sold grows. Empty if it doesn't fit. */
+    Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty);
+
+    /** sold -= qty; false if sold < qty (never happens unless holds and sold disagree). */
+    boolean giveBack(UUID org, int eventId, UUID priceId, int qty);
+
     /** False if sold > 0. A category referenced by order items fails on its FK. */
     boolean deletePriceIfUnsold(UUID org, int eventId, UUID priceId);
 }

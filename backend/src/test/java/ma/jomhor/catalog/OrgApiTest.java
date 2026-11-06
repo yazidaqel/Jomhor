@@ -13,9 +13,9 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /** /org/** contract tests: a staff caller per organizer and the catalog fixtures they build through the API. */
-abstract class OrgApiTest extends IntegrationTest {
+public abstract class OrgApiTest extends IntegrationTest {
 
-    record Caller(UUID org, String token) {}
+    public record Caller(UUID org, String token) {}
 
     protected Caller caller(UUID org, String role) throws Exception {
         String phone = randomPhone();

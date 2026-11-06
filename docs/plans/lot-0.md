@@ -422,4 +422,5 @@ Never cut:
 | --- | --- | --- |
 | `GATE_IN_USE` on gate delete | 2 | Lot 0 has no table referencing gates; `device_assignments` and `scans` must make delete return 409, not 500 (`ponytail:` note in `VenueService`). |
 | Edge forwards only `/v1/*` | 6 | Paths outside the `/v1` context path get Tomcat's default 404, not the 04 error shape. The ALB must route `/v1/*` only. |
+| BE-6 from the BE-5 review | 0 | (1) move the Q8 `payments` read out of sales SQL into a payments query; (2) `POST /fan/orders/{id}/pay` locks the order row `FOR UPDATE` before inserting the PENDING payment, or a payment committed after the expiry snapshot is missed and the order expires anyway; (3) the late-success re-reserve takes the buyer lock and re-checks `per_account_limit`. |
 | OTP abuse limits | 1 | Q14 decided: per-phone daily cap (10 sends, 15 failed attempts / 24 h → lockout), per-IP throttle on both `/*/auth/otp`, send after commit off the request thread. |
