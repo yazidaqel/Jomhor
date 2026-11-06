@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: jomhor
+  datasource:
+    # No defaults: outside the dev profile, missing env vars fail startup.
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jackson:
+    property-naming-strategy: SNAKE_CASE

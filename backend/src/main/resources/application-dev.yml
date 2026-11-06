@@ -1,0 +1,6 @@
+# Local dev only (SPRING_PROFILES_ACTIVE=dev), matches compose.yaml defaults.
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/jomhor}
+    username: ${DB_USER:jomhor}
+    password: ${DB_PASSWORD:jomhor}

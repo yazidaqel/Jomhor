@@ -17,6 +17,8 @@ Error codes (Lot 0; later lots add theirs here):
 | Code | HTTP | When |
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 422 | Bad body; `details.fields{}` |
+| `BAD_REQUEST` | 4xx | Request rejected by the framework before reaching a handler (bad path/query type, missing header, wrong method or media type); HTTP status kept |
+| `INTERNAL_ERROR` | 500 | Anything unexpected; fixed message, `details: {}`, logged server-side, never echoes the exception |
 | `UNAUTHORIZED` | 401 | Missing, invalid or wrong-audience token |
 | `FORBIDDEN` | 403 | No active staff row for `X-Organizer-Id`, or role not allowed |
 | `NOT_FOUND` | 404 | Unknown id, or an id of another organizer or user |
