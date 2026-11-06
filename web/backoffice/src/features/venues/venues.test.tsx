@@ -347,6 +347,10 @@ it('matrix has row and column headers and labelled cells; capacity is pluralised
   expect(screen.getByRole('rowheader', { name: 'P3' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'NORD Virage Nord' })).toBeTruthy()
   expect(cell('P3', 'NORD').getAttribute('aria-label')).toBe('Porte P3, zone NORD')
+  // Phone-width regression guard (jsdom has no layout, so this pins the class): the Zones / Portes grid needs an
+  // explicit minmax(0, 1fr) column, or the tables' min-content width widens the cards past the screen.
+  const grid = screen.getByRole('heading', { name: fr.venues.zones.title }).closest('.grid.gap-6')
+  expect(grid?.classList.contains('grid-cols-1')).toBe(true)
 })
 
 it('after a delete, focus goes to the section heading and the page is interactive again', async () => {

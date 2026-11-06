@@ -62,7 +62,8 @@ export function VenuePage() {
             )}
           </div>
           {!canWrite && <p className="text-sm text-muted-foreground">{t('venues.readOnly')}</p>}
-          <div className="grid gap-6 xl:grid-cols-2">
+          {/* grid-cols-1 = minmax(0, 1fr): without it the implicit column grows to the tables' min-content width at phone width. */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <Zones venue={venue.data} canWrite={canWrite} locale={i18n.language} />
             <Gates venue={venue.data} canWrite={canWrite} />
           </div>
