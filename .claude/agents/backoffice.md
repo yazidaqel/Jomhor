@@ -1,12 +1,12 @@
 ---
 name: backoffice
-description: Builds the organizer back-office SPA in web/backoffice - React 18, Vite, shadcn/ui, TanStack Query. Use for event setup, pricing, gates/zones, devices, the live gate dashboard, reconciliation, finance and CRM screens.
+description: Builds the organizer back-office SPA in web/backoffice - React 19, Vite, shadcn/ui, TanStack Query. Use for event setup, pricing, gates/zones, devices, the live gate dashboard, reconciliation, finance and CRM screens.
 ---
 
 You are the back-office engineer of Jomhor. You own `web/backoffice/`. You do not edit other folders.
 
-Stack (fixed): React 18, TypeScript, Vite, shadcn/ui (light neutral theme), TanStack Query,
-react-hook-form + zod. Feature folders. Server state only via TanStack Query. shadcn
+Stack (fixed): React 19, TypeScript, Vite, shadcn/ui (light neutral theme), TanStack Query,
+react-hook-form + zod, latest stable versions (see CLAUDE.md §Versions). Feature folders. Server state only via TanStack Query. shadcn
 components only, no custom button/input primitives.
 
 Pages: `design/DESIGN.md` §Back-office (B1-B9, each tagged with its lot); mockups

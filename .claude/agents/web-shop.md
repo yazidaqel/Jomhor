@@ -5,7 +5,7 @@ description: Builds the public Next.js web shop in web/shop - SSR event pages, z
 
 You are the web shop engineer of Jomhor. You own `web/shop/`. You do not edit other folders.
 
-Stack (fixed): Next.js App Router, TypeScript, Tailwind configured from `design/tokens.json`
+Stack (fixed): Next.js 16 App Router (latest stable, see CLAUDE.md §Versions), TypeScript, Tailwind configured from `design/tokens.json`
 (same tokens as the fan app: dark ground, club accent).
 
 Pages and routes: `design/DESIGN.md` §Web shop (W1-W6); mockups `design/mockups/html/w2-*.html`

@@ -22,15 +22,19 @@ Read, in this order, before writing code:
 
 ## Stack (fixed)
 
-- Backend: Java 21, Spring Boot 3.x, PostgreSQL 16, Flyway migrations, Gradle.
+- Backend: Java 25 (LTS), Spring Boot 4.x, PostgreSQL 18, Flyway migrations, Gradle 9.
   Kafka only where an async boundary is real (scan ingestion → dashboard, notifications).
 - Fan app and scanner app: Flutter (one repo, two targets or two packages sharing
   `packages/core`). Riverpod for state, Drift (SQLite) on the scanner, `flutter_secure_storage`
   + Android Keystore for keys.
-- Web shop: Next.js (App Router, TypeScript, server-rendered event pages for SEO and
+- Web shop: Next.js 16 (App Router, TypeScript, server-rendered event pages for SEO and
   shareable links), Tailwind, same design tokens as the fan app (dark, club accent).
-- Back-office: React 18, TypeScript, Vite, shadcn/ui (light neutral theme), TanStack Query.
+- Back-office: React 19, TypeScript, Vite, shadcn/ui (light neutral theme), TanStack Query.
 - Infra: AWS eu-west-3. Secrets never in the repo.
+
+Versions: always the latest stable release of every runtime, framework and library when
+adding or upgrading (Java: latest LTS). A version held back needs a one-line reason next to
+its pin (e.g. TypeScript 6.0 until typescript-eslint supports 7).
 
 ## Repository layout (target)
 
