@@ -4,7 +4,7 @@ import { session } from './session'
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  session.token = null
+  session.clear()
 })
 
 function stubFetch(impl: () => Promise<Response>) {
@@ -19,7 +19,7 @@ function sentHeaders(fetchMock: ReturnType<typeof stubFetch>) {
 }
 
 it('calls /v1 with the bearer token and the given X-Organizer-Id', async () => {
-  session.token = 'tok-123'
+  session.start('tok-123', '2999-01-01T00:00:00Z')
   const fetchMock = stubFetch(async () => Response.json({ id: 'evt-1' }))
 
   await expect(api('/org/events', { organizerId: 'org-atlas' })).resolves.toEqual({ id: 'evt-1' })
@@ -31,7 +31,7 @@ it('calls /v1 with the bearer token and the given X-Organizer-Id', async () => {
 })
 
 it('sends no X-Organizer-Id when none is given', async () => {
-  session.token = 'tok-123'
+  session.start('tok-123', '2999-01-01T00:00:00Z')
   const fetchMock = stubFetch(async () => Response.json({}))
 
   await api('/org/me')
@@ -40,7 +40,7 @@ it('sends no X-Organizer-Id when none is given', async () => {
 })
 
 it('never overrides a header the caller set', async () => {
-  session.token = 'tok-123'
+  session.start('tok-123', '2999-01-01T00:00:00Z')
   const fetchMock = stubFetch(async () => Response.json({}))
 
   await api('/org/events', { organizerId: 'org-a', headers: { 'X-Organizer-Id': 'org-b', Authorization: 'Bearer other' } })
@@ -76,6 +76,27 @@ it('falls back to HTTP_<status> when the body is not the 04 shape', async () => 
   stubFetch(async () => new Response('Bad Gateway', { status: 502, statusText: 'Bad Gateway' }))
 
   await expect(api('/org/events')).rejects.toMatchObject({ status: 502, code: 'HTTP_502', details: {} })
+})
+
+it('clears the session on a 401, except from /org/auth/*', async () => {
+  session.start('tok-123', '2999-01-01T00:00:00Z')
+  stubFetch(async () => Response.json({ code: 'OTP_INVALID', message: 'x' }, { status: 401 }))
+  await expect(api('/org/auth/verify', { method: 'POST', body: '{}' })).rejects.toMatchObject({ code: 'OTP_INVALID' })
+  expect(session.token).toBe('tok-123')
+
+  stubFetch(async () => Response.json({ code: 'UNAUTHORIZED', message: 'x' }, { status: 401 }))
+  await expect(api('/org/me')).rejects.toMatchObject({ status: 401 })
+  expect(session.token).toBeNull()
+})
+
+it('treats an expired token as no session', async () => {
+  session.start('tok-old', '2000-01-01T00:00:00Z')
+  const fetchMock = stubFetch(async () => Response.json({}))
+
+  await api('/org/me')
+
+  expect(session.token).toBeNull()
+  expect(sentHeaders(fetchMock).headers.has('Authorization')).toBe(false)
 })
 
 it('wraps a failed fetch as NETWORK_ERROR', async () => {

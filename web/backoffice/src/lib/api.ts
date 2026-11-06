@@ -32,11 +32,12 @@ export type ApiInit = RequestInit & {
 
 /**
  * Calls `/v1{path}` with the session's bearer token; throws ApiError on non-2xx or network failure.
- * Headers set by the caller are never overridden.
+ * Headers set by the caller are never overridden. A 401 outside /org/auth/* clears the session it was sent with.
  */
 export async function api<T>(path: string, { organizerId, ...init }: ApiInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
-  if (session.token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${session.token}`)
+  const token = session.token
+  if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`)
   if (organizerId && !headers.has('X-Organizer-Id')) headers.set('X-Organizer-Id', organizerId)
   if (typeof init.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
@@ -53,6 +54,9 @@ export async function api<T>(path: string, { organizerId, ...init }: ApiInit = {
   }
 
   if (!res.ok) {
+    // A rejected token ends the session (the shell then redirects to /login), unless a new session
+    // started while this request was in flight. /org/auth/* answers 401 for a wrong OTP: not a session problem.
+    if (res.status === 401 && !path.startsWith('/org/auth/') && session.token === token) session.clear()
     const parsed = errorBody.safeParse(parseJson(text))
     throw parsed.success
       ? new ApiError(res.status, parsed.data.code, parsed.data.message, parsed.data.details)
