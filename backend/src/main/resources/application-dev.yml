@@ -7,6 +7,12 @@ spring:
   flyway:
     locations: classpath:db/migration,classpath:db/dev
 
+# Dev trusts only loopback as a proxy (a local shop in front of the API).
+server:
+  tomcat:
+    remoteip:
+      internal-proxies: '${TRUSTED_PROXIES_REGEX:127\.0\.0\.1|0:0:0:0:0:0:0:1}'
+
 # Dev-only values, never used outside the dev profile.
 jomhor:
   jwt-secret: ${JWT_SECRET:dev-only-jwt-secret-not-for-prod-0001}

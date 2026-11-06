@@ -9,13 +9,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.LockSupport;
 import ma.jomhor.tenancy.application.OtpSender;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -52,6 +55,10 @@ public abstract class IntegrationTest {
     @Autowired
     protected JdbcClient jdbc;
 
+    @Autowired
+    @Qualifier("otpSendExecutor")
+    protected ThreadPoolTaskExecutor otpSendExecutor;
+
     /** A fresh Moroccan mobile number, so tests never share a rate-limit window. */
     protected static String randomPhone() {
         return "+2126" + "%08d".formatted(ThreadLocalRandom.current().nextInt(100_000_000));
@@ -69,8 +76,24 @@ public abstract class IntegrationTest {
         return postJson(path, "{\"phone\": \"%s\", \"code\": \"%s\"}".formatted(phone, code));
     }
 
+    /**
+     * Codes are sent after commit on otpSendExecutor; a request's send is queued before its response returns,
+     * so once the pool has run everything it was given, every send so far has reached the mock.
+     */
+    protected void awaitSends() {
+        var pool = otpSendExecutor.getThreadPoolExecutor();
+        long deadline = System.nanoTime() + 10_000_000_000L;
+        while (pool.getCompletedTaskCount() < pool.getTaskCount()) {
+            if (System.nanoTime() > deadline) {
+                throw new AssertionError("OTP sends still running after 10 s");
+            }
+            LockSupport.parkNanos(1_000_000);
+        }
+    }
+
     /** The last code the mock sender got for this phone. */
     protected String lastCode(String phone) {
+        awaitSends();
         var code = ArgumentCaptor.forClass(String.class);
         verify(otpSender, atLeastOnce()).send(eq(phone), code.capture());
         return code.getValue();

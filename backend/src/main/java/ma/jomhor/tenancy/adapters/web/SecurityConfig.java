@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import ma.jomhor.common.Secrets;
@@ -19,7 +20,11 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -28,9 +33,11 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.firewall.RequestRejectedHandler;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import tools.jackson.databind.json.JsonMapper;
@@ -42,6 +49,8 @@ import tools.jackson.databind.json.JsonMapper;
  * GET /fan/events and GET /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
  * server, so an Authorization header sent there is ignored rather than checked, and without the default
  * no-store cache headers (04: public reads carry no cache headers; the authenticated chains keep them).
+ * A fan token is accepted only if its {@code sid} names an active fan_sessions row of its subject (one primary-key
+ * lookup, run after signature, expiry and audience pass); no sid, revoked or expired → 401 (plan Q13).
  */
 @Configuration(proxyBeanMethods = false)
 class SecurityConfig {
@@ -72,14 +81,20 @@ class SecurityConfig {
 
     @Bean
     @Order(1)
-    SecurityFilterChain fanChain(HttpSecurity http) {
-        return audienceChain(http, "/fan/**", "/fan/auth/**", AuthService.FAN);
+    SecurityFilterChain fanChain(HttpSecurity http, AuthService auth) {
+        return audienceChain(http, "/fan/**", "/fan/auth/**", decoder(AuthService.FAN, jwt -> {
+            UUID sid = uuid(jwt.getClaimAsString(AuthService.SID));
+            UUID sub = uuid(jwt.getSubject());
+            return sid != null && sub != null && auth.fanSessionActive(sid, sub) ? OAuth2TokenValidatorResult.success()
+                    : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "No active session", null));
+        }));
     }
 
     @Bean
     @Order(2)
     SecurityFilterChain orgChain(HttpSecurity http) {
-        return audienceChain(http, "/org/**", "/org/auth/**", AuthService.ORG);
+        return audienceChain(http, "/org/**", "/org/auth/**",
+                decoder(AuthService.ORG, jwt -> OAuth2TokenValidatorResult.success()));
     }
 
     @Bean
@@ -108,14 +123,18 @@ class SecurityConfig {
         };
     }
 
-    private SecurityFilterChain audienceChain(HttpSecurity http, String prefix, String open, String audience) {
+    /** A token sent to the open login paths is ignored, so a revoked or expired one never blocks logging in again. */
+    private SecurityFilterChain audienceChain(HttpSecurity http, String prefix, String open, JwtDecoder decoder) {
+        var openPaths = PathPatternRequestMatcher.withDefaults().matcher(open);
+        var bearer = new DefaultBearerTokenResolver();
         return stateless(http)
                 .securityMatcher(prefix)
                 .authorizeHttpRequests(a -> a.requestMatchers(open).permitAll().anyRequest().authenticated())
                 .oauth2ResourceServer(o -> o
+                        .bearerTokenResolver(r -> openPaths.matches(r) ? null : bearer.resolve(r))
                         .authenticationEntryPoint(unauthorized())
                         .accessDeniedHandler(forbidden())
-                        .jwt(j -> j.decoder(decoder(audience))))
+                        .jwt(j -> j.decoder(decoder)))
                 .build();
     }
 
@@ -128,12 +147,25 @@ class SecurityConfig {
                 .exceptionHandling(e -> e.authenticationEntryPoint(unauthorized()).accessDeniedHandler(forbidden()));
     }
 
-    private JwtDecoder decoder(String audience) {
+    /** {@code then} runs only on a token whose signature, expiry and audience already passed. */
+    private JwtDecoder decoder(String audience, OAuth2TokenValidator<Jwt> then) {
         var decoder = NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+        var base = new DelegatingOAuth2TokenValidator<>(
                 JwtValidators.createDefault(),
-                new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(audience))));
+                new JwtClaimValidator<List<String>>(JwtClaimNames.AUD, aud -> aud != null && aud.contains(audience)));
+        decoder.setJwtValidator(jwt -> {
+            var result = base.validate(jwt);
+            return result.hasErrors() ? result : then.validate(jwt);
+        });
         return decoder;
+    }
+
+    private static UUID uuid(String value) {
+        try {
+            return value == null ? null : UUID.fromString(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private AuthenticationEntryPoint unauthorized() {

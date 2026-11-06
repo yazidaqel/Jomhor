@@ -18,45 +18,66 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
-/** Phone-OTP login for fans (aud=fan, 30 d) and staff (aud=org, 12 h). No refresh token in Lot 0 (Q13). */
+/**
+ * Phone-OTP login for fans (aud=fan, 30 d, revocable through its {@code sid} session, plan Q13) and staff
+ * (aud=org, 12 h; the per-request staff-row check cuts off removed staff). No refresh token.
+ */
 @Service
 public class AuthService {
 
     public static final String FAN = "fan";
     public static final String ORG = "org";
+    public static final String SID = "sid";
     static final Duration FAN_TTL = Duration.ofDays(30);
     static final Duration ORG_TTL = Duration.ofHours(12);
 
     private final OtpService otp;
     private final Accounts accounts;
+    private final FanSessions sessions;
     private final JwtEncoder jwt;
 
-    public AuthService(OtpService otp, Accounts accounts, JwtEncoder jwt) {
+    public AuthService(OtpService otp, Accounts accounts, FanSessions sessions, JwtEncoder jwt) {
         this.otp = otp;
         this.accounts = accounts;
+        this.sessions = sessions;
         this.jwt = jwt;
     }
 
     /** token and expiresAt are null for /org/me. */
     public record Session(String token, Instant expiresAt, User user, List<Membership> memberships) {}
 
-    public void fanRequestOtp(String phone) {
-        if (!otp.issue(phone, true)) {
-            throw new ApiException("OTP_RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many codes requested");
+    /** {@code ip}: the client address as resolved through trusted proxies only. */
+    public void fanRequestOtp(String phone, String ip) {
+        if (!otp.issue(phone, FAN, ip, true)) {
+            throw OtpService.rateLimited();
         }
     }
 
+    /** A new fan session on every login; its id is the token's {@code sid}, its expiry the token's. */
     public Session fanVerify(String phone, String code) {
-        otp.verify(phone, code);
+        otp.verify(phone, FAN, code);
         return session(accounts.upsertByPhone(phone), List.of(), FAN, FAN_TTL);
     }
 
+    public boolean fanSessionActive(UUID sessionId, UUID userId) {
+        return sessions.isActive(sessionId, userId);
+    }
+
+    /** Revokes this session, or every session of the user when {@code all}. */
+    public void fanLogout(UUID sessionId, UUID userId, boolean all) {
+        if (all) {
+            sessions.revokeAll(userId);
+        } else {
+            sessions.revoke(sessionId, userId);
+        }
+    }
+
     /**
-     * No staff enumeration: always 202, and every phone goes through the same challenge path and rate limit.
-     * The code is delivered only to a phone with an active staff row.
+     * No staff enumeration: always 202, over any limit too, and every phone goes through the same challenge
+     * path and limits (org audience: never a fan's). The code is delivered only to a phone with an active staff row.
      */
-    public void orgRequestOtp(String phone) {
-        otp.issue(phone, accounts.hasActiveStaff(phone));
+    public void orgRequestOtp(String phone, String ip) {
+        otp.issue(phone, ORG, ip, accounts.hasActiveStaff(phone));
     }
 
     /**
@@ -64,7 +85,7 @@ public class AuthService {
      * A correct code for a phone without an active staff row is then OTP_INVALID; nothing is created.
      */
     public Session orgVerify(String phone, String code) {
-        otp.verify(phone, code);
+        otp.verify(phone, ORG, code);
         Optional<UUID> userId = accounts.findUserIdByPhone(phone);
         List<Membership> memberships = userId.map(accounts::activeMemberships).orElse(List.of());
         if (memberships.isEmpty()) {
@@ -90,9 +111,11 @@ public class AuthService {
                 .subject(user.id().toString())
                 .audience(List.of(audience))
                 .issuedAt(now)
-                .expiresAt(now.plus(ttl))
-                .build();
-        var token = jwt.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims));
+                .expiresAt(now.plus(ttl));
+        if (FAN.equals(audience)) {
+            claims.claim(SID, sessions.create(user.id(), now.plus(ttl)).toString());
+        }
+        var token = jwt.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build()));
         return new Session(token.getTokenValue(), now.plus(ttl), user, memberships);
     }
 }
