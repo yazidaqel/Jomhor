@@ -48,6 +48,8 @@ class DevSeedTest {
                 select s.role::text from staff s join users u on u.id = s.user_id
                 where u.phone_e164 = '+212600000001' and s.active""").query(String.class).list())
                 .containsExactly("ADMIN");
+        assertThat(jdbc.sql("select name || ' ' || timezone from venues").query(String.class).list())
+                .containsExactly("Grand Stade Africa/Casablanca");
         assertThat(jdbc.sql("select code from zones order by code").query(String.class).list())
                 .containsExactly("EST", "HONNEUR", "NORD", "SUD");
         assertThat(jdbc.sql("select sum(z.capacity) <= 45000 and sum(z.capacity) <= max(v.capacity) from zones z join venues v on v.id = z.venue_id")

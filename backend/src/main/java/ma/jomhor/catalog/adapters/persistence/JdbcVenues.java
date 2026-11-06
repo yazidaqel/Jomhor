@@ -18,7 +18,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcVenues implements Venues {
 
-    private static final String VENUE_COLUMNS = "id, name, city, capacity";
+    private static final String VENUE_COLUMNS = "id, name, city, capacity, timezone";
     private static final String ZONE_COLUMNS = "id, code, name, capacity, seated";
     private static final String GATE_SELECT = """
             select g.id, g.code, g.name,
@@ -41,11 +41,13 @@ class JdbcVenues implements Venues {
     }
 
     @Override
-    public Venue insertVenue(UUID org, String name, String city, int capacity) {
+    public Venue insertVenue(UUID org, String name, String city, int capacity, String timezone) {
         return jdbc.sql("""
-                        insert into venues (organizer_id, name, city, capacity) values (:org, :name, :city, :capacity)
+                        insert into venues (organizer_id, name, city, capacity, timezone)
+                        values (:org, :name, :city, :capacity, :timezone)
                         returning\s""" + VENUE_COLUMNS)
                 .param("org", org).param("name", name).param("city", city).param("capacity", capacity)
+                .param("timezone", timezone)
                 .query(JdbcVenues::venue).single();
     }
 
@@ -55,17 +57,32 @@ class JdbcVenues implements Venues {
                 .param("org", org).param("id", venueId).query(JdbcVenues::venue).optional();
     }
 
+    // Must stay for update, never for no key update: only for update conflicts with the for key share an event
+    // insert takes on its venue, which makes VENUE_IN_USE race-free (VenueApiTest.timezonePatchWaitsFor...).
     @Override
-    public boolean updateVenue(UUID org, UUID venueId, String name, String city, Integer capacity) {
+    public Optional<Venue> lockVenue(UUID org, UUID venueId) {
+        return jdbc.sql("select " + VENUE_COLUMNS + " from venues where organizer_id = :org and id = :id for update")
+                .param("org", org).param("id", venueId).query(JdbcVenues::venue).optional();
+    }
+
+    @Override
+    public boolean hasEvents(UUID org, UUID venueId) {
+        return jdbc.sql("select exists (select 1 from events where organizer_id = :org and venue_id = :venue)")
+                .param("org", org).param("venue", venueId).query(Boolean.class).single();
+    }
+
+    @Override
+    public boolean updateVenue(UUID org, UUID venueId, String name, String city, Integer capacity, String timezone) {
         return jdbc.sql("""
                         update venues set
                           name = coalesce(cast(:name as text), name),
                           city = case when cast(:city as text) is null then city else nullif(cast(:city as text), '') end,
-                          capacity = coalesce(cast(:capacity as integer), capacity)
+                          capacity = coalesce(cast(:capacity as integer), capacity),
+                          timezone = coalesce(cast(:timezone as text), timezone)
                         where organizer_id = :org and id = :id
                         """)
                 .param("org", org).param("id", venueId)
-                .param("name", name).param("city", city).param("capacity", capacity)
+                .param("name", name).param("city", city).param("capacity", capacity).param("timezone", timezone)
                 .update() == 1;
     }
 
@@ -182,7 +199,8 @@ class JdbcVenues implements Venues {
     }
 
     private static Venue venue(ResultSet rs, int n) throws SQLException {
-        return new Venue(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("city"), rs.getInt("capacity"));
+        return new Venue(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("city"), rs.getInt("capacity"),
+                rs.getString("timezone"));
     }
 
     private static Zone zone(ResultSet rs, int n) throws SQLException {

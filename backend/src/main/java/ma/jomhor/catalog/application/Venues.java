@@ -17,12 +17,17 @@ public interface Venues {
 
     List<Venue> list(UUID org);
 
-    Venue insertVenue(UUID org, String name, String city, int capacity);
+    Venue insertVenue(UUID org, String name, String city, int capacity, String timezone);
 
     Optional<Venue> findVenue(UUID org, UUID venueId);
 
-    /** {@code city} null = unchanged, "" = cleared. False if the venue is not found. */
-    boolean updateVenue(UUID org, UUID venueId, String name, String city, Integer capacity);
+    /** Like findVenue, and locks the venue row until the end of the transaction (blocks event inserts on it). */
+    Optional<Venue> lockVenue(UUID org, UUID venueId);
+
+    boolean hasEvents(UUID org, UUID venueId);
+
+    /** {@code city} null = unchanged, "" = cleared; other nulls = unchanged. False if the venue is not found. */
+    boolean updateVenue(UUID org, UUID venueId, String name, String city, Integer capacity, String timezone);
 
     List<Zone> zones(UUID org, UUID venueId);
 

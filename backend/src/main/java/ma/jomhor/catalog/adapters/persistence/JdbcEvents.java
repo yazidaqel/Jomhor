@@ -19,8 +19,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcEvents implements Events {
 
+    // timezone comes from the venue, by a scalar subquery so the same list works after select, returning and a lock.
     private static final String EVENT_COLUMNS = """
-            id, venue_id, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at,
+            id, venue_id,
+            (select v.timezone from venues v where v.id = events.venue_id and v.organizer_id = events.organizer_id)
+              as timezone,
+            series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at,
             reentry_policy, per_account_limit, metadata::text as metadata, created_at""";
     private static final String PRICE_COLUMNS = "id, zone_id, name, price_mad, quota, sold";
 
@@ -34,6 +38,7 @@ class JdbcEvents implements Events {
     public List<Event.Summary> list(UUID org, Event.Status status, Instant from) {
         return jdbc.sql("""
                         select e.id, e.title, e.event_type, e.starts_at, e.status, v.id as venue_id, v.name as venue_name,
+                               v.timezone as venue_timezone,
                                coalesce(sum(pc.quota), 0) as quota, coalesce(sum(pc.sold), 0) as sold
                         from events e
                         join venues v on v.id = e.venue_id and v.organizer_id = e.organizer_id
@@ -48,7 +53,7 @@ class JdbcEvents implements Events {
                 .query((rs, n) -> new Event.Summary(rs.getInt("id"), rs.getString("title"),
                         Event.Type.valueOf(rs.getString("event_type")), instant(rs, "starts_at"),
                         Event.Status.valueOf(rs.getString("status")), rs.getObject("venue_id", UUID.class),
-                        rs.getString("venue_name"), rs.getLong("quota"), rs.getLong("sold")))
+                        rs.getString("venue_name"), rs.getString("venue_timezone"), rs.getLong("quota"), rs.getLong("sold")))
                 .list();
     }
 
@@ -225,7 +230,8 @@ class JdbcEvents implements Events {
     }
 
     private static Event event(ResultSet rs, int n) throws SQLException {
-        return new Event(rs.getInt("id"), rs.getObject("venue_id", UUID.class), rs.getObject("series_id", UUID.class),
+        return new Event(rs.getInt("id"), rs.getObject("venue_id", UUID.class), rs.getString("timezone"),
+                rs.getObject("series_id", UUID.class),
                 Event.Type.valueOf(rs.getString("event_type")), rs.getString("title"), instant(rs, "starts_at"),
                 instant(rs, "doors_open_at"), Event.Status.valueOf(rs.getString("status")),
                 instant(rs, "refund_cutoff_at"), Event.ReentryPolicy.valueOf(rs.getString("reentry_policy")),

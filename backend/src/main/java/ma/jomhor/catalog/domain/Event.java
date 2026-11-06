@@ -6,15 +6,15 @@ import java.util.UUID;
 /**
  * An event (match, concert, conference day). Never carries organizer_id (it comes from OrgContext) nor
  * event_key_enc: K_e is written once at create and is not read back through this record.
- * {@code metadata} is the jsonb object as JSON text.
+ * {@code metadata} is the jsonb object as JSON text. {@code timezone} is read from the venue (read-only here).
  */
-public record Event(int id, UUID venueId, UUID seriesId, Type eventType, String title, Instant startsAt,
-                    Instant doorsOpenAt, Status status, Instant refundCutoffAt, ReentryPolicy reentryPolicy,
-                    int perAccountLimit, String metadata, Instant createdAt) {
+public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type eventType, String title,
+                    Instant startsAt, Instant doorsOpenAt, Status status, Instant refundCutoffAt,
+                    ReentryPolicy reentryPolicy, int perAccountLimit, String metadata, Instant createdAt) {
 
     public Event withStatus(Status newStatus, Instant newRefundCutoffAt) {
-        return new Event(id, venueId, seriesId, eventType, title, startsAt, doorsOpenAt, newStatus, newRefundCutoffAt,
-                reentryPolicy, perAccountLimit, metadata, createdAt);
+        return new Event(id, venueId, timezone, seriesId, eventType, title, startsAt, doorsOpenAt, newStatus,
+                newRefundCutoffAt, reentryPolicy, perAccountLimit, metadata, createdAt);
     }
 
     public enum Type { FOOTBALL_MATCH, CONCERT, FESTIVAL_DAY, CONFERENCE, OTHER }
@@ -25,7 +25,7 @@ public record Event(int id, UUID venueId, UUID seriesId, Type eventType, String 
 
     /** Row of GET /org/events: quota and sold are sums over the event's price categories. */
     public record Summary(int id, String title, Type eventType, Instant startsAt, Status status, UUID venueId,
-                          String venueName, long quota, long sold) {}
+                          String venueName, String venueTimezone, long quota, long sold) {}
 
     public record PriceCategory(UUID id, int zoneId, String name, long priceMad, int quota, int sold) {}
 }

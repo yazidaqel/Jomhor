@@ -64,22 +64,22 @@ class EventController {
 
     // ---------- responses ----------
 
-    record VenueRef(UUID id, String name) {}
+    record VenueRef(UUID id, String name, String timezone) {}
 
     record EventRow(int id, String title, Event.Type eventType, Instant startsAt, Event.Status status, VenueRef venue,
                     long quota, long sold) {
         static EventRow of(Event.Summary s) {
             return new EventRow(s.id(), s.title(), s.eventType(), s.startsAt(), s.status(),
-                    new VenueRef(s.venueId(), s.venueName()), s.quota(), s.sold());
+                    new VenueRef(s.venueId(), s.venueName(), s.venueTimezone()), s.quota(), s.sold());
         }
     }
 
-    record EventDto(int id, UUID venueId, UUID seriesId, Event.Type eventType, String title, Instant startsAt,
-                    Instant doorsOpenAt, Event.Status status, Instant refundCutoffAt,
+    record EventDto(int id, UUID venueId, String timezone, UUID seriesId, Event.Type eventType, String title,
+                    Instant startsAt, Instant doorsOpenAt, Event.Status status, Instant refundCutoffAt,
                     Event.ReentryPolicy reentryPolicy, int perAccountLimit, @JsonRawValue String metadata,
                     Instant createdAt) {
         static EventDto of(Event e) {
-            return new EventDto(e.id(), e.venueId(), e.seriesId(), e.eventType(), e.title(), e.startsAt(),
+            return new EventDto(e.id(), e.venueId(), e.timezone(), e.seriesId(), e.eventType(), e.title(), e.startsAt(),
                     e.doorsOpenAt(), e.status(), e.refundCutoffAt(), e.reentryPolicy(), e.perAccountLimit(),
                     e.metadata(), e.createdAt());
         }

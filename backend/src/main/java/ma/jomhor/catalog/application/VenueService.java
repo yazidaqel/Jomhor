@@ -1,5 +1,6 @@
 package ma.jomhor.catalog.application;
 
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,19 +37,34 @@ public class VenueService {
         return venues.list(org);
     }
 
-    public Venue create(UUID org, String name, String city, int capacity) {
+    /** {@code timezone} null → Africa/Casablanca. */
+    public Venue create(UUID org, String name, String city, int capacity, String timezone) {
         String c = trim(city);
-        return venues.insertVenue(org, name.trim(), c == null || c.isEmpty() ? null : c, capacity);
+        String tz = timezone == null ? Venue.DEFAULT_TIMEZONE : checkTimezone(timezone);
+        return venues.insertVenue(org, name.trim(), c == null || c.isEmpty() ? null : c, capacity, tz);
     }
 
     public Detail get(UUID org, UUID venueId) {
         Venue v = venues.findVenue(org, venueId).orElseThrow(notFound("Venue"));
-        return new Detail(v.id(), v.name(), v.city(), v.capacity(), venues.zones(org, venueId), venues.gates(org, venueId));
+        return new Detail(v.id(), v.name(), v.city(), v.capacity(), v.timezone(), venues.zones(org, venueId),
+                venues.gates(org, venueId));
     }
 
+    /**
+     * A new timezone is refused (VENUE_IN_USE) once an event references the venue: their wall times were entered
+     * in the old zone. The venue lock makes the check and a concurrent event create on it run one after the other.
+     * Sending the current timezone again is not a change.
+     */
     @Transactional
-    public Detail update(UUID org, UUID venueId, String name, String city, Integer capacity) {
-        if (!venues.updateVenue(org, venueId, trim(name), trim(city), capacity)) {
+    public Detail update(UUID org, UUID venueId, String name, String city, Integer capacity, String timezone) {
+        if (timezone != null) {
+            checkTimezone(timezone);
+            Venue v = venues.lockVenue(org, venueId).orElseThrow(notFound("Venue"));
+            if (!timezone.equals(v.timezone()) && venues.hasEvents(org, venueId)) {
+                throw new ApiException("VENUE_IN_USE", HttpStatus.CONFLICT, "Venue has events: its timezone is fixed");
+            }
+        }
+        if (!venues.updateVenue(org, venueId, trim(name), trim(city), capacity, timezone)) {
             throw notFound("Venue").get();
         }
         return get(org, venueId);
@@ -139,6 +155,21 @@ public class VenueService {
 
     private static Supplier<ApiException> notFound(String what) {
         return () -> ApiException.notFound(what + " not found");
+    }
+
+    /**
+     * An IANA Area/Location id exactly as the tz database spells it (Africa/Casablanca, Europe/Paris; legacy
+     * links such as Asia/Calcutta too). Refused: fixed offsets (+01:00, Z, UTC+1), generic ids without an area
+     * (UTC, GMT, EST), Etc/* and the JDK-only SystemV/* (not in IANA since 2020b, unknown to clients): only a
+     * region carries DST and Ramadan changes. isFixedOffset is the safety net for anything else of that kind.
+     */
+    static String checkTimezone(String timezone) {
+        if (!timezone.contains("/") || timezone.startsWith("Etc/") || timezone.startsWith("SystemV/")
+                || !ZoneId.getAvailableZoneIds().contains(timezone) || ZoneId.of(timezone).getRules().isFixedOffset()) {
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                    Map.of("fields", Map.of("timezone", "must be an IANA time zone id, e.g. Africa/Casablanca")));
+        }
+        return timezone;
     }
 
     private static String trim(String s) {

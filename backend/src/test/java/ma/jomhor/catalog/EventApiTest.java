@@ -28,7 +28,7 @@ import org.springframework.test.web.servlet.ResultActions;
  */
 class EventApiTest extends OrgApiTest {
 
-    private static final String[] EVENT_KEYS = {"id", "venue_id", "series_id", "event_type", "title", "starts_at",
+    private static final String[] EVENT_KEYS = {"id", "venue_id", "timezone", "series_id", "event_type", "title", "starts_at",
             "doors_open_at", "status", "refund_cutoff_at", "reentry_policy", "per_account_limit", "metadata", "created_at"};
 
     private static String future(Duration d) {
@@ -86,6 +86,34 @@ class EventApiTest extends OrgApiTest {
         String got = body(call(a, get("/org/events/" + id)).andExpect(status().isOk()));
         assertKeys(got, "$", EVENT_KEYS);
         assertThat(JsonPath.<Object>read(got, "$")).isEqualTo(JsonPath.read(json, "$"));
+    }
+
+    /** timezone is the venue's, read-only, on every event representation and in list rows (plan Q7). */
+    @Test
+    void eventsCarryTheirVenuesTimezone() throws Exception {
+        Caller a = admin();
+        String casa = venue(a, "Grand Stade");
+        String paris = JsonPath.read(body(call(a, post("/org/venues"),
+                "{\"name\": \"Parc\", \"capacity\": 1000, \"timezone\": \"Europe/Paris\"}").andExpect(status().isCreated())), "$.id");
+        int zone = zone(a, paris, "NORD");
+        int casaEvent = event(a, casa, "2099-03-01T19:00:00Z");
+        String json = body(create(a, """
+                {"venue_id": "%s", "event_type": "CONCERT", "title": "Concert", "starts_at": "2099-04-01T19:00:00Z"}
+                """.formatted(paris)).andExpect(status().isCreated()).andExpect(jsonPath("$.timezone").value("Europe/Paris")));
+        int parisEvent = JsonPath.read(json, "$.id");
+
+        call(a, get("/org/events/" + casaEvent)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.timezone").value("Africa/Casablanca"));
+        call(a, patch("/org/events/" + parisEvent), "{\"title\": \"Concert 2\", \"timezone\": \"Asia/Tokyo\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Concert 2"))
+                .andExpect(jsonPath("$.timezone").value("Europe/Paris")); // read-only: ignored on input
+        price(a, parisEvent, zone, "Plein", 10);
+        call(a, post("/org/events/" + parisEvent + "/publish")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.timezone").value("Europe/Paris"))
+                .andExpect(jsonPath("$.refund_cutoff_at").value("2099-04-01T18:00:00Z")); // an instant, zone-independent
+        call(a, get("/org/events")).andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].venue.timezone").value(contains("Africa/Casablanca", "Europe/Paris")));
     }
 
     @Test
@@ -153,7 +181,7 @@ class EventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$[1].quota").value(0))
                 .andExpect(jsonPath("$[1].sold").value(0)));
         assertKeys(json, "$[0]", "id", "title", "event_type", "starts_at", "status", "venue", "quota", "sold");
-        assertKeys(json, "$[0].venue", "id", "name");
+        assertKeys(json, "$[0].venue", "id", "name", "timezone");
 
         call(a, get("/org/events").param("from", "2099-06-01T00:00:00Z"))
                 .andExpect(jsonPath("$[*].id").value(contains(late)));

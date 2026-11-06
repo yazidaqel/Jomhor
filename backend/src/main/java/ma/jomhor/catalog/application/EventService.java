@@ -73,10 +73,13 @@ public class EventService {
         } finally {
             Arrays.fill(key, (byte) 0);
         }
-        return events.insert(org, eventId, in.venueId(), in.eventType(), in.title().trim(), in.startsAt(), in.doorsOpenAt(),
+        events.insert(org, eventId, in.venueId(), in.eventType(), in.title().trim(), in.startsAt(), in.doorsOpenAt(),
                         in.reentryPolicy() == null ? Event.ReentryPolicy.NONE : in.reentryPolicy(),
                         in.perAccountLimit() == null ? DEFAULT_PER_ACCOUNT_LIMIT : in.perAccountLimit(), metadata, keyEnc)
                 .orElseThrow(() -> invalid("venue_id", "unknown venue"));
+        // Re-read: the insert's RETURNING sees its statement snapshot, so a venue timezone change it waited for
+        // (venue lock vs FK key share) would be missing from the 201 but present in GET.
+        return events.find(org, eventId).orElseThrow();
     }
 
     public Event get(UUID org, int eventId) {
@@ -116,7 +119,7 @@ public class EventService {
         String metadata = in.metadata() == null || in.metadata().isNull()
                 ? e.metadata() : metadata(e.eventType(), in.metadata());
         Instant cutoff = e.status() == Status.ON_SALE ? startsAt.minus(REFUND_FREEZE) : e.refundCutoffAt();
-        return events.update(org, new Event(e.id(), e.venueId(), e.seriesId(), e.eventType(),
+        return events.update(org, new Event(e.id(), e.venueId(), e.timezone(), e.seriesId(), e.eventType(),
                 in.title() == null ? e.title() : in.title().trim(), startsAt, doors, e.status(), cutoff,
                 or(in.reentryPolicy(), e.reentryPolicy()), or(in.perAccountLimit(), e.perAccountLimit()), metadata,
                 e.createdAt()));

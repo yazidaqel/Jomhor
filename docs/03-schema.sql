@@ -62,7 +62,8 @@ create table venues (
   organizer_id  uuid not null references organizers(id),
   name          text not null,
   city          text,
-  capacity      integer not null check (capacity > 0)
+  capacity      integer not null check (capacity > 0),
+  timezone      text not null default 'Africa/Casablanca'  -- IANA zone; every wall time for this venue's events
 );
 
 create table zones (

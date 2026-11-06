@@ -17,9 +17,9 @@ insert into staff (id, organizer_id, user_id, name, role) values
    'a7a5fc00-0000-4000-8000-000000000101', 'Admin Dev', 'ADMIN')
 on conflict do nothing;
 
-insert into venues (id, organizer_id, name, city, capacity) values
+insert into venues (id, organizer_id, name, city, capacity, timezone) values
   ('a7a5fc00-0000-4000-8000-000000000301', 'a7a5fc00-0000-4000-8000-000000000001',
-   'Grand Stade', 'Casablanca', 45000)
+   'Grand Stade', 'Casablanca', 45000, 'Africa/Casablanca')
 on conflict do nothing;
 
 -- zones.id is a smallserial (2 bytes in the QR): no fixed ids, the natural key is (venue_id, code).

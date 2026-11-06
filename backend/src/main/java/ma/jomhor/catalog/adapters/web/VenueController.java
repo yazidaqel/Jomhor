@@ -43,10 +43,10 @@ class VenueController {
         this.venues = venues;
     }
 
-    record VenueCreate(@NotBlank String name, String city, @NotNull @Positive Integer capacity) {}
+    record VenueCreate(@NotBlank String name, String city, @NotNull @Positive Integer capacity, String timezone) {}
 
     record VenuePatch(@Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String name, String city,
-                      @Positive Integer capacity) {}
+                      @Positive Integer capacity, String timezone) {}
 
     record ZoneCreate(@NotBlank String code, @NotBlank String name, @NotNull @PositiveOrZero Integer capacity,
                       Boolean seated) {}
@@ -70,7 +70,7 @@ class VenueController {
     @PostMapping("/org/venues")
     @ResponseStatus(HttpStatus.CREATED)
     Venue create(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @Valid @RequestBody VenueCreate body) {
-        return venues.create(org.organizerId(), body.name(), body.city(), body.capacity());
+        return venues.create(org.organizerId(), body.name(), body.city(), body.capacity(), body.timezone());
     }
 
     @GetMapping("/org/venues/{id}")
@@ -81,7 +81,7 @@ class VenueController {
     @PatchMapping("/org/venues/{id}")
     Detail update(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id,
                   @Valid @RequestBody VenuePatch body) {
-        return venues.update(org.organizerId(), id, body.name(), body.city(), body.capacity());
+        return venues.update(org.organizerId(), id, body.name(), body.city(), body.capacity(), body.timezone());
     }
 
     @PostMapping("/org/venues/{id}/zones")

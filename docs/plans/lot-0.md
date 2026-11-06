@@ -52,7 +52,7 @@ Why this way:
 | Q4 | Back-office login method | Phone OTP, the same machinery as fans. A staff row links to a `users` row. TOTP/2FA for ADMIN in Lot 6. |
 | Q5 | B2 says the gate → zone matrix is "modifiable par événement", but `gate_zones` is per venue | Lot 0: venue level only. B2 shows the matrix read-only. A per-event override (`event_gate_zones`) goes to Lot 2, where scanners use `allowed_zone_ids`. |
 | Q6 | Refund cutoff offset | Fixed at T0 − 60 min (spec). No per-organizer setting. |
-| Q7 | Time zone | Africa/Casablanca is assumed. The back-office enters and shows times in it; the API is UTC. A `venues.timezone` column waits for a non-Moroccan venue. |
+| Q7 | Time zone | **Decided 2026-11-06 (founder: expansion is an option):** per-venue IANA `venues.timezone`, default `Africa/Casablanca`. API stays UTC; events expose their venue's `timezone`; clients convert through the IANA zone, never a fixed offset. Changing a venue's zone is refused once events reference it (`VENUE_IN_USE`). Migration V5. |
 | Q8 | Card success arrives after the 8 min hold expired | Expiry skips orders with a `PENDING` payment younger than 20 min. A later success re-reserves the quota atomically → `PAID`. If no quota is left, the order stays `EXPIRED`, the payment is `SUCCEEDED`, an `audit_log` row `payment.refund_required` is written, and the refund is manual in the gateway's merchant back-office. |
 | Q9 | Re-entry policy (product open question) | `NONE` (schema default), editable in B2 Règles. |
 | Q10 | Stadium plan (which gates serve which tribunes) | Placeholder from the mockup in the dev seed (ATLAS FC; zones NORD/EST/HONNEUR/SUD; gates P1–P7). Real data is entered at onboarding. |

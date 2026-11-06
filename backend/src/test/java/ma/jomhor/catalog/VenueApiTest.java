@@ -22,10 +22,16 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import javax.sql.DataSource;
+import ma.jomhor.catalog.application.Venues;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Contract: /org/venues, /org/venues/{id}, /org/venues/{id}/zones[/{zone_id}], /org/venues/{id}/gates[/{gate_id}],
@@ -35,6 +41,12 @@ class VenueApiTest extends OrgApiTest {
 
     @Autowired
     DataSource dataSource;
+
+    @Autowired
+    PlatformTransactionManager transactions;
+
+    @Autowired
+    Venues venuesPort;
 
     private String gate(Caller c, String venueId, String code) throws Exception {
         String json = body(call(c, post("/org/venues/" + venueId + "/gates"),
@@ -65,18 +77,18 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.name").value("Grand Stade"))
                 .andExpect(jsonPath("$.city").value("Casablanca"))
                 .andExpect(jsonPath("$.capacity").value(45000)));
-        assertKeys(json, "$", "id", "name", "city", "capacity");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone");
         String id = JsonPath.read(json, "$.id");
         assertThat(jdbc.sql("select organizer_id from venues where id = ?::uuid").param(id).query(UUID.class).single())
                 .isEqualTo(a.org());
 
         json = body(call(a, post("/org/venues"), "{\"name\": \"Salle\", \"capacity\": 300}")
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.city").doesNotExist()));
-        assertKeys(json, "$", "id", "name", "city", "capacity");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone");
 
         json = body(call(a, get("/org/venues")).andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].name").value(contains("Grand Stade", "Salle"))));
-        assertKeys(json, "$[0]", "id", "name", "city", "capacity");
+        assertKeys(json, "$[0]", "id", "name", "city", "capacity", "timezone");
     }
 
     @Test
@@ -108,9 +120,139 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.gates[*].code").value(contains("P1", "P2")))
                 .andExpect(jsonPath("$.gates[0].zone_ids").value(contains(Math.min(nord, est), Math.max(nord, est))))
                 .andExpect(jsonPath("$.gates[1].zone_ids", empty())));
-        assertKeys(json, "$", "id", "name", "city", "capacity", "zones", "gates");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "zones", "gates");
         assertKeys(json, "$.zones[0]", "id", "code", "name", "capacity", "seated");
         assertKeys(json, "$.gates[0]", "id", "code", "name", "zone_ids");
+    }
+
+    // ---------- timezone (plan Q7) ----------
+
+    @Test
+    void timezoneDefaultsToCasablancaAndKeepsAnExplicitZone() throws Exception {
+        Caller a = admin();
+        call(a, post("/org/venues"), "{\"name\": \"Grand Stade\", \"capacity\": 45000}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.timezone").value("Africa/Casablanca"));
+        String json = body(call(a, post("/org/venues"), "{\"name\": \"Parc\", \"capacity\": 300, \"timezone\": \"Europe/Paris\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.timezone").value("Europe/Paris")));
+        String id = JsonPath.read(json, "$.id");
+        call(a, get("/org/venues/" + id)).andExpect(status().isOk()).andExpect(jsonPath("$.timezone").value("Europe/Paris"));
+        call(a, get("/org/venues")).andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].timezone").value(contains("Africa/Casablanca", "Europe/Paris")));
+    }
+
+    @Test
+    void timezoneMustBeAnIanaRegion() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        for (String tz : List.of("Mars/Olympus", "+01:00", "Z", "UTC+01:00", "GMT+1", "africa/casablanca", "",
+                "UTC", "GMT", "EST", "Etc/UTC", "Etc/GMT-1", "SystemV/EST5", "SystemV/EST5EDT")) {
+            call(a, post("/org/venues"), "{\"name\": \"S\", \"capacity\": 10, \"timezone\": \"%s\"}".formatted(tz))
+                    .andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                    .andExpect(jsonPath("$.details.fields.timezone").isString());
+            call(a, patch("/org/venues/" + venueId), "{\"timezone\": \"%s\"}".formatted(tz))
+                    .andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.details.fields.timezone").isString());
+        }
+        call(a, post("/org/venues"), "{\"name\": \"S\", \"capacity\": 10, \"timezone\": \"Asia/Calcutta\"}")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.timezone").value("Asia/Calcutta")); // legacy link, kept as given
+        call(a, post("/org/venues"), "{\"name\": \"S\", \"capacity\": 10, \"timezone\": 1}")
+                .andExpect(status().isUnprocessableContent());
+        assertThat(jdbc.sql("select timezone from venues where id = ?::uuid").param(venueId).query(String.class).single())
+                .isEqualTo("Africa/Casablanca");
+    }
+
+    @Test
+    void timezoneIsFixedOnceAnEventUsesTheVenue() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        call(a, patch("/org/venues/" + venueId), "{\"timezone\": \"Europe/Madrid\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.timezone").value("Europe/Madrid"));
+
+        event(a, venueId);
+        call(a, patch("/org/venues/" + venueId), "{\"timezone\": \"Africa/Casablanca\", \"capacity\": 5000}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VENUE_IN_USE"));
+        assertThat(jdbc.sql("select timezone || ' ' || capacity from venues where id = ?::uuid").param(venueId)
+                .query(String.class).single()).isEqualTo("Europe/Madrid 1000");
+
+        // Other fields stay editable, and resending the current zone is not a change.
+        call(a, patch("/org/venues/" + venueId), "{\"name\": \"Stade 2\", \"capacity\": 5000, \"timezone\": \"Europe/Madrid\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Stade 2"))
+                .andExpect(jsonPath("$.capacity").value(5000))
+                .andExpect(jsonPath("$.timezone").value("Europe/Madrid"));
+
+        // Another organizer's venue stays a 404, timezone or not.
+        Caller b = admin();
+        call(b, patch("/org/venues/" + venueId), "{\"timezone\": \"Europe/Paris\"}")
+                .andExpect(status().isNotFound());
+    }
+
+    /**
+     * An event insert on the venue is in flight (uncommitted, holding for key share on the venue): the timezone
+     * PATCH must wait for it, then see the event and refuse. With the venue locked "for no key update" the PATCH
+     * would not wait, miss the uncommitted event and change the zone under it.
+     */
+    @Test
+    void timezonePatchWaitsForAnEventBeingCreated() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        try (var pool = Executors.newSingleThreadExecutor()) {
+            Future<MockHttpServletResponse> patched = new TransactionTemplate(transactions).execute(t -> {
+                jdbc.sql("""
+                        insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                        values (?, ?::uuid, 'In flight', '2099-01-01T00:00:00Z', decode('00', 'hex'))
+                        """).params(a.org(), venueId).update();
+                Future<MockHttpServletResponse> f = pool.submit(() -> call(a, patch("/org/venues/" + venueId),
+                        "{\"timezone\": \"Europe/Paris\"}").andReturn().getResponse());
+                return stillBlocked(f, "timezone PATCH did not wait for the event insert"); // then commit
+            });
+            MockHttpServletResponse r = patched.get(10, TimeUnit.SECONDS);
+            assertThat(r.getStatus()).isEqualTo(409);
+            assertThat(JsonPath.<String>read(r.getContentAsString(), "$.code")).isEqualTo("VENUE_IN_USE");
+        }
+        assertThat(jdbc.sql("select timezone from venues where id = ?::uuid").param(venueId).query(String.class).single())
+                .isEqualTo("Africa/Casablanca");
+    }
+
+    /** The other way round: an event create waits for a zone change in flight, and its 201 shows the new zone. */
+    @Test
+    void eventCreatedDuringATimezoneChangeShowsTheNewZone() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        UUID venue = UUID.fromString(venueId);
+        try (var pool = Executors.newSingleThreadExecutor()) {
+            Future<MockHttpServletResponse> created = new TransactionTemplate(transactions).execute(t -> {
+                venuesPort.lockVenue(a.org(), venue).orElseThrow();
+                venuesPort.updateVenue(a.org(), venue, null, null, null, "Europe/Paris");
+                Future<MockHttpServletResponse> f = pool.submit(() -> call(a, post("/org/events"), """
+                        {"venue_id": "%s", "event_type": "OTHER", "title": "E", "starts_at": "2099-01-01T00:00:00Z"}
+                        """.formatted(venueId)).andReturn().getResponse());
+                return stillBlocked(f, "event insert did not wait for the venue lock"); // then commit
+            });
+            MockHttpServletResponse r = created.get(10, TimeUnit.SECONDS);
+            assertThat(r.getStatus()).isEqualTo(201);
+            assertThat(JsonPath.<String>read(r.getContentAsString(), "$.timezone")).isEqualTo("Europe/Paris");
+            int id = JsonPath.read(r.getContentAsString(), "$.id");
+            call(a, get("/org/events/" + id)).andExpect(jsonPath("$.timezone").value("Europe/Paris"));
+        }
+    }
+
+    /** Asserts {@code f} hasn't finished after 1 s and hands it back. */
+    private static <T> Future<T> stillBlocked(Future<T> f, String message) {
+        try {
+            f.get(1, TimeUnit.SECONDS);
+        } catch (TimeoutException expected) {
+            return f;
+        } catch (Exception e) {
+            throw new AssertionError(message, e);
+        }
+        throw new AssertionError(message);
     }
 
     @Test
@@ -125,7 +267,7 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.name").value("Stade"))
                 .andExpect(jsonPath("$.city").value("Rabat"))
                 .andExpect(jsonPath("$.capacity").value(2000)));
-        assertKeys(json, "$", "id", "name", "city", "capacity", "zones", "gates");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "zones", "gates");
 
         call(a, patch("/org/venues/" + venueId), "{\"name\": \"Nouveau\", \"city\": \"\"}")
                 .andExpect(status().isOk())

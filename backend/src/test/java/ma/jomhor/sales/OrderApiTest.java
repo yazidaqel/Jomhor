@@ -479,11 +479,16 @@ class OrderApiTest extends OrgApiTest {
         }
         for (int quota = 6; quota <= 15; quota++) {
             int q = quota;
-            calls.add(() -> call(s.org(), patch("/org/events/" + s.eventId() + "/prices/" + s.priceId()),
-                    "{\"quota\": %d}".formatted(q)).andReturn().getResponse().getStatus() + " PATCH");
+            calls.add(() -> {
+                var r = call(s.org(), patch("/org/events/" + s.eventId() + "/prices/" + s.priceId()),
+                        "{\"quota\": %d}".formatted(q)).andReturn().getResponse();
+                return r.getStatus() == 200 ? "200 PATCH" : r.getStatus() + " " + JsonPath.read(r.getContentAsString(), "$.code");
+            });
         }
         List<String> results = concurrently(calls);
-        assertThat(results.subList(20, 30)).containsOnly("200 PATCH");
+        // A raise that lands after sales passed its value is refused (QUOTA_BELOW_SOLD); nothing else, never a 500.
+        assertThat(results.subList(20, 30)).allMatch(r -> r.equals("200 PATCH") || r.equals("422 QUOTA_BELOW_SOLD"))
+                .contains("200 PATCH");
         assertThat(results.subList(0, 20)).allMatch(r -> r.equals("201 RESERVED") || r.equals("409 SOLD_OUT"));
         long reserved = results.stream().filter("201 RESERVED"::equals).count();
         int quota = jdbc.sql("select quota from price_categories where id = ?::uuid").param(s.priceId())
