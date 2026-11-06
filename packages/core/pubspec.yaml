@@ -1,0 +1,12 @@
+name: jomhor_core
+description: Jomhor ticket token codec (v1 static, v2 rotating), K_t derivation and slot maths. Pure Dart.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.0
+dependencies:
+  crypto: ^3.0.8
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.33.0

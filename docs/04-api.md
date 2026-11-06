@@ -158,5 +158,8 @@ Acceptance on the scanner: v2 valid if `|slot - now_slot| <= 1` (server-time-cor
 
 The backend ships `TokenVectorsTest` that writes `docs/token-vectors.json`:
 `[{k_e, event_id, ticket_id, zone_id, slot?, expected_token}]` for 10 static and 10
-rotating tokens. `packages/core` golden-tests against the same file. Until generated,
+rotating tokens. Field encodings: `k_e` lowercase hex (64 chars); `event_id`, `zone_id`,
+`slot` JSON integers (`slot` absent for v1); `ticket_id` canonical lowercase UUID string;
+`expected_token` base64url without padding. Include the edge values (`event_id` 0xFFFFFFFF,
+`zone_id` 0xFFFF, `slot` 0xFFFFFFFF). `packages/core` golden-tests against the same file. Until generated,
 both sides must agree on the byte layout above.
