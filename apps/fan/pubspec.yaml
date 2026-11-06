@@ -1,0 +1,29 @@
+name: jomhor_fan
+description: Jomhor fan app (tickets, rotating QR, club home).
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_riverpod: ^3.5.0
+  flutter_secure_storage: ^11.2.0
+  go_router: ^18.1.3
+  http: ^1.6.0
+  intl: ^0.20.3
+  jomhor_core:
+    path: ../../packages/core
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  very_good_analysis: ^11.0.0
+
+flutter:
+  generate: true
+  uses-material-design: true

@@ -1,0 +1,13 @@
+{
+  "@@locale": "fr",
+  "appTitle": "Jomhor",
+  "@appTitle": {"description": "App name in the OS task switcher. Brand name, not translated."},
+  "navHome": "Accueil",
+  "@navHome": {"description": "Bottom nav tab: home screen (DESIGN.md screen 1)."},
+  "navTickets": "Billets",
+  "@navTickets": {"description": "Bottom nav tab: the fan's tickets (wallet)."},
+  "navProfile": "Profil",
+  "@navProfile": {"description": "Bottom nav tab: the fan's profile."},
+  "placeholderComingSoon": "Bientôt ici. On le prépare pour toi.",
+  "@placeholderComingSoon": {"description": "Body of a screen not built yet. Fans are addressed with 'tu'."}
+}
