@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -35,9 +36,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Three stateless chains. /fan/** needs a JWT with aud=fan, /org/** one with aud=org (same HS256 key,
+ * Four stateless chains. /fan/** needs a JWT with aud=fan, /org/** one with aud=org (same HS256 key,
  * the audience is what separates them); /fan/auth/** and /org/auth/** are open. Everything else is
  * closed except /payments/** (gateway-facing, verified per provider). 401/403 bodies use the 04 shape.
+ * GET /fan/events and GET /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
+ * server, so an Authorization header sent there is ignored rather than checked, and without the default
+ * no-store cache headers (04: public reads carry no cache headers; the authenticated chains keep them).
  */
 @Configuration(proxyBeanMethods = false)
 class SecurityConfig {
@@ -53,6 +57,17 @@ class SecurityConfig {
     @Bean
     JwtEncoder jwtEncoder() {
         return NimbusJwtEncoder.withSecretKey(key).algorithm(MacAlgorithm.HS256).build();
+    }
+
+    /** Exactly the two public reads; anything else under /fan (other methods, deeper paths) falls to fanChain. */
+    @Bean
+    @Order(0)
+    SecurityFilterChain publicFanChain(HttpSecurity http) {
+        return stateless(http)
+                .securityMatchers(m -> m.requestMatchers(HttpMethod.GET, "/fan/events", "/fan/events/{id}"))
+                .headers(h -> h.cacheControl(c -> c.disable()))
+                .authorizeHttpRequests(a -> a.anyRequest().permitAll())
+                .build();
     }
 
     @Bean

@@ -1,5 +1,6 @@
 package ma.jomhor.catalog.application;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +27,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class Inventory {
 
-    /** What a sale needs to know about an event. */
-    public record SaleEvent(UUID organizerId, boolean onSale, int perAccountLimit) {}
+    /**
+     * What a sale needs to know about an event. {@code window} is computed on the database clock (now()):
+     * OPEN = ON_SALE, now >= sale_starts_at (if set) and now < refund_cutoff_at (plan Q19, Q20).
+     */
+    public record SaleEvent(UUID organizerId, SaleWindow window, Instant saleStartsAt, int perAccountLimit) {}
+
+    /** docs/04-api.md EVENT_NOT_ON_SALE details.reason, plus OPEN. */
+    public enum SaleWindow { OPEN, NOT_ON_SALE, NOT_STARTED, CLOSED }
 
     /** A price category as a sale sees it; priceMad in centimes. */
     public record SalePrice(UUID id, int zoneId, String name, long priceMad) {}

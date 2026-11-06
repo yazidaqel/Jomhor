@@ -71,8 +71,8 @@ public class OrderService {
     public View place(UUID userId, int eventId, Order.Channel channel, List<ItemRequest> items) {
         Inventory.SaleEvent event = inventory.saleEvent(eventId)
                 .orElseThrow(() -> ApiException.notFound("Event not found"));
-        if (!event.onSale()) {
-            throw new ApiException("EVENT_NOT_ON_SALE", HttpStatus.CONFLICT, "Event is not on sale");
+        if (event.window() != Inventory.SaleWindow.OPEN) {
+            throw notOnSale(event);
         }
         UUID org = event.organizerId();
         Map<UUID, SalePrice> ofEvent = byId(inventory.prices(org, eventId));
@@ -220,6 +220,16 @@ public class OrderService {
         Map<UUID, SalePrice> map = new HashMap<>();
         prices.forEach(p -> map.put(p.id(), p));
         return map;
+    }
+
+    /** 04: details.reason NOT_ON_SALE / NOT_STARTED (+ sale_starts_at) / CLOSED. */
+    private static ApiException notOnSale(Inventory.SaleEvent event) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("reason", event.window().name());
+        if (event.window() == Inventory.SaleWindow.NOT_STARTED) {
+            details.put("sale_starts_at", event.saleStartsAt().toString());
+        }
+        return new ApiException("EVENT_NOT_ON_SALE", HttpStatus.CONFLICT, "Event is not on sale", details);
     }
 
     private static ApiException invalid(String field, String message) {

@@ -21,7 +21,7 @@ public interface Events {
 
     /** Inserts DRAFT {@code eventId} (from nextId) with its encrypted K_e. Empty if the venue is not the organizer's. */
     Optional<Event> insert(UUID org, int eventId, UUID venueId, Event.Type type, String title, Instant startsAt,
-                           Instant doorsOpenAt, Event.ReentryPolicy reentryPolicy, int perAccountLimit,
+                           Instant doorsOpenAt, Instant saleStartsAt, Event.ReentryPolicy reentryPolicy, int perAccountLimit,
                            String metadata, byte[] eventKeyEnc);
 
     Optional<Event> find(UUID org, int eventId);
@@ -32,7 +32,7 @@ public interface Events {
     /** Like find, and locks the event row until the end of the transaction. */
     Optional<Event> lock(UUID org, int eventId);
 
-    /** Writes the mutable columns of {@code event} (title, times, status, cutoff, rules, metadata). */
+    /** Writes the mutable columns of {@code event} (title, times, sale opening, status, cutoff, rules, metadata). */
     Event update(UUID org, Event event);
 
     List<PriceCategory> prices(UUID org, int eventId);
@@ -57,6 +57,19 @@ public interface Events {
      * back from the row and scopes every following call.
      */
     Optional<Inventory.SaleEvent> forSale(int eventId);
+
+    /**
+     * Public (GET /fan/events): ON_SALE or GATES_OPEN events with starts_at >= {@code from} (null = the database
+     * clock), by starts_at, at most {@code limit}. {@code org} null = every organizer: public data, and each row
+     * carries its organizer_id.
+     */
+    List<Event.Listing> listings(UUID org, Instant from, int limit);
+
+    /** Public (GET /fan/events/{id}): the event by id alone, any status but DRAFT. */
+    Optional<Event.Listing> listing(int eventId);
+
+    /** Zones of the event's venue that have at least one of its price categories, by id, prices by name. */
+    List<Event.ZoneListing> zoneListings(UUID org, int eventId);
 
     /** sold += qty if it stays within quota, in one statement. The only way sold grows. Empty if it doesn't fit. */
     Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty);

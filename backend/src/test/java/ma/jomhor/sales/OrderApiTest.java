@@ -25,7 +25,9 @@ import java.util.concurrent.TimeUnit;
 import ma.jomhor.catalog.OrgApiTest;
 import ma.jomhor.catalog.application.Events;
 import ma.jomhor.catalog.application.Inventory;
+import ma.jomhor.common.web.ApiException;
 import ma.jomhor.sales.application.OrderService;
+import ma.jomhor.sales.domain.Order;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -190,11 +192,58 @@ class OrderApiTest extends OrgApiTest {
         int draft = event(s.org(), s.venueId());
         String draftPrice = price(s.org(), draft, s.zoneId(), "Plein tarif", 10);
         error(order(fan, draft, item(draftPrice, 1)), 409, "EVENT_NOT_ON_SALE");
+        order(fan, draft, item(draftPrice, 1)).andExpect(jsonPath("$.details.reason").value("NOT_ON_SALE"));
         error(order(fan, 999_999_999, item(s.priceId(), 1)), 404, "NOT_FOUND");
         setStatus(s.eventId(), "CLOSED");
         error(order(fan, s.eventId(), item(s.priceId(), 1)), 409, "EVENT_NOT_ON_SALE");
+        order(fan, s.eventId(), item(s.priceId(), 1)).andExpect(jsonPath("$.details.reason").value("NOT_ON_SALE"));
         assertThat(sold(s.priceId())).isZero();
         assertThat(sold(draftPrice)).isZero();
+    }
+
+    /** 04 §On-sale: opening at sale_starts_at, closing at refund_cutoff_at, on the database clock. */
+    @Test
+    void ordersOnlyInsideTheSaleWindow() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String fan = fanToken(phone);
+        String opening = "2099-04-01T10:00:00Z";
+        call(s.org(), patch("/org/events/" + s.eventId()), "{\"sale_starts_at\": \"%s\"}".formatted(opening))
+                .andExpect(status().isOk());
+        String json = body(order(fan, s.eventId(), item(s.priceId(), 1)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EVENT_NOT_ON_SALE")));
+        assertThat(JsonPath.<String>read(json, "$.details.reason")).isEqualTo("NOT_STARTED");
+        assertThat(JsonPath.<String>read(json, "$.details.sale_starts_at")).isEqualTo(opening);
+        // the window is checked before the items: a bad item still gets NOT_STARTED
+        order(fan, s.eventId(), item(UUID.randomUUID().toString(), 1)).andExpect(status().isConflict());
+
+        // Boundaries exactly: in one transaction now() is fixed, so the order is placed at now() = sale_starts_at
+        // (open) and then refused at now() = refund_cutoff_at (CLOSED). Rolled back.
+        UUID buyer = jdbc.sql("select id from users where phone_e164 = ?").param(phone).query(UUID.class).single();
+        var oneItem = List.of(new OrderService.ItemRequest(UUID.fromString(s.priceId()), 1));
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            jdbc.sql("update events set sale_starts_at = now() where id = ?").param(s.eventId()).update();
+            assertThat(orderService.place(buyer, s.eventId(), Order.Channel.APP, oneItem).order().status())
+                    .isEqualTo(Order.Status.RESERVED);
+            jdbc.sql("update events set refund_cutoff_at = now() where id = ?").param(s.eventId()).update();
+            assertThatThrownBy(() -> orderService.place(buyer, s.eventId(), Order.Channel.APP, oneItem))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.code()).isEqualTo("EVENT_NOT_ON_SALE");
+                        assertThat(e.details()).containsEntry("reason", "CLOSED");
+                    });
+            tx.setRollbackOnly();
+        });
+        assertThat(sold(s.priceId())).isZero();
+
+        jdbc.sql("update events set sale_starts_at = now() where id = ?").param(s.eventId()).update();
+        order(fan, s.eventId(), item(s.priceId(), 1)).andExpect(status().isCreated());
+
+        jdbc.sql("update events set refund_cutoff_at = now() where id = ?").param(s.eventId()).update();
+        error(order(fan, s.eventId(), item(s.priceId(), 1)), 409, "EVENT_NOT_ON_SALE");
+        order(fan, s.eventId(), item(s.priceId(), 1))
+                .andExpect(jsonPath("$.details.reason").value("CLOSED"))
+                .andExpect(jsonPath("$.details.sale_starts_at").doesNotExist());
+        assertThat(sold(s.priceId())).isEqualTo(1);
     }
 
     @Test

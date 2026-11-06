@@ -36,10 +36,19 @@ public class EventService {
     static final Duration REFUND_FREEZE = Duration.ofMinutes(60);
     static final int METADATA_MAX_BYTES = 4096;
     static final int DEFAULT_PER_ACCOUNT_LIMIT = 4;
+    /** docs/04-api.md GET /fan/events: at most 50. */
+    static final int PUBLIC_LIST_MAX = 50;
 
-    /** Create or PATCH input. On PATCH a null field is unchanged; venue_id and event_type must match if sent. */
+    /**
+     * Create or PATCH input. On PATCH a null field is unchanged (so sale_starts_at can't be cleared); venue_id
+     * and event_type must match if sent.
+     */
     public record EventInput(UUID venueId, Event.Type eventType, String title, Instant startsAt, Instant doorsOpenAt,
-                             Event.ReentryPolicy reentryPolicy, Integer perAccountLimit, JsonNode metadata) {}
+                             Instant saleStartsAt, Event.ReentryPolicy reentryPolicy, Integer perAccountLimit,
+                             JsonNode metadata) {}
+
+    /** GET /fan/events/{id}: the event and its zones with prices. */
+    public record PublicEvent(Event.Listing event, List<Event.ZoneListing> zones) {}
 
     private final Events events;
     private final KeyEncryptor keys;
@@ -64,6 +73,7 @@ public class EventService {
     public Event create(UUID org, EventInput in) {
         String metadata = metadata(in.eventType(), in.metadata());
         checkDoors(in.doorsOpenAt(), in.startsAt());
+        checkSaleStart(in.saleStartsAt(), in.startsAt());
         byte[] key = new byte[32];
         random.nextBytes(key);
         int eventId = events.nextId();
@@ -74,7 +84,7 @@ public class EventService {
             Arrays.fill(key, (byte) 0);
         }
         events.insert(org, eventId, in.venueId(), in.eventType(), in.title().trim(), in.startsAt(), in.doorsOpenAt(),
-                        in.reentryPolicy() == null ? Event.ReentryPolicy.NONE : in.reentryPolicy(),
+                        in.saleStartsAt(), in.reentryPolicy() == null ? Event.ReentryPolicy.NONE : in.reentryPolicy(),
                         in.perAccountLimit() == null ? DEFAULT_PER_ACCOUNT_LIMIT : in.perAccountLimit(), metadata, keyEnc)
                 .orElseThrow(() -> invalid("venue_id", "unknown venue"));
         // Re-read: the insert's RETURNING sees its statement snapshot, so a venue timezone change it waited for
@@ -116,11 +126,13 @@ public class EventService {
         Instant startsAt = or(in.startsAt(), e.startsAt());
         Instant doors = or(in.doorsOpenAt(), e.doorsOpenAt());
         checkDoors(doors, startsAt);
+        Instant saleStartsAt = or(in.saleStartsAt(), e.saleStartsAt());
+        checkSaleStart(saleStartsAt, startsAt);
         String metadata = in.metadata() == null || in.metadata().isNull()
                 ? e.metadata() : metadata(e.eventType(), in.metadata());
         Instant cutoff = e.status() == Status.ON_SALE ? startsAt.minus(REFUND_FREEZE) : e.refundCutoffAt();
         return events.update(org, new Event(e.id(), e.venueId(), e.timezone(), e.seriesId(), e.eventType(),
-                in.title() == null ? e.title() : in.title().trim(), startsAt, doors, e.status(), cutoff,
+                in.title() == null ? e.title() : in.title().trim(), startsAt, doors, saleStartsAt, e.status(), cutoff,
                 or(in.reentryPolicy(), e.reentryPolicy()), or(in.perAccountLimit(), e.perAccountLimit()), metadata,
                 e.createdAt()));
     }
@@ -141,6 +153,25 @@ public class EventService {
         Event published = events.update(org, e.withStatus(Status.ON_SALE, e.startsAt().minus(REFUND_FREEZE)));
         audit.staff(org, userId, "event.publish", String.valueOf(eventId));
         return published;
+    }
+
+    // ---------- public (GET /fan/events*, no token) ----------
+
+    /** {@code organizer} null = every organizer; {@code from} null = now on the database clock. */
+    public List<Event.Listing> publicList(UUID organizer, Instant from) {
+        return events.listings(organizer, from, PUBLIC_LIST_MAX);
+    }
+
+    /**
+     * DRAFT or unknown → 404. sold_out and from_price_mad are taken again from the price rows of the response,
+     * so they can't contradict zones[].prices[].remaining (two statements, two READ COMMITTED snapshots).
+     */
+    public PublicEvent publicEvent(int eventId) {
+        Event.Listing e = events.listing(eventId).orElseThrow(notFound("Event"));
+        List<Event.ZoneListing> zones = events.zoneListings(e.organizerId(), eventId);
+        Long fromPrice = zones.stream().flatMap(z -> z.prices().stream()).filter(p -> p.remaining() > 0)
+                .map(Event.PriceListing::priceMad).min(Long::compare).orElse(null);
+        return new PublicEvent(e.withStock(fromPrice == null, fromPrice), zones);
     }
 
     // ---------- prices ----------
@@ -255,6 +286,13 @@ public class EventService {
         JsonNode v = m.get(key);
         if (v != null && !ok.test(v)) {
             throw invalid("metadata." + key, message);
+        }
+    }
+
+    /** Sales close at starts_at − 60 min (plan Q20), so a scheduled opening must come before that. */
+    private static void checkSaleStart(Instant saleStartsAt, Instant startsAt) {
+        if (saleStartsAt != null && !saleStartsAt.isBefore(startsAt.minus(REFUND_FREEZE))) {
+            throw invalid("sale_starts_at", "must be before starts_at - 60 min");
         }
     }
 
