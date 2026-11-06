@@ -1,6 +1,5 @@
 package ma.jomhor.common.web;
 
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -16,6 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import tools.jackson.databind.PropertyNamingStrategies;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -23,6 +23,7 @@ public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     // Field paths are reported as the client sent them (JSON is snake_case, see application.yml).
+    // Jackson 3 made translate() protected; nameForField ignores its config/field args and calls it.
     private static final PropertyNamingStrategies.NamingBase SNAKE =
             (PropertyNamingStrategies.NamingBase) PropertyNamingStrategies.SNAKE_CASE;
 
@@ -35,7 +36,7 @@ public class ApiExceptionHandler {
     ResponseEntity<ApiError> invalid(MethodArgumentNotValidException e) {
         Map<String, Object> fields = new LinkedHashMap<>();
         e.getBindingResult().getFieldErrors()
-                .forEach(f -> fields.putIfAbsent(SNAKE.translate(f.getField()), f.getDefaultMessage()));
+                .forEach(f -> fields.putIfAbsent(SNAKE.nameForField(null, null, f.getField()), f.getDefaultMessage()));
         return validationFailed(fields);
     }
 
@@ -73,7 +74,7 @@ public class ApiExceptionHandler {
     }
 
     private static ResponseEntity<ApiError> validationFailed(Map<String, Object> fields) {
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
                 .body(new ApiError("VALIDATION_FAILED", "Invalid request body", Map.of("fields", fields)));
     }
 }

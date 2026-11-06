@@ -14,7 +14,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -35,7 +35,7 @@ class ApiExceptionHandlerTest {
     @Test
     void beanValidationGives422WithFields() throws Exception {
         mvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON).content("{\"price_mad\": -1}"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.message").isString())
                 .andExpect(jsonPath("$.details.fields.display_name").isString())
@@ -45,7 +45,7 @@ class ApiExceptionHandlerTest {
     @Test
     void malformedBodyGives422() throws Exception {
         mvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON).content("{"))
-                .andExpect(status().isUnprocessableEntity())
+                .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
     }
 
