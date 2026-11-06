@@ -184,6 +184,11 @@ function EventEditor({ event }: { event?: EventDetail }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {event && (
+            <Button variant="outline" asChild>
+              <Link to={`/events/${encodeURIComponent(event.id)}/sales`}>{t('nav.sales')}</Link>
+            </Button>
+          )}
           {editable && (
             <Button type="submit" form="event-form" variant="outline" disabled={save.isPending || (!!event && !isDirty)}>
               {t(event?.status === 'ON_SALE' ? 'events.saveChanges' : 'events.saveDraft')}

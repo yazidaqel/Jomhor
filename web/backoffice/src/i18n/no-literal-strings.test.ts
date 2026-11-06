@@ -1,10 +1,14 @@
 // @vitest-environment node
 import { ESLint } from 'eslint'
-import { expect, it } from 'vitest'
+import { beforeAll, expect, it } from 'vitest'
 
 // The "no hard-coded user-visible strings" guard is ESLint (eslint.config.js: i18next/no-literal-string +
 // no-restricted-syntax for text attributes). This pins what it catches and what it lets through.
 const eslint = new ESLint()
+
+// The first lintText loads the whole config (typescript-eslint, plugins): seconds when the suite runs in parallel.
+// Pay it here, under the hook's own timeout, rather than inside the first test's 5 s.
+beforeAll(() => eslint.lintText('', { filePath: 'src/features/sample/Sample.tsx' }), 60_000)
 
 async function literalErrors(jsx: string) {
   const code = `export function Sample({ ok, name }: { ok: boolean; name: string }) {\n  return ${jsx}\n}\n`
