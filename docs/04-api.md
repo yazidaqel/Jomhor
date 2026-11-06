@@ -30,11 +30,16 @@ Error codes (Lot 0; later lots add theirs here):
 | `PER_ACCOUNT_LIMIT` | 409 | `details.limit`, `details.held` |
 | `ORDER_EXPIRED` / `ORDER_NOT_PAYABLE` | 409 | Pay on a non-`RESERVED` order |
 | `CODE_TAKEN` | 409 | Duplicate zone or gate code in a venue |
-| `ZONE_IN_USE` / `GATE_IN_USE` / `PRICE_IN_USE` | 409 | Delete of a referenced row |
+| `ZONE_IN_USE` / `GATE_IN_USE` / `PRICE_IN_USE` | 409 | Delete of a referenced row. `gate_zones` mappings do not count: they are removed with their zone or gate. References are price categories, order items, tickets (Lot 2: device assignments, scans). |
 | `QUOTA_EXCEEDS_CAPACITY` / `QUOTA_BELOW_SOLD` | 422 | Price category quota rules |
 | `REFUND_FROZEN` | 409 | Refund or cancel after `refund_cutoff_at` |
 
-No pagination in Lot 0. Lists are per organizer and small.
+No pagination in Lot 0. Lists are per organizer and small, in a stable order: by name for
+venues, by code for zones and gates, ids ascending inside arrays such as `zone_ids`.
+
+Conventions: create → `201` with the resource; delete → `204`; PATCH is partial (a missing or
+`null` field is left unchanged; send `""` to clear an optional text field such as `city`) and
+returns the same representation as the matching GET.
 
 ## Fan
 

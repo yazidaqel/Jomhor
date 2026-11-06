@@ -23,11 +23,13 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** Full app on one shared Postgres 18 container, with test secrets and a mock OtpSender. */
-@SpringBootTest(properties = {
-        "jomhor.jwt-secret=test-only-jwt-secret-0123456789abcdef",
-        "jomhor.otp-secret=test-only-otp-secret-0123456789abcdef"})
+@SpringBootTest(properties = {IntegrationTest.JWT_SECRET, IntegrationTest.OTP_SECRET})
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
+
+    /** For subclasses that redeclare @SpringBootTest (e.g. RANDOM_PORT). */
+    public static final String JWT_SECRET = "jomhor.jwt-secret=test-only-jwt-secret-0123456789abcdef";
+    public static final String OTP_SECRET = "jomhor.otp-secret=test-only-otp-secret-0123456789abcdef";
 
     @ServiceConnection
     public static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:18");

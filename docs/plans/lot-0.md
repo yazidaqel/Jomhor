@@ -407,7 +407,7 @@ Never cut:
 | Area | What the reviewer checks hardest |
 | --- | --- |
 | Tenant isolation | Every repository query on a tenant table filters by `organizer_id` (`findByIdAndOrganizerId`). Another org's or another user's id → 404, never 200. `MigrationsTest` allowlist is exactly 3 tables. The back-office query keys include `organizerId`. |
-| K_e | Generated at create in the same transaction; AES-GCM with a random nonce; master key from env only; byte[] field excluded from `toString` and logging; absent from every DTO (test exists). |
+| K_e | Responses use controller-local DTO records, never the `Event` domain record (it carries `event_key_enc`; one added field would leak K_e). Generated at create in the same transaction; AES-GCM with a random nonce; master key from env only; byte[] field excluded from `toString` and logging; absent from every DTO (test exists). |
 | Money | `long` / `bigint` everywhere. Any gateway amount string built with `/ 100` and `% 100`, no `BigDecimal(double)` or `double`. Back-office DH parsing is string/integer only. `order_items.unit_price_mad` snapshot is used for totals. |
 | Payments | Signature verified before any state change, including the simulated gateway's. Callback idempotent (payment row lock + status check, unique `(provider, provider_ref)`). Amount check. `PAID` and ticket issue in one transaction. Late-success rule (Q8). `/return` never mutates. No caller-supplied redirect URL. Simulated gateway impossible under `prod`. No card data stored in `payments.callback`. |
 | Quota | The conditional `UPDATE` is the only way `sold` grows. Expiry releases exactly once. The concurrency test is real (parallel threads, not sequential calls). |
@@ -415,3 +415,11 @@ Never cut:
 | Naming | `event_id` only; football fields only inside `metadata`; Flyway names match `docs/03-schema.sql` exactly. |
 | Contract | Every Lot 0 row in `docs/04-api.md` has a contract test. No endpoint exists that is not in the doc. |
 | UI | No hard-coded strings (FR via i18n); shadcn components only; organizers addressed as "vous". |
+
+## 7. Carried forward (from Lot 0 reviews)
+
+| Item | Lot | Note |
+| --- | --- | --- |
+| `GATE_IN_USE` on gate delete | 2 | Lot 0 has no table referencing gates; `device_assignments` and `scans` must make delete return 409, not 500 (`ponytail:` note in `VenueService`). |
+| Edge forwards only `/v1/*` | 6 | Paths outside the `/v1` context path get Tomcat's default 404, not the 04 error shape. The ALB must route `/v1/*` only. |
+| OTP abuse limits | 1 | See Q14. |
