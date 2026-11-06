@@ -22,9 +22,14 @@ function Item({ to, children }: { to: string; children: ReactNode }) {
 export function Shell() {
   const { t } = useTranslation()
   return (
-    // DESIGN §Back-office: sidebar 1 1 240px, content 999 1 560px; they wrap (stack) when content would go under 560px.
-    <div className="flex min-h-screen flex-wrap">
-      <nav aria-label={t('nav.label')} className="flex flex-[1_1_240px] flex-col gap-1 border-r bg-card px-3 py-4">
+    // DESIGN §Back-office: sidebar 1 1 240px, content 999 1 560px; they wrap (stack) when content would go under
+    // 560px, i.e. below 240 + 560 = 800px. CSS cannot see the wrap, so the stacked look keys off that same width.
+    // Single row: stretch so the sidebar is full height. Stacked: content-start so rows don't stretch.
+    <div className="flex min-h-screen flex-wrap max-[800px]:content-start">
+      <nav
+        aria-label={t('nav.label')}
+        className="flex flex-[1_1_240px] flex-col gap-1 border-r bg-card px-3 py-4 max-[800px]:border-r-0 max-[800px]:border-b"
+      >
         <div className="flex items-center gap-2.5 px-2.5 pb-4">
           <img src="/jomhor-mark.svg" alt="" className="size-7 rounded-lg" />
           <span className="text-[15px] font-bold">{t('app.name')}</span>

@@ -43,14 +43,15 @@ export async function api<T>(path: string, { organizerId, ...init }: ApiInit = {
   }
 
   let res: Response
+  let text: string
   try {
     res = await fetch(`/v1${path}`, { ...init, headers })
+    text = await res.text() // can fail too: connection dropped mid-body
   } catch (e) {
     if (init.signal?.aborted) throw e // cancellation (e.g. TanStack Query) is not a network error
     throw new ApiError(0, 'NETWORK_ERROR', e instanceof Error ? e.message : String(e))
   }
 
-  const text = await res.text()
   if (!res.ok) {
     const parsed = errorBody.safeParse(parseJson(text))
     throw parsed.success

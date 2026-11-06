@@ -88,3 +88,24 @@ it('wraps a failed fetch as NETWORK_ERROR', async () => {
   expect(err).toBeInstanceOf(ApiError)
   expect(err).toMatchObject({ status: 0, code: 'NETWORK_ERROR' })
 })
+
+it('wraps a body read failure (connection dropped mid-body) as NETWORK_ERROR', async () => {
+  const res = new Response('{"id":')
+  vi.spyOn(res, 'text').mockRejectedValue(new TypeError('network error'))
+  stubFetch(async () => res)
+
+  await expect(api('/org/events')).rejects.toMatchObject({ status: 0, code: 'NETWORK_ERROR' })
+})
+
+it('rethrows the original AbortError when the caller aborted', async () => {
+  const controller = new AbortController()
+  controller.abort()
+  stubFetch(async () => {
+    throw new DOMException('aborted', 'AbortError')
+  })
+
+  const err = await api('/org/events', { signal: controller.signal }).catch((e: unknown) => e)
+
+  expect(err).not.toBeInstanceOf(ApiError)
+  expect(err).toMatchObject({ name: 'AbortError' })
+})
