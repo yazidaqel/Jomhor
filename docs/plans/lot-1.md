@@ -224,7 +224,7 @@ On payment success every holder's ticket is issued with `holder_user_id`, `holde
 
 **§Test vectors: replace the first sentence**
 
-`TokenVectorsTest` (backend) builds 10 static and 10 rotating vectors from fixed inputs, including the edge values and the 6 interim cases of `packages/core/tool/interim_vectors.py`. If the file is absent, or `-Djomhor.writeVectors=true` is set, it writes `docs/token-vectors.json`; otherwise it fails when the committed file differs. `packages/core` fails, rather than skipping, when the file is missing.
+`TokenVectorsTest` (backend) builds 10 static and 10 rotating vectors from fixed inputs, including the edge values and the 6 interim cases (hard-coded in the test). If the file is absent, or `-Djomhor.writeVectors=true` is set, it writes `docs/token-vectors.json`; otherwise it fails when the committed file differs. `packages/core` fails, rather than skipping, when the file is missing.
 
 ### 4.4 `design/DESIGN.md`
 

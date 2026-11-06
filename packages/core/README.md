@@ -12,11 +12,12 @@ the ticket token codec from `docs/04-api.md` §Token.
 
 ```
 dart pub get
-dart analyze
+dart analyze --fatal-infos
 dart test
 ```
 
-`test/vectors_test.dart` holds interim known-answer vectors computed by the
-independent Python script `tool/interim_vectors.py` (`python tool/interim_vectors.py`),
-and a golden test against `docs/token-vectors.json` that is skipped until the
-backend generates that file (Lot 1).
+`test/vectors_test.dart` is the golden test against `docs/token-vectors.json`
+(10 static + 10 rotating vectors, written by the backend's `TokenVectorsTest`,
+see `docs/04-api.md` §Test vectors). Each vector must encode to its
+`expected_token`, decode back to its inputs and verify. A missing file fails
+the test: run the backend `TokenVectorsTest` and commit the file.
