@@ -16,6 +16,7 @@ it.each([
   '+\u0662\u0661\u0662 \u0666 \u0661\u0662 \u0663\u0664 \u0665\u0666 \u0667\u0668',
   '\u200e+212 6 12 34 56 78\u200f', // LRM / RLM
   '\u2066+212\u2069 \u061c06 12 34 56 78\u2067\u2068', // isolates + Arabic letter mark
+  '\u202b\u202a+212 6 12\u202c \u202d34 56\u202e 78\u202c', // embeddings LRE/RLE, overrides LRO/RLO, PDF
 ])('normalizes %j to E.164', (input) => expect(normalizePhone(input)).toBe('+212612345678'))
 
 it.each(['', 'abc', '061234567', '06123456789', '0812345678', '+33612345678', '+21200612345678', '+212 6 12 34 56 7x', '(06) 12'])(

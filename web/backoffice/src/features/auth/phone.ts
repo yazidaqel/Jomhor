@@ -7,8 +7,9 @@ export function normalizePhone(input: string): string | null {
   const ascii = input
     .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660)) // Arabic-Indic digits
     .replace(/[\u06f0-\u06f9]/g, (d) => String(d.charCodeAt(0) - 0x06f0)) // Extended Arabic-Indic digits
-    // Separators, plus bidi marks pasted from RTL text: ALM U+061C, LRM/RLM U+200E/F, isolates U+2066-2069.
-    .replace(/[\s.()\-\u061c\u200e\u200f\u2066-\u2069]/g, '')
+    // Separators, plus bidi controls pasted from RTL text: ALM U+061C, LRM/RLM U+200E/F, embeddings and overrides
+    // LRE/RLE/PDF/LRO/RLO U+202A-202E, isolates U+2066-2069.
+    .replace(/[\s.()\-\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
   const m = /^(?:(?:\+|00)?2120?|0)([5-7]\d{8})$/.exec(ascii)
   return m ? `+212${m[1]}` : null
 }

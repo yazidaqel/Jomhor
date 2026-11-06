@@ -98,11 +98,14 @@ function EventEditor({ event }: { event?: EventDetail }) {
   const [publishRefused, setPublishRefused] = useState(false) // EVENT_NOT_EDITABLE on publish, shown on the page
   const refusedAlert = useRef<HTMLParagraphElement>(null)
 
-  // doors_open_at cannot be cleared in Lot 0 (04-api §Organizer): once set, it stays required.
+  // doors_open_at and sale_starts_at cannot be cleared (04-api §Organizer): once set, they stay required.
   // Edit: `values` follows the server copy (refetch on focus, after a write); fields the user changed keep their value,
   // and errors on screen (zod or VALIDATION_FAILED) stay.
-  const form = useForm({
-    resolver: zodResolver(eventSchema(t, !!event?.doors_open_at)),
+  // Wall times are in the venue's zone: the event's once saved, the chosen venue's before.
+  const zoneOf = (venueId: string) => event?.timezone ?? venues.data?.find((v) => v.id === venueId)?.timezone
+  const form = useForm<EventForm, unknown, EventValues>({
+    resolver: (values, ctx, options) =>
+      zodResolver(eventSchema(t, zoneOf(values.venue_id), !!event?.doors_open_at, !!event?.sale_starts_at))(values, ctx, options),
     defaultValues: event ? toForm(event) : emptyForm(),
     values: event && toForm(event),
     resetOptions: { keepDirtyValues: true, keepErrors: true },
@@ -111,8 +114,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
   const { errors, isDirty } = form.formState
   const [type, venueId] = useWatch({ control: form.control, name: ['event_type', 'venue_id'] })
   const metadataKeys = METADATA_KEYS[type]
-  // Wall times are in the venue's zone: the event's once saved, the chosen venue's before.
-  const zone = event?.timezone ?? venues.data?.find((v) => v.id === venueId)?.timezone
+  const zone = zoneOf(venueId)
 
   /**
    * Shows the tab holding the first of these fields (a hidden field's error would go unseen), synchronously so the
@@ -136,6 +138,8 @@ function EventEditor({ event }: { event?: EventDetail }) {
     const fields = e instanceof ApiError && e.code === 'VALIDATION_FAILED' ? Object.keys(Object(e.details.fields)) : []
     reveal(fields) // before showFormError focuses the first of them
     showFormError(e, form, t)
+    // Its one rule (also broken by a T0 change alone): before T0 − 60 min.
+    if (fields.includes('sale_starts_at')) form.setError('sale_starts_at', { message: t('events.form.saleBeforeStart') })
     // Create with a venue deleted meanwhile (or not this organizer's): 422 on venue_id. Refresh the picker.
     if (!event && fields.includes('venue_id')) {
       form.setError('venue_id', { message: t('events.form.venueGone') })
@@ -334,6 +338,15 @@ function EventEditor({ event }: { event?: EventDetail }) {
                       form={form}
                       error={err(errors.doors_open_at)}
                     />
+                    <WallTimeInput
+                      id="event-sale-starts-at"
+                      label={t('events.form.saleStartsAt')}
+                      note={t('events.form.saleStartsAtHint')}
+                      zone={zone}
+                      name="sale_starts_at"
+                      form={form}
+                      error={err(errors.sale_starts_at)}
+                    />
                   </FieldGroup>
 
                   {metadataKeys.length > 0 && (
@@ -416,6 +429,11 @@ function EventEditor({ event }: { event?: EventDetail }) {
                       error={err(errors.per_account_limit)}
                       registration={form.register('per_account_limit')}
                     />
+                    <Field className="md:col-span-2">
+                      <FieldLabel htmlFor="event-named">{t('events.rules.named')}</FieldLabel>
+                      <Input id="event-named" readOnly value={t('events.rules.namedValue')} aria-describedby="event-named-hint" />
+                      <FieldDescription id="event-named-hint">{t('events.rules.namedHint')}</FieldDescription>
+                    </Field>
                     <Field className="md:col-span-2">
                       <FieldLabel htmlFor="event-refund-freeze">{t('events.rules.refundFreeze')}</FieldLabel>
                       <Input id="event-refund-freeze" readOnly value={t('events.rules.refundFreezeValue')} aria-describedby="event-refund-freeze-hint" />
@@ -530,6 +548,7 @@ function publishErrorKey(e: unknown) {
 function WallTimeInput({
   id,
   label,
+  note,
   zone,
   name,
   form,
@@ -537,8 +556,10 @@ function WallTimeInput({
 }: {
   id: string
   label: string
+  /** Shown after the zone hint. */
+  note?: string
   zone?: string
-  name: 'starts_at' | 'doors_open_at'
+  name: 'starts_at' | 'doors_open_at' | 'sale_starts_at'
   form: UseFormReturn<EventForm, unknown, EventValues>
   error?: string
 }) {
@@ -546,7 +567,8 @@ function WallTimeInput({
   const wall = useWatch({ control: form.control, name })
   const [now] = useState(() => Date.now())
   const at = WALL.test(wall) && zone ? Date.parse(wallToUtc(wall, zone)) : now
-  const hint = zone ? t('events.form.zoneHint', { zone, offset: offsetLabel(at, zone) }) : t('events.form.zoneUnknown')
+  const zoneHint = zone ? t('events.form.zoneHint', { zone, offset: offsetLabel(at, zone) }) : t('events.form.zoneUnknown')
+  const hint = note ? `${zoneHint} · ${note}` : zoneHint
   return <TextInput id={id} type="datetime-local" label={label} hint={hint} error={error} registration={form.register(name)} />
 }
 
