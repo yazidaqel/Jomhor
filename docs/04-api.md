@@ -1,7 +1,7 @@
 # API contracts (V1)
 
 Base: `https://api.jomhor.ma/v1`. JSON, UTF-8. Money in integer centimes (`_mad`).
-Times in RFC 3339 UTC. Errors: `{ "code": "ORDER_EXPIRED", "message": "...", "details": {} }`.
+Times in RFC 3339 UTC; clients show and enter them in the venue's `timezone` (IANA), never a fixed offset. Errors: `{ "code": "ORDER_EXPIRED", "message": "...", "details": {} }`.
 
 Three audiences, three auth schemes:
 
@@ -17,22 +17,32 @@ Error codes (Lot 0; later lots add theirs here):
 | Code | HTTP | When |
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 422 | Bad body; `details.fields{}` |
+| `BAD_REQUEST` | 4xx | Request rejected by the framework before reaching a handler (bad path/query type, missing header, wrong method or media type); HTTP status kept |
+| `INTERNAL_ERROR` | 500 | Anything unexpected; fixed message, `details: {}`, logged server-side, never echoes the exception |
 | `UNAUTHORIZED` | 401 | Missing, invalid or wrong-audience token |
 | `FORBIDDEN` | 403 | No active staff row for `X-Organizer-Id`, or role not allowed |
 | `NOT_FOUND` | 404 | Unknown id, or an id of another organizer or user |
 | `OTP_INVALID` / `OTP_EXPIRED` | 401 | Verify failed |
 | `OTP_RATE_LIMITED` | 429 | > 3 sends per phone per 10 min |
 | `EVENT_NOT_ON_SALE` | 409 | Order on an event that is not `ON_SALE` |
-| `EVENT_NOT_EDITABLE` | 409 | Edit after `ON_SALE` (except allowed fields) or when `CLOSED` |
+| `EVENT_NOT_EDITABLE` | 409 | Event PATCH, price write or publish when the status doesn't allow it (PATCH and prices: only `DRAFT`/`ON_SALE`; publish: only `DRAFT`, so the losing side of a double publish gets it too) |
 | `SOLD_OUT` | 409 | `details.price_category_id` |
 | `PER_ACCOUNT_LIMIT` | 409 | `details.limit`, `details.held` |
 | `ORDER_EXPIRED` / `ORDER_NOT_PAYABLE` | 409 | Pay on a non-`RESERVED` order |
 | `CODE_TAKEN` | 409 | Duplicate zone or gate code in a venue |
-| `ZONE_IN_USE` / `GATE_IN_USE` / `PRICE_IN_USE` | 409 | Delete of a referenced row |
+| `VENUE_IN_USE` | 409 | Changing a venue's `timezone` once events reference the venue |
+| `ZONE_IN_USE` / `GATE_IN_USE` / `PRICE_IN_USE` | 409 | Delete of a referenced row. `gate_zones` mappings do not count: they are removed with their zone or gate. References are price categories, order items, tickets (Lot 2: device assignments, scans). |
 | `QUOTA_EXCEEDS_CAPACITY` / `QUOTA_BELOW_SOLD` | 422 | Price category quota rules |
 | `REFUND_FROZEN` | 409 | Refund or cancel after `refund_cutoff_at` |
 
-No pagination in Lot 0. Lists are per organizer and small.
+No pagination in Lot 0. Lists are per organizer and small, in a stable order: by name for
+venues, by code for zones and gates, by `starts_at` for events, by `zone_id` then `name` for prices,
+ids ascending inside arrays such as `zone_ids`. Integer fields reject floats and strings (`50.5`,
+`5000.0`, `"5000"` → 422).
+
+Conventions: create → `201` with the resource; delete → `204`; PATCH is partial (a missing or
+`null` field is left unchanged; send `""` to clear an optional text field such as `city`) and
+returns the same representation as the matching GET.
 
 ## Fan
 
@@ -40,15 +50,20 @@ No pagination in Lot 0. Lists are per organizer and small.
 | --- | --- | --- |
 | POST | `/fan/auth/otp` | `{phone}` (E.164) → `202`; sends OTP (SMS / WhatsApp). 6-digit code, valid 5 min, 5 attempts. Max 3 sends per phone per 10 min (`OTP_RATE_LIMITED`). |
 | POST | `/fan/auth/verify` | `{phone, code}` → `{token, expires_at, user:{id, phone, display_name, locale}}`. Creates the user on first login. JWT `aud=fan`, 30 days. |
-| GET | `/fan/events?organizer=&from=` | Upcoming events with `from_price_mad`, `on_sale`, `sold_out` |
-| GET | `/fan/events/{id}` | Event detail: zones with price, remaining, seated flag, gates per zone |
+| GET | `/fan/events?organizer=&from=` | Upcoming events with `from_price_mad`, `on_sale`, `sold_out`, `timezone` (the venue's) |
+| GET | `/fan/events/{id}` | Event detail: zones with price, remaining, seated flag, gates per zone, `timezone` (the venue's) |
 | POST | `/fan/orders` | `{event_id, channel: APP\|WEB, items:[{price_category_id, qty}], holders:[{phone?}] (Lot 1)}` → `201 {id, status: RESERVED, reserved_until, total_mad, items:[{price_category_id, zone_id, name, qty, unit_price_mad}]}`. Held 8 min. Quota taken atomically. Σ qty over the user's `RESERVED`/`AWAITING_CASH`/`PAID` orders for the event ≤ `per_account_limit`. |
 | POST | `/fan/orders/{id}/pay` | `{method: CARD}` → `{payment_id, redirect_url}`: `redirect_url` is a browser page on this API (§Payments) that sends the buyer to the card gateway; each call creates a new payment attempt · `{method: CASH_AGENCY}` → `{cash_code, expires_at}` (Lot 3) · `{method: WALLET, phone}` → `{status}` (Lot 3) |
-| GET | `/fan/orders/{id}` | `{id, event_id, status, total_mad, reserved_until, paid_at, items[], ticket_ids[]}`. Status polling after payment. Owner only (404 otherwise). |
+| GET | `/fan/orders/{id}` | `{id, event_id, status, total_mad, reserved_until, paid_at, items[], ticket_ids[]}`. Status polling after payment. Owner only (404 otherwise). `items[]` has the same shape as in the POST response (only `unit_price_mad` is a snapshot), ordered by `price_category_id`. |
 | GET | `/fan/tickets` | My tickets (valid, upcoming first). Each: `{id, event, zone, gate_codes[], seat_label, k_t (base64url, only for the holder), ticket_no}` |
 | GET | `/fan/tickets/{id}/pdf` | Static-QR PDF |
 | POST | `/fan/tickets/{id}/transfer` | `{to_phone}` → ticket re-issued to recipient (new K_t), sender's QR invalid |
 | GET | `/fan/gates/{event_id}/load` | Live gate load `[{gate_code, wait_min}]` (from scan rate) |
+
+Order rules: item validation errors use `details.fields["items[i].price_category_id"]`-style
+keys; `channel` accepts `APP` and `WEB` only (`POS` is Lot 3); a `qty` above the account limit
+is answered with `PER_ACCOUNT_LIMIT`. The limit counts `RESERVED` orders until the expiry job
+(every 30 s) moves them to `EXPIRED`.
 
 ## Payments
 
@@ -61,36 +76,50 @@ gateway (`provider = fake`) that exists only outside prod.
 | POST | `/payments/{provider}/callback` | Server to server (`fake` now, `payzone` later). Signature verified before any state change. Idempotent on `payment_id`. On approval, in one transaction: payment `SUCCEEDED` → order `PAID` → tickets issued (one per unit, holder = buyer). Request format and acknowledgement body come from the adapter. |
 | GET, POST | `/payments/card/{payment_id}/return` | Browser landing after the gateway. **Never changes state.** Lot 0: plain "paiement en cours de confirmation" page. Lot 1: redirects to a fixed client URL per `orders.channel` (no caller-supplied URL). |
 | GET | `/payments/fake/{payment_id}` | Simulated gateway page: amount, "Approuver" / "Refuser". Each button posts a signed callback to `/payments/fake/callback`, then lands on `/return`. Supports a delayed callback. Exists only in `dev`/`test`/`staging`; startup fails if `payments.card.provider=fake` under `prod`. |
+| POST | `/payments/fake/{payment_id}/late` | Simulated gateway only (same profiles): schedules the signed approval after `payments.fake.late-delay`; `410` if the payment isn't `PENDING`. |
 | POST | `/payments/cash/callback` | Agency network (Lot 3), idempotent on `payment_ref` |
+
+Answers: `POST /fan/orders/{id}/pay` → `200`. A callback with a missing, bad or tampered signature →
+401 `UNAUTHORIZED` with a fixed message and empty `details`, nothing written. `/redirect`, `/return`
+and the simulated gateway page are browser pages (FR HTML, e.g. the 410), not the JSON error shape;
+an unknown `payment_id` on `/redirect` is the JSON 404. A success on a `RESERVED` order whose hold
+has passed but that the expiry job hasn't swept yet is a normal `PAID` (the places are still held).
 
 Late success: expiry skips orders with a `PENDING` payment younger than 20 min. A success after
 expiry re-reserves the quota atomically → `PAID`; if no quota is left the order stays `EXPIRED`,
-the payment is `SUCCEEDED`, and `audit_log` gets `payment.refund_required` (manual refund).
+the payment is `SUCCEEDED`, and `audit_log` gets `payment.refund_required` (manual refund) with reason `SOLD_OUT`,
+`PER_ACCOUNT_LIMIT`, `NOT_PAYABLE` (a second success for an order already `PAID`), or
+`AMOUNT_MISMATCH` (an approved callback whose amount differs from the payment: payment `FAILED`,
+order stays payable, the charged amount must be refunded).
 
 ## Organizer
 
 Every `/org/*` call except `/org/auth/*` and `/org/me` needs `X-Organizer-Id`. The server checks
 for an active `staff` row (user_id = token subject). Lot 0 roles: `ADMIN`, `OPS` read and write;
-`FINANCE` read only; `GATE`, `SUPERVISOR` get 403.
+`FINANCE` read only; `GATE`, `SUPERVISOR` get 403. A missing or malformed `X-Organizer-Id` → 400
+`BAD_REQUEST`; no active staff row for it → 403 `FORBIDDEN`.
+
+Fans and staff share one OTP mechanism (`otp_challenges` has no audience): a code proves the
+caller holds the phone; the endpoint decides the token audience.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/org/auth/otp` | `{phone}` → always `202` (no staff enumeration). The code is sent only if the phone belongs to a user with an active staff row. |
-| POST | `/org/auth/verify` | `{phone, code}` → `{token, expires_at, memberships:[{organizer_id, organizer_name, role}]}`. JWT `aud=org`, 12 h. |
-| GET | `/org/me` | `{user, memberships[]}`, no `X-Organizer-Id` (feeds the organizer switcher) |
-| GET, POST | `/org/venues` | `{name, city?, capacity}` → `{id, name, city, capacity}` |
-| GET, PATCH | `/org/venues/{id}` | GET returns `zones[]` and `gates[]` (each gate with `zone_ids[]`) |
+| POST | `/org/auth/otp` | `{phone}` → always `202` (no staff enumeration). The code is sent only if the phone belongs to a user with an active staff row. Over the rate limit it still answers `202` and sends nothing (a 429 would reveal staff phones). |
+| POST | `/org/auth/verify` | `{phone, code}` → `{token, expires_at, memberships:[{organizer_id, organizer_name, role}]}`. JWT `aud=org`, 12 h. A phone with no active staff row → `OTP_INVALID`, nothing created. |
+| GET | `/org/me` | `{user:{id, phone, display_name, locale}, memberships:[{organizer_id, organizer_name, role}]}`, no `X-Organizer-Id` (feeds the organizer switcher) |
+| GET, POST | `/org/venues` | `{name, city?, capacity, timezone?}` → `{id, name, city, capacity, timezone}`. `timezone` is an IANA region id (`Area/Location`, e.g. `Africa/Casablanca`, the default); unknown ids and fixed-offset ids (`UTC`, `GMT`, `Etc/*`, `+01:00`) → 422. |
+| GET, PATCH | `/org/venues/{id}` | GET returns `zones[]` and `gates[]` (each gate with `zone_ids[]`). `timezone` can change only while no event references the venue (`VENUE_IN_USE`); re-sending the current value is not a change. |
 | POST | `/org/venues/{id}/zones` | `{code, name, capacity, seated?}` → `{id, code, name, capacity, seated}` (`id` is an int) |
 | PATCH, DELETE | `/org/venues/{id}/zones/{zone_id}` | DELETE only if unreferenced (`ZONE_IN_USE`) |
 | POST | `/org/venues/{id}/gates` | `{code, name}` → `{id, code, name, zone_ids:[]}` |
 | PATCH, DELETE | `/org/venues/{id}/gates/{gate_id}` | DELETE only if unreferenced (`GATE_IN_USE`) |
 | PUT | `/org/gates/{id}/zones` | `{zone_ids:[...]}` replaces the set. Zones must belong to the gate's venue. |
-| GET | `/org/events?status=&from=` | `[{id, title, event_type, starts_at, status, venue:{id, name}, quota, sold}]` by `starts_at` |
-| POST | `/org/events` | `{venue_id, event_type, title, starts_at, doors_open_at?, reentry_policy?, per_account_limit?, metadata?}` → `201` event in `DRAFT`. **K_e (32 random bytes) is generated and encrypted in the same transaction and never returned.** |
-| GET, PATCH | `/org/events/{id}` | Event `{id, venue_id, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at, reentry_policy, per_account_limit, metadata, created_at}`. PATCH allowed in `DRAFT`/`ON_SALE`. `venue_id` and `event_type` are fixed after create. Changing `starts_at` while `ON_SALE` recomputes `refund_cutoff_at`. |
-| GET, POST | `/org/events/{id}/prices` | `{zone_id, name, price_mad, quota}` → `{id, zone_id, name, price_mad, quota, sold}`. The zone must be in the event's venue; Σ quota per zone ≤ zone capacity. |
-| PATCH, DELETE | `/org/events/{id}/prices/{price_id}` | `quota ≥ sold`. A price change applies to new orders only (snapshot in `order_items`). DELETE only if `sold = 0` (`PRICE_IN_USE`). |
-| POST | `/org/events/{id}/publish` | `DRAFT` → `ON_SALE`. Needs ≥ 1 category with quota > 0 and `starts_at > now`. Sets `refund_cutoff_at = starts_at − 60 min`. Writes `audit_log` `event.publish`. |
+| GET | `/org/events?status=&from=` | `[{id, title, event_type, starts_at, status, venue:{id, name, timezone}, quota, sold}]` by `starts_at` |
+| POST | `/org/events` | `{venue_id, event_type, title, starts_at, doors_open_at?, reentry_policy?, per_account_limit?, metadata?}` → `201` event in `DRAFT`. **K_e (32 random bytes) is generated and encrypted in the same transaction and never returned.** A `venue_id` that is unknown or another organizer's → 422 `VALIDATION_FAILED` on `venue_id`. Lot 0 has no version field: concurrent edits of one event are last-write-wins. |
+| GET, PATCH | `/org/events/{id}` | Event (`id` is an int, the 4-byte `event_id` of the QR) `{id, venue_id, timezone, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at, reentry_policy, per_account_limit, metadata, created_at}`. PATCH allowed in `DRAFT`/`ON_SALE`. `venue_id` and `event_type` are fixed after create (a different value → 422). Changing `starts_at` while `ON_SALE` recomputes `refund_cutoff_at`. `metadata` in a PATCH replaces the whole object. `doors_open_at` cannot be cleared in Lot 0. |
+| GET, POST | `/org/events/{id}/prices` | `{zone_id, name, price_mad, quota}` → `{id, zone_id, name, price_mad, quota, sold}`. The zone must be in the event's venue; Σ quota per zone ≤ zone capacity. A name already used for that zone in the event → 422 `VALIDATION_FAILED` on `name` with `details.reason` `NAME_TAKEN` (clients match the reason, never the message text). |
+| PATCH, DELETE | `/org/events/{id}/prices/{price_id}` | PATCH `{name?, price_mad?, quota?}`; `zone_id` is fixed after create (a different value → 422). `quota ≥ sold`. A price change applies to new orders only (snapshot in `order_items`). DELETE only if `sold = 0` (`PRICE_IN_USE`). |
+| POST | `/org/events/{id}/publish` | `DRAFT` → `ON_SALE`. Needs ≥ 1 category with quota > 0 and `starts_at > now`. Sets `refund_cutoff_at = starts_at − 60 min`. Writes `audit_log` `event.publish`. → `200` with the event (GET shape). Unmet precondition → 422 `VALIDATION_FAILED` with `details.reason` `NO_QUOTA` (`fields.prices`) or `STARTS_IN_PAST` (`fields.starts_at`). |
 | GET | `/org/events/{id}/sales` | Sold / remaining per zone, by channel, revenue |
 | POST | `/org/tickets/{id}/block` · `/unblock` · `/refund` | Refused after `refund_cutoff_at` (`REFUND_FROZEN`) |
 | POST | `/org/events/{id}/invitations` | Bulk accreditations `[{phone?, name, zone_id, count}]` → tickets with method FREE |
@@ -111,7 +140,8 @@ for an active `staff` row (user_id = token subject). Lot 0 roles: `ADMIN`, `OPS`
 | others | free |
 
 The server requires a JSON object of at most 4 KB, type-checks the known keys and keeps unknown
-keys. The back-office validates per type with zod.
+keys. A known key sent as `null` fails the type check: leave empty keys out. The back-office
+validates per type with zod.
 
 ## Gate (scanner)
 
@@ -144,5 +174,8 @@ Acceptance on the scanner: v2 valid if `|slot - now_slot| <= 1` (server-time-cor
 
 The backend ships `TokenVectorsTest` that writes `docs/token-vectors.json`:
 `[{k_e, event_id, ticket_id, zone_id, slot?, expected_token}]` for 10 static and 10
-rotating tokens. `packages/core` golden-tests against the same file. Until generated,
+rotating tokens. Field encodings: `k_e` lowercase hex (64 chars); `event_id`, `zone_id`,
+`slot` JSON integers (`slot` absent for v1); `ticket_id` canonical lowercase UUID string;
+`expected_token` base64url without padding. Include the edge values (`event_id` 0xFFFFFFFF,
+`zone_id` 0xFFFF, `slot` 0xFFFFFFFF). `packages/core` golden-tests against the same file. Until generated,
 both sides must agree on the byte layout above.

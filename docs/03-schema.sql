@@ -62,7 +62,8 @@ create table venues (
   organizer_id  uuid not null references organizers(id),
   name          text not null,
   city          text,
-  capacity      integer not null check (capacity > 0)
+  capacity      integer not null check (capacity > 0),
+  timezone      text not null default 'Africa/Casablanca'  -- IANA zone; every wall time for this venue's events
 );
 
 create table zones (
@@ -304,6 +305,7 @@ create table settlements (
 );
 
 -- ---------- audit ----------
+-- Owned by the shared kernel (backend `ma.jomhor.common.AuditLog`): every module writes through it.
 create table audit_log (
   id            bigserial primary key,
   organizer_id  uuid,

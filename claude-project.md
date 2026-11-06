@@ -10,7 +10,7 @@ and custom instructions). The project knowledge should hold `docs/00-product.md`
 Jomhor (جمهور, "the crowd") — a ticketing and fan platform built for Morocco, anchored on a
 football club as first customer. Offline gate validation, Moroccan payments (card, cash at
 agencies, wallet), WhatsApp delivery, Darija-first, organizer-owned data. Stack: Spring
-Boot 3 / Java 21 / PostgreSQL, Flutter (fan app + scanner), Next.js web shop, React +
+Boot 4 / Java 25 / PostgreSQL, Flutter (fan app + scanner), Next.js web shop, React +
 shadcn back-office.
 
 ## Custom instructions
@@ -28,8 +28,8 @@ anything about scope, data model, protocol or design):
   key (K_e); scans are append-only and idempotent on `scan_id`; first scan wins. No server
   call on the critical path. No personal data in a QR.
 - Money is integer centimes (MAD). Copy is French by default, Arabic with RTL, English.
-- Stack is fixed: Java 21 / Spring Boot 3 / PostgreSQL 16 / Flyway; Flutter (Riverpod,
-  Drift) for fan app and scanner; Next.js (App Router, SSR) for the web shop; React 18 +
+- Stack is fixed: Java 25 / Spring Boot 4 / PostgreSQL 18 / Flyway; Flutter (Riverpod,
+  Drift) for fan app and scanner; Next.js (App Router, SSR) for the web shop; React 19 +
   Vite + shadcn/ui for the back-office; AWS eu-west-3.
 - V1 ships in seven lots (00-product.md). When asked to build or plan something, say which
   lot it belongs to, then propose migration → API → UI in that order.

@@ -10,7 +10,7 @@ V1 validates every ticket at the gate with no server round-trip: the scanner hol
 - Three sales channels, all producing the same ticket record: fan app (rotating QR), web shop (PDF, static QR), cash points of sale (thermal print, static QR).
 - Scanners are Android phones or Android PDAs (Sunmi L2 / Zebra TC2x class) running one Flutter scanner app. No turnstiles, no fixed network at the gates.
 - Design assumption: zero usable connectivity at the gates from 60 min before the event start (T0) to 30 min after. Nothing on the critical path may call the server.
-- Server side: Spring Boot 3 / Java 21, PostgreSQL. Scanner side: Flutter + SQLite, keys in Android Keystore.
+- Server side: Spring Boot 4 / Java 25, PostgreSQL 18. Scanner side: Flutter + SQLite, keys in Android Keystore.
 - Out of scope for v1: resale, away matches, NFC season cards, turnstile integration.
 
 ## Actors, devices & trust boundaries

@@ -6,7 +6,8 @@ description: Builds the Spring Boot modular monolith in backend/ - Flyway migrat
 You are the backend engineer of Jomhor. You own `backend/` and `docs/token-vectors.json`.
 You do not edit `apps/`, `packages/` or `web/`.
 
-Stack (fixed): Java 21, Spring Boot 3.x, PostgreSQL 16, Flyway, Gradle, JUnit 5 + Testcontainers.
+Stack (fixed): Java 25, Spring Boot 4.x, PostgreSQL 18, Flyway, Gradle 9, JUnit + Testcontainers.
+Always the latest stable versions (see CLAUDE.md §Versions).
 Modules: tenancy, catalog, sales, payments, tickets, gate, finance, notifications, crm.
 Package-by-module, hexagonal inside a module (domain / application / adapters). Modules talk
 through application services or domain events, never through another module's repository.

@@ -12,7 +12,7 @@ Outside dependencies:
 | --- | --- | --- |
 | Payzone merchant kit and sandbox credentials (decision 2026-11-06: Payzone, not CMI) | Founder → Payzone | BE-7 only, which sits **outside Lot 0** until the kit arrives. Lot 0 runs entirely on the simulated gateway. |
 | A public HTTPS URL for Payzone sandbox callbacks | Orchestrator (cloudflared or ngrok tunnel) or AWS staging, whichever exists when the kit lands | BE-7 sandbox run |
-| Docker on dev machines (Testcontainers), JDK 21, Node 20+ | Dev machines | All tasks |
+| Docker on dev machines (Testcontainers), JDK 25, Node 22.12+ | Dev machines | All tasks |
 
 **How the exit criterion "Admin creates an event and sells a test ticket by card" is met without Lot 1:**
 
@@ -46,19 +46,20 @@ Why this way:
 
 | # | Question | Default for Lot 0 |
 | --- | --- | --- |
-| Q1 | **Decided:** card gateway is Payzone. Kit and sandbox credentials pending | Simulated gateway behind the `CardGateway` port for Lot 0. Payzone adapter (BE-7) once the kit arrives. |
+| Q1 | **Decided:** card gateway is Payzone; keep the simulated gateway until the kit arrives (confirmed 2026-11-06) | Simulated gateway behind the `CardGateway` port for Lot 0. Payzone adapter (BE-7) once the kit arrives. |
 | Q2 | SMS/WhatsApp OTP provider | `OtpSender` port with a log adapter (dev/staging only; prod refuses to start with it). Choose the provider before Lot 1. |
 | Q3 | `users` is global (one fan account across organizers). This breaks the letter of "every table carries `organizer_id`". | Global, written up as an explicit exception: `organizers`, `users`, `otp_challenges`. Organizer ownership of fans comes through `orders`/`tickets`. |
 | Q4 | Back-office login method | Phone OTP, the same machinery as fans. A staff row links to a `users` row. TOTP/2FA for ADMIN in Lot 6. |
 | Q5 | B2 says the gate → zone matrix is "modifiable par événement", but `gate_zones` is per venue | Lot 0: venue level only. B2 shows the matrix read-only. A per-event override (`event_gate_zones`) goes to Lot 2, where scanners use `allowed_zone_ids`. |
 | Q6 | Refund cutoff offset | Fixed at T0 − 60 min (spec). No per-organizer setting. |
-| Q7 | Time zone | Africa/Casablanca is assumed. The back-office enters and shows times in it; the API is UTC. A `venues.timezone` column waits for a non-Moroccan venue. |
+| Q7 | Time zone | **Decided 2026-11-06 (founder: expansion is an option):** per-venue IANA `venues.timezone`, default `Africa/Casablanca`. API stays UTC; events expose their venue's `timezone`; clients convert through the IANA zone, never a fixed offset. Changing a venue's zone is refused once events reference it (`VENUE_IN_USE`). Migration V5. |
 | Q8 | Card success arrives after the 8 min hold expired | Expiry skips orders with a `PENDING` payment younger than 20 min. A later success re-reserves the quota atomically → `PAID`. If no quota is left, the order stays `EXPIRED`, the payment is `SUCCEEDED`, an `audit_log` row `payment.refund_required` is written, and the refund is manual in the gateway's merchant back-office. |
 | Q9 | Re-entry policy (product open question) | `NONE` (schema default), editable in B2 Règles. |
 | Q10 | Stadium plan (which gates serve which tribunes) | Placeholder from the mockup in the dev seed (ATLAS FC; zones NORD/EST/HONNEUR/SUD; gates P1–P7). Real data is entered at onboarding. |
 | Q11 | Event series in Lot 0? | No. `series_id` stays nullable and the B2 "Série" field is hidden until Lot 5 (passes). |
 | Q12 | First organizer and admin in staging/prod | A dev seed (dev profile only) plus a documented SQL snippet. No platform-admin API until Lot 6. |
 | Q13 | JWT revocation and refresh | Lot 0: one HS256 access token (fan 30 d, org 12 h), no refresh. Revisit in Lot 1 before real K_t reaches phones. |
+| Q14 | OTP abuse limits beyond 3 sends / 5 attempts per 10 min (BE-2 review): 15 guesses per 10 min on a staff phone is ~6 %/month for a targeted account; no per-IP cap means SMS pumping once a real provider is live | **Decided 2026-11-06: defaults accepted, implement in Lot 1 with the real `OtpSender`.** per-phone daily cap (10 sends, 15 failed attempts / 24 h → lockout), per-IP throttle on both `/*/auth/otp`, send after commit off the request thread. Log adapter only in Lot 0. Also covers a silent lockout: `/org/auth/otp` creates a challenge for any phone (needed so it can't reveal staff), so 3 calls / 10 min lock a fan out without any SMS; the per-IP throttle is the fix. |
 
 ## 4. Contract changes
 
@@ -360,8 +361,8 @@ The backend is the serial critical path: one folder, one agent per wave. Each ba
 
 | Wave | # | Owner | Files / area | Task | Done = test | Blocked on | Days |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | BE-1 | backend | `backend/` (Gradle single project, `ma.jomhor`, Spring Boot 3, Flyway, `compose.yaml` PG16), `.github/workflows/ci.yml` | Scaffold; migrations V1–V4; error handler (04 error shape); only the module packages Lot 0 uses (tenancy, catalog, sales, payments, tickets); CI with two path-filtered jobs (`./gradlew test`; `web/backoffice`: `npm ci && npm run check`) | `MigrationsTest`: V1–V4 apply on Testcontainers PG16; an `information_schema` query finds `organizer_id` on every table except `organizers`, `users`, `otp_challenges`, `flyway_schema_history`; `sold > quota` is rejected by CHECK | W0 | 2 |
-| 1 ∥ | BO-1 | backoffice | `web/backoffice/` | Vite + React 18 + TS + Tailwind + shadcn + TanStack Query + RHF/zod + react-router + i18n (FR); sidebar shell per DESIGN (Événements and Paramètres › Lieux active, others disabled); API client (`/v1` via Vite proxy, Bearer, `X-Organizer-Id`, error shape); `npm run check` = typecheck + lint + test + build | `npm run check` green; a unit test shows the client sets both headers and parses the 04 error shape | W0 | 1.5 |
+| 1 | BE-1 | backend | `backend/` (Gradle single project, `ma.jomhor`, Spring Boot 4, Flyway, `compose.yaml` PG18), `.github/workflows/ci.yml` | Scaffold; migrations V1–V4; error handler (04 error shape); only the module packages Lot 0 uses (tenancy, catalog, sales, payments, tickets); CI with two path-filtered jobs (`./gradlew test`; `web/backoffice`: `npm ci && npm run check`) | `MigrationsTest`: V1–V4 apply on Testcontainers PG18; an `information_schema` query finds `organizer_id` on every table except `organizers`, `users`, `otp_challenges`, `flyway_schema_history`; `sold > quota` is rejected by CHECK | W0 | 2 |
+| 1 ∥ | BO-1 | backoffice | `web/backoffice/` | Vite + React 19 + TS + Tailwind + shadcn + TanStack Query + RHF/zod + react-router + i18n (FR); sidebar shell per DESIGN (Événements and Paramètres › Lieux active, others disabled); API client (`/v1` via Vite proxy, Bearer, `X-Organizer-Id`, error shape); `npm run check` = typecheck + lint + test + build | `npm run check` green; a unit test shows the client sets both headers and parses the 04 error shape | W0 | 1.5 |
 | 1 ∥ | FL-1 *(optional)* | flutter | `packages/core/` | Pure-Dart token codec (v1/v2, K_t derivation, slot) against 04 §Token. Not on the Lot 0 critical path. | `dart test` round-trips the layout; golden test marked pending (`token-vectors.json` arrives in Lot 1) | — | 2 |
 | 2 | BE-2 | backend | `backend/…/tenancy` | OTP (hashed, rate limit, 5 attempts) + `OtpSender` port with a log adapter (refused under prod); JWT HS256 with `aud` fan/org, secret from env; `/fan/auth/*`, `/org/auth/*`, `/org/me`; `OrgContext` filter (`X-Organizer-Id` → staff row and role); dev seed (ATLAS FC, admin with a test phone, stadium) in a dev-only Flyway location | Contract tests for the 5 endpoints. Tenant test: staff of org A with header B → 403; fan token on `/org` → 401; 4th send in 10 min → 429; 6th wrong code → challenge dead; `/org/auth/otp` for an unknown phone → 202 and nothing sent | BE-1 | 2.5 |
 | 3 | BE-3 | backend | `backend/…/catalog` (venues) | Venue, zone and gate CRUD; `PUT /org/gates/{id}/zones` | Contract test per row; every lookup scoped by `organizer_id` (another org's id → 404); `CODE_TAKEN`; `ZONE_IN_USE`; a zone of another venue in gate-zones → 422 | BE-2 | 1.5 |
@@ -406,7 +407,7 @@ Never cut:
 | Area | What the reviewer checks hardest |
 | --- | --- |
 | Tenant isolation | Every repository query on a tenant table filters by `organizer_id` (`findByIdAndOrganizerId`). Another org's or another user's id → 404, never 200. `MigrationsTest` allowlist is exactly 3 tables. The back-office query keys include `organizerId`. |
-| K_e | Generated at create in the same transaction; AES-GCM with a random nonce; master key from env only; byte[] field excluded from `toString` and logging; absent from every DTO (test exists). |
+| K_e | Responses use controller-local DTO records, never the `Event` domain record (it carries `event_key_enc`; one added field would leak K_e). Generated at create in the same transaction; AES-GCM with a random nonce; master key from env only; byte[] field excluded from `toString` and logging; absent from every DTO (test exists). |
 | Money | `long` / `bigint` everywhere. Any gateway amount string built with `/ 100` and `% 100`, no `BigDecimal(double)` or `double`. Back-office DH parsing is string/integer only. `order_items.unit_price_mad` snapshot is used for totals. |
 | Payments | Signature verified before any state change, including the simulated gateway's. Callback idempotent (payment row lock + status check, unique `(provider, provider_ref)`). Amount check. `PAID` and ticket issue in one transaction. Late-success rule (Q8). `/return` never mutates. No caller-supplied redirect URL. Simulated gateway impossible under `prod`. No card data stored in `payments.callback`. |
 | Quota | The conditional `UPDATE` is the only way `sold` grows. Expiry releases exactly once. The concurrency test is real (parallel threads, not sequential calls). |
@@ -414,3 +415,13 @@ Never cut:
 | Naming | `event_id` only; football fields only inside `metadata`; Flyway names match `docs/03-schema.sql` exactly. |
 | Contract | Every Lot 0 row in `docs/04-api.md` has a contract test. No endpoint exists that is not in the doc. |
 | UI | No hard-coded strings (FR via i18n); shadcn components only; organizers addressed as "vous". |
+
+## 7. Carried forward (from Lot 0 reviews)
+
+| Item | Lot | Note |
+| --- | --- | --- |
+| `GATE_IN_USE` on gate delete | 2 | Lot 0 has no table referencing gates; `device_assignments` and `scans` must make delete return 409, not 500 (`ponytail:` note in `VenueService`). |
+| Edge forwards only `/v1/*` | 6 | Paths outside the `/v1` context path get Tomcat's default 404, not the 04 error shape. The ALB must route `/v1/*` only. |
+| BE-6 from the BE-5 review | 0 | (1) move the Q8 `payments` read out of sales SQL into a payments query; (2) `POST /fan/orders/{id}/pay` locks the order row `FOR UPDATE` before inserting the PENDING payment, or a payment committed after the expiry snapshot is missed and the order expires anyway; (3) the late-success re-reserve takes the buyer lock and re-checks `per_account_limit`. |
+| Duplicate `provider_ref` on a signed callback | BE-7 | A correctly signed callback reusing another payment's `provider_ref` hits the unique index and returns 500 (nothing written). Real gateways' refs are unique; map it to a clean refusal + audit when the Payzone adapter lands. |
+| OTP abuse limits | 1 | Q14 decided: per-phone daily cap (10 sends, 15 failed attempts / 24 h → lockout), per-IP throttle on both `/*/auth/otp`, send after commit off the request thread. |
