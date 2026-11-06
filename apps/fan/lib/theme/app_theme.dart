@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 
-/// DESIGN.md §Components (bottom nav icons); not in tokens.json.
-const _navIconSize = 22.0;
-
 /// Dark theme from `design/tokens.json` (via tokens.g.dart). The club accent
 /// is `JomhorColors.accent`; nothing here names a club colour.
 ThemeData buildAppTheme() {
@@ -56,8 +53,7 @@ ThemeData buildAppTheme() {
         foregroundColor: JomhorColors.onAccent,
         minimumSize: const Size.fromHeight(JomhorSize.ctaHeight),
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control))),
-        // DESIGN.md asks 16/600 for the CTA; tokens.json has no such style yet, so body until it does.
-        textStyle: JomhorType.body,
+        textStyle: JomhorType.cta,
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
@@ -65,8 +61,8 @@ ThemeData buildAppTheme() {
       backgroundColor: JomhorColors.surface,
       indicatorColor: Colors.transparent,
       iconTheme: selected(
-        const IconThemeData(size: _navIconSize, color: JomhorColors.accent),
-        const IconThemeData(size: _navIconSize, color: JomhorColors.textMuted),
+        const IconThemeData(size: JomhorSize.navIcon, color: JomhorColors.accent),
+        const IconThemeData(size: JomhorSize.navIcon, color: JomhorColors.textMuted),
       ),
       labelTextStyle: selected(
         JomhorType.caption.copyWith(color: JomhorColors.accent),

@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/config.dart';
+import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
 
 /// An API failure: the `{code, message, details}` body of docs/04-api.md, or
@@ -25,15 +27,36 @@ class ApiError implements Exception {
   String toString() => 'ApiError($status $code: $message)';
 }
 
+/// A 2xx response: decoded JSON and the server's clock.
+class ApiResponse {
+  const new(this.body, this.date);
+
+  final Object? body;
+
+  /// The `Date` header (server time, 1 s resolution); null when absent or unreadable.
+  final DateTime? date;
+}
+
+DateTime? _date(String? header) {
+  if (header == null) return null;
+  try {
+    return HttpDate.parse(header);
+  } on Exception {
+    return null;
+  }
+}
+
 /// JSON client for the fan API. [get], [post] and [patch] send `Authorization: Bearer` when a
-/// token is stored. Public endpoints (`GET /fan/events*`) go through [getPublic], which never does.
+/// token is stored. Public endpoints (`GET /fan/events*`, `POST /fan/auth/*`) go through [getPublic]
+/// and [postPublic], which never do; [get] and [post] refuse those paths.
 class ApiClient {
   new({
     required this.baseUrl,
     required this._tokens,
-    http.Client? httpClient,
+    required this._http,
     this.timeout = const Duration(seconds: 20),
-  }) : _http = httpClient ?? http.Client();
+    this.onUnauthorized,
+  });
 
   /// Includes the `/v1` prefix, e.g. `https://api.jomhor.ma/v1`.
   final String baseUrl;
@@ -43,22 +66,38 @@ class ApiClient {
   final TokenStore _tokens;
   final http.Client _http;
 
+  /// Called with the token a request carried when it got a 401 (revoked or expired session).
+  /// A 401 without a token (e.g. `OTP_INVALID` on verify) does not call it.
+  final Future<void> Function(String token)? onUnauthorized;
+
   Future<Object?> get(String path, {Map<String, String>? query}) {
     // A public read through the authenticated path would leak the token to a public, cacheable URL.
     if (path.startsWith('/fan/events')) throw ArgumentError.value(path, 'path', 'public endpoint: use getPublic');
-    return _send('GET', path, query: query, auth: true);
+    return _body(_send('GET', path, query: query, auth: true));
   }
 
   /// For public endpoints: never sends the session token.
-  Future<Object?> getPublic(String path, {Map<String, String>? query}) => _send('GET', path, query: query, auth: false);
+  Future<Object?> getPublic(String path, {Map<String, String>? query}) => _body(getPublicResponse(path, query: query));
 
-  Future<Object?> post(String path, {Object? body}) => _send('POST', path, body: body, auth: true);
+  /// [getPublic] plus the server's `Date` header, for reads whose meaning depends on server time.
+  Future<ApiResponse> getPublicResponse(String path, {Map<String, String>? query}) =>
+      _send('GET', path, query: query, auth: false);
 
-  Future<Object?> patch(String path, {Object? body}) => _send('PATCH', path, body: body, auth: true);
+  Future<Object?> post(String path, {Object? body}) {
+    if (path.startsWith('/fan/auth/')) throw ArgumentError.value(path, 'path', 'public endpoint: use postPublic');
+    return _body(_send('POST', path, body: body, auth: true));
+  }
 
-  /// Returns the decoded JSON body (null when empty, e.g. 202/204).
+  /// For public endpoints (OTP request and verify): never sends the session token.
+  Future<Object?> postPublic(String path, {Object? body}) => _body(_send('POST', path, body: body, auth: false));
+
+  Future<Object?> patch(String path, {Object? body}) => _body(_send('PATCH', path, body: body, auth: true));
+
+  static Future<Object?> _body(Future<ApiResponse> response) async => (await response).body;
+
+  /// Returns the decoded JSON body (null when empty, e.g. 202/204) and the `Date` header.
   /// Throws [ApiError] on any non-2xx status or network failure.
-  Future<Object?> _send(
+  Future<ApiResponse> _send(
     String method,
     String path, {
     required bool auth,
@@ -67,10 +106,8 @@ class ApiClient {
   }) async {
     final request = http.Request(method, Uri.parse('$baseUrl$path').replace(queryParameters: query))
       ..headers['Accept'] = 'application/json';
-    if (auth) {
-      final token = await _tokens.read();
-      if (token != null) request.headers['Authorization'] = 'Bearer $token';
-    }
+    final token = auth ? await _tokens.read() : null;
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
     if (body != null) {
       request
         ..headers['Content-Type'] = 'application/json; charset=utf-8'
@@ -86,6 +123,7 @@ class ApiClient {
     }
 
     final status = response.statusCode;
+    if (status == 401 && token != null) await onUnauthorized?.call(token);
     final Object? json;
     try {
       // bodyBytes: `response.body` falls back to latin1 without a charset.
@@ -93,7 +131,7 @@ class ApiClient {
     } on FormatException {
       throw ApiError(status: status, code: ApiError.unexpectedResponse, message: 'Body is not JSON');
     }
-    if (status >= 200 && status < 300) return json;
+    if (status >= 200 && status < 300) return ApiResponse(json, _date(response.headers['date']));
 
     if (json case {'code': final String code, 'message': final String message}) {
       final details = json['details'];
@@ -106,12 +144,21 @@ class ApiClient {
     }
     throw ApiError(status: status, code: ApiError.unexpectedResponse, message: 'HTTP $status');
   }
-
-  void close() => _http.close();
 }
 
-final apiClientProvider = Provider<ApiClient>((ref) {
-  final client = ApiClient(baseUrl: AppConfig.apiBaseUrl, tokens: ref.watch(tokenStoreProvider));
+/// Overridden in tests with `MockClient`.
+final httpClientProvider = Provider<http.Client>((ref) {
+  final client = http.Client();
   ref.onDispose(client.close);
   return client;
 });
+
+final apiClientProvider = Provider<ApiClient>(
+  (ref) => ApiClient(
+    baseUrl: AppConfig.apiBaseUrl,
+    tokens: ref.watch(tokenStoreProvider),
+    http: ref.watch(httpClientProvider),
+    // Any 401 on an authenticated call ends the session; the router then shows the login.
+    onUnauthorized: (token) => ref.read(sessionProvider.notifier).rejected(token),
+  ),
+);

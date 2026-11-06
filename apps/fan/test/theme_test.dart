@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jomhor_fan/theme/app_theme.dart';
+import 'package:jomhor_fan/theme/tokens.g.dart';
 
 import '../tool/gen_tokens.dart';
 
@@ -17,6 +18,11 @@ void main() {
     expect(theme.colorScheme.primary, hex('accent'));
     expect(theme.colorScheme.onPrimary, hex('onAccent'));
     expect(theme.scaffoldBackgroundColor, hex('ground'));
+  });
+
+  test('the club identity comes from tokens.json', () {
+    final club = tokens['club']! as Map<String, Object?>;
+    expect((JomhorClub.name, JomhorClub.crestInitial), (club['name'], club['crestInitial']));
   });
 
   test('tokens.g.dart matches tokens.json (else run `dart run tool/gen_tokens.dart`)', () {

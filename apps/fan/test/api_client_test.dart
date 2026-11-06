@@ -5,21 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
-import 'package:jomhor_fan/core/api/token_store.dart';
 
-class MemoryTokenStore implements TokenStore {
-  new([this.token]);
-  String? token;
-
-  @override
-  Future<String?> read() async => token;
-
-  @override
-  Future<void> write(String token) async => this.token = token;
-
-  @override
-  Future<void> clear() async => token = null;
-}
+import 'helpers.dart';
 
 void main() {
   late http.Request last;
@@ -27,7 +14,7 @@ void main() {
   ApiClient client(String? token, {int status = 200, String body = '{}'}) => ApiClient(
     baseUrl: 'https://api.test/v1',
     tokens: MemoryTokenStore(token),
-    httpClient: MockClient((request) async {
+    http: MockClient((request) async {
       last = request;
       return http.Response.bytes(utf8.encode(body), status, headers: {'content-type': 'application/json'});
     }),
@@ -98,7 +85,7 @@ void main() {
       tokens: MemoryTokenStore(),
       timeout: const Duration(milliseconds: 50),
       // Headers arrive at once; the body never ends.
-      httpClient: MockClient.streaming(
+      http: MockClient.streaming(
         (request, _) async => http.StreamedResponse(StreamController<List<int>>().stream, 200),
       ),
     );
@@ -109,11 +96,50 @@ void main() {
     final api = ApiClient(
       baseUrl: 'https://api.test/v1',
       tokens: MemoryTokenStore(),
-      httpClient: MockClient((_) => throw http.ClientException('Failed host lookup')),
+      http: MockClient((_) => throw http.ClientException('Failed host lookup')),
     );
     await expectLater(
       api.get('/fan/me'),
       throwsA(isA<ApiError>().having((e) => e.status, 'status', 0).having((e) => e.code, 'code', 'NETWORK_ERROR')),
     );
+  });
+
+  test('a 401 on a call that carried the token reports that token; a 401 without a token does not', () async {
+    final rejected = <String>[];
+    ApiClient api(String? token) => ApiClient(
+      baseUrl: 'https://api.test/v1',
+      tokens: MemoryTokenStore(token),
+      http: MockClient((_) async => apiError(401, 'OTP_INVALID')),
+      onUnauthorized: (token) async => rejected.add(token),
+    );
+
+    await expectLater(
+      api('jwt').postPublic('/fan/auth/verify', body: const <String, Object?>{}),
+      throwsA(isA<ApiError>()),
+    );
+    expect(rejected, isEmpty);
+    await expectLater(api('jwt').get('/fan/me'), throwsA(isA<ApiError>()));
+    expect(rejected, ['jwt']);
+  });
+
+  test('OTP calls never carry the token; post refuses /fan/auth/*', () async {
+    final api = client('jwt', status: 202, body: '');
+    await api.postPublic('/fan/auth/otp', body: {'phone': '+212612345678'});
+    expect(last.headers.containsKey('Authorization'), isFalse);
+    expect(() => api.post('/fan/auth/verify', body: const <String, Object?>{}), throwsArgumentError);
+  });
+
+  test('getPublicResponse exposes the server Date header (null when absent or unreadable)', () async {
+    Future<DateTime?> date(Map<String, String> headers) async => (await ApiClient(
+      baseUrl: 'https://api.test/v1',
+      tokens: MemoryTokenStore(),
+      http: MockClient(
+        (_) async => http.Response('[]', 200, headers: {'content-type': 'application/json', ...headers}),
+      ),
+    ).getPublicResponse('/fan/events')).date;
+
+    expect(await date({'date': 'Sat, 20 Feb 2027 11:59:30 GMT'}), DateTime.utc(2027, 2, 20, 11, 59, 30));
+    expect(await date({}), isNull);
+    expect(await date({'date': 'yesterday'}), isNull);
   });
 }

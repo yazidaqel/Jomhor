@@ -9,16 +9,18 @@ class PlaceholderScreen extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.all(JomhorSpace.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: JomhorSpace.m),
-          Text(AppLocalizations.of(context).placeholderComingSoon),
-        ],
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(JomhorSpace.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: JomhorSpace.m),
+            Text(AppLocalizations.of(context).placeholderComingSoon),
+          ],
+        ),
       ),
     ),
   );

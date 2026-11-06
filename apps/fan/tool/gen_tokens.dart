@@ -34,6 +34,12 @@ String generateTokens(Map<String, Object?> tokens) {
   }
 
   group('JomhorColors', 'color', (name, v) => 'Color $name = ${_color(v! as String)}');
+  // The club this build serves (Q23: build-time, one club). `crest` is an asset path, null until there is one.
+  group(
+    'JomhorClub',
+    'club',
+    (name, v) => v == null ? 'String? $name = null' : "String $name = '${_escape(v as String)}'",
+  );
   group('JomhorFonts', 'font', (name, v) => v is String ? "String $name = '${_escape(v)}'" : null);
   for (final (className, section) in [('JomhorRadius', 'radius'), ('JomhorSpace', 'space'), ('JomhorSize', 'size')]) {
     group(className, section, (name, v) => 'double $name = ${v! as num}');

@@ -35,6 +35,13 @@ abstract final class JomhorColors {
   static const Color ticketRule = Color(0xFFD6DAE3);
 }
 
+abstract final class JomhorClub {
+  static const String name = 'ATLAS FC';
+  static const String shortName = 'ATLAS';
+  static const String crestInitial = 'A';
+  static const String? crest = null;
+}
+
 abstract final class JomhorFonts {
   static const String display = 'Barlow Condensed';
   static const String body = 'Inter';
@@ -65,6 +72,7 @@ abstract final class JomhorSize {
   static const double navHeight = 84;
   static const double phoneWidth = 390;
   static const double phoneHeight = 844;
+  static const double navIcon = 22;
 }
 
 abstract final class JomhorMotion {
@@ -99,6 +107,9 @@ abstract final class JomhorType {
 
   /// body face.
   static const TextStyle bodySmall = TextStyle(fontSize: 13, fontWeight: FontWeight.w400);
+
+  /// body face.
+  static const TextStyle cta = TextStyle(fontSize: 16, fontWeight: FontWeight.w600);
 
   /// body face, uppercase.
   static const TextStyle label = TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 1.5);
