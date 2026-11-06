@@ -175,6 +175,54 @@ it('otp passes 429 OTP_RATE_LIMITED through', async () => {
   expect((await res.json()).code).toBe('OTP_RATE_LIMITED')
 })
 
+it('a backend timeout is a 502 INTERNAL_ERROR', async () => {
+  fetchMock.mockRejectedValue(new DOMException('The operation timed out.', 'TimeoutError'))
+  const res = await otp(req('/api/auth/otp', { phone: USER.phone }))
+  expect(res.status).toBe(502)
+  expect(await res.json()).toEqual({ code: 'INTERNAL_ERROR', message: 'Backend unreachable', details: {} })
+})
+
+it('a caller signal is combined with the timeout', async () => {
+  const { api } = await import('@/lib/api')
+  fetchMock.mockResolvedValue(upstream(200, {}))
+  const caller = new AbortController()
+  await api('/fan/me', { signal: caller.signal })
+  const signal = fetchMock.mock.calls[0]![1]!.signal!
+  expect(signal).not.toBe(caller.signal)
+  expect(signal.aborted).toBe(false)
+  caller.abort()
+  expect(signal.aborted).toBe(true)
+})
+
+it('with a caller signal present, the call still aborts after BACKEND_TIMEOUT_MS → 502', async () => {
+  const { api, BACKEND_TIMEOUT_MS } = await import('@/lib/api')
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+  // A backend that never answers: the request settles only when its signal aborts.
+  fetchMock.mockImplementation(
+    (_, init) => new Promise((_, reject) => init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason))),
+  )
+  const call = api('/fan/me', { signal: new AbortController().signal })
+  const outcome = call.then(
+    () => 'resolved',
+    (e: unknown) => e,
+  )
+  const signal = fetchMock.mock.calls[0]![1]!.signal!
+
+  await vi.advanceTimersByTimeAsync(BACKEND_TIMEOUT_MS - 1)
+  expect(signal.aborted).toBe(false)
+  await vi.advanceTimersByTimeAsync(1)
+
+  expect(signal.aborted).toBe(true)
+  expect((signal.reason as DOMException).name).toBe('TimeoutError')
+  expect(await outcome).toMatchObject({ status: 502, code: 'INTERNAL_ERROR' })
+})
+
+it('a malformed SHOP_ORIGIN refuses every request', async () => {
+  vi.stubEnv('SHOP_ORIGIN', 'shop.test')
+  expect((await otp(req('/api/auth/otp', { phone: USER.phone }))).status).toBe(403)
+  expect(console.error).toHaveBeenCalledWith('SHOP_ORIGIN is malformed: refusing mutating requests', 'shop.test')
+})
+
 it('otp answers 502 when the backend is unreachable', async () => {
   fetchMock.mockRejectedValue(new TypeError('fetch failed'))
   const res = await otp(req('/api/auth/otp', { phone: USER.phone }))

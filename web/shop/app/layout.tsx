@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Barlow_Condensed, Inter } from 'next/font/google'
+import { shopName } from '@/lib/club'
 import { defaultLocale, dirOf, getDictionary } from '@/lib/i18n'
 import './globals.css'
 
@@ -9,8 +10,14 @@ const body = Inter({ weight: ['400', '500', '600'], subsets: ['latin'], variable
 
 const d = getDictionary(defaultLocale)
 
-export const metadata: Metadata = {
-  title: { default: d.app.name, template: `%s · ${d.app.name}` },
+/** Read per request: `SHOP_ORIGIN` makes canonical and Open Graph URLs absolute (unset at build time). */
+export function generateMetadata(): Metadata {
+  const origin = process.env.SHOP_ORIGIN
+  return {
+    title: { default: shopName, template: `%s · ${shopName}` },
+    ...(URL.canParse(origin ?? '') && { metadataBase: new URL(origin!) }),
+    openGraph: { siteName: shopName, locale: d.meta.og, type: 'website' },
+  }
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

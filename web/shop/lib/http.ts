@@ -9,18 +9,34 @@ export const SESSION_COOKIE = '__Host-jomhor_session'
 
 /**
  * Mutating handlers accept same-origin browser requests only: `Origin` must equal `SHOP_ORIGIN` (scheme, host and
- * port). Host and X-Forwarded-Host are ignored. Unset `SHOP_ORIGIN` → every request is refused (fail closed).
+ * port). Host and X-Forwarded-Host are ignored. Unset or malformed `SHOP_ORIGIN` → every request is refused (fail
+ * closed) and logged.
  */
 export function isSameOrigin(req: Request): boolean {
+  const shop = shopOrigin()
   const origin = req.headers.get('origin')
-  const shop = process.env.SHOP_ORIGIN
-  if (!shop) console.error('SHOP_ORIGIN is not set: refusing mutating requests')
-  if (!origin || !shop) return false
+  if (!shop || !origin) return false
   try {
-    return new URL(origin).origin === new URL(shop).origin
+    return new URL(origin).origin === shop
   } catch {
     return false // "null" and garbage
   }
+}
+
+function shopOrigin(): string | null {
+  const raw = process.env.SHOP_ORIGIN
+  if (!raw) {
+    console.error('SHOP_ORIGIN is not set: refusing mutating requests')
+    return null
+  }
+  try {
+    const origin = new URL(raw).origin
+    if (origin !== 'null') return origin
+  } catch {
+    // logged below
+  }
+  console.error('SHOP_ORIGIN is malformed: refusing mutating requests', raw)
+  return null
 }
 
 export const errorResponse = (status: number, code: string, message = '') =>

@@ -27,9 +27,9 @@ it('fmt fills placeholders', () => {
 
 // The "no hard-coded user-visible strings" guard is ESLint (eslint.config.mjs); this pins what it catches.
 const eslint = new ESLint()
-async function literalErrors(jsx: string) {
+async function literalErrors(jsx: string, filePath = 'app/sample/Sample.tsx') {
   const code = `export function Sample({ ok, d }: { ok: boolean; d: { t: string } }) {\n  return ${jsx}\n}\n`
-  const [result] = await eslint.lintText(code, { filePath: 'app/sample/Sample.tsx' })
+  const [result] = await eslint.lintText(code, { filePath })
   return result!.messages.filter((m) => /i18next|no-restricted-syntax/.test(m.ruleId ?? '')).length
 }
 
@@ -42,3 +42,8 @@ it.each(['<p>{d.t}</p>', '<input placeholder={d.t} id="phone" type="tel" autoCom
   'lint allows %s',
   async (jsx) => expect(await literalErrors(jsx)).toBe(0),
 )
+
+it('the guard covers .tsx outside app/ too', async () => {
+  expect(await literalErrors('<p>Bonjour</p>', 'components/Sample.tsx')).toBeGreaterThan(0)
+  expect(await literalErrors('<p>Bonjour</p>', 'lib/sample/Sample.tsx')).toBeGreaterThan(0)
+})
