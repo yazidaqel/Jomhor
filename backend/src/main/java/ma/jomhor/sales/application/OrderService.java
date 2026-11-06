@@ -1,21 +1,30 @@
 package ma.jomhor.sales.application;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.application.Inventory.SalePrice;
+import ma.jomhor.common.HolderNames;
 import ma.jomhor.common.web.ApiException;
 import ma.jomhor.sales.application.Orders.Expired;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tickets.application.TicketService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -39,7 +48,14 @@ public class OrderService {
     /** Plan Q8: an order with a PENDING payment younger than this is not expired. */
     static final Duration PAYMENT_GRACE = Duration.ofMinutes(20);
 
-    public record ItemRequest(UUID priceCategoryId, int qty) {}
+    /** {@code holders} as sent: validated and resolved by {@link #place}. */
+    public record ItemRequest(UUID priceCategoryId, int qty, List<HolderRequest> holders) {}
+
+    /** {@code phone} absent → the buyer holds the place. */
+    public record HolderRequest(String name, String phone) {}
+
+    /** Same as the fan auth endpoints. */
+    private static final Pattern E164 = Pattern.compile("\\+[1-9][0-9]{7,14}");
 
     /** An order with what the fan sees of each category, and its tickets. */
     public record View(Order order, Map<UUID, SalePrice> categories, List<UUID> ticketIds) {}
@@ -51,21 +67,28 @@ public class OrderService {
     private final Inventory inventory;
     private final TicketService tickets;
     private final PendingPayments pendingPayments;
+    private final UserService users;
     private final TransactionTemplate tx;
+    private final long maxActiveHolds;
 
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
-                        PlatformTransactionManager transactions) {
+                        UserService users, PlatformTransactionManager transactions,
+                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds) {
         this.orders = orders;
         this.inventory = inventory;
         this.tickets = tickets;
         this.pendingPayments = pendingPayments;
+        this.users = users;
         this.tx = new TransactionTemplate(transactions);
+        this.maxActiveHolds = maxActiveHolds;
     }
 
     /**
-     * Checks in this order: event (404, 409 EVENT_NOT_ON_SALE), items (422), per-account limit (409), quota
-     * (409 SOLD_OUT). The buyer lock is taken before the limit is read, so two parallel orders of one buyer
-     * are counted one after the other.
+     * Checks in this order: event (404, 409 EVENT_NOT_ON_SALE), items and holders (422), queue (429 SALE_BUSY),
+     * per-account limit (409), quota (409 SOLD_OUT). The buyer lock is taken before the limit is read, so two
+     * parallel orders of one buyer are counted one after the other. A holder phone's account is found or created
+     * once everything else passed (it rolls back with the order); the response is the same either way, so it can't
+     * be used to probe whether a phone has an account.
      */
     @Transactional
     public View place(UUID userId, int eventId, Order.Channel channel, List<ItemRequest> items) {
@@ -88,6 +111,13 @@ public class OrderService {
             }
             requested += item.qty();
         }
+        List<List<HolderRequest>> holders = validHolders(items);
+
+        // ponytail: soft cap on a plain count, no lock (04 §On-sale Busy); the ranked queue is Lot 5.
+        if (orders.activeHolds(org, eventId) >= maxActiveHolds) {
+            throw new ApiException("SALE_BUSY", HttpStatus.TOO_MANY_REQUESTS, "Too many fans buying right now",
+                    Map.of("retry_after_s", ThreadLocalRandom.current().nextInt(5, 31)));
+        }
 
         orders.lockBuyer(userId, eventId);
         long held = orders.held(org, userId, eventId);
@@ -97,9 +127,20 @@ public class OrderService {
         }
 
         Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, qty);
-        List<Order.Item> lines = qty.entrySet().stream()
-                .map(e -> new Order.Item(e.getKey(), e.getValue(), taken.get(e.getKey()).priceMad()))
-                .toList();
+        // Each distinct phone once, in sorted order: two orders naming the same new phones insert their users rows
+        // in the same order, so they queue on the unique index instead of deadlocking.
+        Map<String, UUID> byPhone = new TreeMap<>();
+        holders.stream().flatMap(List::stream).map(HolderRequest::phone).filter(Objects::nonNull)
+                .forEach(p -> byPhone.put(p, null));
+        byPhone.replaceAll((phone, none) -> users.holder(phone));
+        List<Order.Item> lines = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            UUID category = items.get(i).priceCategoryId();
+            List<Order.Holder> holding = holders.get(i).stream()
+                    .map(h -> new Order.Holder(h.name(), h.phone() == null ? userId : byPhone.get(h.phone())))
+                    .toList();
+            lines.add(new Order.Item(category, items.get(i).qty(), taken.get(category).priceMad(), holding));
+        }
         long total = lines.stream().mapToLong(l -> l.qty() * l.unitPriceMad()).sum();
         return new View(orders.insert(org, eventId, userId, channel, total, lines), taken, List.of());
     }
@@ -107,7 +148,7 @@ public class OrderService {
     public View get(UUID userId, UUID orderId) {
         Order order = orders.find(userId, orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
         return new View(order, byId(inventory.prices(order.organizerId(), order.eventId())),
-                tickets.ofOrder(order.organizerId(), order.id()));
+                tickets.heldInOrder(order.organizerId(), order.id(), userId));
     }
 
     // ---------- payment (called by payments) ----------
@@ -152,10 +193,24 @@ public class OrderService {
         }
         Map<UUID, SalePrice> categories = byId(inventory.prices(o.organizerId(), o.eventId()));
         orders.markPaid(o.organizerId(), o.id(), paymentRef);
-        tickets.issue(o.organizerId(), o.id(), o.eventId(), o.userId(), o.items().stream()
-                .map(i -> new TicketService.Line(categories.get(i.priceCategoryId()).zoneId(), i.priceCategoryId(), i.qty()))
-                .toList());
+        List<TicketService.Seat> seats = new ArrayList<>();
+        for (Order.Item i : o.items()) {
+            int zone = categories.get(i.priceCategoryId()).zoneId();
+            if (i.holders().isEmpty()) { // a Lot 0 order: every place to the buyer, no name
+                for (int n = 0; n < i.qty(); n++) {
+                    seats.add(new TicketService.Seat(zone, i.priceCategoryId(), o.userId(), null));
+                }
+            } else {
+                i.holders().forEach(h -> seats.add(new TicketService.Seat(zone, i.priceCategoryId(), h.userId(), h.name())));
+            }
+        }
+        tickets.issue(o.organizerId(), o.id(), o.eventId(), seats);
         return Settlement.PAID;
+    }
+
+    /** The channel of an order (payments' /return picks its landing URL by it). Reads only. */
+    public Optional<Order.Channel> channel(UUID org, UUID orderId) {
+        return orders.channel(org, orderId);
     }
 
     /** Takes the expired order's places again; null if done, else why not. */
@@ -214,6 +269,33 @@ public class OrderService {
             throw e;
         }
         return new Batch(due.size(), (int) expired.stream().flatMap(d -> d.orderIds().stream()).distinct().count());
+    }
+
+    /**
+     * docs/04-api.md §Fan POST /fan/orders and §Holder names: one holder per place, each name normalized and
+     * Latin, each phone absent or E.164. Returns the holders per item with normalized names.
+     */
+    private static List<List<HolderRequest>> validHolders(List<ItemRequest> items) {
+        List<List<HolderRequest>> all = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            ItemRequest item = items.get(i);
+            if (item.holders() == null || item.holders().size() != item.qty()) {
+                throw invalid("items[%d].holders".formatted(i), "one holder per place");
+            }
+            List<HolderRequest> holders = new ArrayList<>();
+            for (int j = 0; j < item.holders().size(); j++) {
+                HolderRequest h = item.holders().get(j);
+                String path = "items[%d].holders[%d].".formatted(i, j);
+                String name = HolderNames.normalize(h == null ? null : h.name()).orElseThrow(() -> invalid(path + "name",
+                        "2 to 60 Latin letters, spaces, apostrophes, dots or hyphens"));
+                if (h.phone() != null && !E164.matcher(h.phone()).matches()) {
+                    throw invalid(path + "phone", "an E.164 phone number");
+                }
+                holders.add(new HolderRequest(name, h.phone()));
+            }
+            all.add(holders);
+        }
+        return all;
     }
 
     private static Map<UUID, SalePrice> byId(List<SalePrice> prices) {

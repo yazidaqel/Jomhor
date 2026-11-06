@@ -1,7 +1,9 @@
 package ma.jomhor.payments.application;
 
+import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.web.ApiException;
@@ -36,6 +38,8 @@ import tools.jackson.databind.json.JsonMapper;
 public class PaymentService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
+    /** Placeholder in payments.return-url.* templates. */
+    private static final String ORDER_ID = "{order_id}";
 
     public record Started(UUID paymentId, String redirectUrl) {}
 
@@ -53,10 +57,13 @@ public class PaymentService {
     private final JsonMapper json;
     private final TransactionTemplate tx;
     private final String baseUrl;
+    private final Map<Order.Channel, String> returnUrls;
 
     public PaymentService(Payments payments, OrderService orders, CardGateway gateway, AuditLog audit, JsonMapper json,
                           PlatformTransactionManager transactions,
-                          @Value("${payments.public-base-url}") String baseUrl) {
+                          @Value("${payments.public-base-url}") String baseUrl,
+                          @Value("${payments.return-url.web}") String webReturnUrl,
+                          @Value("${payments.return-url.app}") String appReturnUrl) {
         this.payments = payments;
         this.orders = orders;
         this.gateway = gateway;
@@ -64,6 +71,32 @@ public class PaymentService {
         this.json = json;
         this.tx = new TransactionTemplate(transactions);
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.returnUrls = Map.of(Order.Channel.WEB, template("payments.return-url.web", webReturnUrl),
+                Order.Channel.APP, template("payments.return-url.app", appReturnUrl));
+    }
+
+    /** Fails startup unless the template has {order_id} and, filled in, is an absolute URI. */
+    public static String template(String key, String url) {
+        if (!url.contains(ORDER_ID)) {
+            throw new IllegalStateException(key + " must contain " + ORDER_ID);
+        }
+        try {
+            if (!URI.create(url.replace(ORDER_ID, new UUID(0, 0).toString())).isAbsolute()) {
+                throw new IllegalStateException(key + " must be an absolute URL");
+            }
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(key + " is not a valid URL", e);
+        }
+        return url;
+    }
+
+    /**
+     * Where the browser lands after the gateway (04 §Payments /return): the configured URL of the order's channel,
+     * never a caller-supplied one. Reads only. Unknown payment → empty.
+     */
+    public Optional<URI> returnUrl(UUID paymentId) {
+        return payments.find(paymentId).flatMap(p -> orders.channel(p.organizerId(), p.orderId())
+                .map(c -> URI.create(returnUrls.get(c).replace(ORDER_ID, p.orderId().toString()))));
     }
 
     /** The API's public base (…/v1), for absolute URLs in responses and adapter pages. */

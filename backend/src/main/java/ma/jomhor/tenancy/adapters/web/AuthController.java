@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 import ma.jomhor.tenancy.application.AuthService;
 import ma.jomhor.tenancy.application.AuthService.Session;
+import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tenancy.domain.Membership;
 import ma.jomhor.tenancy.domain.StaffRole;
 import ma.jomhor.tenancy.domain.User;
@@ -15,22 +16,28 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** docs/04-api.md: /fan/auth/*, /org/auth/*, /org/me. */
+/** docs/04-api.md: /fan/auth/*, GET/PATCH /fan/me, /org/auth/*, /org/me. */
 @RestController
 class AuthController {
 
     static final String E164 = "\\+[1-9][0-9]{7,14}";
 
     private final AuthService auth;
+    private final UserService users;
 
-    AuthController(AuthService auth) {
+    AuthController(AuthService auth, UserService users) {
         this.auth = auth;
+        this.users = users;
     }
+
+    /** PATCH is partial: a missing or null field is left unchanged. */
+    record ProfilePatch(String displayName, String locale) {}
 
     record OtpRequest(@NotNull @Pattern(regexp = E164) String phone) {}
 
@@ -65,6 +72,16 @@ class AuthController {
     FanSession fanVerify(@Valid @RequestBody VerifyRequest body) {
         Session s = auth.fanVerify(body.phone(), body.code());
         return new FanSession(s.token(), s.expiresAt(), UserDto.of(s.user()));
+    }
+
+    @GetMapping("/fan/me")
+    UserDto fanMe(@AuthenticationPrincipal Jwt jwt) {
+        return UserDto.of(users.get(UUID.fromString(jwt.getSubject())));
+    }
+
+    @PatchMapping("/fan/me")
+    UserDto fanMeUpdate(@AuthenticationPrincipal Jwt jwt, @RequestBody ProfilePatch body) {
+        return UserDto.of(users.update(UUID.fromString(jwt.getSubject()), body.displayName(), body.locale()));
     }
 
     @PostMapping("/org/auth/otp")

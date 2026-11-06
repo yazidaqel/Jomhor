@@ -48,8 +48,8 @@ abstract class PaymentTest extends OrgApiTest {
 
     String order(String token, Sale s, int qty) throws Exception {
         return JsonPath.read(body(fan(token, post("/fan/orders"), """
-                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": %d}]}
-                """.formatted(s.eventId(), s.priceId(), qty)).andExpect(status().isCreated())), "$.id");
+                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": %d, "holders": %s}]}
+                """.formatted(s.eventId(), s.priceId(), qty, holders(qty))).andExpect(status().isCreated())), "$.id");
     }
 
     ResultActions pay(String token, String orderId) throws Exception {

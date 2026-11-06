@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import ma.jomhor.IntegrationTest;
@@ -33,6 +34,11 @@ public abstract class OrgApiTest extends IntegrationTest {
 
     protected ResultActions call(Caller c, MockHttpServletRequestBuilder req, String body) throws Exception {
         return call(c, req.contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    /** A POST /fan/orders holders array of {@code qty} places, all held by the buyer (no phone). */
+    protected static String holders(int qty) {
+        return "[" + String.join(", ", Collections.nCopies(qty, "{\"name\": \"Yazid Aqel\"}")) + "]";
     }
 
     protected static String body(ResultActions r) throws Exception {

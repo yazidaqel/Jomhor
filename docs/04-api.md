@@ -59,7 +59,7 @@ returns the same representation as the matching GET.
 | GET | `/fan/events/{id}` | **Public.** Same fields + `zones:[{id, code, name, seated, gate_codes[], prices:[{price_category_id, name, price_mad, remaining}]}]`; zones by `id`, prices by `name`, `gate_codes` ascending. `remaining = quota − sold`. `DRAFT` (or unknown) → 404; `CLOSED` is returned with `on_sale = false`. No key, no `sold`/`quota` fields. |
 | POST | `/fan/orders` | `{event_id, channel: APP\|WEB, items:[{price_category_id, qty, holders:[{name, phone?}]}]}` → `201 {id, status: RESERVED, reserved_until, total_mad, items:[{price_category_id, zone_id, name, qty, unit_price_mad, holders:[{label}]}]}`. Held 8 min. Checks in order: event (404), sale window (409 `EVENT_NOT_ON_SALE`), items and holders (422), queue (429 `SALE_BUSY`), per-account limit (409), quota (409 `SOLD_OUT`). `holders.length = qty` (else 422 on `items[i].holders`). `name` per §Holder names (422 on `items[i].holders[j].name`). `phone` absent or equal to the buyer's → the buyer holds that ticket. Another E.164 phone → that phone's account holds it (created if new); it gets the ticket on WhatsApp and in the app or W5 after OTP login, and the buyer never gets its K_t or PDF. Σ qty over the buyer's `RESERVED`/`AWAITING_CASH`/`PAID` orders for the event ≤ `per_account_limit`. |
 | POST | `/fan/orders/{id}/pay` | Unchanged (`{method: CARD}` → `{payment_id, redirect_url}`; CASH_AGENCY and WALLET in Lot 3) |
-| GET | `/fan/orders/{id}` | `{id, event_id, channel, status, total_mad, reserved_until, paid_at, items[], ticket_ids[]}`. `items[]` as in the POST response, ordered by `price_category_id`. Owner (buyer) only, 404 otherwise. |
+| GET | `/fan/orders/{id}` | `{id, event_id, channel, status, total_mad, reserved_until, paid_at, items[], ticket_ids[]}` (`ticket_ids` = only the tickets the caller holds; a friend's ticket is never listed to the buyer). `items[]` as in the POST response, ordered by `price_category_id`. Owner (buyer) only, 404 otherwise. |
 | GET | `/fan/tickets?with_keys=` | Tickets **held** by the caller (`holder_user_id`), upcoming events first, then past. → `{server_time, tickets:[{id, ticket_no, status, holder_label, seat_label, event:{id, title, event_type, starts_at, doors_open_at, timezone, venue:{name, city}, metadata}, zone:{id, code, name}, gate_codes[], k_t?}]}`. `k_t` (base64url, 32 bytes) only when `with_keys=true`, status `VALID` and the event is not `CLOSED`. The fan app sends `with_keys=true`; the web shop never does. `Cache-Control: no-store`. |
 | GET | `/fan/tickets/{id}/pdf` | Holder only (404 otherwise); `VALID` only (409 `TICKET_NOT_VALID`). `application/pdf`, `billet-{ticket_no}.pdf`: A4 page with a wallet-size cut-out. Static v1 QR (ECC M) signed with K_e, ticket number under it, event, date in the venue's time zone, venue, zone, gates, holder label. `Cache-Control: no-store`. |
 | POST | `/fan/tickets/{id}/whatsapp` | Holder only, `VALID` only. Queues the PDF to the holder's phone → `202`. More than 3 per ticket per 24 h → 429 `DELIVERY_RATE_LIMITED`. |
@@ -83,8 +83,8 @@ is answered with `PER_ACCOUNT_LIMIT`. The limit counts `RESERVED` orders until t
 
 | Rule | Value |
 | --- | --- |
-| Input | NFC-normalised, trimmed, inner spaces collapsed; 2–60 chars; `^\p{IsLatin}[\p{IsLatin} '.\-]{1,59}$` (Latin letters with accents, space, apostrophe, dot, hyphen). Arabic script: Lot 4. |
-| `holder_label` (ticket card, PDF) | first word + space + first letter of the last word + "." → `Yazid A.`; one word → as is |
+| Input | Input containing a letter-number (`\p{Nl}`, e.g. Roman-numeral characters) is refused first; then NFKC-normalised (fullwidth → ASCII), typographic apostrophe `’` → `'`, inner whitespace (incl. no-break spaces) collapsed to one space, then trimmed; 2–60 chars; first char a Latin letter, the rest Latin letters (with accents), space, apostrophe, dot, hyphen — letters only: `^[\p{IsLatin}&&\p{L}][[\p{IsLatin}&&\p{L}] '.\-]{1,59}$` (Java class syntax; the intersection is nested so space, apostrophe, dot and hyphen stay allowed). Arabic script: Lot 4. |
+| `holder_label` (ticket card, PDF) | first word as typed + space + first letter of the last word, uppercased, + "." → `Yazid A.` (also for `Yazid aqel`); one word → as is |
 | `holder_initials` (Lot 2 manifest) | first letter of the first and last words, uppercase → `Y. A.`; one word → `Y.` |
 | `ticket_no` | last 8 hex chars of `ticket_id`, uppercase, grouped 4-4 → `4D5C 6B7A` |
 
@@ -105,7 +105,7 @@ gateway (`provider = fake`) that exists only outside prod.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/payments/card/{payment_id}/redirect` | Sends the browser to the gateway: a 302 or an auto-submitting form, as the adapter decides. `410` if the payment is not `PENDING`. Never carries a merchant secret. |
-| POST | `/payments/{provider}/callback` | Server to server (`fake` now, `payzone` later). Signature verified before any state change. Idempotent on `payment_id`. On approval, in one transaction: payment `SUCCEEDED` → order `PAID` → tickets issued (one per unit, holder = buyer). Request format and acknowledgement body come from the adapter. |
+| POST | `/payments/{provider}/callback` | Server to server (`fake` now, `payzone` later). Signature verified before any state change. Idempotent on `payment_id`. On approval, in one transaction: payment `SUCCEEDED` → order `PAID` → tickets issued to the stored holders (one per place; Lot 0 orders without holders → buyer). Request format and acknowledgement body come from the adapter. |
 | GET, POST | `/payments/card/{payment_id}/return` | Browser landing after the gateway. **Never changes state.** Reads the payment's order and `302`s to a fixed URL by `orders.channel`. WEB: `payments.return-url.web` (`{SHOP_BASE_URL}/orders/{order_id}`). APP: `payments.return-url.app` (`jomhor-fan://orders/{order_id}`). No caller-supplied URL. Unknown `payment_id` → the FR "paiement en cours de confirmation" page. |
 | GET | `/payments/fake/{payment_id}` | Simulated gateway page: amount, "Approuver" / "Refuser". Each button posts a signed callback to `/payments/fake/callback`, then lands on `/return`. Supports a delayed callback. Exists only in `dev`/`test`/`staging`; startup fails if `payments.card.provider=fake` under `prod`. |
 | POST | `/payments/fake/{payment_id}/late` | Simulated gateway only (same profiles): schedules the signed approval after `payments.fake.late-delay`; `410` if the payment isn't `PENDING`. |
@@ -131,8 +131,9 @@ for an active `staff` row (user_id = token subject). Lot 0 roles: `ADMIN`, `OPS`
 `FINANCE` read only; `GATE`, `SUPERVISOR` get 403. A missing or malformed `X-Organizer-Id` → 400
 `BAD_REQUEST`; no active staff row for it → 403 `FORBIDDEN`.
 
-Fans and staff share one OTP mechanism (`otp_challenges` has no audience): a code proves the
-caller holds the phone; the endpoint decides the token audience.
+Fans and staff use the same OTP mechanism, counted per audience (`otp_challenges.audience`): a
+code verifies only on the endpoint family that requested it, and staff requests never use up a fan's
+limits.
 
 | Method | Path | Purpose |
 | --- | --- | --- |

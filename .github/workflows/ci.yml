@@ -10,6 +10,12 @@ permissions:
   pull-requests: read
 
 jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 .github/scripts/check_source_chars.py
+
   changes:
     runs-on: ubuntu-latest
     outputs:

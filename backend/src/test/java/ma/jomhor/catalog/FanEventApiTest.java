@@ -83,8 +83,8 @@ class FanEventApiTest extends OrgApiTest {
 
     private void buy(String fan, int eventId, String priceId, int qty) throws Exception {
         mvc.perform(post("/fan/orders").header("Authorization", "Bearer " + fan).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"event_id\": %d, \"channel\": \"WEB\", \"items\": [{\"price_category_id\": \"%s\", \"qty\": %d}]}"
-                                .formatted(eventId, priceId, qty)))
+                        .content("{\"event_id\": %d, \"channel\": \"WEB\", \"items\": [{\"price_category_id\": \"%s\", \"qty\": %d, \"holders\": %s}]}"
+                                .formatted(eventId, priceId, qty, holders(qty))))
                 .andExpect(status().isCreated());
     }
 

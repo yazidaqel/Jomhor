@@ -16,7 +16,13 @@ public interface Orders {
     /** Σ qty of the buyer's RESERVED, AWAITING_CASH and PAID orders on the event. */
     long held(UUID org, UUID userId, int eventId);
 
-    /** A RESERVED order held 8 min from now (database clock), with its items. */
+    /** The event's RESERVED orders still held (reserved_until > now()). No lock (docs/04-api.md §On-sale Busy). */
+    long activeHolds(UUID org, int eventId);
+
+    /** The channel of an order of this organizer. */
+    Optional<Order.Channel> channel(UUID org, UUID orderId);
+
+    /** A RESERVED order held 8 min from now (database clock), with its items and their holders. */
     Order insert(UUID org, int eventId, UUID userId, Order.Channel channel, long totalMad, List<Order.Item> items);
 
     /** The buyer's own order; another user's is absent. */

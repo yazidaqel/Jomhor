@@ -1,4 +1,4 @@
-### Lot 0 exit demo: sell one test ticket by card on the simulated gateway (IntelliJ HTTP client).
+### Lot 1 demo: sell 2 named tickets by card on the simulated gateway, the 2nd held by a friend (IntelliJ HTTP client).
 #
 # Start the backend with the dev profile (dev seed: ATLAS FC, admin +212600000001, Grand Stade):
 #   docker compose up -d && SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
@@ -12,6 +12,7 @@
 @venue = a7a5fc00-0000-4000-8000-000000000301
 @adminPhone = +212600000001
 @fanPhone = +212611111111
+@friendPhone = +212622222222
 @orgCode = 000000
 @fanCode = 000000
 
@@ -47,7 +48,7 @@ Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 Content-Type: application/json
 
-{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo Lot 0",
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo Lot 1",
  "starts_at": "2099-05-01T19:00:00Z", "metadata": {"opponent": "Démo"}}
 
 > {% client.global.set("eventId", response.body.id); %}
@@ -81,16 +82,25 @@ Content-Type: application/json
 
 > {% client.global.set("fanToken", response.body.token); %}
 
-### 8. Fan: order one ticket (held 8 min)
+### 7b. Fan: profile name (prefills holder row 1 in the clients)
+PATCH {{base}}/fan/me
+Authorization: Bearer {{fanToken}}
+Content-Type: application/json
+
+{"display_name": "Yazid Aqel"}
+
+### 8. Fan: order two named places (held 8 min); the 2nd goes to the friend's phone (account created if new)
 POST {{base}}/fan/orders
 Authorization: Bearer {{fanToken}}
 Content-Type: application/json
 
-{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{priceId}}", "qty": 1}]}
+{"event_id": {{eventId}}, "channel": "WEB", "items": [{"price_category_id": "{{priceId}}", "qty": 2,
+  "holders": [{"name": "Yazid Aqel"}, {"name": "Samir Benali", "phone": "{{friendPhone}}"}]}]}
 
 > {% client.global.set("orderId", response.body.id); %}
 
-### 9. Fan: pay by card. Open redirect_url from the response in a browser and click "Approuver".
+### 9. Fan: pay by card. Open redirect_url in a browser and click "Approuver": /return then 302s to
+#    payments.return-url.web (dev: http://localhost:3000/orders/{order_id}; APP orders: jomhor-fan://orders/{order_id}).
 POST {{base}}/fan/orders/{{orderId}}/pay
 Authorization: Bearer {{fanToken}}
 Content-Type: application/json
@@ -99,11 +109,11 @@ Content-Type: application/json
 
 > {% client.global.set("redirectUrl", response.body.redirect_url); %}
 
-### 10. Fan: poll until status = PAID and ticket_ids has one id
+### 10. Fan: poll until status = PAID and ticket_ids has two ids (items[0].holders: "Yazid A.", "Samir B.")
 GET {{base}}/fan/orders/{{orderId}}
 Authorization: Bearer {{fanToken}}
 
-### 11. Organizer: the sale shows as sold = 1 (also on B2 Tarifs)
+### 11. Organizer: the sale shows as sold = 2 (also on B2 Tarifs)
 GET {{base}}/org/events/{{eventId}}/prices
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}

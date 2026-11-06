@@ -15,6 +15,9 @@ public interface Accounts {
 
     Optional<User> findUser(UUID userId);
 
+    /** Sets the fields given (null = unchanged; an empty display name clears it); the user after the change. */
+    Optional<User> updateProfile(UUID userId, String displayName, String locale);
+
     Optional<UUID> findUserIdByPhone(String phone);
 
     boolean hasActiveStaff(String phone);

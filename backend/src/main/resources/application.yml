@@ -35,3 +35,13 @@ payments:
   fake:
     secret: ${PAYMENTS_FAKE_SECRET:} # >= 32 bytes; read only by the simulated gateway
     late-delay: ${PAYMENTS_FAKE_LATE_DELAY:21m} # "Réponse tardive": past the 20 min expiry grace (plan Q8)
+  # Where /payments/card/{id}/return sends the browser, by orders.channel; {order_id} is substituted.
+  # Required from env (no caller-supplied URL, 04 §Payments). WEB: {SHOP_BASE_URL}/orders/{order_id};
+  # APP: jomhor-fan://orders/{order_id} (the webview catches it, plan Q27).
+  return-url:
+    web: ${PAYMENTS_RETURN_URL_WEB}
+    app: ${PAYMENTS_RETURN_URL_APP}
+
+sales:
+  # Basic on-sale queue (04 §On-sale Busy): active holds of one event at or above this → 429 SALE_BUSY.
+  max-active-holds-per-event: ${SALES_MAX_ACTIVE_HOLDS_PER_EVENT:2000}
