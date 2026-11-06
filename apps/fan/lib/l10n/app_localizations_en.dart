@@ -211,4 +211,190 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chooseZone => 'Choisir ma zone';
+
+  @override
+  String zonesSubtitle(String event, String date) {
+    return '$event · $date';
+  }
+
+  @override
+  String get pickZoneHint => 'Touche une zone pour choisir tes places.';
+
+  @override
+  String get pickedZone => 'Zone choisie';
+
+  @override
+  String placesMax(int max) {
+    return 'Billets · max $max';
+  }
+
+  @override
+  String get fewerPlaces => 'Un billet de moins';
+
+  @override
+  String get morePlaces => 'Un billet de plus';
+
+  @override
+  String get groupHint => 'Les places d\'un même achat sont côte à côte. Chaque ami reçoit son propre QR.';
+
+  @override
+  String get total => 'Total';
+
+  @override
+  String get continueCta => 'Continuer';
+
+  @override
+  String get allSoldOut => 'Complet · toutes les zones sont vendues';
+
+  @override
+  String get payTitle => 'Paiement';
+
+  @override
+  String holdLeft(String time) {
+    return 'Places réservées · $time';
+  }
+
+  @override
+  String summaryLine(int qty, String zone) {
+    return '$qty × $zone';
+  }
+
+  @override
+  String get serviceFee => 'Frais de service';
+
+  @override
+  String get holdersTitle => 'Billets nominatifs';
+
+  @override
+  String get holderMe => 'Billet 1 · Moi';
+
+  @override
+  String holderN(int n) {
+    return 'Billet $n';
+  }
+
+  @override
+  String get holderNameLabel => 'Prénom et nom';
+
+  @override
+  String get holderNameError => 'Prénom et nom en lettres latines, de 2 à 60 caractères.';
+
+  @override
+  String get holderPhoneLabel => 'WhatsApp de ton ami (facultatif)';
+
+  @override
+  String get holderPhoneHelp =>
+      'Il reçoit son billet sur WhatsApp et dans l\'app. Sans numéro, le billet reste chez toi.';
+
+  @override
+  String get holderPhoneError => 'Numéro marocain invalide. Essaie 06 12 34 56 78.';
+
+  @override
+  String get methodTitle => 'Moyen de paiement';
+
+  @override
+  String get methodCard => 'Carte bancaire';
+
+  @override
+  String get methodCardHint => 'Visa, Mastercard · 3D Secure';
+
+  @override
+  String get instant => 'Instantané';
+
+  @override
+  String payCta(String total) {
+    return 'Payer $total';
+  }
+
+  @override
+  String get payCaption => 'Billets envoyés dans l\'app et sur WhatsApp';
+
+  @override
+  String get friendsConsent => 'Je confirme que ces personnes acceptent de recevoir leur billet sur WhatsApp';
+
+  @override
+  String get friendsConsentMissing => 'Coche la case pour confirmer que tes amis sont d\'accord.';
+
+  @override
+  String get checkPayment => 'Voir l\'état du paiement';
+
+  @override
+  String busyRetry(int s) {
+    return 'Beaucoup de monde en ce moment · nouvel essai dans $s s';
+  }
+
+  @override
+  String get expiredTitle => 'Réservation expirée';
+
+  @override
+  String get expiredBody => 'Tes places ont été libérées. Choisis-les à nouveau.';
+
+  @override
+  String get expiredCta => 'Choisir à nouveau';
+
+  @override
+  String get cardPageTitle => 'Paiement sécurisé';
+
+  @override
+  String get orderPending => 'Paiement en cours de confirmation.';
+
+  @override
+  String get orderPendingHint =>
+      'Ça prend quelques secondes. Ne paie pas une deuxième fois : la banque peut confirmer un peu plus tard.';
+
+  @override
+  String get orderPaymentFailed =>
+      'Ton paiement n\'a pas abouti. Tu peux réessayer tant que tes places sont réservées.';
+
+  @override
+  String get orderAwaitingPayment => 'Commande en attente de paiement.';
+
+  @override
+  String get orderNotPaidYet =>
+      'Aucun paiement n\'a encore été fait pour cette commande. Tu peux payer tant que tes places sont réservées.';
+
+  @override
+  String get orderPayAgainCaution =>
+      'Toujours pas de confirmation. Réessaie seulement si ta carte a été refusée et que rien n\'a été débité.';
+
+  @override
+  String get payAgain => 'Payer à nouveau';
+
+  @override
+  String get orderPaidTitle => 'C\'est validé !';
+
+  @override
+  String get orderPaidBody => 'Tes billets sont dans l\'onglet Billets. Tes amis reçoivent les leurs sur WhatsApp.';
+
+  @override
+  String get seeTickets => 'Voir mes billets';
+
+  @override
+  String get orderExpired => 'Cette réservation a expiré.';
+
+  @override
+  String get backHome => 'Retour à l\'accueil';
+
+  @override
+  String get errorNotStarted => 'La vente n\'a pas encore commencé.';
+
+  @override
+  String get errorSaleClosed => 'La vente est terminée pour cet événement.';
+
+  @override
+  String get errorNotOnSale => 'Cet événement n\'est pas en vente.';
+
+  @override
+  String get errorSoldOut => 'Plus de places dans ce tarif. Choisis une autre zone.';
+
+  @override
+  String errorPerAccountLimit(int limit, int held) {
+    return 'Limite atteinte : $limit billets par compte pour cet événement, tu en as déjà $held.';
+  }
+
+  @override
+  String get errorOrderExpired => 'Ta réservation a expiré. Choisis à nouveau tes places.';
+
+  @override
+  String get errorOrderNotPayable => 'Cette commande ne peut plus être payée.';
 }

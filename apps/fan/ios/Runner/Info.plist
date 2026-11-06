@@ -14,6 +14,17 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>ma.jomhor.fan</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>jomhor-fan</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleName</key>
 	<string>Jomhor</string>
 	<key>CFBundlePackageType</key>

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -104,6 +105,7 @@ Future<ProviderContainer> pumpJomhor(
   MemoryTokenStore? tokens,
   String organizerId = testOrganizer,
   TestClock? clock,
+  List<Override> overrides = const [],
 }) async {
   final time = clock ?? TestClock(DateTime.utc(2027, 2, 20, 12));
   tzdata.initializeTimeZones();
@@ -119,6 +121,7 @@ Future<ProviderContainer> pumpJomhor(
       organizerIdProvider.overrideWithValue(organizerId),
       nowProvider.overrideWithValue(() => time.now),
       jitterProvider.overrideWithValue((_) => Duration.zero),
+      ...overrides,
       clockProvider.overrideWith((ref) async* {
         yield time.now;
         yield* time._ticks.stream;

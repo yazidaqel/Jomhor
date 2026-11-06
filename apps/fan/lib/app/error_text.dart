@@ -11,7 +11,19 @@ String errorText(AppLocalizations l, String code) => switch (code) {
   'OTP_RATE_LIMITED' => l.errorOtpRateLimited,
   'VALIDATION_FAILED' => l.errorValidation,
   'NOT_FOUND' => l.errorNotFound,
+  'EVENT_NOT_ON_SALE' => l.errorNotOnSale,
+  'SOLD_OUT' => l.errorSoldOut,
+  'ORDER_EXPIRED' => l.errorOrderExpired,
+  'ORDER_NOT_PAYABLE' => l.errorOrderNotPayable,
   ApiError.network => l.errorNetwork,
   missingOrganizer => l.errorMissingOrganizer,
   _ => l.errorGeneric,
+};
+
+/// [errorText], plus the codes whose copy reads `details` (EVENT_NOT_ON_SALE reason, PER_ACCOUNT_LIMIT numbers).
+String apiErrorText(AppLocalizations l, ApiError e) => switch ((e.code, e.details)) {
+  ('EVENT_NOT_ON_SALE', {'reason': 'NOT_STARTED'}) => l.errorNotStarted,
+  ('EVENT_NOT_ON_SALE', {'reason': 'CLOSED'}) => l.errorSaleClosed,
+  ('PER_ACCOUNT_LIMIT', {'limit': final int limit, 'held': final int held}) => l.errorPerAccountLimit(limit, held),
+  _ => errorText(l, e.code),
 };

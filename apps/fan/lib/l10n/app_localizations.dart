@@ -440,6 +440,336 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Choisir ma zone'**
   String get chooseZone;
+
+  /// No description provided for @zonesSubtitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'{event} · {date}'**
+  String zonesSubtitle(String event, String date);
+
+  /// No description provided for @pickZoneHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Touche une zone pour choisir tes places.'**
+  String get pickZoneHint;
+
+  /// No description provided for @pickedZone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zone choisie'**
+  String get pickedZone;
+
+  /// No description provided for @placesMax.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billets · max {max}'**
+  String placesMax(int max);
+
+  /// No description provided for @fewerPlaces.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un billet de moins'**
+  String get fewerPlaces;
+
+  /// No description provided for @morePlaces.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un billet de plus'**
+  String get morePlaces;
+
+  /// No description provided for @groupHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les places d\'un même achat sont côte à côte. Chaque ami reçoit son propre QR.'**
+  String get groupHint;
+
+  /// No description provided for @total.
+  ///
+  /// In fr, this message translates to:
+  /// **'Total'**
+  String get total;
+
+  /// No description provided for @continueCta.
+  ///
+  /// In fr, this message translates to:
+  /// **'Continuer'**
+  String get continueCta;
+
+  /// No description provided for @allSoldOut.
+  ///
+  /// In fr, this message translates to:
+  /// **'Complet · toutes les zones sont vendues'**
+  String get allSoldOut;
+
+  /// No description provided for @payTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Paiement'**
+  String get payTitle;
+
+  /// Hold countdown, mm:ss.
+  ///
+  /// In fr, this message translates to:
+  /// **'Places réservées · {time}'**
+  String holdLeft(String time);
+
+  /// No description provided for @summaryLine.
+  ///
+  /// In fr, this message translates to:
+  /// **'{qty} × {zone}'**
+  String summaryLine(int qty, String zone);
+
+  /// No description provided for @serviceFee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Frais de service'**
+  String get serviceFee;
+
+  /// No description provided for @holdersTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billets nominatifs'**
+  String get holdersTitle;
+
+  /// No description provided for @holderMe.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet 1 · Moi'**
+  String get holderMe;
+
+  /// No description provided for @holderN.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet {n}'**
+  String holderN(int n);
+
+  /// No description provided for @holderNameLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prénom et nom'**
+  String get holderNameLabel;
+
+  /// No description provided for @holderNameError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prénom et nom en lettres latines, de 2 à 60 caractères.'**
+  String get holderNameError;
+
+  /// No description provided for @holderPhoneLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'WhatsApp de ton ami (facultatif)'**
+  String get holderPhoneLabel;
+
+  /// No description provided for @holderPhoneHelp.
+  ///
+  /// In fr, this message translates to:
+  /// **'Il reçoit son billet sur WhatsApp et dans l\'app. Sans numéro, le billet reste chez toi.'**
+  String get holderPhoneHelp;
+
+  /// No description provided for @holderPhoneError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Numéro marocain invalide. Essaie 06 12 34 56 78.'**
+  String get holderPhoneError;
+
+  /// No description provided for @methodTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Moyen de paiement'**
+  String get methodTitle;
+
+  /// No description provided for @methodCard.
+  ///
+  /// In fr, this message translates to:
+  /// **'Carte bancaire'**
+  String get methodCard;
+
+  /// No description provided for @methodCardHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Visa, Mastercard · 3D Secure'**
+  String get methodCardHint;
+
+  /// No description provided for @instant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Instantané'**
+  String get instant;
+
+  /// No description provided for @payCta.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer {total}'**
+  String payCta(String total);
+
+  /// No description provided for @payCaption.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billets envoyés dans l\'app et sur WhatsApp'**
+  String get payCaption;
+
+  /// Plan Q21: required as soon as a holder row has a friend's phone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Je confirme que ces personnes acceptent de recevoir leur billet sur WhatsApp'**
+  String get friendsConsent;
+
+  /// No description provided for @friendsConsentMissing.
+  ///
+  /// In fr, this message translates to:
+  /// **'Coche la case pour confirmer que tes amis sont d\'accord.'**
+  String get friendsConsentMissing;
+
+  /// No description provided for @checkPayment.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voir l\'état du paiement'**
+  String get checkPayment;
+
+  /// SALE_BUSY: the app retries by itself. No queue position exists, none is shown.
+  ///
+  /// In fr, this message translates to:
+  /// **'Beaucoup de monde en ce moment · nouvel essai dans {s} s'**
+  String busyRetry(int s);
+
+  /// No description provided for @expiredTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réservation expirée'**
+  String get expiredTitle;
+
+  /// No description provided for @expiredBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tes places ont été libérées. Choisis-les à nouveau.'**
+  String get expiredBody;
+
+  /// No description provided for @expiredCta.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir à nouveau'**
+  String get expiredCta;
+
+  /// No description provided for @cardPageTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Paiement sécurisé'**
+  String get cardPageTitle;
+
+  /// No description provided for @orderPending.
+  ///
+  /// In fr, this message translates to:
+  /// **'Paiement en cours de confirmation.'**
+  String get orderPending;
+
+  /// No description provided for @orderPendingHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ça prend quelques secondes. Ne paie pas une deuxième fois : la banque peut confirmer un peu plus tard.'**
+  String get orderPendingHint;
+
+  /// No description provided for @orderPaymentFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ton paiement n\'a pas abouti. Tu peux réessayer tant que tes places sont réservées.'**
+  String get orderPaymentFailed;
+
+  /// No description provided for @orderAwaitingPayment.
+  ///
+  /// In fr, this message translates to:
+  /// **'Commande en attente de paiement.'**
+  String get orderAwaitingPayment;
+
+  /// No description provided for @orderNotPaidYet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun paiement n\'a encore été fait pour cette commande. Tu peux payer tant que tes places sont réservées.'**
+  String get orderNotPaidYet;
+
+  /// No description provided for @orderPayAgainCaution.
+  ///
+  /// In fr, this message translates to:
+  /// **'Toujours pas de confirmation. Réessaie seulement si ta carte a été refusée et que rien n\'a été débité.'**
+  String get orderPayAgainCaution;
+
+  /// No description provided for @payAgain.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer à nouveau'**
+  String get payAgain;
+
+  /// No description provided for @orderPaidTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'C\'est validé !'**
+  String get orderPaidTitle;
+
+  /// No description provided for @orderPaidBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tes billets sont dans l\'onglet Billets. Tes amis reçoivent les leurs sur WhatsApp.'**
+  String get orderPaidBody;
+
+  /// No description provided for @seeTickets.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voir mes billets'**
+  String get seeTickets;
+
+  /// No description provided for @orderExpired.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cette réservation a expiré.'**
+  String get orderExpired;
+
+  /// No description provided for @backHome.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retour à l\'accueil'**
+  String get backHome;
+
+  /// No description provided for @errorNotStarted.
+  ///
+  /// In fr, this message translates to:
+  /// **'La vente n\'a pas encore commencé.'**
+  String get errorNotStarted;
+
+  /// No description provided for @errorSaleClosed.
+  ///
+  /// In fr, this message translates to:
+  /// **'La vente est terminée pour cet événement.'**
+  String get errorSaleClosed;
+
+  /// No description provided for @errorNotOnSale.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cet événement n\'est pas en vente.'**
+  String get errorNotOnSale;
+
+  /// No description provided for @errorSoldOut.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plus de places dans ce tarif. Choisis une autre zone.'**
+  String get errorSoldOut;
+
+  /// No description provided for @errorPerAccountLimit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Limite atteinte : {limit} billets par compte pour cet événement, tu en as déjà {held}.'**
+  String errorPerAccountLimit(int limit, int held);
+
+  /// No description provided for @errorOrderExpired.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta réservation a expiré. Choisis à nouveau tes places.'**
+  String get errorOrderExpired;
+
+  /// No description provided for @errorOrderNotPayable.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cette commande ne peut plus être payée.'**
+  String get errorOrderNotPayable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

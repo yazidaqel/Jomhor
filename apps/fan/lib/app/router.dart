@@ -5,12 +5,20 @@ import 'package:jomhor_fan/app/placeholder_screen.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/app/shell.dart';
 import 'package:jomhor_fan/features/auth/login_screen.dart';
+import 'package:jomhor_fan/features/checkout/card_payment.dart';
+import 'package:jomhor_fan/features/checkout/checkout_screen.dart';
+import 'package:jomhor_fan/features/checkout/order_screen.dart';
+import 'package:jomhor_fan/features/checkout/zones_screen.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 
-/// Paths that need a session; events are public (no login prompt to browse).
-bool needsSession(String path) => path.startsWith('/tickets') || path.startsWith('/profile');
+/// Paths that need a session; events are public (no login prompt to browse), buying is not.
+bool needsSession(String path) =>
+    path.startsWith('/tickets') ||
+    path.startsWith('/profile') ||
+    path.startsWith('/orders') ||
+    RegExp('^/events/[^/]+/(zones|checkout)').hasMatch(path);
 
 /// Where to go after login: an in-app path only, never another host.
 String afterLogin(String? from) =>
@@ -26,6 +34,11 @@ final routerProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     refreshListenable: sessionChanged,
     redirect: (context, state) {
+      // `jomhor-fan://orders/{id}` (card return in Custom Tabs or another browser) → the order screen.
+      if (state.uri.scheme == appScheme) {
+        final id = returnedOrderId(state.uri.toString());
+        return id == null ? '/' : '/orders/$id';
+      }
       final signedIn = ref.read(sessionProvider);
       final path = state.matchedLocation;
       if (path == '/login') return signedIn ? afterLogin(state.uri.queryParameters['from']) : null;
@@ -60,12 +73,29 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/events/:id',
         builder: (context, state) => EventScreen(id: int.tryParse(state.pathParameters['id']!) ?? -1),
         routes: [
-          // Screen 3 · Choix de zone: FL-6.
           GoRoute(
             path: 'zones',
-            builder: (context, state) => PlaceholderScreen(title: AppLocalizations.of(context).chooseZone),
+            builder: (context, state) => ZonesScreen(eventId: int.tryParse(state.pathParameters['id']!) ?? -1),
+          ),
+          GoRoute(
+            path: 'checkout',
+            builder: (context, state) {
+              final q = state.uri.queryParameters;
+              return CheckoutScreen(
+                args: (
+                  eventId: int.tryParse(state.pathParameters['id']!) ?? -1,
+                  priceCategoryId: q['price'] ?? '',
+                  qty: (int.tryParse(q['qty'] ?? '') ?? 1).clamp(1, 20),
+                ),
+              );
+            },
           ),
         ],
+      ),
+      GoRoute(
+        path: '/orders/:id',
+        redirect: (context, state) => isOrderId(state.pathParameters['id']!) ? null : '/',
+        builder: (context, state) => OrderScreen(orderId: state.pathParameters['id']!),
       ),
     ],
   );

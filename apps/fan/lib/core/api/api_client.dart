@@ -70,10 +70,13 @@ class ApiClient {
   /// A 401 without a token (e.g. `OTP_INVALID` on verify) does not call it.
   final Future<void> Function(String token)? onUnauthorized;
 
-  Future<Object?> get(String path, {Map<String, String>? query}) {
+  Future<Object?> get(String path, {Map<String, String>? query}) => _body(getResponse(path, query: query));
+
+  /// [get] plus the server's `Date` header (e.g. to tell whether a hold is still running on server time).
+  Future<ApiResponse> getResponse(String path, {Map<String, String>? query}) {
     // A public read through the authenticated path would leak the token to a public, cacheable URL.
     if (path.startsWith('/fan/events')) throw ArgumentError.value(path, 'path', 'public endpoint: use getPublic');
-    return _body(_send('GET', path, query: query, auth: true));
+    return _send('GET', path, query: query, auth: true);
   }
 
   /// For public endpoints: never sends the session token.
@@ -85,7 +88,13 @@ class ApiClient {
 
   Future<Object?> post(String path, {Object? body}) {
     if (path.startsWith('/fan/auth/')) throw ArgumentError.value(path, 'path', 'public endpoint: use postPublic');
-    return _body(_send('POST', path, body: body, auth: true));
+    return _body(postResponse(path, body: body));
+  }
+
+  /// [post] plus the server's `Date` header (e.g. to run a hold countdown on server time).
+  Future<ApiResponse> postResponse(String path, {Object? body}) {
+    if (path.startsWith('/fan/auth/')) throw ArgumentError.value(path, 'path', 'public endpoint: use postPublic');
+    return _send('POST', path, body: body, auth: true);
   }
 
   /// For public endpoints (OTP request and verify): never sends the session token.

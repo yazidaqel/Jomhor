@@ -8,6 +8,7 @@ import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
+import 'package:jomhor_fan/features/events/zone_row.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 
@@ -137,7 +138,7 @@ class _Body extends StatelessWidget {
               const SizedBox(height: JomhorSpace.xl),
               Text(l.zonesTitle, style: JomhorType.h2),
               const SizedBox(height: JomhorSpace.m),
-              for (final (i, z) in detail.zones.indexed) _ZoneRow(zone: z, index: i),
+              for (final (i, z) in detail.zones.indexed) ZoneRow(zone: z, index: i),
               const SizedBox(height: JomhorSpace.m),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,79 +172,6 @@ class _Chip extends StatelessWidget {
     ),
     child: Text(text, style: JomhorType.bodySmall),
   );
-}
-
-const List<Color> _zonePalette = [JomhorColors.zoneA, JomhorColors.zoneB, JomhorColors.zoneC];
-
-class _ZoneRow extends StatelessWidget {
-  const new({required this.zone, required this.index});
-
-  final Zone zone;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final z = zone;
-    final price = z.fromPriceMad;
-    final open = z.prices.where((p) => p.remaining > 0).length;
-    final description = [
-      if (z.seated) l.zoneSeated else l.zoneStanding,
-      if (z.gateCodes.isNotEmpty) l.zoneGates(z.gateCodes.length, z.gateCodes.join(', ')),
-    ].reduce(l.dotPair);
-
-    return Opacity(
-      opacity: z.soldOut ? 0.55 : 1,
-      child: Container(
-        key: Key('zone.${z.id}'),
-        margin: const EdgeInsets.only(bottom: JomhorSpace.s),
-        padding: const EdgeInsets.all(JomhorSpace.m),
-        decoration: const BoxDecoration(
-          color: JomhorColors.surface,
-          border: Border.fromBorderSide(BorderSide(color: JomhorColors.border)),
-          borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 10,
-              height: 40,
-              decoration: BoxDecoration(
-                color: z.soldOut ? JomhorColors.zoneDisabled : _zonePalette[index % _zonePalette.length],
-                borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
-              ),
-            ),
-            const SizedBox(width: JomhorSpace.m),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(z.name, style: JomhorType.body),
-                  Text(description, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (price != null) Text(open > 1 ? l.chipFrom(formatDh(price)) : formatDh(price), style: JomhorType.h2),
-                Text(
-                  z.soldOut
-                      ? l.soldOut
-                      : z.lastSeats
-                      ? l.zoneLastSeats
-                      : l.zoneRemaining(z.remaining),
-                  style: JomhorType.caption.copyWith(
-                    color: z.lastSeats ? Theme.of(context).colorScheme.error : JomhorColors.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _Footer extends StatelessWidget {

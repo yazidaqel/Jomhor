@@ -131,13 +131,13 @@ void main() {
       expect(soldOut.opacity, lessThan(1));
     });
 
-    testWidgets('on sale: rules banner with the account limit, "Choisir ma zone" opens screen 3', (tester) async {
+    testWidgets('on sale: rules banner with the account limit, "Choisir ma zone" asks to log in first', (tester) async {
       await open(tester, detail);
       expect(find.text('Vente ouverte · limite 4 billets par compte · billets nominatifs'), findsOneWidget);
       expect(find.text('CHAMPIONNAT · JOURNÉE 11'), findsOneWidget);
       await tester.tap(find.text('Choisir ma zone'));
       await tester.pumpAndSettle();
-      expect(find.text('Choisir ma zone'), findsOneWidget); // the screen 3 placeholder title
+      expect(find.text('Connecte-toi'), findsOneWidget); // buying needs a session (screen 3 is guarded)
       expect(find.byKey(const Key('event.cta')), findsNothing);
     });
 
