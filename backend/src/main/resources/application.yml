@@ -1,10 +1,23 @@
 server:
   servlet:
     context-path: /v1 # docs/04-api.md base; every audience (/fan, /org, /gate, /payments) sits under it
+  # Client IP (per-IP OTP throttle) = Tomcat RemoteIpValve: X-Forwarded-For is believed only from a peer matching
+  # internal-proxies, else the TCP peer is the client. TRUSTED_PROXIES_REGEX is required outside dev/test (startup
+  # check in ClientIpConfig; never Spring's private-range regex): the shop and ALB private subnets (plan §7
+  # "Client IP trust chain"). Empty = trust no proxy.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      remote-ip-header: X-Forwarded-For
+      internal-proxies: ${TRUSTED_PROXIES_REGEX:}
 
 spring:
   application:
     name: jomhor
+  task:
+    execution:
+      # Keep Boot's applicationTaskExecutor (and unqualified @Async on it) next to the dedicated otpSendExecutor.
+      mode: force
   datasource:
     # No defaults: outside the dev profile, missing env vars fail startup.
     url: ${DB_URL}
@@ -35,3 +48,28 @@ payments:
   fake:
     secret: ${PAYMENTS_FAKE_SECRET:} # >= 32 bytes; read only by the simulated gateway
     late-delay: ${PAYMENTS_FAKE_LATE_DELAY:21m} # "Réponse tardive": past the 20 min expiry grace (plan Q8)
+  # Where /payments/card/{id}/return sends the browser, by orders.channel; {order_id} is substituted.
+  # Required from env (no caller-supplied URL, 04 §Payments). WEB: {SHOP_BASE_URL}/orders/{order_id};
+  # APP: jomhor-fan://orders/{order_id} (the webview catches it, plan Q27).
+  return-url:
+    web: ${PAYMENTS_RETURN_URL_WEB}
+    app: ${PAYMENTS_RETURN_URL_APP}
+
+sales:
+  # Basic on-sale queue (04 §On-sale Busy): active holds of one event at or above this → 429 SALE_BUSY.
+  max-active-holds-per-event: ${SALES_MAX_ACTIVE_HOLDS_PER_EVENT:2000}
+
+otp:
+  # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14). Mobile CGNAT puts many fans behind one IP:
+  # keep the fan limits loose and watch them on on-sale day. Org over its limit still answers 202.
+  per-ip:
+    fan:
+      sends-10m: ${OTP_PER_IP_FAN_10M:20}
+      sends-24h: ${OTP_PER_IP_FAN_24H:200}
+    org:
+      sends-10m: ${OTP_PER_IP_ORG_10M:5}
+      sends-24h: ${OTP_PER_IP_ORG_24H:20}
+  # Codes are sent after commit on this bounded pool; when its queue is full a code is dropped (202 either way).
+  send:
+    threads: ${OTP_SEND_THREADS:4}
+    queue-capacity: ${OTP_SEND_QUEUE_CAPACITY:1000}

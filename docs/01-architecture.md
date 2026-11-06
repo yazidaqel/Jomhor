@@ -41,6 +41,9 @@ flowchart TB
 | Back-office | Event setup, zone/gate mapping, devices, live dashboard, reconciliation, finance, CRM, campaigns | Nothing (API client) |
 | Kafka | `scan.ingested` → dashboard projection; `order.paid` → ticket issue + WhatsApp delivery | — |
 
+Lot 1: `order.paid` → WhatsApp delivery goes through a DB outbox (`ticket_deliveries`) polled by
+`notifications`. Kafka comes in when the scan dashboard needs it (Lot 2).
+
 ## Backend modules (modular monolith)
 
 `tenancy` · `catalog` · `sales` · `payments` · `tickets` · `gate` · `finance` ·

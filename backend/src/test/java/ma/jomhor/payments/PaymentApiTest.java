@@ -1,6 +1,7 @@
 package ma.jomhor.payments;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import ma.jomhor.payments.application.PaymentService;
 import ma.jomhor.sales.application.OrderService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -182,20 +185,34 @@ class PaymentApiTest extends PaymentTest {
         assertThat(page).contains("150,00 DH", "Approuver", "Refuser", "Réponse tardive").doesNotContain(FAKE_SECRET);
     }
 
+    /** 04 §Payments /return: 302 to payments.return-url.{web,app} (test config) by channel; never changes state. */
     @Test
-    void returnNeverChangesState() throws Exception {
+    void returnRedirectsByChannelAndNeverChangesState() throws Exception {
         Sale s = onSale(10);
         String fan = fanToken(randomPhone());
-        String orderId = order(fan, s, 1);
-        String p = payment(fan, orderId);
-        for (var req : List.of(get("/payments/card/" + p + "/return"), post("/payments/card/" + p + "/return")
-                .param("outcome", "APPROVED").param("payment_id", p))) {
-            mvc.perform(req).andExpect(status().isOk());
+        String appOrder = order(fan, s, 1);
+        String webOrder = JsonPath.read(body(fan(fan, post("/fan/orders"), """
+                {"event_id": %d, "channel": "WEB", "items": [{"price_category_id": "%s", "qty": 1, "holders": %s}]}
+                """.formatted(s.eventId(), s.priceId(), holders(1))).andExpect(status().isCreated())), "$.id");
+        Map<String, String> expected = Map.of(payment(fan, appOrder), "jomhor-fan://orders/" + appOrder,
+                payment(fan, webOrder), "http://shop.test/orders/" + webOrder);
+        for (var e : expected.entrySet()) {
+            String p = e.getKey();
+            for (var req : List.of(get("/payments/card/" + p + "/return"), post("/payments/card/" + p + "/return")
+                    .param("outcome", "APPROVED").param("payment_id", p).param("return_url", "https://evil.test/"))) {
+                mvc.perform(req).andExpect(status().isFound())
+                        .andExpect(r -> assertThat(r.getResponse().getHeader("Location")).isEqualTo(e.getValue()))
+                        .andExpect(r -> assertThat(r.getResponse().getHeader("Cache-Control")).isEqualTo("no-store"));
+            }
+            assertThat(paymentStatus(p)).isEqualTo("PENDING");
         }
-        mvc.perform(get("/payments/card/" + UUID.randomUUID() + "/return")).andExpect(status().isOk());
-        assertThat(paymentStatus(p)).isEqualTo("PENDING");
-        assertThat(orderStatus(orderId)).isEqualTo("RESERVED");
-        assertThat(tickets(orderId)).isZero();
+        // Unknown payment: the FR page, no redirect.
+        mvc.perform(get("/payments/card/" + UUID.randomUUID() + "/return")).andExpect(status().isOk())
+                .andExpect(r -> assertThat(r.getResponse().getContentAsString()).contains("en cours de confirmation"));
+        for (String orderId : List.of(appOrder, webOrder)) {
+            assertThat(orderStatus(orderId)).isEqualTo("RESERVED");
+            assertThat(tickets(orderId)).isZero();
+        }
     }
 
     // ---------- callback ----------
@@ -240,6 +257,76 @@ class PaymentApiTest extends PaymentTest {
         assertThat(tickets(orderId)).isEqualTo(1);
         assertThat(sold(s.priceId())).isEqualTo(1);
         assertThat(orderStatus(orderId)).isEqualTo("PAID");
+    }
+
+    private String paymentStatusOf(String token, String orderId) throws Exception {
+        return JsonPath.read(body(fan(token, get("/fan/orders/" + orderId)).andExpect(status().isOk())), "$.payment_status");
+    }
+
+    /** 04 GET /fan/orders/{id} payment_status: the latest attempt; a PENDING one 20 min old or more reads FAILED. */
+    @Test
+    void paymentStatusIsTheLatestAttempt() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        String orderId = order(fan, s, 1);
+        assertThat(paymentStatusOf(fan, orderId)).isNull();
+        String first = payment(fan, orderId);
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        callback(signed(first, "DECLINED", total(orderId), "FAKE-" + UUID.randomUUID())).andExpect(status().isSeeOther());
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
+
+        // An attempt the fan abandoned on the gateway: still PENDING in the table, reported FAILED from 20 min.
+        // (The declined one is moved further back, so the second stays the latest while it is aged.)
+        jdbc.sql("update payments set created_at = now() - interval '1 hour' where id = ?::uuid").param(first).update();
+        String second = payment(fan, orderId);
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        jdbc.sql("update payments set created_at = now() - interval '19 minutes 50 seconds' where id = ?::uuid")
+                .param(second).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        jdbc.sql("update payments set created_at = now() - interval '20 minutes' where id = ?::uuid").param(second).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
+        assertThat(paymentStatus(second)).isEqualTo("PENDING");
+
+        // Its late success is still taken (plan Q8): PAID, and the order reports SUCCEEDED.
+        callback(approve(second, total(orderId))).andExpect(status().isSeeOther());
+        assertThat(orderStatus(orderId)).isEqualTo("PAID");
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
+        assertThat(tickets(orderId)).isEqualTo(1);
+    }
+
+    /** A success wins over a later attempt: an older attempt approved after a newer one was opened reads SUCCEEDED. */
+    @Test
+    void anOlderSuccessWinsOverALaterAttempt() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        String orderId = order(fan, s, 1);
+        String older = payment(fan, orderId);
+        jdbc.sql("update payments set created_at = now() - interval '5 minutes' where id = ?::uuid").param(older).update();
+        String newer = payment(fan, orderId);
+        callback(approve(older, total(orderId))).andExpect(status().isSeeOther());
+        assertThat(orderStatus(orderId)).isEqualTo("PAID");
+        assertThat(paymentStatus(newer)).isEqualTo("PENDING");
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
+        jdbc.sql("update payments set created_at = now() - interval '21 minutes' where id = ?::uuid").param(newer).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED"); // not the stale newer one's FAILED
+        callback(signed(newer, "DECLINED", total(orderId), "FAKE-" + UUID.randomUUID())).andExpect(status().isSeeOther());
+        assertThat(paymentStatus(newer)).isEqualTo("FAILED");
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
+    }
+
+    /** A stale PENDING attempt doesn't block a new one: /pay still answers while the hold lasts. */
+    @Test
+    void aStalePendingAttemptLeavesPayOpen() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        String orderId = order(fan, s, 1);
+        String stale = payment(fan, orderId);
+        jdbc.sql("update payments set created_at = now() - interval '21 minutes' where id = ?::uuid").param(stale).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
+        String fresh = payment(fan, orderId);
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        callback(approve(fresh, total(orderId))).andExpect(status().isSeeOther());
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
     }
 
     @Test
@@ -327,6 +414,78 @@ class PaymentApiTest extends PaymentTest {
         assertThat(sold(s.priceId())).isEqualTo(2);
         assertThat(tickets(orderId)).isEqualTo(2);
         assertThat(refundsRequired(p)).isZero();
+    }
+
+    /** Q8: the tickets of a late success go to the holders snapshot at reservation, like an on-time one. */
+    @Test
+    void aLateSuccessIssuesToTheHolders() throws Exception {
+        Sale s = onSale(10);
+        String buyerPhone = randomPhone();
+        String friendPhone = randomPhone();
+        String fan = fanToken(buyerPhone);
+        String orderId = JsonPath.read(body(fan(fan, post("/fan/orders"), """
+                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": 2,
+                  "holders": [{"name": "Yazid Aqel"}, {"name": "Samir Benali", "phone": "%s"}]}]}
+                """.formatted(s.eventId(), s.priceId(), friendPhone)).andExpect(status().isCreated())), "$.id");
+        String p = payment(fan, orderId);
+        expireWithStalePayment(orderId, p);
+
+        callback(approve(p, total(orderId))).andExpect(status().isSeeOther());
+        assertThat(orderStatus(orderId)).isEqualTo("PAID");
+        assertThat(jdbc.sql("""
+                select string_agg(u.phone_e164 || ' ' || t.holder_name || ' ' || t.holder_initials, ',' order by t.holder_name)
+                from tickets t join users u on u.id = t.holder_user_id where t.order_id = ?::uuid
+                """).param(orderId).query(String.class).single())
+                .isEqualTo(friendPhone + " Samir Benali S. B.," + buyerPhone + " Yazid Aqel Y. A.");
+    }
+
+    /**
+     * An order placed before V7 has holders = []: approved on time or late (Q8), each place goes to the buyer with no
+     * name or initials. The length check is NOT VALID, so such rows exist; they can only be written with it off.
+     */
+    @Test
+    void aLot0OrderWithoutHoldersIssuesToTheBuyer() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String fan = fanToken(phone);
+        String onTime = order(fan, s, 2);
+        String late = order(fan, s, 1);
+        new TransactionTemplate(transactions).executeWithoutResult(t -> {
+            jdbc.sql("alter table order_items drop constraint order_items_holders_len").update();
+            jdbc.sql("update order_items set holders = '[]' where order_id in (?::uuid, ?::uuid)").params(onTime, late).update();
+            jdbc.sql("alter table order_items add constraint order_items_holders_len"
+                    + " check (jsonb_array_length(holders) = qty) not valid").update();
+        });
+        String pOnTime = payment(fan, onTime);
+        String pLate = payment(fan, late);
+        expireWithStalePayment(late, pLate);
+
+        callback(approve(pOnTime, total(onTime))).andExpect(status().isSeeOther());
+        callback(approve(pLate, total(late))).andExpect(status().isSeeOther());
+        UUID buyer = jdbc.sql("select id from users where phone_e164 = ?").param(phone).query(UUID.class).single();
+        for (var e : Map.of(onTime, 2, late, 1).entrySet()) {
+            assertThat(orderStatus(e.getKey())).isEqualTo("PAID");
+            assertThat(jdbc.sql("""
+                    select string_agg(t.holder_user_id || ' ' || coalesce(t.holder_name, '-') || ' '
+                                      || coalesce(t.holder_initials, '-'), ',')
+                    from tickets t where t.order_id = ?::uuid
+                    """).param(e.getKey()).query(String.class).single())
+                    .isEqualTo(String.join(",", Collections.nCopies(e.getValue(), buyer + " - -")));
+            fan(fan, get("/fan/orders/" + e.getKey())).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.ticket_ids.length()").value(e.getValue()))
+                    .andExpect(jsonPath("$.items[0].holders.length()").value(0));
+        }
+    }
+
+    @Test
+    void returnTemplatesAreCheckedAtStartup() {
+        assertThat(PaymentService.template("k", "https://shop.example/orders/{order_id}"))
+                .isEqualTo("https://shop.example/orders/{order_id}");
+        assertThat(PaymentService.template("k", "jomhor-fan://orders/{order_id}")).isEqualTo("jomhor-fan://orders/{order_id}");
+        for (String bad : List.of("https://shop.example/orders/", "https://shop example/{order_id}", "/orders/{order_id}")) {
+            assertThatThrownBy(() -> PaymentService.template("payments.return-url.web", bad))
+                    .isInstanceOf(IllegalStateException.class).hasMessageStartingWith("payments.return-url.web");
+        }
     }
 
     @Test
@@ -424,14 +583,14 @@ class PaymentApiTest extends PaymentTest {
         }
         String fan = fanToken(randomPhone());
         String orderId = JsonPath.read(body(fan(fan, post("/fan/orders"), """
-                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": 2},
-                                                             {"price_category_id": "%s", "qty": 1}]}
-                """.formatted(s.eventId(), s.priceId(), scarce)).andExpect(status().isCreated())), "$.id");
+                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": 2, "holders": %s},
+                                                             {"price_category_id": "%s", "qty": 1, "holders": %s}]}
+                """.formatted(s.eventId(), s.priceId(), holders(2), scarce, holders(1))).andExpect(status().isCreated())), "$.id");
         String p = payment(fan, orderId);
         expireWithStalePayment(orderId, p);
         fan(fanToken(randomPhone()), post("/fan/orders"), """
-                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": 1}]}
-                """.formatted(s.eventId(), scarce)).andExpect(status().isCreated());
+                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": 1, "holders": %s}]}
+                """.formatted(s.eventId(), scarce, holders(1))).andExpect(status().isCreated());
         assertThat(sold(s.priceId())).isZero();
         assertThat(sold(scarce)).isEqualTo(1);
 

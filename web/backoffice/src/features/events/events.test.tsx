@@ -132,6 +132,7 @@ const detail = (over: Partial<EventDetail> = {}): EventDetail => ({
   title: 'Atlas FC vs Rapid Oued',
   starts_at: '2026-11-14T19:00:00Z',
   doors_open_at: '2026-11-14T17:30:00Z',
+  sale_starts_at: null,
   status: 'DRAFT',
   refund_cutoff_at: null,
   reentry_policy: 'NONE',
@@ -855,4 +856,134 @@ it('rules: a server error on reentry_policy opens Règles and marks the select',
   await user.click(saveDraft())
   await waitFor(() => expect(screen.getByRole('tab', { name: fr.events.tabs.rules }).getAttribute('aria-selected')).toBe('true'))
   expect(screen.getByRole('combobox', { name: fr.events.rules.reentry }).getAttribute('aria-invalid')).toBe('true')
+})
+
+// ---- B2 sale opening, nominative row (BO-6) ----
+
+it.each([
+  ['Grand Stade', 45000, CASA],
+  ['Salle Pleyel', 3000, PARIS],
+] as const)('create: the sale opening at %s is read in its zone (%s) and sent as UTC', async (name, capacity, zone) => {
+  const user = userEvent.setup()
+  const calls = stubApi()
+  renderApp('/events/new')
+  await screen.findByRole('heading', { name: fr.events.new })
+  await user.type(field(fr.events.form.title), 'Atlas FC vs Rapid Oued')
+  setDateTime(fr.events.form.startsAt, NORMAL)
+  setDateTime(fr.events.form.saleStartsAt, '2026-05-01T10:00')
+  await pick(user, fr.events.form.venue, i18n.t('events.form.venueOption', { name, capacity }))
+  const offset = offsetLabel(Date.parse(expectedUtc('2026-05-01T10:00', zone)), zone)
+  expect(document.getElementById('event-sale-starts-at-hint')!.textContent).toBe(
+    `${i18n.t('events.form.zoneHint', { zone, offset })} · ${fr.events.form.saleStartsAtHint}`,
+  )
+  await user.click(saveDraft())
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect((writes(calls)[0]!.body as Record<string, unknown>).sale_starts_at).toBe(expectedUtc('2026-05-01T10:00', zone))
+  expect(expectedUtc('2026-05-01T10:00', CASA)).not.toBe(expectedUtc('2026-05-01T10:00', PARIS))
+})
+
+it('sale opening: must be strictly before T0 − 60 min (FR copy, nothing sent); one minute earlier passes', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi()
+  renderApp('/events/1') // T0 2026-11-14T19:00Z
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  const t0 = field(fr.events.form.startsAt).value
+  const minus = (min: number) => utcToWall(new Date(Date.parse(wallToUtc(t0, CASA)) - min * 60_000).toISOString(), CASA)
+  setDateTime(fr.events.form.saleStartsAt, minus(60))
+  await user.click(saveDraft())
+  expect(await screen.findByText(fr.events.form.saleBeforeStart)).toBeTruthy()
+  expect(field(fr.events.form.saleStartsAt).getAttribute('aria-invalid')).toBe('true')
+  expect(writes(calls)).toEqual([])
+
+  setDateTime(fr.events.form.saleStartsAt, minus(61))
+  await user.click(saveDraft())
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)[0]!.body).toEqual({ sale_starts_at: new Date(Date.parse('2026-11-14T19:00:00Z') - 61 * 60_000).toISOString() })
+})
+
+it('sale opening: a stored one is shown in the venue zone, not re-sent when unchanged, and cannot be cleared', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi('ADMIN', undefined, detail({ sale_starts_at: '2026-11-01T09:00:00Z' }))
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  expect(field(fr.events.form.saleStartsAt).value).toBe(expectedWall('2026-11-01T09:00:00Z'))
+  await user.clear(field(fr.events.form.title))
+  await user.type(field(fr.events.form.title), 'Renommé')
+  await user.click(saveDraft())
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)[0]!.body).toEqual({ title: 'Renommé' })
+
+  setDateTime(fr.events.form.saleStartsAt, '')
+  await user.click(saveDraft())
+  expect(await screen.findByText(fr.events.form.saleRequired)).toBeTruthy()
+  expect(writes(calls)).toHaveLength(1)
+})
+
+it('sale opening: a server 422 on sale_starts_at opens Général and shows the FR rule on the field', async () => {
+  const user = userEvent.setup()
+  stubB2('ADMIN', (c) =>
+    c.method === 'PATCH'
+      ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { sale_starts_at: 'too late' } } }, { status: 422 })
+      : undefined,
+  )
+  renderApp('/events/1')
+  const rules = await openTab(user, fr.events.tabs.rules)
+  await user.clear(within(rules).getByLabelText(fr.events.form.perAccountLimit))
+  await user.type(within(rules).getByLabelText(fr.events.form.perAccountLimit), '6')
+  await user.click(saveDraft())
+  await waitFor(() => expect(screen.getByRole('tab', { name: fr.events.tabs.general }).getAttribute('aria-selected')).toBe('true'))
+  expect(screen.getByText(fr.events.form.saleBeforeStart)).toBeTruthy()
+  expect(field(fr.events.form.saleStartsAt).getAttribute('aria-invalid')).toBe('true')
+})
+
+it('FINANCE: the sale opening is shown read-only', async () => {
+  stubApi('FINANCE', undefined, detail({ sale_starts_at: '2026-11-01T09:00:00Z' }))
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  expect(field(fr.events.form.saleStartsAt).value).toBe(expectedWall('2026-11-01T09:00:00Z'))
+  expect(field(fr.events.form.saleStartsAt).matches(':disabled')).toBe(true)
+})
+
+it('rules: "Billets nominatifs · toujours" is a read-only row with its explanation', async () => {
+  const user = userEvent.setup()
+  stubB2()
+  renderApp('/events/1')
+  const panel = await openTab(user, fr.events.tabs.rules)
+  const named = within(panel).getByLabelText(fr.events.rules.named) as HTMLInputElement
+  expect(named.value).toBe(fr.events.rules.namedValue)
+  expect(named.readOnly).toBe(true)
+  expect(document.getElementById(named.getAttribute('aria-describedby')!)!.textContent).toBe(fr.events.rules.namedHint)
+})
+
+it('sale opening: across clock changes the T0 − 60 rule compares instants, as the server does (Europe/Paris)', async () => {
+  // Premises from Intl: spring forward 2026-03-29 (01:30 CET and 03:00 CEST are 30 min apart);
+  // fall back 2026-10-25 (01:59 CEST and the later 02:59, CET, are 2 h apart).
+  expect(expectedWall('2026-03-29T00:30:00Z', PARIS)).toBe('2026-03-29T01:30')
+  expect(expectedWall('2026-03-29T01:00:00Z', PARIS)).toBe('2026-03-29T03:00')
+  expect(expectedWall('2026-10-24T23:59:00Z', PARIS)).toBe('2026-10-25T01:59')
+  expect(expectedWall('2026-10-24T23:00:00Z', PARIS)).toBe('2026-10-25T01:00')
+  expect(expectedWall('2026-10-25T01:59:00Z', PARIS)).toBe('2026-10-25T02:59')
+  expect(offsetMinutes(Date.parse('2026-10-25T01:59:00Z'), PARIS)).toBe(60) // CET: the later 02:59
+
+  const user = userEvent.setup()
+  const calls = stubApi('ADMIN', undefined, detail({ timezone: PARIS }))
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  setDateTime(fr.events.form.startsAt, '2026-03-29T03:00')
+  setDateTime(fr.events.form.doorsOpenAt, '2026-03-29T01:00')
+  setDateTime(fr.events.form.saleStartsAt, '2026-03-29T01:30') // 90 min on the clock, 30 min in time: refused
+  await user.click(saveDraft())
+  expect(await screen.findByText(fr.events.form.saleBeforeStart)).toBeTruthy()
+  expect(writes(calls)).toEqual([])
+
+  setDateTime(fr.events.form.startsAt, '2026-10-25T02:59')
+  setDateTime(fr.events.form.doorsOpenAt, '2026-10-25T01:00') // CEST, as is the sale opening
+  setDateTime(fr.events.form.saleStartsAt, '2026-10-25T01:59') // 60 min on the clock, 2 h in time: accepted
+  await user.click(saveDraft())
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)[0]!.body).toEqual({
+    starts_at: '2026-10-25T01:59:00.000Z',
+    doors_open_at: '2026-10-24T23:00:00.000Z',
+    sale_starts_at: '2026-10-24T23:59:00.000Z',
+  })
 })

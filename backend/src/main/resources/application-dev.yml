@@ -7,6 +7,12 @@ spring:
   flyway:
     locations: classpath:db/migration,classpath:db/dev
 
+# Dev trusts only loopback as a proxy (a local shop in front of the API).
+server:
+  tomcat:
+    remoteip:
+      internal-proxies: '${TRUSTED_PROXIES_REGEX:127\.0\.0\.1|0:0:0:0:0:0:0:1}'
+
 # Dev-only values, never used outside the dev profile.
 jomhor:
   jwt-secret: ${JWT_SECRET:dev-only-jwt-secret-not-for-prod-0001}
@@ -19,3 +25,6 @@ payments:
   public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080/v1}
   fake:
     secret: ${PAYMENTS_FAKE_SECRET:dev-only-payments-fake-secret-not-for-prod}
+  return-url:
+    web: ${PAYMENTS_RETURN_URL_WEB:http://localhost:3000/orders/{order_id}}
+    app: ${PAYMENTS_RETURN_URL_APP:jomhor-fan://orders/{order_id}}

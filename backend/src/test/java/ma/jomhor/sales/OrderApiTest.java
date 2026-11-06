@@ -25,7 +25,9 @@ import java.util.concurrent.TimeUnit;
 import ma.jomhor.catalog.OrgApiTest;
 import ma.jomhor.catalog.application.Events;
 import ma.jomhor.catalog.application.Inventory;
+import ma.jomhor.common.web.ApiException;
 import ma.jomhor.sales.application.OrderService;
+import ma.jomhor.sales.domain.Order;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -42,8 +44,10 @@ class OrderApiTest extends OrgApiTest {
 
     private static final String[] RESERVED_KEYS = {"id", "status", "reserved_until", "total_mad", "items"};
     private static final String[] ORDER_KEYS =
-            {"id", "event_id", "status", "total_mad", "reserved_until", "paid_at", "items", "ticket_ids"};
-    private static final String[] ITEM_KEYS = {"price_category_id", "zone_id", "name", "qty", "unit_price_mad"};
+            {"id", "event_id", "channel", "status", "payment_status", "total_mad", "reserved_until", "paid_at", "items",
+             "ticket_ids"};
+    private static final String[] ITEM_KEYS =
+            {"price_category_id", "zone_id", "zone_name", "name", "qty", "unit_price_mad", "holders"};
 
     @Autowired
     OrderService orderService;
@@ -77,7 +81,7 @@ class OrderApiTest extends OrgApiTest {
     }
 
     private static String item(String priceId, int qty) {
-        return "{\"price_category_id\": \"%s\", \"qty\": %d}".formatted(priceId, qty);
+        return "{\"price_category_id\": \"%s\", \"qty\": %d, \"holders\": %s}".formatted(priceId, qty, holders(qty));
     }
 
     private String reserve(String token, Sale s, int qty) throws Exception {
@@ -127,6 +131,7 @@ class OrderApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.total_mad").value(2 * 5000 + 12550))
                 .andExpect(jsonPath("$.items[0].price_category_id").value(s.priceId()))
                 .andExpect(jsonPath("$.items[0].zone_id").value(s.zoneId()))
+                .andExpect(jsonPath("$.items[0].zone_name").value("Zone NORD"))
                 .andExpect(jsonPath("$.items[0].name").value("Plein tarif"))
                 .andExpect(jsonPath("$.items[0].qty").value(2))
                 .andExpect(jsonPath("$.items[0].unit_price_mad").value(5000))
@@ -150,9 +155,13 @@ class OrderApiTest extends OrgApiTest {
         json = body(fetch(fan, id).andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id))
                 .andExpect(jsonPath("$.event_id").value(s.eventId()))
+                .andExpect(jsonPath("$.channel").value("APP"))
+                .andExpect(jsonPath("$.items[0].holders[0].label").value("Yazid A."))
                 .andExpect(jsonPath("$.status").value("RESERVED"))
                 .andExpect(jsonPath("$.total_mad").value(2 * 5000 + 12550))
                 .andExpect(jsonPath("$.paid_at").isEmpty())
+                .andExpect(jsonPath("$.payment_status").isEmpty())
+                .andExpect(jsonPath("$.items[0].zone_name").value("Zone NORD"))
                 .andExpect(jsonPath("$.ticket_ids", empty()))
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.items[?(@.price_category_id == '%s')].unit_price_mad".formatted(vip)).value(12550)));
@@ -190,11 +199,59 @@ class OrderApiTest extends OrgApiTest {
         int draft = event(s.org(), s.venueId());
         String draftPrice = price(s.org(), draft, s.zoneId(), "Plein tarif", 10);
         error(order(fan, draft, item(draftPrice, 1)), 409, "EVENT_NOT_ON_SALE");
+        order(fan, draft, item(draftPrice, 1)).andExpect(jsonPath("$.details.reason").value("NOT_ON_SALE"));
         error(order(fan, 999_999_999, item(s.priceId(), 1)), 404, "NOT_FOUND");
         setStatus(s.eventId(), "CLOSED");
         error(order(fan, s.eventId(), item(s.priceId(), 1)), 409, "EVENT_NOT_ON_SALE");
+        order(fan, s.eventId(), item(s.priceId(), 1)).andExpect(jsonPath("$.details.reason").value("NOT_ON_SALE"));
         assertThat(sold(s.priceId())).isZero();
         assertThat(sold(draftPrice)).isZero();
+    }
+
+    /** 04 §On-sale: opening at sale_starts_at, closing at refund_cutoff_at, on the database clock. */
+    @Test
+    void ordersOnlyInsideTheSaleWindow() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String fan = fanToken(phone);
+        String opening = "2099-04-01T10:00:00Z";
+        call(s.org(), patch("/org/events/" + s.eventId()), "{\"sale_starts_at\": \"%s\"}".formatted(opening))
+                .andExpect(status().isOk());
+        String json = body(order(fan, s.eventId(), item(s.priceId(), 1)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EVENT_NOT_ON_SALE")));
+        assertThat(JsonPath.<String>read(json, "$.details.reason")).isEqualTo("NOT_STARTED");
+        assertThat(JsonPath.<String>read(json, "$.details.sale_starts_at")).isEqualTo(opening);
+        // the window is checked before the items: a bad item still gets NOT_STARTED
+        order(fan, s.eventId(), item(UUID.randomUUID().toString(), 1)).andExpect(status().isConflict());
+
+        // Boundaries exactly: in one transaction now() is fixed, so the order is placed at now() = sale_starts_at
+        // (open) and then refused at now() = refund_cutoff_at (CLOSED). Rolled back.
+        UUID buyer = jdbc.sql("select id from users where phone_e164 = ?").param(phone).query(UUID.class).single();
+        var oneItem = List.of(new OrderService.ItemRequest(UUID.fromString(s.priceId()), 1,
+                List.of(new OrderService.HolderRequest("Yazid Aqel", null))));
+        new TransactionTemplate(transactions).executeWithoutResult(tx -> {
+            jdbc.sql("update events set sale_starts_at = now() where id = ?").param(s.eventId()).update();
+            assertThat(orderService.place(buyer, s.eventId(), Order.Channel.APP, oneItem).order().status())
+                    .isEqualTo(Order.Status.RESERVED);
+            jdbc.sql("update events set refund_cutoff_at = now() where id = ?").param(s.eventId()).update();
+            assertThatThrownBy(() -> orderService.place(buyer, s.eventId(), Order.Channel.APP, oneItem))
+                    .isInstanceOfSatisfying(ApiException.class, e -> {
+                        assertThat(e.code()).isEqualTo("EVENT_NOT_ON_SALE");
+                        assertThat(e.details()).containsEntry("reason", "CLOSED");
+                    });
+            tx.setRollbackOnly();
+        });
+        assertThat(sold(s.priceId())).isZero();
+
+        jdbc.sql("update events set sale_starts_at = now() where id = ?").param(s.eventId()).update();
+        order(fan, s.eventId(), item(s.priceId(), 1)).andExpect(status().isCreated());
+
+        jdbc.sql("update events set refund_cutoff_at = now() where id = ?").param(s.eventId()).update();
+        error(order(fan, s.eventId(), item(s.priceId(), 1)), 409, "EVENT_NOT_ON_SALE");
+        order(fan, s.eventId(), item(s.priceId(), 1))
+                .andExpect(jsonPath("$.details.reason").value("CLOSED"))
+                .andExpect(jsonPath("$.details.sale_starts_at").doesNotExist());
+        assertThat(sold(s.priceId())).isEqualTo(1);
     }
 
     @Test
@@ -219,6 +276,131 @@ class OrderApiTest extends OrgApiTest {
                 .andExpect(status().isUnprocessableContent());
         assertThat(sold(s.priceId())).isZero();
         assertThat(sold(other.priceId())).isZero();
+    }
+
+    // ---------- holders (04 §Fan POST /fan/orders, §Holder names) ----------
+
+    private static String item(String priceId, int qty, String holders) {
+        return "{\"price_category_id\": \"%s\", \"qty\": %d, \"holders\": %s}".formatted(priceId, qty, holders);
+    }
+
+    private static void invalidField(ResultActions r, String field) throws Exception {
+        String json = body(r.andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED")));
+        Map<String, Object> fields = JsonPath.read(json, "$.details.fields");
+        assertThat(fields).containsOnlyKeys(field);
+    }
+
+    @Test
+    void oneHolderPerPlace() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 2, holders(1))), "items[0].holders");
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 1, holders(2))), "items[0].holders");
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 1, "[]")), "items[0].holders");
+        invalidField(order(fan, s.eventId(), "{\"price_category_id\": \"%s\", \"qty\": 1}".formatted(s.priceId())),
+                "items[0].holders");
+        String vip = price(s.org(), s.eventId(), s.zoneId(), "VIP", 10);
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 1) + "," + item(vip, 2, holders(3))), "items[1].holders");
+        assertThat(sold(s.priceId())).isZero();
+    }
+
+    @Test
+    void holderNamesAreLatinTwoToSixtyChars() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        for (String bad : List.of("يزيد عاقل", "Y", "  Y  ", "", "Yazid 3", "Yazid@Aqel", "-Yazid", "Язид",
+                "A" + "b".repeat(60))) {
+            invalidField(order(fan, s.eventId(), item(s.priceId(), 2,
+                    "[{\"name\": \"Yazid Aqel\"}, {\"name\": \"%s\"}]".formatted(bad))), "items[0].holders[1].name");
+        }
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 1, "[{\"phone\": \"+212600000000\"}]")),
+                "items[0].holders[0].name");
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 1, "[null]")), "items[0].holders[0].name");
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 1, "[{\"name\": \"\u2160\u2161\"}]")),
+                "items[0].holders[0].name");
+        // NFKC, U+2019 → ', whitespace (no-break spaces too) collapsed then stripped; accents, apostrophe, dot, hyphen ok.
+        String decomposed = "Fe\u0301lix  N\u2019Diaye-Le\u0301on   jr.\u00A0";
+        String json = body(order(fan, s.eventId(), item(s.priceId(), 3,
+                "[{\"name\": \"%s\"}, {\"name\": \" Ab \"}, {\"name\": \"\uFF39azid\u202FAqel\"}]".formatted(decomposed)))
+                .andExpect(status().isCreated()));
+        assertThat(JsonPath.<List<String>>read(json, "$.items[0].holders[*].label"))
+                .containsExactly("Félix J.", "Ab", "Yazid A.");
+        assertThat(jdbc.sql("select holders::text from order_items where order_id = ?::uuid")
+                .param(JsonPath.<String>read(json, "$.id")).query(String.class).single())
+                .contains("\"Félix N'Diaye-Léon jr.\"", "\"Ab\"", "\"Yazid Aqel\"");
+        assertThat(sold(s.priceId())).isEqualTo(3);
+    }
+
+    @Test
+    void holderPhonesAreE164() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        for (String bad : List.of("0612345678", "+0612345678", "212612345678", "+2126 1234 5678", "")) {
+            invalidField(order(fan, s.eventId(), item(s.priceId(), 1,
+                    "[{\"name\": \"Yazid Aqel\", \"phone\": \"%s\"}]".formatted(bad))), "items[0].holders[0].phone");
+        }
+        assertThat(sold(s.priceId())).isZero();
+    }
+
+    /** 04 check order: the sale window comes before the holders; the holders before the limit. */
+    @Test
+    void holdersAreCheckedAfterTheWindowAndBeforeTheLimit() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        setStatus(s.eventId(), "CLOSED");
+        error(order(fan, s.eventId(), item(s.priceId(), 2, holders(1))), 409, "EVENT_NOT_ON_SALE");
+        setStatus(s.eventId(), "ON_SALE");
+        invalidField(order(fan, s.eventId(), item(s.priceId(), 5, holders(4))), "items[0].holders");
+        error(order(fan, s.eventId(), item(s.priceId(), 5)), 409, "PER_ACCOUNT_LIMIT");
+    }
+
+    /**
+     * No phone or the buyer's own phone → the buyer holds the place; another phone → that phone's account, created
+     * if new. The response is the same whether the phone had an account or not, and carries labels only.
+     */
+    @Test
+    void holderPhonesPickTheHoldingAccount() throws Exception {
+        Sale s = onSale(10);
+        String buyerPhone = randomPhone();
+        String knownPhone = randomPhone();
+        String newPhone = randomPhone();
+        String fan = fanToken(buyerPhone);
+        fanToken(knownPhone);
+        String json = body(order(fan, s.eventId(), item(s.priceId(), 4, """
+                [{"name": "Yazid Aqel"}, {"name": "Yazid Aqel", "phone": "%s"},
+                 {"name": "Samir Benali", "phone": "%s"}, {"name": "Samir Benali", "phone": "%s"}]
+                """.formatted(buyerPhone, knownPhone, newPhone))).andExpect(status().isCreated()));
+        for (int j = 0; j < 4; j++) {
+            assertKeys(json, "$.items[0].holders[%d]".formatted(j), "label");
+        }
+        assertThat(JsonPath.<List<String>>read(json, "$.items[0].holders[*].label"))
+                .containsExactly("Yazid A.", "Yazid A.", "Samir B.", "Samir B.");
+        assertThat(json).doesNotContain(knownPhone, newPhone, "user_id", "Benali");
+
+        List<String> holders = jdbc.sql("""
+                select u.phone_e164 from order_items i
+                     cross join lateral jsonb_array_elements(i.holders) with ordinality as h(v, n)
+                     join users u on u.id = cast(h.v->>'user_id' as uuid)
+                where i.order_id = ?::uuid order by h.n
+                """).param(JsonPath.<String>read(json, "$.id")).query(String.class).list();
+        assertThat(holders).containsExactly(buyerPhone, buyerPhone, knownPhone, newPhone);
+        assertThat(jdbc.sql("select holders::text from order_items where order_id = ?::uuid")
+                .param(JsonPath.<String>read(json, "$.id")).query(String.class).single())
+                .doesNotContain(buyerPhone, knownPhone, newPhone);
+    }
+
+    /** A refused order creates no holder account (the upsert rolls back with it). */
+    @Test
+    void aRefusedOrderCreatesNoHolderAccount() throws Exception {
+        Sale s = onSale(1);
+        String newPhone = randomPhone();
+        String fan = fanToken(randomPhone());
+        error(order(fan, s.eventId(), item(s.priceId(), 2,
+                "[{\"name\": \"Yazid Aqel\"}, {\"name\": \"Samir Benali\", \"phone\": \"%s\"}]".formatted(newPhone))),
+                409, "SOLD_OUT");
+        assertThat(jdbc.sql("select count(*) from users where phone_e164 = ?").param(newPhone).query(Integer.class)
+                .single()).isZero();
     }
 
     // ---------- quota and limit ----------

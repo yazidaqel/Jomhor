@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 
 import ma.jomhor.IntegrationTest;
 import ma.jomhor.JomhorApplication;
+import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.payments.application.CardGateway;
 import ma.jomhor.tenancy.application.OtpSender;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,8 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 /**
  * The log sender prints codes: only dev and staging get it. Anywhere else there is no sender yet, so no start.
- * Under prod and no profile a stub card gateway is registered, so the OtpSender is the only bean missing.
+ * Under prod and no profile a stub card gateway and a stub ticket messenger are registered, so the OtpSender is the
+ * only bean missing.
  */
 class OtpSenderProfileTest {
 
@@ -41,7 +43,10 @@ class OtpSenderProfileTest {
         var pg = IntegrationTest.POSTGRES;
         var app = new SpringApplication(JomhorApplication.class);
         if (stubCardGateway) {
-            app.addInitializers(c -> c.getBeanFactory().registerSingleton("stubCardGateway", mock(CardGateway.class)));
+            app.addInitializers(c -> {
+                c.getBeanFactory().registerSingleton("stubCardGateway", mock(CardGateway.class));
+                c.getBeanFactory().registerSingleton("stubTicketMessenger", mock(TicketMessenger.class));
+            });
         }
         return app.run(
                 "--spring.profiles.active=" + (profile == null ? "" : profile),

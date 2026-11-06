@@ -30,6 +30,8 @@ export type EventDetail = {
   title: string
   starts_at: string
   doors_open_at: string | null
+  /** Sale opening; null = at publish. Cannot be cleared once set (04-api Lot 1). */
+  sale_starts_at: string | null
   status: EventStatus
   refund_cutoff_at: string | null
   reentry_policy: 'NONE' | 'ONE_EXIT'
@@ -63,7 +65,15 @@ type MetadataKey = 'opponent' | 'competition' | 'matchday' | 'headliner'
 // Form fields carry the API names (`metadata.matchday` included) so VALIDATION_FAILED keys map 1:1.
 const WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/ // datetime-local value, wall time in the venue's zone
 
-export function eventSchema(t: TFunction, doorsRequired: boolean) {
+const HOUR = 3_600_000
+
+/**
+ * `zone`: the venue's, in which wall times are read (before a venue is picked, wall order; the venue is required anyway).
+ * `doorsRequired` / `saleRequired`: the stored event has that time set, and it cannot be cleared.
+ */
+export function eventSchema(t: TFunction, zone: string | undefined, doorsRequired: boolean, saleRequired = false) {
+  // Instants, as the server compares them (wall order differs across a clock change).
+  const at = (wall: string) => Date.parse(wallToUtc(wall, zone ?? 'UTC'))
   const text = z.string().trim()
   return z
     .object({
@@ -73,6 +83,9 @@ export function eventSchema(t: TFunction, doorsRequired: boolean) {
       doors_open_at: z
         .string()
         .refine((s) => (s === '' ? !doorsRequired : WALL.test(s)), t(doorsRequired ? 'events.form.doorsRequired' : 'events.form.dateInvalid')),
+      sale_starts_at: z
+        .string()
+        .refine((s) => (s === '' ? !saleRequired : WALL.test(s)), t(saleRequired ? 'events.form.saleRequired' : 'events.form.dateInvalid')),
       venue_id: z.string().min(1, t('events.form.venueRequired')),
       per_account_limit: integerInput(t('events.form.limitInvalid'), 1, 20),
       reentry_policy: z.enum(REENTRY_POLICIES),
@@ -88,15 +101,22 @@ export function eventSchema(t: TFunction, doorsRequired: boolean) {
         return v.event_type === 'FOOTBALL_MATCH' && typeof v.metadata?.matchday === 'string'
       },
     })
-    // Both are wall times in the venue's zone, so their text order is their time order.
-    // ponytail: except inside the hour repeated when clocks go back; compare instants if that ever matters.
-    .refine((v) => !v.doors_open_at || v.doors_open_at.slice(0, 16) <= v.starts_at.slice(0, 16), {
+    .refine((v) => !v.doors_open_at || at(v.doors_open_at) <= at(v.starts_at), {
       message: t('events.form.doorsAfterStart'),
       path: ['doors_open_at'],
       // Also when other fields are invalid, so every error shows at once; only needs both times to be valid.
       when: ({ value }) => {
         const v = value as { starts_at?: unknown; doors_open_at?: unknown }
         return typeof v.starts_at === 'string' && WALL.test(v.starts_at) && typeof v.doors_open_at === 'string' && WALL.test(v.doors_open_at)
+      },
+    })
+    // Server rule: sale_starts_at strictly before starts_at − 60 min.
+    .refine((v) => !v.sale_starts_at || at(v.sale_starts_at) < at(v.starts_at) - HOUR, {
+      message: t('events.form.saleBeforeStart'),
+      path: ['sale_starts_at'],
+      when: ({ value }) => {
+        const v = value as { starts_at?: unknown; sale_starts_at?: unknown }
+        return typeof v.starts_at === 'string' && WALL.test(v.starts_at) && typeof v.sale_starts_at === 'string' && WALL.test(v.sale_starts_at)
       },
     })
 }
@@ -111,6 +131,7 @@ export const emptyForm = (): EventForm => ({
   title: '',
   starts_at: '',
   doors_open_at: '',
+  sale_starts_at: '',
   venue_id: '',
   per_account_limit: '4',
   reentry_policy: 'NONE',
@@ -122,6 +143,7 @@ export const toForm = (e: EventDetail): EventForm => ({
   title: e.title,
   starts_at: utcToWall(e.starts_at, e.timezone),
   doors_open_at: e.doors_open_at ? utcToWall(e.doors_open_at, e.timezone) : '',
+  sale_starts_at: e.sale_starts_at ? utcToWall(e.sale_starts_at, e.timezone) : '',
   venue_id: e.venue_id,
   per_account_limit: String(e.per_account_limit),
   reentry_policy: e.reentry_policy,
@@ -145,6 +167,7 @@ function toBody(v: EventValues, existing: Record<string, unknown>, zone: string)
     title: v.title,
     starts_at: wallToUtc(v.starts_at, zone),
     ...(v.doors_open_at && { doors_open_at: wallToUtc(v.doors_open_at, zone) }),
+    ...(v.sale_starts_at && { sale_starts_at: wallToUtc(v.sale_starts_at, zone) }),
     per_account_limit: v.per_account_limit,
     reentry_policy: v.reentry_policy,
     metadata,

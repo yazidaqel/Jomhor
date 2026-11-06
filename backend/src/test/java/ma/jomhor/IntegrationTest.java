@@ -7,14 +7,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.tenancy.application.OtpSender;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -23,8 +26,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/** Full app (test profile: simulated card gateway) on one shared Postgres 18 container, test secrets, a mock OtpSender. */
+/**
+ * Full app (test profile: simulated card gateway) on one shared Postgres 18 container, test secrets, a mock OtpSender
+ * and a mock TicketMessenger.
+ */
 @ActiveProfiles("test")
+@Import(OtpSendCounter.class)
 @SpringBootTest(properties = {IntegrationTest.JWT_SECRET, IntegrationTest.OTP_SECRET, IntegrationTest.EVENT_KEY_MASTER})
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
@@ -46,11 +53,17 @@ public abstract class IntegrationTest {
     @MockitoBean
     protected OtpSender otpSender;
 
+    @MockitoBean
+    protected TicketMessenger ticketMessenger;
+
     @Autowired
     protected MockMvc mvc;
 
     @Autowired
     protected JdbcClient jdbc;
+
+    @Autowired
+    OtpSendCounter sendCounter;
 
     /** A fresh Moroccan mobile number, so tests never share a rate-limit window. */
     protected static String randomPhone() {
@@ -69,8 +82,20 @@ public abstract class IntegrationTest {
         return postJson(path, "{\"phone\": \"%s\", \"code\": \"%s\"}".formatted(phone, code));
     }
 
+    /**
+     * Codes are sent after commit on otpSendExecutor, and a request's send is handed to the pool before its response
+     * returns. {@link OtpSendCounter} counts every hand-off until it has run or been dropped, so once it reads zero
+     * every send so far has reached the mock (or was rejected by a full queue).
+     */
+    protected void awaitSends() {
+        if (!sendCounter.awaitIdle(Duration.ofSeconds(10))) {
+            throw new AssertionError("OTP sends still running after 10 s");
+        }
+    }
+
     /** The last code the mock sender got for this phone. */
     protected String lastCode(String phone) {
+        awaitSends();
         var code = ArgumentCaptor.forClass(String.class);
         verify(otpSender, atLeastOnce()).send(eq(phone), code.capture());
         return code.getValue();

@@ -48,13 +48,13 @@ class EventController {
     // ---------- requests ----------
 
     record EventCreate(@NotNull UUID venueId, @NotNull Event.Type eventType, @NotBlank String title,
-                       @NotNull Instant startsAt, Instant doorsOpenAt, Event.ReentryPolicy reentryPolicy,
-                       @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata) {}
+                       @NotNull Instant startsAt, Instant doorsOpenAt, Instant saleStartsAt,
+                       Event.ReentryPolicy reentryPolicy, @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata) {}
 
     record EventPatch(UUID venueId, Event.Type eventType,
                       @Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String title, Instant startsAt,
-                      Instant doorsOpenAt, Event.ReentryPolicy reentryPolicy, @Min(1) @Max(20) Integer perAccountLimit,
-                      JsonNode metadata) {}
+                      Instant doorsOpenAt, Instant saleStartsAt, Event.ReentryPolicy reentryPolicy,
+                      @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata) {}
 
     record PriceCreate(@NotNull Integer zoneId, @NotBlank String name, @NotNull @PositiveOrZero Long priceMad,
                        @NotNull @PositiveOrZero Integer quota) {}
@@ -75,12 +75,12 @@ class EventController {
     }
 
     record EventDto(int id, UUID venueId, String timezone, UUID seriesId, Event.Type eventType, String title,
-                    Instant startsAt, Instant doorsOpenAt, Event.Status status, Instant refundCutoffAt,
-                    Event.ReentryPolicy reentryPolicy, int perAccountLimit, @JsonRawValue String metadata,
-                    Instant createdAt) {
+                    Instant startsAt, Instant doorsOpenAt, Instant saleStartsAt, Event.Status status,
+                    Instant refundCutoffAt, Event.ReentryPolicy reentryPolicy, int perAccountLimit,
+                    @JsonRawValue String metadata, Instant createdAt) {
         static EventDto of(Event e) {
             return new EventDto(e.id(), e.venueId(), e.timezone(), e.seriesId(), e.eventType(), e.title(), e.startsAt(),
-                    e.doorsOpenAt(), e.status(), e.refundCutoffAt(), e.reentryPolicy(), e.perAccountLimit(),
+                    e.doorsOpenAt(), e.saleStartsAt(), e.status(), e.refundCutoffAt(), e.reentryPolicy(), e.perAccountLimit(),
                     e.metadata(), e.createdAt());
         }
     }
@@ -104,7 +104,7 @@ class EventController {
     @ResponseStatus(HttpStatus.CREATED)
     EventDto create(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @Valid @RequestBody EventCreate body) {
         return EventDto.of(events.create(org.organizerId(), new EventInput(body.venueId(), body.eventType(),
-                body.title(), body.startsAt(), body.doorsOpenAt(), body.reentryPolicy(), body.perAccountLimit(),
+                body.title(), body.startsAt(), body.doorsOpenAt(), body.saleStartsAt(), body.reentryPolicy(), body.perAccountLimit(),
                 body.metadata())));
     }
 
@@ -117,7 +117,7 @@ class EventController {
     EventDto update(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable int id,
                     @Valid @RequestBody EventPatch body) {
         return EventDto.of(events.update(org.organizerId(), id, new EventInput(body.venueId(), body.eventType(),
-                body.title(), body.startsAt(), body.doorsOpenAt(), body.reentryPolicy(), body.perAccountLimit(),
+                body.title(), body.startsAt(), body.doorsOpenAt(), body.saleStartsAt(), body.reentryPolicy(), body.perAccountLimit(),
                 body.metadata())));
     }
 

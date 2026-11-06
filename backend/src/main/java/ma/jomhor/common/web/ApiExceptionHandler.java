@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.ErrorResponse;
@@ -29,9 +30,12 @@ public class ApiExceptionHandler {
     private static final PropertyNamingStrategies.NamingBase SNAKE =
             (PropertyNamingStrategies.NamingBase) PropertyNamingStrategies.SNAKE_CASE;
 
+    // Every error is JSON whatever the Accept header: a client asking for a PDF (GET /fan/tickets/{id}/pdf) still
+    // gets its 400/404/409 body (a preset Content-Type skips Accept negotiation).
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ApiError> api(ApiException e) {
-        return ResponseEntity.status(e.status()).body(new ApiError(e.code(), e.getMessage(), e.details()));
+        return ResponseEntity.status(e.status()).contentType(MediaType.APPLICATION_JSON)
+                .body(new ApiError(e.code(), e.getMessage(), e.details()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -71,19 +75,19 @@ public class ApiExceptionHandler {
             return badRequest(r.getStatusCode(), r.getHeaders());
         }
         log.error("Unhandled exception", e);
-        return ResponseEntity.internalServerError()
+        return ResponseEntity.internalServerError().contentType(MediaType.APPLICATION_JSON)
                 .body(new ApiError("INTERNAL_ERROR", "Internal error", Map.of()));
     }
 
     // Fixed message (the reason phrase): framework messages can echo request input.
     private static ResponseEntity<ApiError> badRequest(HttpStatusCode status, HttpHeaders headers) {
         var reason = HttpStatus.resolve(status.value());
-        return ResponseEntity.status(status).headers(headers)
+        return ResponseEntity.status(status).headers(headers).contentType(MediaType.APPLICATION_JSON)
                 .body(new ApiError("BAD_REQUEST", reason == null ? "Bad request" : reason.getReasonPhrase(), Map.of()));
     }
 
     private static ResponseEntity<ApiError> validationFailed(Map<String, Object> fields) {
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).contentType(MediaType.APPLICATION_JSON)
                 .body(new ApiError("VALIDATION_FAILED", "Invalid request body", Map.of("fields", fields)));
     }
 }

@@ -26,6 +26,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
+    // Ticket PDF (GET /fan/tickets/{id}/pdf): PDFBox draws the page, ZXing core encodes the QR (tests decode with it too).
+    implementation("org.apache.pdfbox:pdfbox:3.0.8")
+    implementation("com.google.zxing:core:3.5.4")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
@@ -36,4 +39,7 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // TokenVectorsTest compares against (or, with -Djomhor.writeVectors=true, rewrites) docs/token-vectors.json.
+    inputs.files("../docs/token-vectors.json")
+    providers.systemProperty("jomhor.writeVectors").orNull?.let { systemProperty("jomhor.writeVectors", it) }
 }

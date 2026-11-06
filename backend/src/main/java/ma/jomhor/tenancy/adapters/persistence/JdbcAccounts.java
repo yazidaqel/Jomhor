@@ -37,6 +37,18 @@ class JdbcAccounts implements Accounts {
     }
 
     @Override
+    public Optional<User> updateProfile(UUID userId, String displayName, String locale) {
+        return jdbc.sql("""
+                        update users set display_name = case when cast(:name as text) is null then display_name
+                                                             else nullif(:name, '') end,
+                                         locale = coalesce(cast(:locale as text), locale)
+                        where id = :id
+                        returning\s""" + USER_COLUMNS)
+                .param("name", displayName).param("locale", locale).param("id", userId)
+                .query(JdbcAccounts::user).optional();
+    }
+
+    @Override
     public Optional<UUID> findUserIdByPhone(String phone) {
         return jdbc.sql("select id from users where phone_e164 = ?").param(phone).query(UUID.class).optional();
     }

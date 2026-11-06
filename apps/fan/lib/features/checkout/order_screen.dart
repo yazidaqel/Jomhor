@@ -1,0 +1,167 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:jomhor_fan/app/error_panel.dart';
+import 'package:jomhor_fan/app/error_text.dart';
+import 'package:jomhor_fan/core/money.dart';
+import 'package:jomhor_fan/features/checkout/card_payment.dart';
+import 'package:jomhor_fan/features/checkout/order.dart';
+import 'package:jomhor_fan/features/checkout/order_status.dart';
+import 'package:jomhor_fan/l10n/app_localizations.dart';
+import 'package:jomhor_fan/theme/tokens.g.dart';
+
+/// After the card page (or the `jomhor-fan://orders/{id}` deep link): waits for PAID, then the
+/// success card slides in. The ticket itself is FL-7 (Billets).
+class OrderScreen extends ConsumerWidget {
+  const new({required this.orderId, super.key});
+
+  final String orderId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final status = ref.watch(orderStatusProvider(orderId));
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: JomhorColors.ground,
+        leading: CloseButton(onPressed: () => context.go('/')),
+        title: Text(l.payTitle, style: JomhorType.h2),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(JomhorSpace.xl),
+          child: switch (status) {
+            AsyncValue(value: final view?) => _OrderState(view: view),
+            AsyncError(:final error) => Center(
+              child: ErrorPanel(error: error, onRetry: () => ref.invalidate(orderStatusProvider(orderId))),
+            ),
+            _ => const Center(child: CircularProgressIndicator()),
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderState extends ConsumerWidget {
+  const new({required this.view});
+
+  final OrderView view;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final order = view.order;
+    if (order.paid) return const _Paid();
+    final rePay = ref.watch(rePayProvider(order.id));
+    final again = payAgain(order, waitedLong: rePay.waitedLong, holdOver: view.holdOver);
+    if (order.settled || again == PayAgain.holdOver) return _Expired(eventId: order.eventId);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Center(child: CircularProgressIndicator()),
+        const SizedBox(height: JomhorSpace.xl),
+        Text(
+          again == PayAgain.notStarted ? l.orderAwaitingPayment : l.orderPending,
+          key: const Key('order.pending'),
+          style: JomhorType.h2,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: JomhorSpace.s),
+        Text(
+          switch (again) {
+            PayAgain.no || PayAgain.holdOver => l.orderPendingHint,
+            PayAgain.failed => l.orderPaymentFailed,
+            PayAgain.notStarted => l.orderNotPaidYet,
+            PayAgain.withCaution => l.orderPayAgainCaution,
+          },
+          key: const Key('order.hint'),
+          style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+          textAlign: TextAlign.center,
+        ),
+        if (again != PayAgain.no) ...[
+          const SizedBox(height: JomhorSpace.xl),
+          OutlinedButton(
+            key: const Key('order.payAgain'),
+            onPressed: rePay.inFlight ? null : () => _payAgain(context, ref, l),
+            child: Text(again == PayAgain.notStarted ? l.payCta(formatDh(order.totalMad)) : l.payAgain),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// A new card attempt, only when [payAgain] allows it (a second payment while one may still succeed
+  /// could charge the fan twice). [RePay] keeps it to one at a time.
+  Future<void> _payAgain(BuildContext context, WidgetRef ref, AppLocalizations l) async {
+    final id = view.order.id;
+    final launch = ref.read(cardPaymentLauncherProvider);
+    final error = await ref.read(rePayProvider(id).notifier).start((url) async {
+      if (context.mounted) await launch(context, url, id);
+    });
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorText(l, error))));
+    }
+  }
+}
+
+/// The hold is over (or the order settled unpaid): say so and offer a new order for the same event.
+class _Expired extends StatelessWidget {
+  const new({required this.eventId});
+
+  final int? eventId;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l.orderExpired, key: const Key('order.expired'), style: JomhorType.h2, textAlign: TextAlign.center),
+        const SizedBox(height: JomhorSpace.xl),
+        if (eventId case final id?) ...[
+          FilledButton(onPressed: () => context.go('/events/$id/zones'), child: Text(l.expiredCta)),
+          const SizedBox(height: JomhorSpace.s),
+        ],
+        OutlinedButton(onPressed: () => context.go('/'), child: Text(l.backHome)),
+      ],
+    );
+  }
+}
+
+/// "C'est validé !" slides up into place (DESIGN.md principle 6: motion that means something).
+class _Paid extends StatelessWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return TweenAnimationBuilder<Offset>(
+      tween: Tween(begin: const Offset(0, 0.4), end: Offset.zero),
+      duration: const Duration(milliseconds: JomhorMotion.ticketFlip),
+      curve: Curves.easeOutCubic,
+      builder: (context, offset, child) => FractionalTranslation(translation: offset, child: child),
+      child: Card(
+        key: const Key('order.paid'),
+        child: Padding(
+          padding: const EdgeInsets.all(JomhorSpace.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.check_circle_outline, size: 64, color: JomhorColors.successText),
+              const SizedBox(height: JomhorSpace.m),
+              Text(l.orderPaidTitle, style: JomhorType.h1, textAlign: TextAlign.center),
+              const SizedBox(height: JomhorSpace.s),
+              Text(l.orderPaidBody, textAlign: TextAlign.center),
+              const SizedBox(height: JomhorSpace.xl),
+              FilledButton(onPressed: () => context.go('/tickets'), child: Text(l.seeTickets)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

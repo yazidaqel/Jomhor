@@ -1,0 +1,152 @@
+[
+  {
+    "k_e": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "event_id": 1,
+    "ticket_id": "00000000-0000-0000-0000-000000000000",
+    "zone_id": 0,
+    "expected_token": "AQAAAAEAAAAAAAAAAAAAAAAAAAAAAADY-OQAv69oEqMuKmsGFGbt"
+  },
+  {
+    "k_e": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "event_id": 4294967295,
+    "ticket_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "zone_id": 65535,
+    "expected_token": "Af____________________________-pSYKrqUqqRa-brQSqhrNn"
+  },
+  {
+    "k_e": "07fd348a359bcfdb2e69357771fc9a7c78df62ff8b0834e3fcc478688f46c27b",
+    "event_id": 4242,
+    "ticket_id": "0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a",
+    "zone_id": 12,
+    "expected_token": "AQAAEJIBkvDBej58TZsaLz5NXGt6AAzL3C2r68YM_6EOzHyVF8yf"
+  },
+  {
+    "k_e": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_id": 0,
+    "ticket_id": "00000000-0000-0000-0000-000000000000",
+    "zone_id": 0,
+    "expected_token": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAChrtOaif2D7wFra1wja49P"
+  },
+  {
+    "k_e": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "event_id": 2147483648,
+    "ticket_id": "80000000-0000-0000-8000-000000000000",
+    "zone_id": 32768,
+    "expected_token": "AYAAAACAAAAAAAAAAIAAAAAAAAAAgAB8bmxU7wOTI6onV1Lqy7l_"
+  },
+  {
+    "k_e": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "event_id": 2147483647,
+    "ticket_id": "7fffffff-ffff-7fff-7fff-ffffffffffff",
+    "zone_id": 32767,
+    "expected_token": "AX____9_______9__3__________f__grgjNNzd0kSCBg_CgHoqH"
+  },
+  {
+    "k_e": "07fd348a359bcfdb2e69357771fc9a7c78df62ff8b0834e3fcc478688f46c27b",
+    "event_id": 4242,
+    "ticket_id": "0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a",
+    "zone_id": 65535,
+    "expected_token": "AQAAEJIBkvDBej58TZsaLz5NXGt6__8mrLk4cZl-7nXsl3n_6AhB"
+  },
+  {
+    "k_e": "07fd348a359bcfdb2e69357771fc9a7c78df62ff8b0834e3fcc478688f46c27b",
+    "event_id": 4243,
+    "ticket_id": "0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a",
+    "zone_id": 12,
+    "expected_token": "AQAAEJMBkvDBej58TZsaLz5NXGt6AAy4RZHO1yitbwjC4UxZcHf9"
+  },
+  {
+    "k_e": "ae5059ae95c96067d9699649c833411d1adde5838db58d02b72daf72969e1f19",
+    "event_id": 4242,
+    "ticket_id": "0193a5b2-1c00-7000-8000-00000000abcd",
+    "zone_id": 12,
+    "expected_token": "AQAAEJIBk6WyHABwAIAAAAAAAKvNAAygequhf5ZjU3W1GVZ8a0Ob"
+  },
+  {
+    "k_e": "ae5059ae95c96067d9699649c833411d1adde5838db58d02b72daf72969e1f19",
+    "event_id": 123456789,
+    "ticket_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "zone_id": 300,
+    "expected_token": "AQdbzRX0esELWMxDcqVnDgKyw9R5ASzmcHShTzetPQGrgN7gai97"
+  },
+  {
+    "k_e": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "event_id": 1,
+    "ticket_id": "00000000-0000-0000-0000-000000000000",
+    "zone_id": 0,
+    "slot": 0,
+    "expected_token": "AgAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwbWQAOILF_FGKbsjCpWAyQ"
+  },
+  {
+    "k_e": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "event_id": 4294967295,
+    "ticket_id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "zone_id": 65535,
+    "slot": 4294967295,
+    "expected_token": "Av__________________________________FrgpyDzZB-IGDRviZ-0Lwg"
+  },
+  {
+    "k_e": "07fd348a359bcfdb2e69357771fc9a7c78df62ff8b0834e3fcc478688f46c27b",
+    "event_id": 4242,
+    "ticket_id": "0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a",
+    "zone_id": 12,
+    "slot": 59000000,
+    "expected_token": "AgAAEJIBkvDBej58TZsaLz5NXGt6AAwDhETAN2Y8hye_mRwmw86JAJgtcA"
+  },
+  {
+    "k_e": "0000000000000000000000000000000000000000000000000000000000000000",
+    "event_id": 0,
+    "ticket_id": "00000000-0000-0000-0000-000000000000",
+    "zone_id": 0,
+    "slot": 0,
+    "expected_token": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAiYmeIJbR03wwtFlNI0-h3Q"
+  },
+  {
+    "k_e": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "event_id": 2147483648,
+    "ticket_id": "80000000-0000-0000-8000-000000000000",
+    "zone_id": 32768,
+    "slot": 2147483648,
+    "expected_token": "AoAAAACAAAAAAAAAAIAAAAAAAAAAgACAAAAA6isewxFScmooFc35_XQM5Q"
+  },
+  {
+    "k_e": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "event_id": 2147483647,
+    "ticket_id": "7fffffff-ffff-7fff-7fff-ffffffffffff",
+    "zone_id": 32767,
+    "slot": 2147483647,
+    "expected_token": "An____9_______9__3__________f_9_____soTGRDkPvmWwfcHkhZfZ-w"
+  },
+  {
+    "k_e": "07fd348a359bcfdb2e69357771fc9a7c78df62ff8b0834e3fcc478688f46c27b",
+    "event_id": 4242,
+    "ticket_id": "0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a",
+    "zone_id": 12,
+    "slot": 58999999,
+    "expected_token": "AgAAEJIBkvDBej58TZsaLz5NXGt6AAwDhES_kJt0YoRZ3eqTnnnkpHnmNQ"
+  },
+  {
+    "k_e": "07fd348a359bcfdb2e69357771fc9a7c78df62ff8b0834e3fcc478688f46c27b",
+    "event_id": 4242,
+    "ticket_id": "0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a",
+    "zone_id": 12,
+    "slot": 59000001,
+    "expected_token": "AgAAEJIBkvDBej58TZsaLz5NXGt6AAwDhETBfCpOuflYUw1nq4WxlahtXA"
+  },
+  {
+    "k_e": "ae5059ae95c96067d9699649c833411d1adde5838db58d02b72daf72969e1f19",
+    "event_id": 123456789,
+    "ticket_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "zone_id": 300,
+    "slot": 59799840,
+    "expected_token": "AgdbzRX0esELWMxDcqVnDgKyw9R5ASwDkHkgC9-9wudGU4AkY0Qzuodadw"
+  },
+  {
+    "k_e": "ae5059ae95c96067d9699649c833411d1adde5838db58d02b72daf72969e1f19",
+    "event_id": 4242,
+    "ticket_id": "0193a5b2-1c00-7000-8000-00000000abcd",
+    "zone_id": 12,
+    "slot": 4294967294,
+    "expected_token": "AgAAEJIBk6WyHABwAIAAAAAAAKvNAAz____-gP-w24OL8PIpPMG2MyPb1Q"
+  }
+]

@@ -19,16 +19,16 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /** Fixtures for card payments on the simulated gateway: a sale, orders, pay, signed callbacks, DB probes. */
-abstract class PaymentTest extends OrgApiTest {
+public abstract class PaymentTest extends OrgApiTest {
 
     /** payments.fake.secret in src/test/resources/application.properties. */
     static final String FAKE_SECRET = "test-only-payments-fake-secret-0123456789";
     static final String BASE = "http://localhost/v1";
 
     /** A published event with one category of {@code quota} at 50 DH. */
-    record Sale(Caller org, int zoneId, int eventId, String priceId) {}
+    public record Sale(Caller org, int zoneId, int eventId, String priceId) {}
 
-    Sale onSale(int quota) throws Exception {
+    protected Sale onSale(int quota) throws Exception {
         Caller a = admin();
         String venueId = venue(a, "Stade");
         int zoneId = zone(a, venueId, "NORD");
@@ -38,25 +38,25 @@ abstract class PaymentTest extends OrgApiTest {
         return new Sale(a, zoneId, eventId, priceId);
     }
 
-    ResultActions fan(String token, MockHttpServletRequestBuilder req) throws Exception {
+    protected ResultActions fan(String token, MockHttpServletRequestBuilder req) throws Exception {
         return mvc.perform(req.header("Authorization", "Bearer " + token));
     }
 
-    ResultActions fan(String token, MockHttpServletRequestBuilder req, String body) throws Exception {
+    protected ResultActions fan(String token, MockHttpServletRequestBuilder req, String body) throws Exception {
         return fan(token, req.contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
-    String order(String token, Sale s, int qty) throws Exception {
+    protected String order(String token, Sale s, int qty) throws Exception {
         return JsonPath.read(body(fan(token, post("/fan/orders"), """
-                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": %d}]}
-                """.formatted(s.eventId(), s.priceId(), qty)).andExpect(status().isCreated())), "$.id");
+                {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": %d, "holders": %s}]}
+                """.formatted(s.eventId(), s.priceId(), qty, holders(qty))).andExpect(status().isCreated())), "$.id");
     }
 
-    ResultActions pay(String token, String orderId) throws Exception {
+    protected ResultActions pay(String token, String orderId) throws Exception {
         return fan(token, post("/fan/orders/" + orderId + "/pay"), "{\"method\": \"CARD\"}");
     }
 
-    String payment(String token, String orderId) throws Exception {
+    protected String payment(String token, String orderId) throws Exception {
         return JsonPath.read(body(pay(token, orderId).andExpect(status().isOk())), "$.payment_id");
     }
 
@@ -68,7 +68,7 @@ abstract class PaymentTest extends OrgApiTest {
     }
 
     /** The callback fields the simulated gateway posts, signed with the test secret. */
-    static Map<String, String> signed(String paymentId, String outcome, long amountMad, String providerRef) throws Exception {
+    protected static Map<String, String> signed(String paymentId, String outcome, long amountMad, String providerRef) throws Exception {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("payment_id", paymentId);
         m.put("outcome", outcome);
@@ -78,11 +78,11 @@ abstract class PaymentTest extends OrgApiTest {
         return m;
     }
 
-    static Map<String, String> approve(String paymentId, long amountMad) throws Exception {
+    protected static Map<String, String> approve(String paymentId, long amountMad) throws Exception {
         return signed(paymentId, "APPROVED", amountMad, "FAKE-" + UUID.randomUUID());
     }
 
-    ResultActions callback(Map<String, String> fields) throws Exception {
+    protected ResultActions callback(Map<String, String> fields) throws Exception {
         var req = post("/payments/fake/callback").contentType(MediaType.APPLICATION_FORM_URLENCODED);
         fields.forEach(req::param);
         return mvc.perform(req);
@@ -126,7 +126,7 @@ abstract class PaymentTest extends OrgApiTest {
         return jdbc.sql("select count(*) from tickets where order_id = ?::uuid").param(orderId).query(Integer.class).single();
     }
 
-    long total(String orderId) {
+    protected long total(String orderId) {
         return jdbc.sql("select total_mad from orders where id = ?::uuid").param(orderId).query(Long.class).single();
     }
 

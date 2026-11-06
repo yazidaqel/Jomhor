@@ -29,7 +29,8 @@ import org.springframework.test.web.servlet.ResultActions;
 class EventApiTest extends OrgApiTest {
 
     private static final String[] EVENT_KEYS = {"id", "venue_id", "timezone", "series_id", "event_type", "title", "starts_at",
-            "doors_open_at", "status", "refund_cutoff_at", "reentry_policy", "per_account_limit", "metadata", "created_at"};
+            "doors_open_at", "sale_starts_at", "status", "refund_cutoff_at", "reentry_policy", "per_account_limit",
+            "metadata", "created_at"};
 
     private static String future(Duration d) {
         return Instant.now().plus(d).truncatedTo(ChronoUnit.SECONDS).toString();
@@ -59,7 +60,7 @@ class EventApiTest extends OrgApiTest {
         String json = body(create(a, """
                 {"venue_id": "%s", "event_type": "FOOTBALL_MATCH", "title": " ATLAS FC – Raja ",
                  "starts_at": "2099-05-01T19:00:00Z", "doors_open_at": "2099-05-01T17:00:00Z",
-                 "reentry_policy": "ONE_EXIT", "per_account_limit": 6,
+                 "sale_starts_at": "2099-04-01T10:00:00Z", "reentry_policy": "ONE_EXIT", "per_account_limit": 6,
                  "metadata": {"opponent": "Raja", "competition": "Botola Pro", "matchday": 12, "tv": "Arryadia"}}
                 """.formatted(venueId))
                 .andExpect(status().isCreated())
@@ -70,6 +71,7 @@ class EventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.title").value("ATLAS FC – Raja"))
                 .andExpect(jsonPath("$.starts_at").value("2099-05-01T19:00:00Z"))
                 .andExpect(jsonPath("$.doors_open_at").value("2099-05-01T17:00:00Z"))
+                .andExpect(jsonPath("$.sale_starts_at").value("2099-04-01T10:00:00Z"))
                 .andExpect(jsonPath("$.status").value("DRAFT"))
                 .andExpect(jsonPath("$.refund_cutoff_at").isEmpty())
                 .andExpect(jsonPath("$.reentry_policy").value("ONE_EXIT"))
@@ -294,6 +296,38 @@ class EventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.venue_id").value(venueId))
                 .andExpect(jsonPath("$.event_type").value("FOOTBALL_MATCH"))
                 .andExpect(jsonPath("$.title").value("Match"));
+    }
+
+    /** Lot 1 (plan Q19, Q20): sale_starts_at < starts_at − 60 min on every write that changes either field. */
+    @Test
+    void saleStartsAtMustBeBeforeTheSalesClose() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        String base = "\"venue_id\": \"%s\", \"event_type\": \"OTHER\", \"title\": \"T\", \"starts_at\": \"2099-05-01T19:00:00Z\""
+                .formatted(venueId);
+        invalid(create(a, "{" + base + ", \"sale_starts_at\": \"2099-05-01T18:00:00Z\"}"), "sale_starts_at"); // = T0 − 60
+        invalid(create(a, "{" + base + ", \"sale_starts_at\": \"2099-05-02T00:00:00Z\"}"), "sale_starts_at");
+        create(a, "{" + base + "}").andExpect(status().isCreated()).andExpect(jsonPath("$.sale_starts_at").isEmpty());
+        int id = JsonPath.read(body(create(a, "{" + base + ", \"sale_starts_at\": \"2099-05-01T17:59:59Z\"}")
+                .andExpect(status().isCreated())), "$.id");
+
+        invalid(call(a, patch("/org/events/" + id), "{\"starts_at\": \"2099-05-01T18:59:59Z\"}"), "sale_starts_at");
+        invalid(call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-05-01T18:00:00Z\"}"), "sale_starts_at");
+        call(a, patch("/org/events/" + id), "{\"starts_at\": \"2099-04-01T19:00:00Z\", \"sale_starts_at\": \"2099-03-01T10:00:00Z\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sale_starts_at").value("2099-03-01T10:00:00Z"));
+        // null = unchanged: it can't be cleared
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": null, \"title\": \"U\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sale_starts_at").value("2099-03-01T10:00:00Z"));
+
+        price(a, id, zone(a, venueId, "NORD"), "Plein", 10);
+        call(a, post("/org/events/" + id + "/publish")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.sale_starts_at").value("2099-03-01T10:00:00Z"));
+        String now = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"%s\"}".formatted(now)) // ON_SALE: may move it
+                .andExpect(status().isOk()).andExpect(jsonPath("$.sale_starts_at").value(now));
+        invalid(call(a, patch("/org/events/" + id), "{\"starts_at\": \"%s\"}".formatted(now)), "sale_starts_at");
     }
 
     @Test

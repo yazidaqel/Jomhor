@@ -1,5 +1,6 @@
 package ma.jomhor.sales.application;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -16,7 +17,13 @@ public interface Orders {
     /** Σ qty of the buyer's RESERVED, AWAITING_CASH and PAID orders on the event. */
     long held(UUID org, UUID userId, int eventId);
 
-    /** A RESERVED order held 8 min from now (database clock), with its items. */
+    /** The event's RESERVED orders still held (reserved_until > now()). No lock (docs/04-api.md §On-sale Busy). */
+    long activeHolds(UUID org, int eventId);
+
+    /** The channel of an order of this organizer. */
+    Optional<Order.Channel> channel(UUID org, UUID orderId);
+
+    /** A RESERVED order held 8 min from now (database clock), with its items and their holders. */
     Order insert(UUID org, int eventId, UUID userId, Order.Channel channel, long totalMad, List<Order.Item> items);
 
     /** The buyer's own order; another user's is absent. */
@@ -44,4 +51,18 @@ public interface Orders {
 
     /** The places of one price category held by the orders just expired. */
     record Expired(Hold hold, List<UUID> orderIds) {}
+
+    /**
+     * Per price category and channel of the event: places in PAID orders, places in RESERVED orders still held
+     * (reserved_until > now(), swept or not), and Σ qty × unit_price_mad (the snapshot) of the PAID ones.
+     */
+    List<SalesLine> salesLines(UUID org, int eventId);
+
+    record SalesLine(UUID priceCategoryId, String channel, long paid, long held, long revenueMad) {}
+
+    /** The event's payment.refund_required audit rows (matched on the order they name), newest first. */
+    List<RefundRequired> refundsRequired(UUID org, int eventId);
+
+    /** amountMad is what the gateway charged; reason SOLD_OUT, PER_ACCOUNT_LIMIT, NOT_PAYABLE or AMOUNT_MISMATCH. */
+    record RefundRequired(UUID paymentId, UUID orderId, long amountMad, String reason, Instant at) {}
 }

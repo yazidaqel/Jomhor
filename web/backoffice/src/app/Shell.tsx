@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { LogOut } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Navigate, NavLink, Outlet, useLocation } from 'react-router'
+import { Link, Navigate, Outlet, useLocation } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -13,20 +13,32 @@ import { session, useSelectedOrganizerId, useSessionToken } from '@/lib/session'
 // GATE and SUPERVISOR staff get 403 on every /org call (04-api §Organizer): not offered here.
 const BACKOFFICE_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'FINANCE']
 
-// Lit up lot by lot; only Événements and Paramètres › Lieux exist in Lot 0.
-const DISABLED = ['sales', 'liveGates', 'devices', 'invitations', 'finance', 'crm'] as const
+// Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1.
+const DISABLED = ['liveGates', 'devices', 'invitations', 'finance', 'crm'] as const
 
-function Item({ to, children }: { to: string; children: ReactNode }) {
+function Item({ to, current, children }: { to: string; current: boolean; children: ReactNode }) {
   return (
     <Button
       asChild
       variant="ghost"
       className="justify-start aria-[current=page]:bg-accent aria-[current=page]:font-semibold"
     >
-      <NavLink to={to}>{children}</NavLink>
+      <Link to={to} aria-current={current ? 'page' : undefined}>
+        {children}
+      </Link>
     </Button>
   )
 }
+
+/** `/events/:id/sales` lives under Événements in the URL but under Ventes in the sidebar. */
+const section = (pathname: string) =>
+  /^\/(sales|events\/[^/]+\/sales)\/?$/.test(pathname)
+    ? 'sales'
+    : pathname.startsWith('/events')
+      ? 'events'
+      : pathname.startsWith('/settings/venues')
+        ? 'venues'
+        : null
 
 function LogoutButton(props: { variant?: 'outline' | 'ghost'; iconOnly?: boolean }) {
   const { t } = useTranslation()
@@ -72,6 +84,7 @@ export function Shell() {
   const location = useLocation()
   const queryClient = useQueryClient()
   const me = useMe(!!token)
+  const active = section(location.pathname)
 
   // No valid session (never signed in, expired, logout, or a 401 cleared it): back to login, then here.
   if (!token) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
@@ -114,7 +127,12 @@ export function Shell() {
             ))}
           </SelectContent>
         </Select>
-        <Item to="/events">{t('nav.events')}</Item>
+        <Item to="/events" current={active === 'events'}>
+          {t('nav.events')}
+        </Item>
+        <Item to="/sales" current={active === 'sales'}>
+          {t('nav.sales')}
+        </Item>
         {DISABLED.map((key) => (
           <Button key={key} variant="ghost" disabled className="justify-start">
             {t(`nav.${key}`)}
@@ -122,7 +140,9 @@ export function Shell() {
         ))}
         <div className="px-4 pt-2 pb-1 text-sm font-medium">{t('nav.settings')}</div>
         <div className="flex flex-col pl-3">
-          <Item to="/settings/venues">{t('nav.venues')}</Item>
+          <Item to="/settings/venues" current={active === 'venues'}>
+            {t('nav.venues')}
+          </Item>
         </div>
         <div className="mt-auto flex items-center gap-2 px-2.5 pt-4">
           <div className="min-w-0 flex-1 text-xs">

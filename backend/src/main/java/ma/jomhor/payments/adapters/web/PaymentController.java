@@ -76,9 +76,17 @@ class PaymentController {
                 "<h1>Paiement terminé</h1><p>Ce paiement n'est plus en attente.</p>");
     }
 
-    /** Browser landing after the gateway. Never reads or changes anything: the callback is the only truth. */
+    /**
+     * Browser landing after the gateway: 302 to the configured page of the order's channel, which polls the order.
+     * Never changes anything, and ignores whatever the gateway posts here: the callback is the only truth.
+     */
     @RequestMapping(path = "/payments/card/{paymentId}/return", method = {RequestMethod.GET, RequestMethod.POST})
     ResponseEntity<String> landing(@PathVariable UUID paymentId) {
+        var target = payments.returnUrl(paymentId);
+        if (target.isPresent()) {
+            return ResponseEntity.status(HttpStatus.FOUND).location(target.get()).header("Cache-Control", "no-store")
+                    .build();
+        }
         return Pages.html(HttpStatus.OK, "Paiement en cours de confirmation",
                 "<h1>Paiement en cours de confirmation</h1>"
                         + "<p>Votre paiement est en cours de confirmation. Vos billets apparaîtront dès qu'il sera validé.</p>");

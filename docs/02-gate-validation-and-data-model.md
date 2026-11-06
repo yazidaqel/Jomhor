@@ -121,12 +121,12 @@ Server (PostgreSQL):
 | gates | Physical entrance | id, organizer\_id, venue\_id, code, name |
 | gate\_zones | Which zones a gate serves | organizer\_id, gate\_id, zone\_id |
 | event\_series | Season, festival edition, tour | id, organizer\_id, name, starts\_on, ends\_on |
-| events | One ticketed occurrence | id, organizer\_id, venue\_id, series\_id (nullable), event\_type (FOOTBALL\_MATCH, CONCERT, FESTIVAL\_DAY, CONFERENCE, OTHER), title, starts\_at, doors\_open\_at, status (DRAFT, ON\_SALE, GATES\_OPEN, CLOSED), event\_key\_enc, refund\_cutoff\_at, reentry\_policy, metadata jsonb (opponent, competition, headliner…) |
+| events | One ticketed occurrence | id, organizer\_id, venue\_id, series\_id (nullable), event\_type (FOOTBALL\_MATCH, CONCERT, FESTIVAL\_DAY, CONFERENCE, OTHER), title, starts\_at, doors\_open\_at, status (DRAFT, ON\_SALE, GATES\_OPEN, CLOSED), event\_key\_enc, refund\_cutoff\_at, sale\_starts\_at, reentry\_policy, metadata jsonb (opponent, competition, headliner…) |
 | price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold |
 | orders | Purchase | id, organizer\_id, event\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status |
-| order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, qty, unit\_price\_mad |
+| order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, qty, unit\_price\_mad, holders jsonb (name, user\_id per place) |
 | payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref |
-| tickets | One seat / admission | id (UUID), order\_id, event\_id, zone\_id, seat\_label, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_initials, issued\_at |
+| tickets | One seat / admission | id (UUID), order\_id, event\_id, zone\_id, seat\_label, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_user\_id, holder\_name (never in a manifest), holder\_initials, issued\_at |
 | passes | Season ticket / multi-event bundle | id, series\_id, user\_id, zone\_id, status; materialised as one ticket per event |
 | devices | Enrolled scanners | id, organizer\_id, public\_key, label, status (PENDING, ACTIVE, REVOKED), last\_seen\_at |
 | device\_assignments | Device ↔ event ↔ gate | organizer\_id, device\_id, event\_id, gate\_id |
@@ -134,7 +134,9 @@ Server (PostgreSQL):
 | scans | Append-only gate log | scan\_id (UUIDv7, PK), organizer\_id, ticket\_id, event\_id, device\_id, gate\_id, direction (IN, OUT), result, device\_time, received\_at, override\_reason, supervisor\_id |
 | staff | Back-office staff, gate staff & supervisors | id, organizer\_id, user\_id (OTP login, nullable), name, role, pin\_hash |
 | users | Fan / staff identity (platform-wide, no organizer\_id) | id, phone\_e164, display\_name, locale |
-| otp\_challenges | Phone OTP (platform-wide) | id, phone\_e164, code\_hash, attempts, expires\_at |
+| otp\_challenges | Phone OTP (platform-wide) | id, phone\_e164, audience (fan, org), ip, code\_hash, attempts, expires\_at |
+| fan\_sessions | Revocable fan login sessions (platform-wide) | id (JWT sid), user\_id, expires\_at, revoked\_at |
+| ticket\_deliveries | WhatsApp delivery outbox | id, organizer\_id, ticket\_id, status (PENDING, SENT, FAILED), attempts, next\_attempt\_at |
 
 Indexes that matter: `scans (ticket_id, direction, device_time)` for canonical-first resolution; `scans (event_id, received_at)` for the live dashboard; `tickets (event_id, status)` for manifest builds; a GIN index on `events.metadata` only if type-specific search is needed. A partial unique index on `scans (ticket_id, direction) WHERE result = 'OK'` is deliberately not used, because the first `OK` must be chosen by device\_time after the fact, not by arrival order.
 

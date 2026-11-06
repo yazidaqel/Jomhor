@@ -34,6 +34,15 @@ it('formatDh displays centimes in the FR locale with 2 decimals', () => {
   expect(formatDh(5000, 'fr')).toBe(nf.format(50))
 })
 
+it('formatDh: 0 centimes, and the largest integer a JSON number carries exactly', () => {
+  const nf = new Intl.NumberFormat('fr', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  expect(formatDh(0, 'fr')).toBe(nf.format(0))
+  expect(formatDh(1, 'fr')).toBe(nf.format('0.01'))
+  // 90 071 992 547 409,91 DH: Number(...) / 100 would round this; the string path does not.
+  expect(formatDh(Number.MAX_SAFE_INTEGER, 'fr')).toBe(nf.format('90071992547409.91'))
+  expect(formatDh(123_456_789_012, 'fr')).toBe(nf.format('1234567890.12'))
+})
+
 it('formatDh is exact for a bigint total past 2^53', () => {
   const total = 2n ** 64n + 1n // centimes
   const nf = new Intl.NumberFormat('fr', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -20,7 +21,7 @@ import org.springframework.stereotype.Repository;
 class JdbcOrders implements Orders {
 
     private static final String ORDER_COLUMNS =
-            "id, organizer_id, event_id, user_id, status, total_mad, reserved_until, paid_at";
+            "id, organizer_id, event_id, user_id, channel, status, total_mad, reserved_until, paid_at";
 
     private final JdbcClient jdbc;
 
@@ -58,14 +59,37 @@ class JdbcOrders implements Orders {
                 .param("total", totalMad)
                 .query((rs, n) -> order(rs, items)).single();
         for (Order.Item item : items) {
+            // holders as [{"name", "user_id"}] in place order, built by Postgres from two parallel arrays.
             jdbc.sql("""
-                            insert into order_items (organizer_id, order_id, price_category_id, qty, unit_price_mad)
-                            values (:org, :order, :category, :qty, :price)
+                            insert into order_items (organizer_id, order_id, price_category_id, qty, unit_price_mad, holders)
+                            values (:org, :order, :category, :qty, :price,
+                                    (select coalesce(jsonb_agg(jsonb_build_object('name', h.name, 'user_id', h.user_id)
+                                                               order by h.n), '[]'::jsonb)
+                                     from unnest(cast(:names as text[]), cast(:users as uuid[])) with ordinality
+                                          as h(name, user_id, n)))
                             """)
                     .param("org", org).param("order", order.id()).param("category", item.priceCategoryId())
-                    .param("qty", item.qty()).param("price", item.unitPriceMad()).update();
+                    .param("qty", item.qty()).param("price", item.unitPriceMad())
+                    .param("names", item.holders().stream().map(Order.Holder::name).toArray(String[]::new))
+                    .param("users", item.holders().stream().map(Order.Holder::userId).toArray(UUID[]::new))
+                    .update();
         }
         return order;
+    }
+
+    @Override
+    public long activeHolds(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select count(*) from orders
+                        where organizer_id = :org and event_id = :event and status = 'RESERVED' and reserved_until > now()
+                        """)
+                .param("org", org).param("event", eventId).query(Long.class).single();
+    }
+
+    @Override
+    public Optional<Order.Channel> channel(UUID org, UUID orderId) {
+        return jdbc.sql("select channel::text from orders where organizer_id = :org and id = :id")
+                .param("org", org).param("id", orderId).query(String.class).optional().map(Order.Channel::valueOf);
     }
 
     @Override
@@ -128,23 +152,75 @@ class JdbcOrders implements Orders {
 
     private List<Order.Item> items(UUID org, UUID orderId) {
         return jdbc.sql("""
-                        select price_category_id, qty, unit_price_mad from order_items
+                        select price_category_id, qty, unit_price_mad,
+                               array(select h->>'name' from jsonb_array_elements(holders) with ordinality as e(h, n)
+                                     order by n) as names,
+                               array(select cast(h->>'user_id' as uuid) from jsonb_array_elements(holders)
+                                     with ordinality as e(h, n) order by n) as users
+                        from order_items
                         where organizer_id = :org and order_id = :order order by price_category_id
                         """)
                 .param("org", org).param("order", orderId)
                 .query((rs, n) -> new Order.Item(rs.getObject("price_category_id", UUID.class), rs.getInt("qty"),
-                        rs.getLong("unit_price_mad")))
+                        rs.getLong("unit_price_mad"), holders(rs)))
                 .list();
+    }
+
+    private static List<Order.Holder> holders(ResultSet rs) throws SQLException {
+        String[] names = (String[]) rs.getArray("names").getArray();
+        UUID[] users = (UUID[]) rs.getArray("users").getArray();
+        List<Order.Holder> holders = new ArrayList<>(names.length);
+        for (int i = 0; i < names.length; i++) {
+            holders.add(new Order.Holder(names[i], users[i]));
+        }
+        return holders;
     }
 
     private static Order order(ResultSet rs, List<Order.Item> items) throws SQLException {
         return new Order(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"),
-                rs.getObject("user_id", UUID.class), Order.Status.valueOf(rs.getString("status")), rs.getLong("total_mad"),
+                rs.getObject("user_id", UUID.class), Order.Channel.valueOf(rs.getString("channel")),
+                Order.Status.valueOf(rs.getString("status")), rs.getLong("total_mad"),
                 instant(rs, "reserved_until"), instant(rs, "paid_at"), items);
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
         OffsetDateTime t = rs.getObject(column, OffsetDateTime.class);
         return t == null ? null : t.toInstant();
+    }
+
+    @Override
+    public List<SalesLine> salesLines(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select i.price_category_id, o.channel::text as channel,
+                               coalesce(sum(i.qty) filter (where o.status = 'PAID'), 0) as paid,
+                               coalesce(sum(i.qty) filter (where o.status = 'RESERVED' and o.reserved_until > now()), 0) as held,
+                               coalesce(sum(i.qty * i.unit_price_mad) filter (where o.status = 'PAID'), 0) as revenue_mad
+                        from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
+                        where o.organizer_id = :org and o.event_id = :event and o.status in ('PAID', 'RESERVED')
+                        group by i.price_category_id, o.channel
+                        """)
+                .param("org", org).param("event", eventId)
+                .query((rs, n) -> new SalesLine(rs.getObject("price_category_id", UUID.class), rs.getString("channel"),
+                        rs.getLong("paid"), rs.getLong("held"), rs.getLong("revenue_mad")))
+                .list();
+    }
+
+    // audit_log (common) written by PaymentService.refundRequired, whose payload keys this reads; the event comes
+    // from the order the payload names. Index audit_log (organizer_id, action, at), V10.
+    @Override
+    public List<RefundRequired> refundsRequired(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select a.payload ->> 'payment_id' as payment_id, o.id as order_id,
+                               cast(a.payload ->> 'amount_mad' as bigint) as amount_mad, a.payload ->> 'reason' as reason, a.at
+                        from audit_log a
+                        join orders o on o.organizer_id = a.organizer_id and o.id = cast(a.payload ->> 'order_id' as uuid)
+                        where a.organizer_id = :org and a.action = 'payment.refund_required' and o.event_id = :event
+                        order by a.at desc, a.id desc
+                        """)
+                .param("org", org).param("event", eventId)
+                .query((rs, n) -> new RefundRequired(UUID.fromString(rs.getString("payment_id")),
+                        rs.getObject("order_id", UUID.class), rs.getLong("amount_mad"), rs.getString("reason"),
+                        instant(rs, "at")))
+                .list();
     }
 }

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.within;
 import static org.hamcrest.Matchers.hasKey;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -15,21 +17,27 @@ import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import ma.jomhor.IntegrationTest;
 import ma.jomhor.common.web.ApiException;
 import ma.jomhor.tenancy.application.OtpService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Contract: POST /fan/auth/otp, POST /fan/auth/verify (docs/04-api.md §Fan). */
 class FanAuthTest extends IntegrationTest {
 
     @Autowired
     OtpService otpService;
+
+    @Autowired
+    TransactionTemplate tx;
 
     @Test
     void otpReturns202AndSendsA6DigitCode() throws Exception {
@@ -87,6 +95,7 @@ class FanAuthTest extends IntegrationTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value("OTP_RATE_LIMITED"))
                 .andExpect(jsonPath("$.details").isMap());
+        awaitSends();
         verify(otpSender, times(3)).send(eq(phone), anyString());
     }
 
@@ -125,7 +134,7 @@ class FanAuthTest extends IntegrationTest {
     private String guess(CountDownLatch start, String phone, String code) throws InterruptedException {
         start.await();
         try {
-            otpService.verify(phone, code);
+            otpService.verify(phone, "fan", code);
             return "OK";
         } catch (ApiException e) {
             return e.code();
@@ -153,6 +162,111 @@ class FanAuthTest extends IntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("OTP_EXPIRED"))
                 .andExpect(jsonPath("$.message").isString());
+    }
+
+    @Test
+    void eleventhSendIn24HoursIs429() throws Exception {
+        String phone = randomPhone();
+        for (int i = 0; i < 10; i++) {
+            requestOtp("/fan/auth/otp", phone).andExpect(status().isAccepted());
+            age(phone, Duration.ofMinutes(11)); // out of the 10 min window, still inside 24 h
+        }
+        rateLimited(requestOtp("/fan/auth/otp", phone));
+        age(phone, Duration.ofHours(23));
+        requestOtp("/fan/auth/otp", phone).andExpect(status().isAccepted());
+    }
+
+    @Test
+    void afterFifteenFailuresEvenTheRightCodeIs429UntilTheOldestFailureIs24HoursOld() throws Exception {
+        String phone = randomPhone();
+        for (int failures : new int[] {5, 5, 4}) {
+            requestOtp("/fan/auth/otp", phone).andExpect(status().isAccepted());
+            String wrong = wrong(lastCode(phone));
+            for (int i = 0; i < failures; i++) {
+                verifyOtp("/fan/auth/verify", phone, wrong).andExpect(status().isUnauthorized());
+            }
+            age(phone, Duration.ofMinutes(11));
+        }
+        requestOtp("/fan/auth/otp", phone).andExpect(status().isAccepted()); // 14 failures: not locked yet
+        String code = lastCode(phone);
+        verifyOtp("/fan/auth/verify", phone, wrong(code)).andExpect(status().isUnauthorized()); // the 15th
+
+        rateLimited(verifyOtp("/fan/auth/verify", phone, code));
+        rateLimited(requestOtp("/fan/auth/otp", phone));
+
+        // The oldest challenge (5 failures) leaves the 24 h window: 10 left, unlocked, the live code works.
+        jdbc.sql("""
+                update otp_challenges set created_at = now() - interval '25 hours'
+                where id = (select id from otp_challenges where phone_e164 = ? order by created_at limit 1)
+                """).param(phone).update();
+        verifyOtp("/fan/auth/verify", phone, code).andExpect(status().isOk());
+    }
+
+    @Test
+    void parallelWrongGuessesAtFourteenFailuresStopAtFifteen() throws Exception {
+        String phone = randomPhone();
+        for (int attempts : new int[] {5, 5, 4}) {
+            jdbc.sql("""
+                    insert into otp_challenges (phone_e164, audience, code_hash, attempts, expires_at, created_at)
+                    values (?, 'fan', ?, ?, now() - interval '55 minutes', now() - interval '1 hour')
+                    """).params(phone, "00".repeat(32), attempts).update();
+        }
+        requestOtp("/fan/auth/otp", phone).andExpect(status().isAccepted());
+        String wrong = wrong(lastCode(phone));
+        var start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(4)) {
+            var guesses = List.of(pool.submit(() -> guess(start, phone, wrong)), pool.submit(() -> guess(start, phone, wrong)),
+                    pool.submit(() -> guess(start, phone, wrong)), pool.submit(() -> guess(start, phone, wrong)));
+            start.countDown();
+            var codes = new ArrayList<String>();
+            for (var g : guesses) {
+                codes.add(g.get());
+            }
+            assertThat(codes).containsExactlyInAnyOrder("OTP_INVALID", "OTP_RATE_LIMITED", "OTP_RATE_LIMITED",
+                    "OTP_RATE_LIMITED");
+        }
+        assertThat(jdbc.sql("select sum(attempts) from otp_challenges where phone_e164 = ?").param(phone)
+                .query(Integer.class).single()).isEqualTo(15);
+    }
+
+    @Test
+    void aRolledBackIssueSendsNothing() {
+        String phone = randomPhone();
+        tx.executeWithoutResult(t -> {
+            assertThat(otpService.issue(phone, "fan", "192.0.2.10", true)).isTrue();
+            t.setRollbackOnly();
+        });
+        awaitSends();
+        verify(otpSender, never()).send(eq(phone), anyString());
+        assertThat(jdbc.sql("select count(*) from otp_challenges where phone_e164 = ?").param(phone)
+                .query(Integer.class).single()).isZero();
+    }
+
+    @Test
+    void theCodeIsSentAfterTheResponseOffTheRequestThread() throws Exception {
+        String phone = randomPhone();
+        var sendThread = new AtomicReference<Thread>();
+        doAnswer(inv -> {
+            sendThread.set(Thread.currentThread());
+            return null;
+        }).when(otpSender).send(eq(phone), anyString());
+        requestOtp("/fan/auth/otp", phone).andExpect(status().isAccepted()); // MockMvc runs on this thread
+        awaitSends();
+        assertThat(sendThread.get()).isNotNull().isNotSameAs(Thread.currentThread());
+        assertThat(sendThread.get().getName()).startsWith("otp-send-");
+    }
+
+    private void age(String phone, Duration by) {
+        jdbc.sql("update otp_challenges set created_at = created_at - ? * interval '1 second' where phone_e164 = ?")
+                .params(by.toSeconds(), phone).update();
+    }
+
+    private static String wrong(String code) {
+        return "%06d".formatted((Integer.parseInt(code) + 1) % 1_000_000);
+    }
+
+    private static void rateLimited(ResultActions result) throws Exception {
+        result.andExpect(status().isTooManyRequests()).andExpect(jsonPath("$.code").value("OTP_RATE_LIMITED"));
     }
 
     private ResultActions login(String phone) throws Exception {
