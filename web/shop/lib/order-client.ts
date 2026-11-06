@@ -167,12 +167,17 @@ export function pageClock(now: () => number = () => performance.now()) {
 export const RETRY_PAY_AFTER_MS = 60_000
 
 /**
- * Whether to offer "pay again" on a RESERVED order. A callback can land after the fan is back from the gateway and a
- * late success is honoured, so a second payment could double-charge: with `payment_status` (04), only when the last
- * attempt FAILED or there was none; without it, only after RETRY_PAY_AFTER_MS on the page.
+ * Whether to offer "pay again" (04 GET /fan/orders/{id}; same rule as apps/fan `payAgain`): a RESERVED order whose hold
+ * still runs on server time (`renderedAt`, the server's clock at SSR, plus `msOnPage` on the monotonic page clock;
+ * the device wall clock is never used). A callback can land after the fan is back from the gateway and a late
+ * success is honoured, so a second payment could double-charge: with `payment_status`, only when the last attempt
+ * FAILED or there was none; without it, only after RETRY_PAY_AFTER_MS on the page.
  */
-export function canRetryPay(o: OrderStatus, msOnPage: number): boolean {
+export function canRetryPay(o: OrderStatus, msOnPage: number, renderedAt: number): boolean {
   if (o.status !== 'RESERVED') return false
+  // ponytail: the page clock starts at mount, a second or so after the SSR, so this can run that long past the hold;
+  // the backend then answers ORDER_EXPIRED.
+  if (!o.reserved_until || !(Date.parse(o.reserved_until) > renderedAt + msOnPage)) return false
   if ('payment_status' in o) return o.payment_status === 'FAILED' || o.payment_status === null
   return msOnPage >= RETRY_PAY_AFTER_MS
 }

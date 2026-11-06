@@ -69,6 +69,32 @@ export async function api<T>(path: string, { json, token, headers, signal, ...in
   throw toApiError(res.status, data)
 }
 
+/**
+ * GET `${API_BASE_URL}${path}` for a binary body: the upstream Response as soon as its headers are in, body unread
+ * (stream it on). Non-2xx → ApiError from its JSON body. BACKEND_TIMEOUT_MS covers the headers only.
+ * A stall mid-body is bounded only by undici's body timeout (`bodyTimeout`, 300 s by default).
+ */
+export async function apiStream(path: string, { token, accept, signal }: { token: string; accept: string; signal?: AbortSignal }): Promise<Response> {
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(new DOMException('Backend timeout', 'TimeoutError')), BACKEND_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(`${env('API_BASE_URL')}${path}`, {
+      cache: 'no-store',
+      signal: signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal,
+      headers: { accept, authorization: `Bearer ${token}` },
+    })
+    if (res.ok) return res
+    throw toApiError(res.status, parse(await res.text()))
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    console.error('backend call failed', path, e)
+    throw new ApiError(502, 'INTERNAL_ERROR', 'Backend unreachable')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 function parse(text: string): unknown {
   try {
     return JSON.parse(text)

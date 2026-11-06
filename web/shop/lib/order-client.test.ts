@@ -138,30 +138,44 @@ it('polling stops when aborted (page left)', async () => {
   expect(fetchOrder).toHaveBeenCalledTimes(1)
 })
 
+const RENDERED = Date.parse('2026-02-01T12:00:00Z') // server clock at SSR; the hold runs to 12:08:00
+const HOLD_MS = 8 * 60_000
+
 it.each<[string, OrderStatus, number, boolean]>([
   ['no payment_status field, just back from the gateway', order('RESERVED'), 5_000, false],
   ['no payment_status field, after 60 s on the page', order('RESERVED'), RETRY_PAY_AFTER_MS, true],
   ['payment_status FAILED', order('RESERVED', { payment_status: 'FAILED' }), 0, true],
   ['payment_status null (no /pay yet)', order('RESERVED', { payment_status: null }), 0, true],
-  ['payment_status PENDING, even after minutes', order('RESERVED', { payment_status: 'PENDING' }), 600_000, false],
-  ['payment_status SUCCEEDED (callback in, order not yet PAID)', order('RESERVED', { payment_status: 'SUCCEEDED' }), 600_000, false],
-  ['an order that is not RESERVED', order('EXPIRED', { payment_status: 'FAILED' }), 600_000, false],
+  ['payment_status FAILED, 1 s before the hold ends', order('RESERVED', { payment_status: 'FAILED' }), HOLD_MS - 1000, true],
+  ['payment_status FAILED, hold over', order('RESERVED', { payment_status: 'FAILED' }), HOLD_MS, false],
+  ['payment_status null, hold over (expiry job not run yet)', order('RESERVED', { payment_status: null }), HOLD_MS + 20_000, false],
+  ['no payment_status field, hold over', order('RESERVED'), HOLD_MS, false],
+  ['no reserved_until', order('RESERVED', { payment_status: 'FAILED', reserved_until: null }), 0, false],
+  ['unparseable reserved_until', order('RESERVED', { payment_status: 'FAILED', reserved_until: 'soon' }), 0, false],
+  ['payment_status PENDING', order('RESERVED', { payment_status: 'PENDING' }), 60_000, false],
+  ['payment_status SUCCEEDED (callback in, order not yet PAID)', order('RESERVED', { payment_status: 'SUCCEEDED' }), 60_000, false],
+  ['an order that is not RESERVED', order('EXPIRED', { payment_status: 'FAILED' }), 0, false],
+  ['AWAITING_CASH', order('AWAITING_CASH', { payment_status: null }), 0, false],
 ])('canRetryPay: %s → %s', (_, o, ms, offered) => {
-  expect(canRetryPay(o, ms)).toBe(offered)
+  expect(canRetryPay(o, ms, RENDERED)).toBe(offered)
 })
 
-it('the "pay again" wait runs on the page clock: a device wall clock 2 min ahead of the server changes nothing', () => {
+it('the "pay again" wait and the hold run on the page clock: a device wall clock 2 min ahead of the server changes nothing', () => {
   vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout'] })
-  const serverRenderedAt = Date.parse('2026-02-01T12:00:00Z')
-  vi.setSystemTime(serverRenderedAt + 120_000) // the phone's clock runs 2 min fast
+  vi.setSystemTime(RENDERED + 120_000) // the phone's clock runs 2 min fast
   const elapsed = pageClock()
   const reserved = order('RESERVED')
-  expect(canRetryPay(reserved, elapsed())).toBe(false)
-  expect(canRetryPay(reserved, Date.now() - serverRenderedAt)).toBe(true) // what comparing wall clocks would have done
+  expect(canRetryPay(reserved, elapsed(), RENDERED)).toBe(false)
+  expect(canRetryPay(reserved, Date.now() - RENDERED, RENDERED)).toBe(true) // what comparing wall clocks would have done
   vi.advanceTimersByTime(RETRY_PAY_AFTER_MS - 1000)
-  expect(canRetryPay(reserved, elapsed())).toBe(false)
+  expect(canRetryPay(reserved, elapsed(), RENDERED)).toBe(false)
   vi.advanceTimersByTime(1000)
-  expect(canRetryPay(reserved, elapsed())).toBe(true)
+  expect(canRetryPay(reserved, elapsed(), RENDERED)).toBe(true)
+  const failed = order('RESERVED', { payment_status: 'FAILED' })
+  vi.advanceTimersByTime(HOLD_MS - RETRY_PAY_AFTER_MS - 1000) // 7:59 on the page; the phone already reads 10:59
+  expect(canRetryPay(failed, elapsed(), RENDERED)).toBe(true)
+  vi.advanceTimersByTime(1000)
+  expect(canRetryPay(failed, elapsed(), RENDERED)).toBe(false)
 })
 
 describe('placeOrder', () => {

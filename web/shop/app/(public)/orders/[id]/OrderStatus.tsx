@@ -120,7 +120,7 @@ export function OrderStatus({
           {c.tickets}
         </Link>
       )}
-      {canRetryPay(order, onPageMs) && (
+      {canRetryPay(order, onPageMs, renderedAt) && (
         <div className="flex flex-col items-start gap-2">
           <p className="text-body-small text-text-muted">{c.retryNote}</p>
           <button
