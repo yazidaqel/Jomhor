@@ -58,9 +58,6 @@ payments:
 sales:
   # Basic on-sale queue (04 §On-sale Busy): active holds of one event at or above this → 429 SALE_BUSY.
   max-active-holds-per-event: ${SALES_MAX_ACTIVE_HOLDS_PER_EVENT:2000}
-  # GET /fan/orders/{id} reports a PENDING attempt this old as FAILED (a fan who left the gateway), so clients stop
-  # showing "en cours". The row stays PENDING and a late callback still settles it (plan Q8). Below the 20 min grace.
-  pending-payment-reported-failed-after: ${SALES_PENDING_PAYMENT_REPORTED_FAILED_AFTER:10m}
 
 otp:
   # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14). Mobile CGNAT puts many fans behind one IP:

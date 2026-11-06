@@ -16,8 +16,11 @@ import java.util.stream.Collectors;
 import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.common.HolderNames;
+import ma.jomhor.common.web.ApiException;
+import ma.jomhor.tickets.adapters.pdf.TicketPdf;
 import ma.jomhor.tickets.domain.Ticket;
 import ma.jomhor.tickets.domain.TicketToken;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -103,6 +106,37 @@ public class TicketService {
                 .thenComparingLong(g -> past.test(g) ? -startsAt(g) : startsAt(g))
                 .thenComparingInt(g -> g.getFirst().event().id()));
         return groups.stream().flatMap(List::stream).toList();
+    }
+
+    /** A rendered ticket PDF. Not for logs. */
+    public record Pdf(String ticketNo, byte[] content) {
+        @Override
+        public String toString() {
+            return "Pdf[" + ticketNo + "]";
+        }
+    }
+
+    /**
+     * 04 GET /fan/tickets/{id}/pdf: the printable ticket of a ticket {@code holderUserId} holds (404 otherwise, the
+     * buyer of a friend's ticket included), VALID only (409 TICKET_NOT_VALID). Its QR is the static v1 token signed
+     * with K_e inside withEventKey: only the token string leaves the callback.
+     */
+    public Pdf pdf(UUID holderUserId, UUID ticketId) {
+        Ticket t = tickets.heldBy(holderUserId, ticketId).orElseThrow(() -> ApiException.notFound("Ticket not found"));
+        if (t.status() != Ticket.Status.VALID) {
+            throw new ApiException("TICKET_NOT_VALID", HttpStatus.CONFLICT, "Ticket is not valid");
+        }
+        EventService.PublicEvent pe = events.publicEvent(t.eventId());
+        Event.Listing e = pe.event();
+        Event.ZoneListing z = pe.zones().stream().filter(zl -> zl.id() == t.zoneId()).findFirst().orElseThrow();
+        String token = events.withEventKey(t.organizerId(), t.eventId(),
+                k -> TicketToken.encodeStatic(k, t.eventId(), t.id(), t.zoneId()));
+        String ticketNo = TicketToken.ticketNo(t.id());
+        String venue = e.venueCity() == null || e.venueCity().isBlank() ? e.venueName()
+                : e.venueName() + ", " + e.venueCity();
+        return new Pdf(ticketNo, TicketPdf.render(new TicketPdf.Content(token, ticketNo, e.title(), e.startsAt(),
+                e.timezone(), venue, z.name(), z.gateCodes(),
+                t.holderName() == null ? null : HolderNames.label(t.holderName()))));
     }
 
     private static long startsAt(List<Held> group) {

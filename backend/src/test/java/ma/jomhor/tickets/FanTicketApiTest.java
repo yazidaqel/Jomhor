@@ -30,7 +30,7 @@ class FanTicketApiTest extends PaymentTest {
     private static final String[] TICKET_KEYS =
             {"id", "ticket_no", "status", "holder_label", "seat_label", "event", "zone", "gate_codes"};
     private static final String[] EVENT_KEYS =
-            {"id", "title", "event_type", "starts_at", "doors_open_at", "timezone", "venue", "metadata"};
+            {"id", "title", "event_type", "status", "starts_at", "doors_open_at", "timezone", "venue", "metadata"};
 
     @Autowired
     EventService events;
@@ -108,6 +108,7 @@ class FanTicketApiTest extends PaymentTest {
                 .isEqualTo((id.substring(28, 32) + " " + id.substring(32)).toUpperCase());
         assertThat(JsonPath.<Integer>read(json, "$.tickets[0].event.id")).isEqualTo(s.eventId());
         assertThat(JsonPath.<String>read(json, "$.tickets[0].event.event_type")).isEqualTo("FOOTBALL_MATCH");
+        assertThat(JsonPath.<String>read(json, "$.tickets[0].event.status")).isEqualTo("ON_SALE");
         assertThat(JsonPath.<String>read(json, "$.tickets[0].event.venue.name")).isEqualTo("Grand Stade");
         assertThat(JsonPath.<Integer>read(json, "$.tickets[0].zone.id")).isEqualTo(s.zoneId());
         assertThat(JsonPath.<String>read(json, "$.tickets[0].zone.code")).isEqualTo("NORD");
@@ -195,6 +196,8 @@ class FanTicketApiTest extends PaymentTest {
         }
         assertThat(tickets.stream().filter(t -> t.get("id").equals(blocked.toString())).findFirst().orElseThrow()
                 .get("status")).isEqualTo("BLOCKED");
+        assertThat(JsonPath.<List<String>>read(json, "$.tickets[*].event.status"))
+                .containsExactly("ON_SALE", "ON_SALE", "ON_SALE", "CLOSED", "CLOSED");
     }
 
     /** Past = CLOSED or started more than 12 h ago (database clock); past latest first, after the upcoming ones. */

@@ -263,7 +263,7 @@ class PaymentApiTest extends PaymentTest {
         return JsonPath.read(body(fan(token, get("/fan/orders/" + orderId)).andExpect(status().isOk())), "$.payment_status");
     }
 
-    /** 04 GET /fan/orders/{id} payment_status: the latest attempt; a PENDING one 10 min old or more reads FAILED. */
+    /** 04 GET /fan/orders/{id} payment_status: the latest attempt; a PENDING one 20 min old or more reads FAILED. */
     @Test
     void paymentStatusIsTheLatestAttempt() throws Exception {
         Sale s = onSale(10);
@@ -275,15 +275,15 @@ class PaymentApiTest extends PaymentTest {
         callback(signed(first, "DECLINED", total(orderId), "FAKE-" + UUID.randomUUID())).andExpect(status().isSeeOther());
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
 
-        // An attempt the fan abandoned on the gateway: still PENDING in the table, reported FAILED from 10 min.
+        // An attempt the fan abandoned on the gateway: still PENDING in the table, reported FAILED from 20 min.
         // (The declined one is moved further back, so the second stays the latest while it is aged.)
         jdbc.sql("update payments set created_at = now() - interval '1 hour' where id = ?::uuid").param(first).update();
         String second = payment(fan, orderId);
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
-        jdbc.sql("update payments set created_at = now() - interval '9 minutes 50 seconds' where id = ?::uuid")
+        jdbc.sql("update payments set created_at = now() - interval '19 minutes 50 seconds' where id = ?::uuid")
                 .param(second).update();
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
-        jdbc.sql("update payments set created_at = now() - interval '10 minutes' where id = ?::uuid").param(second).update();
+        jdbc.sql("update payments set created_at = now() - interval '20 minutes' where id = ?::uuid").param(second).update();
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
         assertThat(paymentStatus(second)).isEqualTo("PENDING");
 
@@ -307,7 +307,7 @@ class PaymentApiTest extends PaymentTest {
         assertThat(orderStatus(orderId)).isEqualTo("PAID");
         assertThat(paymentStatus(newer)).isEqualTo("PENDING");
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
-        jdbc.sql("update payments set created_at = now() - interval '11 minutes' where id = ?::uuid").param(newer).update();
+        jdbc.sql("update payments set created_at = now() - interval '21 minutes' where id = ?::uuid").param(newer).update();
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED"); // not the stale newer one's FAILED
         callback(signed(newer, "DECLINED", total(orderId), "FAKE-" + UUID.randomUUID())).andExpect(status().isSeeOther());
         assertThat(paymentStatus(newer)).isEqualTo("FAILED");
@@ -321,7 +321,7 @@ class PaymentApiTest extends PaymentTest {
         String fan = fanToken(randomPhone());
         String orderId = order(fan, s, 1);
         String stale = payment(fan, orderId);
-        jdbc.sql("update payments set created_at = now() - interval '11 minutes' where id = ?::uuid").param(stale).update();
+        jdbc.sql("update payments set created_at = now() - interval '21 minutes' where id = ?::uuid").param(stale).update();
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
         String fresh = payment(fan, orderId);
         assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");

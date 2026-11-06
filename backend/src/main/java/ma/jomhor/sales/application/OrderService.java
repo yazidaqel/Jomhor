@@ -45,7 +45,10 @@ public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
     static final int EXPIRY_BATCH = 1000;
-    /** Plan Q8: an order with a PENDING payment younger than this is not expired. */
+    /**
+     * Plan Q8 late-success window: an order with a PENDING payment younger than this is not expired, and GET
+     * /fan/orders/{id} reports a PENDING attempt this old as FAILED (never one the bank can still confirm).
+     */
     static final Duration PAYMENT_GRACE = Duration.ofMinutes(20);
 
     /** {@code holders} as sent: validated and resolved by {@link #place}. */
@@ -74,12 +77,10 @@ public class OrderService {
     private final UserService users;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
-    private final Duration pendingReportedFailedAfter;
 
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         UserService users, PlatformTransactionManager transactions,
-                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
-                        @Value("${sales.pending-payment-reported-failed-after}") Duration pendingReportedFailedAfter) {
+                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds) {
         this.orders = orders;
         this.inventory = inventory;
         this.tickets = tickets;
@@ -87,7 +88,6 @@ public class OrderService {
         this.users = users;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
-        this.pendingReportedFailedAfter = pendingReportedFailedAfter;
     }
 
     /**
@@ -156,7 +156,7 @@ public class OrderService {
         Order order = orders.find(userId, orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
         return new View(order, byId(inventory.prices(order.organizerId(), order.eventId())),
                 tickets.heldInOrder(order.organizerId(), order.id(), userId),
-                pendingPayments.latestAttempt(order.organizerId(), order.id(), pendingReportedFailedAfter).orElse(null));
+                pendingPayments.latestAttempt(order.organizerId(), order.id(), PAYMENT_GRACE).orElse(null));
     }
 
     // ---------- payment (called by payments) ----------

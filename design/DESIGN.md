@@ -136,7 +136,7 @@ card moves under the zones, CTA becomes sticky bottom bar).
 | W3 | Paiement | — (same as app screen 4, two-column) | `/orders/[id]/pay` | Client; Payzone redirect |
 | W4 | Commande · code cash | `ShopOrderStatus` | `/orders/[id]` | SSR + polling; status updates without reload |
 | W5 | Mes billets | — | `/me/tickets` | Client, OTP login; PDF download; "Ouvrir dans l'app" deep link |
-| W6 | Billet PDF | — | `/tickets/[id].pdf` | Server-generated A4 + wallet-size, static QR |
+| W6 | Billet PDF | — | `/api/tickets/[id]/pdf` (proxy, `no-store`) | Server-generated A4 + wallet-size, static QR |
 
 W2 details: header (crest + club name, nav Matchs / Abonnements / Mes billets / Aide,
 language switch, Se connecter); hero with competition label, 64 px uppercase title,

@@ -3,14 +3,20 @@ package ma.jomhor.tickets.adapters.persistence;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.tickets.application.Tickets;
 import ma.jomhor.tickets.domain.Ticket;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 @Repository
 class JdbcTickets implements Tickets {
+
+    private static final RowMapper<Ticket> TICKET = (rs, n) -> new Ticket(rs.getObject("id", UUID.class),
+            rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"), rs.getInt("zone_id"),
+            Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getString("seat_label"));
 
     private final JdbcClient jdbc;
 
@@ -39,11 +45,16 @@ class JdbcTickets implements Tickets {
                         select id, organizer_id, event_id, zone_id, status, holder_name, seat_label from tickets
                         where holder_user_id = :holder order by event_id, id
                         """)
-                .param("holder", holderUserId)
-                .query((rs, n) -> new Ticket(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
-                        rs.getInt("event_id"), rs.getInt("zone_id"), Ticket.Status.valueOf(rs.getString("status")),
-                        rs.getString("holder_name"), rs.getString("seat_label")))
-                .list();
+                .param("holder", holderUserId).query(TICKET).list();
+    }
+
+    @Override
+    public Optional<Ticket> heldBy(UUID holderUserId, UUID ticketId) {
+        return jdbc.sql("""
+                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label from tickets
+                        where id = :id and holder_user_id = :holder
+                        """)
+                .param("id", ticketId).param("holder", holderUserId).query(TICKET).optional();
     }
 
     @Override

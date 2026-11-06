@@ -2,6 +2,7 @@ package ma.jomhor.tickets.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.tickets.domain.Ticket;
 
@@ -19,6 +20,9 @@ public interface Tickets {
      * scope, and each row's organizer_id scopes whatever is read for it next.
      */
     List<Ticket> heldBy(UUID holderUserId);
+
+    /** The ticket {@code ticketId} if {@code holderUserId} holds it (same scope as {@link #heldBy(UUID)}). */
+    Optional<Ticket> heldBy(UUID holderUserId, UUID ticketId);
 
     /** The database clock (now()), so "past" agrees with every other time rule. */
     Instant now();

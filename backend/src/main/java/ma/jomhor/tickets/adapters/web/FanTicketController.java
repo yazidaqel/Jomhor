@@ -12,16 +12,20 @@ import ma.jomhor.tickets.application.TicketService;
 import ma.jomhor.tickets.domain.Ticket;
 import ma.jomhor.tickets.domain.TicketToken;
 import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * docs/04-api.md §Fan GET /fan/tickets?with_keys=: the tickets held by the token's sub, field by field below: no
  * full name, no phone, no order, no K_e. {@code k_t} only when TicketService set it (with_keys, VALID, not CLOSED).
+ * GET /fan/tickets/{id}/pdf: the holder's printable ticket.
  */
 @RestController
 class FanTicketController {
@@ -34,8 +38,8 @@ class FanTicketController {
 
     record VenueDto(String name, String city) {}
 
-    record EventDto(int id, String title, Event.Type eventType, Instant startsAt, Instant doorsOpenAt, String timezone,
-                    VenueDto venue, @JsonRawValue String metadata) {}
+    record EventDto(int id, String title, Event.Type eventType, Event.Status status, Instant startsAt,
+                    Instant doorsOpenAt, String timezone, VenueDto venue, @JsonRawValue String metadata) {}
 
     record ZoneDto(int id, String code, String name) {}
 
@@ -49,7 +53,7 @@ class FanTicketController {
             Event.ZoneListing z = h.zone();
             return new TicketDto(t.id(), TicketToken.ticketNo(t.id()), t.status(),
                     t.holderName() == null ? null : HolderNames.label(t.holderName()), t.seatLabel(),
-                    new EventDto(e.id(), e.title(), e.eventType(), e.startsAt(), e.doorsOpenAt(), e.timezone(),
+                    new EventDto(e.id(), e.title(), e.eventType(), e.status(), e.startsAt(), e.doorsOpenAt(), e.timezone(),
                             new VenueDto(e.venueName(), e.venueCity()), e.metadata()),
                     new ZoneDto(z.id(), z.code(), z.name()), z.gateCodes(), h.ticketKey());
         }
@@ -69,5 +73,15 @@ class FanTicketController {
         List<TicketDto> held = tickets.heldBy(UUID.fromString(jwt.getSubject()), "true".equals(withKeys)).stream()
                 .map(TicketDto::of).toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new TicketsDto(Instant.now(), held));
+    }
+
+    /** 04 GET /fan/tickets/{id}/pdf. Filename billet-XXXX-XXXX.pdf: the ticket_no with its space as a hyphen. */
+    @GetMapping("/fan/tickets/{id}/pdf")
+    ResponseEntity<byte[]> pdf(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        TicketService.Pdf pdf = tickets.pdf(UUID.fromString(jwt.getSubject()), id);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.APPLICATION_PDF)
+                .header("Content-Disposition", ContentDisposition.attachment()
+                        .filename("billet-" + pdf.ticketNo().replace(' ', '-') + ".pdf").build().toString())
+                .body(pdf.content());
     }
 }
