@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { FieldError } from '@/components/ui/field'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useOrganizer } from '@/features/auth/organizer'
-import { path, useCanWrite, useVenueMutation, venueErrorKey, type Gate, type VenueDetail } from './api'
+import { useCanWrite, useOrganizer } from '@/features/auth/organizer'
+import { path } from '@/lib/api'
+import { useVenueMutation, venueErrorKey, type Gate, type VenueDetail } from './api'
 
 type Change = { gateId: string; zone_ids: number[] }
 

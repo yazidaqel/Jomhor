@@ -18,7 +18,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { integerInput, path, showApiError, useVenueMutation, venueErrorKey, type Gate, type Venue, type Zone } from './api'
+import { path } from '@/lib/api'
+import { integerInput } from '@/lib/forms'
+import { showApiError, useVenueMutation, venueErrorKey, type Gate, type Venue, type Zone } from './api'
 
 /** Open state of a dialog, owned by the page so the dialog outlives the table row it acts on. */
 export type DialogProps = { open: boolean; onOpenChange: (open: boolean) => void; fallbackFocus?: RefObject<HTMLElement | null> }

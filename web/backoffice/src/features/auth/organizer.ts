@@ -1,5 +1,5 @@
 import { createContext, use } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
 export type Role = 'ADMIN' | 'OPS' | 'FINANCE' | 'GATE' | 'SUPERVISOR'
@@ -33,5 +33,28 @@ export function useOrgQuery<T>(key: readonly unknown[], path: string) {
   return useQuery({
     queryKey: ['org', organizerId, ...key],
     queryFn: ({ signal }) => api<T>(path, { organizerId, signal }),
+  })
+}
+
+/** Lot 0 roles: ADMIN and OPS write; anything else (FINANCE) reads only. */
+export const useCanWrite = () => (['ADMIN', 'OPS'] as Role[]).includes(useOrganizer().role)
+
+export type Request = { method: 'POST' | 'PATCH' | 'PUT' | 'DELETE'; path: string; body?: unknown }
+export type Send = <R = unknown>(r: Request) => Promise<R>
+
+/**
+ * Organizer-scoped write: `run` sends its request(s) with `send`, which carries the same X-Organizer-Id as the
+ * query keys. Afterwards, success or not (a NOT_FOUND means our copy is stale), this organizer's queries under
+ * `scope`, and only those, are refetched in the background: the mutation settles with its own response, so a dialog
+ * can close (or show its error) before the refetch removes the row it was opened from.
+ */
+export function useOrgMutation<V, R = unknown>(scope: readonly unknown[], run: (v: V, send: Send) => Promise<R>) {
+  const { organizer_id: organizerId } = useOrganizer()
+  const queryClient = useQueryClient()
+  const send: Send = ({ method, path, body }) =>
+    api(path, { method, organizerId, body: body === undefined ? undefined : JSON.stringify(body) })
+  return useMutation({
+    mutationFn: (v: V) => run(v, send),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['org', organizerId, ...scope] }),
   })
 }

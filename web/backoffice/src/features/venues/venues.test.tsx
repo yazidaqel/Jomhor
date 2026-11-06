@@ -258,7 +258,7 @@ it('VALIDATION_FAILED is shown on the fields named in details.fields', async () 
 
   const capacity = within(dialog).getByLabelText(fr.venues.capacity)
   await waitFor(() => expect(capacity.getAttribute('aria-invalid')).toBe('true'))
-  expect(within(dialog).getByText(fr.venues.fieldInvalid)).toBeTruthy()
+  expect(within(dialog).getByText(fr.common.fieldInvalid)).toBeTruthy()
   expect(within(dialog).getByLabelText(fr.venues.name).getAttribute('aria-invalid')).toBe('false')
 })
 

@@ -72,3 +72,6 @@ function parseJson(text: string): unknown {
     return null
   }
 }
+
+/** `/a/b/c` with each segment URL-encoded. */
+export const path = (...parts: (string | number)[]) => parts.map((p) => `/${encodeURIComponent(p)}`).join('')

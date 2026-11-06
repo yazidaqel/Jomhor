@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { errorKey } from '@/lib/errors'
-import { useCanWrite, useVenues } from './api'
+import { useNotFoundNotice } from '@/lib/useNotFoundNotice'
+import { useCanWrite } from '@/features/auth/organizer'
+import { useVenues } from './api'
 import { VenueDialog } from './dialogs'
 
 /** B10 Lieux: the organizer's venues. */
@@ -16,13 +18,7 @@ export function VenuesPage() {
   const canWrite = useCanWrite()
   const navigate = useNavigate()
   const [creating, setCreating] = useState(false)
-  // Set by the venue page on an unknown id. Shown once: cleared from the history entry so back/reload don't repeat it.
-  const location = useLocation()
-  const arrivedNotFound = !!(location.state as { notFound?: boolean } | null)?.notFound
-  const [notFound] = useState(arrivedNotFound)
-  useEffect(() => {
-    if (arrivedNotFound) void navigate(location.pathname, { replace: true, state: null })
-  }, [arrivedNotFound, location.pathname, navigate])
+  const notFound = useNotFoundNotice() // set by the venue page on an unknown id
 
   return (
     <div className="flex flex-col gap-6">
