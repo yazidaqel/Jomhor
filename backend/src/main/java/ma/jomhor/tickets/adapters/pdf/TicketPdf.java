@@ -136,7 +136,10 @@ public final class TicketPdf {
         }
     }
 
-    /** Dark modules as filled squares (vector: sharp at any print size), on a white square with the quiet zone. */
+    /**
+     * Dark modules as filled rectangles (vector: sharp at any print size), on a white square with the quiet zone.
+     * Each horizontal run of dark modules is one rectangle, so no antialiasing seam shows between neighbours.
+     */
     private static void qr(PDPageContentStream s, String token, float x, float y, float side) throws IOException {
         ByteMatrix m;
         try {
@@ -153,7 +156,12 @@ public final class TicketPdf {
         for (int row = 0; row < m.getHeight(); row++) {
             for (int col = 0; col < m.getWidth(); col++) {
                 if (m.get(col, row) == 1) {
-                    s.addRect(x + (QUIET + col) * module, y + side - (QUIET + row + 1) * module, module, module);
+                    int start = col;
+                    while (col + 1 < m.getWidth() && m.get(col + 1, row) == 1) {
+                        col++;
+                    }
+                    s.addRect(x + (QUIET + start) * module, y + side - (QUIET + row + 1) * module,
+                            (col - start + 1) * module, module);
                 }
             }
         }

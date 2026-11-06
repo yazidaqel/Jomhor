@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import ma.jomhor.IntegrationTest;
 import ma.jomhor.JomhorApplication;
+import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.payments.application.CardGateway;
 import ma.jomhor.tenancy.application.OtpSender;
 import org.junit.jupiter.api.Test;
@@ -16,8 +17,8 @@ import org.springframework.context.ConfigurableApplicationContext;
 
 /**
  * The simulated gateway exists only under dev, test and staging with payments.card.provider=fake. Without an
- * adapter there is no start (prod until BE-7, or no profile). Outside staging a stub OtpSender is registered so
- * the card gateway is the only bean missing. The provider, secret and base URL come from src/test/resources unless overridden.
+ * adapter there is no start (prod until BE-7, or no profile). Outside staging a stub OtpSender and a stub
+ * TicketMessenger are registered so the card gateway is the only bean missing. The provider, secret and base URL come from src/test/resources unless overridden.
  */
 class CardGatewayProfileTest {
 
@@ -68,8 +69,11 @@ class CardGatewayProfileTest {
     private static ConfigurableApplicationContext start(String profiles, String... extra) {
         var pg = IntegrationTest.POSTGRES;
         var app = new SpringApplication(JomhorApplication.class);
-        if (!profiles.contains("staging")) { // staging has its own (log) OtpSender
-            app.addInitializers(c -> c.getBeanFactory().registerSingleton("stubOtpSender", mock(OtpSender.class)));
+        if (!profiles.contains("staging")) { // staging has its own (log) OtpSender and TicketMessenger
+            app.addInitializers(c -> {
+                c.getBeanFactory().registerSingleton("stubOtpSender", mock(OtpSender.class));
+                c.getBeanFactory().registerSingleton("stubTicketMessenger", mock(TicketMessenger.class));
+            });
         }
         List<String> args = new ArrayList<>(List.of(
                 "--spring.profiles.active=" + profiles,

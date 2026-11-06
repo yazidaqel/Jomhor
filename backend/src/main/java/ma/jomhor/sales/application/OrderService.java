@@ -18,6 +18,7 @@ import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.application.Inventory.SalePrice;
 import ma.jomhor.common.HolderNames;
 import ma.jomhor.common.web.ApiException;
+import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.sales.application.Orders.Expired;
 import ma.jomhor.sales.domain.Order;
 import ma.jomhor.tenancy.application.UserService;
@@ -75,17 +76,19 @@ public class OrderService {
     private final TicketService tickets;
     private final PendingPayments pendingPayments;
     private final UserService users;
+    private final TicketDeliveryService deliveries;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
 
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
-                        UserService users, PlatformTransactionManager transactions,
+                        UserService users, TicketDeliveryService deliveries, PlatformTransactionManager transactions,
                         @Value("${sales.max-active-holds-per-event}") long maxActiveHolds) {
         this.orders = orders;
         this.inventory = inventory;
         this.tickets = tickets;
         this.pendingPayments = pendingPayments;
         this.users = users;
+        this.deliveries = deliveries;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
     }
@@ -184,7 +187,7 @@ public class OrderService {
 
     /**
      * A card payment of the order succeeded (payments' callback, inside its transaction): RESERVED → PAID with
-     * one ticket per place. EXPIRED (a late success, plan Q8) re-reserves the places under the buyer lock with
+     * one ticket per place, each with one WhatsApp delivery queued to its holder. EXPIRED (a late success, plan Q8) re-reserves the places under the buyer lock with
      * the per-account limit checked again. Never throws for a business outcome: the payment commits as
      * SUCCEEDED either way, and anything but PAID is for a manual refund.
      */
@@ -212,7 +215,7 @@ public class OrderService {
                 i.holders().forEach(h -> seats.add(new TicketService.Seat(zone, i.priceCategoryId(), h.userId(), h.name())));
             }
         }
-        tickets.issue(o.organizerId(), o.id(), o.eventId(), seats);
+        deliveries.enqueue(o.organizerId(), tickets.issue(o.organizerId(), o.id(), o.eventId(), seats));
         return Settlement.PAID;
     }
 

@@ -10,6 +10,7 @@ import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.tenancy.application.OtpSender;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +26,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/** Full app (test profile: simulated card gateway) on one shared Postgres 18 container, test secrets, a mock OtpSender. */
+/**
+ * Full app (test profile: simulated card gateway) on one shared Postgres 18 container, test secrets, a mock OtpSender
+ * and a mock TicketMessenger.
+ */
 @ActiveProfiles("test")
 @Import(OtpSendCounter.class)
 @SpringBootTest(properties = {IntegrationTest.JWT_SECRET, IntegrationTest.OTP_SECRET, IntegrationTest.EVENT_KEY_MASTER})
@@ -48,6 +52,9 @@ public abstract class IntegrationTest {
 
     @MockitoBean
     protected OtpSender otpSender;
+
+    @MockitoBean
+    protected TicketMessenger ticketMessenger;
 
     @Autowired
     protected MockMvc mvc;

@@ -12,12 +12,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.DecodeHintType;
+import com.google.zxing.NotFoundException;
 import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.Result;
 import com.google.zxing.ResultMetadataType;
 import com.google.zxing.common.HybridBinarizer;
 import com.google.zxing.qrcode.QRCodeReader;
 import com.jayway.jsonpath.JsonPath;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -44,7 +48,7 @@ import org.springframework.http.MediaType;
  * TICKET_NOT_VALID), application/pdf attachment billet-XXXX-XXXX.pdf, no-store; the QR decodes to a v1 token
  * signed with K_e; the date is in the venue's zone; no full name, phone or key in the document.
  */
-class TicketPdfApiTest extends PaymentTest {
+public class TicketPdfApiTest extends PaymentTest {
 
     private static final String TITLE = "Atlas FC - Raja CA";
 
@@ -98,15 +102,58 @@ class TicketPdfApiTest extends PaymentTest {
         }
     }
 
-    /** Renders the page and decodes its one QR code. */
-    private static Result qr(byte[] pdf) throws Exception {
+    private static final float MM = 72f / 25.4f;
+    /** TicketPdf's QR square: side 54 mm - 22 pt, 41 modules (version 4: 33, plus a 4-module quiet zone each side). */
+    private static final float MODULE_PT = (54f * MM - 22f) / 41f;
+    /** Rendering scale (px per pt) that makes one module exactly 10 px. */
+    private static final float SCALE = 10f / MODULE_PT;
+
+    /**
+     * Decodes the ticket's QR (also used by the WhatsApp delivery test). The page is rendered without antialiasing at
+     * 10 px per module, the QR square is cut out exactly, and ZXing reads it as a pure barcode. Its finder-pattern
+     * search on the whole page misses about 1 random QR in 100: random modules can look like a finder pattern.
+     */
+    public static Result qr(byte[] pdf) throws Exception {
+        BufferedImage img = render(pdf);
+        // The QR sits 4 pt inside the card's left edge, and TicketPdf centres the 85.6 mm card on the page. Scan down the
+        // middle of its first module column for the top-left finder pattern: the first dark run 7 modules (70 px) tall.
+        float cardX = (img.getWidth() / SCALE - 85.6f * MM) / 2;
+        int qrX = Math.round((cardX + 4) * SCALE);
+        int col = qrX + 45;
+        int run = 0;
+        int finderTop = -1;
+        for (int y = 0; y < img.getHeight() && finderTop < 0; y++) {
+            run = (img.getRGB(col, y) & 0xff) < 128 ? run + 1 : 0;
+            if (run >= 65) {
+                finderTop = y - run + 1;
+            }
+        }
+        if (finderTop < 0) {
+            throw NotFoundException.getNotFoundInstance();
+        }
+        BufferedImage square = img.getSubimage(qrX, finderTop - 40, 410, 410);
+        int[] pixels = square.getRGB(0, 0, 410, 410, null, 0, 410);
+        return new QRCodeReader().decode(new BinaryBitmap(new HybridBinarizer(new RGBLuminanceSource(410, 410, pixels))),
+                Map.of(DecodeHintType.PURE_BARCODE, true, DecodeHintType.POSSIBLE_FORMATS, List.of(BarcodeFormat.QR_CODE)));
+    }
+
+    private static BufferedImage render(byte[] pdf) throws Exception {
         try (PDDocument doc = Loader.loadPDF(pdf)) {
-            BufferedImage img = new PDFRenderer(doc).renderImageWithDPI(0, 200);
-            int[] pixels = img.getRGB(0, 0, img.getWidth(), img.getHeight(), null, 0, img.getWidth());
-            return new QRCodeReader().decode(new BinaryBitmap(new HybridBinarizer(
-                            new RGBLuminanceSource(img.getWidth(), img.getHeight(), pixels))),
-                    Map.of(DecodeHintType.TRY_HARDER, true,
-                            DecodeHintType.POSSIBLE_FORMATS, List.of(BarcodeFormat.QR_CODE)));
+            PDRectangle box = doc.getPage(0).getMediaBox();
+            BufferedImage img = new BufferedImage(Math.round(box.getWidth() * SCALE), Math.round(box.getHeight() * SCALE),
+                    BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = img.createGraphics();
+            try {
+                g.setBackground(Color.WHITE); // PDFBox clears the page with it (black by default on a BufferedImage)
+                PDFRenderer renderer = new PDFRenderer(doc);
+                renderer.setRenderingHints(new RenderingHints(Map.of(
+                        RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF,
+                        RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)));
+                renderer.renderPageToGraphics(0, g, SCALE);
+            } finally {
+                g.dispose();
+            }
+            return img;
         }
     }
 

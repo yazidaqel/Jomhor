@@ -24,6 +24,9 @@ public interface Tickets {
     /** The ticket {@code ticketId} if {@code holderUserId} holds it (same scope as {@link #heldBy(UUID)}). */
     Optional<Ticket> heldBy(UUID holderUserId, UUID ticketId);
 
+    /** The holder of ticket {@code ticketId} of organizer {@code org}. */
+    Optional<UUID> holder(UUID org, UUID ticketId);
+
     /** The database clock (now()), so "past" agrees with every other time rule. */
     Instant now();
 }

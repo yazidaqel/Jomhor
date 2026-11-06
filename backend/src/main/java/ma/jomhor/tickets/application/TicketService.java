@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -122,10 +123,7 @@ public class TicketService {
      * with K_e inside withEventKey: only the token string leaves the callback.
      */
     public Pdf pdf(UUID holderUserId, UUID ticketId) {
-        Ticket t = tickets.heldBy(holderUserId, ticketId).orElseThrow(() -> ApiException.notFound("Ticket not found"));
-        if (t.status() != Ticket.Status.VALID) {
-            throw new ApiException("TICKET_NOT_VALID", HttpStatus.CONFLICT, "Ticket is not valid");
-        }
+        Ticket t = heldValid(holderUserId, ticketId);
         EventService.PublicEvent pe = events.publicEvent(t.eventId());
         Event.Listing e = pe.event();
         Event.ZoneListing z = pe.zones().stream().filter(zl -> zl.id() == t.zoneId()).findFirst().orElseThrow();
@@ -137,6 +135,20 @@ public class TicketService {
         return new Pdf(ticketNo, TicketPdf.render(new TicketPdf.Content(token, ticketNo, e.title(), e.startsAt(),
                 e.timezone(), venue, z.name(), z.gateCodes(),
                 t.holderName() == null ? null : HolderNames.label(t.holderName()))));
+    }
+
+    /** The ticket if {@code holderUserId} holds it (404 otherwise) and it is VALID (409 TICKET_NOT_VALID). */
+    public Ticket heldValid(UUID holderUserId, UUID ticketId) {
+        Ticket t = tickets.heldBy(holderUserId, ticketId).orElseThrow(() -> ApiException.notFound("Ticket not found"));
+        if (t.status() != Ticket.Status.VALID) {
+            throw new ApiException("TICKET_NOT_VALID", HttpStatus.CONFLICT, "Ticket is not valid");
+        }
+        return t;
+    }
+
+    /** Who holds ticket {@code ticketId} of organizer {@code org} (notifications: the recipient, read at send time). */
+    public Optional<UUID> holder(UUID org, UUID ticketId) {
+        return tickets.holder(org, ticketId);
     }
 
     private static long startsAt(List<Held> group) {

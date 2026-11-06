@@ -117,3 +117,15 @@ Authorization: Bearer {{fanToken}}
 GET {{base}}/org/events/{{eventId}}/prices
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
+
+### 12. Fan: my tickets (keeps the first ticket id; the friend's ticket is not listed to the buyer)
+GET {{base}}/fan/tickets
+Authorization: Bearer {{fanToken}}
+
+> {% client.global.set("ticketId", response.body.tickets[0].id); %}
+
+### 13. Fan: re-send the ticket PDF on WhatsApp -> 202 (holder only, VALID only). The job (every 10 s) logs
+#    [dev WhatsApp] ticket XXXX XXXX -> +212*******11 (... bytes PDF)
+#    A 4th re-send of one ticket within 24 h -> 429 DELIVERY_RATE_LIMITED (the automatic send after payment is not counted).
+POST {{base}}/fan/tickets/{{ticketId}}/whatsapp
+Authorization: Bearer {{fanToken}}

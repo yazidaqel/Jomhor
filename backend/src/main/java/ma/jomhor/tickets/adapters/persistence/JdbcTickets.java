@@ -16,7 +16,8 @@ class JdbcTickets implements Tickets {
 
     private static final RowMapper<Ticket> TICKET = (rs, n) -> new Ticket(rs.getObject("id", UUID.class),
             rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"), rs.getInt("zone_id"),
-            Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getString("seat_label"));
+            Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getString("seat_label"),
+            rs.getObject("issued_at", OffsetDateTime.class).toInstant());
 
     private final JdbcClient jdbc;
 
@@ -42,7 +43,7 @@ class JdbcTickets implements Tickets {
     @Override
     public List<Ticket> heldBy(UUID holderUserId) {
         return jdbc.sql("""
-                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label from tickets
+                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label, issued_at from tickets
                         where holder_user_id = :holder order by event_id, id
                         """)
                 .param("holder", holderUserId).query(TICKET).list();
@@ -51,10 +52,16 @@ class JdbcTickets implements Tickets {
     @Override
     public Optional<Ticket> heldBy(UUID holderUserId, UUID ticketId) {
         return jdbc.sql("""
-                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label from tickets
+                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label, issued_at from tickets
                         where id = :id and holder_user_id = :holder
                         """)
                 .param("id", ticketId).param("holder", holderUserId).query(TICKET).optional();
+    }
+
+    @Override
+    public Optional<UUID> holder(UUID org, UUID ticketId) {
+        return jdbc.sql("select holder_user_id from tickets where organizer_id = :org and id = :id and holder_user_id is not null")
+                .param("org", org).param("id", ticketId).query(UUID.class).optional();
     }
 
     @Override
