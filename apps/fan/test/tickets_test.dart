@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart' show ButtonStyleButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -246,8 +247,95 @@ void main() {
     await openTicket(tester, c, otherId);
     expect(find.byKey(const Key('ticket.status')), findsOneWidget);
     expect(find.byType(TicketQr), findsNothing);
-    // Lot 1: WhatsApp re-send shown but off until BE-14.
-    expect(find.text('Renvoi du PDF sur WhatsApp · bientôt'), findsOneWidget);
+    // WhatsApp re-send: VALID tickets only.
+    expect(tester.widget<ButtonStyleButton>(find.byKey(const Key('ticket.whatsapp'))).onPressed, isNull);
+  });
+
+  testWidgets('WhatsApp: a double tap sends one POST', (tester) async {
+    seedCache([ticketJson()]);
+    final answer = Completer<http.Response>();
+    final c = await pumpJomhor(
+      tester,
+      backend: (r) async {
+        if (!r.url.path.endsWith('/whatsapp')) return await offline(r);
+        calls.add(r);
+        return await answer.future;
+      },
+      tokens: MemoryTokenStore('jwt'),
+      keepSecureStorage: true,
+    );
+    await openTicket(tester, c);
+    final button = find.byKey(const Key('ticket.whatsapp'));
+    await tester.tap(button);
+    await tester.pump();
+    await tester.tap(button, warnIfMissed: false);
+    await tester.pump();
+    answer.complete(http.Response('', 202));
+    await tester.pumpAndSettle();
+    expect(calls.where((r) => r.url.path.endsWith('/whatsapp')), hasLength(1));
+  });
+
+  testWidgets('a session change during the cache write of a refresh leaves no K_t of the old session', (tester) async {
+    final cache = _GatedCache();
+    final tokens = MemoryTokenStore('jwt');
+    final c = await pumpJomhor(
+      tester,
+      backend: (r) async => json({
+        'server_time': '2027-02-20T12:00:02Z',
+        'tickets': [ticketJson()],
+      }),
+      tokens: tokens,
+      overrides: [ticketCacheProvider.overrideWithValue(cache)],
+    );
+    expect(await savedCache(), isNotNull);
+    // The token check before the write passes; the session changes between it and the write. A token swap does
+    // not flip sessionProvider, so no rebuild wipes the cache: only the check after the write does.
+    cache.beforeWrite = () => c.read(sessionProvider.notifier).signIn('jwt-2');
+    await c.read(ticketsProvider.notifier).refresh();
+    expect(await savedCache(), isNull);
+
+    // Same window with a logout.
+    await c.read(sessionProvider.notifier).signIn('jwt');
+    await c.read(ticketsProvider.notifier).refresh();
+    await tester.pumpAndSettle();
+    cache.beforeWrite = () => c.read(sessionProvider.notifier).signOut();
+    await c.read(ticketsProvider.notifier).refresh();
+    await tester.pumpAndSettle();
+    expect((tokens.token, await savedCache()), (null, null));
+  });
+
+  group('WhatsApp re-send', () {
+    for (final (name, answer, copy) in [
+      ('202', () => http.Response('', 202), 'Billet renvoyé sur WhatsApp'),
+      ('429', () => apiError(429, 'DELIVERY_RATE_LIMITED'), "Ce billet a déjà été renvoyé 3 fois aujourd'hui"),
+      ('409', () => apiError(409, 'TICKET_NOT_VALID'), "Ce billet n'est plus valide"),
+      ('404', () => apiError(404, 'NOT_FOUND'), 'Ce billet ne peut pas être renvoyé pour le moment'),
+      ('offline', () => throw Exception('no network'), 'Pas de connexion'),
+    ]) {
+      testWidgets('$name: one POST on tap, none before, and the matching copy', (tester) async {
+        seedCache([ticketJson()]);
+        final c = await pumpJomhor(
+          tester,
+          backend: (r) async {
+            if (!r.url.path.endsWith('/whatsapp')) return await offline(r);
+            calls.add(r);
+            return answer();
+          },
+          tokens: MemoryTokenStore('jwt'),
+          keepSecureStorage: true,
+        );
+        await openTicket(tester, c);
+        await tester.pump(const Duration(seconds: 3));
+        const whatsapp = '/v1/fan/tickets/$ticketId/whatsapp';
+        expect(calls.where((r) => r.url.path == whatsapp), isEmpty, reason: 'no call without a tap');
+
+        await tester.tap(find.byKey(const Key('ticket.whatsapp')));
+        await tester.pumpAndSettle();
+        final sent = calls.where((r) => r.url.path == whatsapp).toList();
+        expect((sent.single.method, sent.single.headers['Authorization']), ('POST', 'Bearer jwt'));
+        expect(find.textContaining(copy), findsOneWidget);
+      });
+    }
   });
 
   testWidgets('logout wipes the saved tickets and K_t', (tester) async {
@@ -417,5 +505,18 @@ class _FlakyStorage extends FlutterSecureStorage {
   }) {
     if (failReads) throw PlatformException(code: 'keystore');
     return super.read(key: key);
+  }
+}
+
+/// Runs [beforeWrite] once, right before the next write.
+class _GatedCache extends TicketCache {
+  Future<void> Function()? beforeWrite;
+
+  @override
+  Future<void> write(Map<String, Object?> response, Duration offset) async {
+    final hook = beforeWrite;
+    beforeWrite = null;
+    await hook?.call();
+    await super.write(response, offset);
   }
 }

@@ -1,16 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
-import 'package:jomhor_fan/features/auth/auth_repository.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 
 class CheckoutRepository {
   new(this._api);
 
   final ApiClient _api;
-
-  Future<FanUser> me() async => FanUser.fromJson((await _api.get('/fan/me'))! as Map<String, Object?>);
-
-  Future<void> setDisplayName(String name) => _api.patch('/fan/me', body: {'display_name': name});
 
   /// Holds the places for 8 min. Returns the order and the server time of the answer (`Date`), so the
   /// countdown runs on server time.

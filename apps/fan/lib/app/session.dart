@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,8 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Whether a token was stored at startup. `main` overrides it with [startSession]'s result.
 final initialSignedInProvider = Provider<bool>((ref) => false);
 
-/// Signed in = a fan session token is stored. Signing out forgets it and wipes the ticket cache (K_t included)
-/// locally; the server-side logout (`POST /fan/me/logout`) is FL-8.
+/// Signed in = a fan session token is stored. Signing out forgets it and wipes the ticket cache (K_t included);
+/// [logout] also revokes the session on the server first.
 class Session extends Notifier<bool> {
   @override
   bool build() => ref.read(initialSignedInProvider);
@@ -17,10 +18,30 @@ class Session extends Notifier<bool> {
     state = true;
   }
 
+  /// `POST /fan/me/logout` (`all`: every session of the fan), then [signOut], which runs whatever the call does
+  /// (offline, error, no answer within [logoutWait]): the token and K_t never stay on the phone after a logout.
+  /// Returns whether the server confirmed the revocation.
+  Future<bool> logout({bool all = false}) async {
+    try {
+      await ref.read(apiClientProvider).post('/fan/me/logout', body: {'all': all}).timeout(logoutWait);
+      return true;
+    } on Object {
+      // Not revoked: the token is still wiped below and expires on its own (30 d).
+      return false;
+    } finally {
+      await signOut();
+    }
+  }
+
+  static const logoutWait = Duration(seconds: 5);
+
+  /// Never throws: signed out even if the Keystore/Keychain fails, and [Tickets.build] wipes the cache again then.
   Future<void> signOut() async {
     try {
       // Both run even if one fails.
       await Future.wait([ref.read(tokenStoreProvider).clear(), ref.read(ticketCacheProvider).wipe()]);
+    } on Object {
+      // Storage failed: signed out for this run anyway (no button callback sees the error).
     } finally {
       state = false;
     }

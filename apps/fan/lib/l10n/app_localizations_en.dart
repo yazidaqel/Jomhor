@@ -22,9 +22,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navProfile => 'Profile';
 
   @override
-  String get placeholderComingSoon => 'Coming soon. We\'re getting it ready for you.';
-
-  @override
   String get back => 'Retour';
 
   @override
@@ -498,7 +495,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ticketWhatsApp => 'WhatsApp';
 
   @override
-  String get ticketWhatsAppSoon => 'Renvoi du PDF sur WhatsApp · bientôt';
+  String get ticketWhatsAppHint => 'Reçois à nouveau le PDF de ce billet sur WhatsApp';
+
+  @override
+  String get ticketWhatsAppSent => 'Billet renvoyé sur WhatsApp';
+
+  @override
+  String get ticketWhatsAppRateLimited => 'Ce billet a déjà été renvoyé 3 fois aujourd\'hui. Réessaie demain.';
+
+  @override
+  String get ticketWhatsAppNotValid => 'Ce billet n\'est plus valide : il ne peut pas être renvoyé.';
+
+  @override
+  String get ticketWhatsAppFailed => 'Ce billet ne peut pas être renvoyé pour le moment. Réessaie plus tard.';
 
   @override
   String myTicketTitle(String what, String date) {
@@ -521,4 +530,54 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get cancel => 'Annuler';
+
+  @override
+  String get save => 'Enregistrer';
+
+  @override
+  String get profileName => 'Nom';
+
+  @override
+  String get profileNameEmpty => 'Ajoute ton prénom et ton nom';
+
+  @override
+  String get profileEditName => 'Modifier le nom';
+
+  @override
+  String get profilePhone => 'Téléphone';
+
+  @override
+  String get profileLanguage => 'Langue';
+
+  @override
+  String get languageFr => 'Français';
+
+  @override
+  String get languageAr => 'العربية';
+
+  @override
+  String get languageEn => 'English';
+
+  @override
+  String get profileLogout => 'Se déconnecter';
+
+  @override
+  String get profileLogoutAll => 'Se déconnecter de tous mes appareils';
+
+  @override
+  String get profileLogoutBody => 'Tes billets seront retirés de ce téléphone. Reconnecte-toi pour les retrouver.';
+
+  @override
+  String get profileLogoutAllBody =>
+      'Ton compte sera déconnecté sur ce téléphone et sur tous tes autres appareils. Tes billets seront retirés de ce téléphone.';
+
+  @override
+  String get profileLogoutConfirm => 'Me déconnecter';
+
+  @override
+  String get profileLogoutAllFailed =>
+      'Ce téléphone est déconnecté, mais tes autres appareils n\'ont pas pu l\'être (pas de réseau). Reconnecte-toi et réessaie.';
 }

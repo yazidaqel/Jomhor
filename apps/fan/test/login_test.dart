@@ -41,7 +41,13 @@ void main() {
     tester,
   ) async {
     final tokens = MemoryTokenStore();
-    final container = await pumpJomhor(tester, backend: backend(), tokens: tokens);
+    // The Profil tab reads /fan/me once signed in.
+    final me = json({'id': 'u1', 'phone': '+212612345678', 'display_name': null, 'locale': 'fr'});
+    final container = await pumpJomhor(
+      tester,
+      backend: backend(me: me),
+      tokens: tokens,
+    );
 
     await tester.tap(find.text('Profil'));
     await tester.pumpAndSettle();

@@ -16,7 +16,7 @@ void main() {
   });
 
   test('a key missing from app_ar.arb falls back to FR', () {
-    expect(ar.placeholderComingSoon, fr.placeholderComingSoon);
+    expect(ar.errorGeneric, fr.errorGeneric);
   });
 
   test('list separators per locale: Arabic uses the Arabic comma', () {

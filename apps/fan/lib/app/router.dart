@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:jomhor_fan/app/placeholder_screen.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/app/shell.dart';
 import 'package:jomhor_fan/features/auth/login_screen.dart';
@@ -11,10 +10,10 @@ import 'package:jomhor_fan/features/checkout/order_screen.dart';
 import 'package:jomhor_fan/features/checkout/zones_screen.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
+import 'package:jomhor_fan/features/profile/profile_screen.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_screen.dart';
-import 'package:jomhor_fan/l10n/app_localizations.dart';
 
 /// Paths that need a session; events are public (no login prompt to browse), buying is not.
 bool needsSession(String path) =>
@@ -71,12 +70,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [GoRoute(path: '/tickets', builder: (context, state) => const TicketsScreen())],
           ),
           StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/profile', // FL-8
-                builder: (context, state) => PlaceholderScreen(title: AppLocalizations.of(context).navProfile),
-              ),
-            ],
+            routes: [GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen())],
           ),
         ],
       ),

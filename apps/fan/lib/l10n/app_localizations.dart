@@ -117,12 +117,6 @@ abstract class AppLocalizations {
   /// **'Profil'**
   String get navProfile;
 
-  /// Body of a screen not built yet. Fans are addressed with 'tu'.
-  ///
-  /// In fr, this message translates to:
-  /// **'Bientôt ici. On le prépare pour toi.'**
-  String get placeholderComingSoon;
-
   /// Tooltip of the back button.
   ///
   /// In fr, this message translates to:
@@ -945,11 +939,35 @@ abstract class AppLocalizations {
   /// **'WhatsApp'**
   String get ticketWhatsApp;
 
-  /// Lot 1: the re-send endpoint (BE-14) is not there yet, so the button is disabled.
+  /// No description provided for @ticketWhatsAppHint.
   ///
   /// In fr, this message translates to:
-  /// **'Renvoi du PDF sur WhatsApp · bientôt'**
-  String get ticketWhatsAppSoon;
+  /// **'Reçois à nouveau le PDF de ce billet sur WhatsApp'**
+  String get ticketWhatsAppHint;
+
+  /// No description provided for @ticketWhatsAppSent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet renvoyé sur WhatsApp'**
+  String get ticketWhatsAppSent;
+
+  /// 429 DELIVERY_RATE_LIMITED: more than 3 re-sends of one ticket in 24 h.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce billet a déjà été renvoyé 3 fois aujourd\'hui. Réessaie demain.'**
+  String get ticketWhatsAppRateLimited;
+
+  /// No description provided for @ticketWhatsAppNotValid.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce billet n\'est plus valide : il ne peut pas être renvoyé.'**
+  String get ticketWhatsAppNotValid;
+
+  /// Re-send refused for another reason than the network (404, 401, 5xx).
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce billet ne peut pas être renvoyé pour le moment. Réessaie plus tard.'**
+  String get ticketWhatsAppFailed;
 
   /// Screen 1 strip. what = competition or event title.
   ///
@@ -968,6 +986,102 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'{days, plural, =0{aujourd\'hui à {time}} =1{demain à {time}} other{dans {days} jours}}'**
   String myTicketWhen(int days, String time);
+
+  /// No description provided for @cancel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Annuler'**
+  String get cancel;
+
+  /// No description provided for @save.
+  ///
+  /// In fr, this message translates to:
+  /// **'Enregistrer'**
+  String get save;
+
+  /// No description provided for @profileName.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nom'**
+  String get profileName;
+
+  /// No description provided for @profileNameEmpty.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ajoute ton prénom et ton nom'**
+  String get profileNameEmpty;
+
+  /// No description provided for @profileEditName.
+  ///
+  /// In fr, this message translates to:
+  /// **'Modifier le nom'**
+  String get profileEditName;
+
+  /// No description provided for @profilePhone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Téléphone'**
+  String get profilePhone;
+
+  /// No description provided for @profileLanguage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Langue'**
+  String get profileLanguage;
+
+  /// No description provided for @languageFr.
+  ///
+  /// In fr, this message translates to:
+  /// **'Français'**
+  String get languageFr;
+
+  /// Language names are written in their own language, in every locale.
+  ///
+  /// In fr, this message translates to:
+  /// **'العربية'**
+  String get languageAr;
+
+  /// No description provided for @languageEn.
+  ///
+  /// In fr, this message translates to:
+  /// **'English'**
+  String get languageEn;
+
+  /// No description provided for @profileLogout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Se déconnecter'**
+  String get profileLogout;
+
+  /// No description provided for @profileLogoutAll.
+  ///
+  /// In fr, this message translates to:
+  /// **'Se déconnecter de tous mes appareils'**
+  String get profileLogoutAll;
+
+  /// No description provided for @profileLogoutBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tes billets seront retirés de ce téléphone. Reconnecte-toi pour les retrouver.'**
+  String get profileLogoutBody;
+
+  /// No description provided for @profileLogoutAllBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ton compte sera déconnecté sur ce téléphone et sur tous tes autres appareils. Tes billets seront retirés de ce téléphone.'**
+  String get profileLogoutAllBody;
+
+  /// No description provided for @profileLogoutConfirm.
+  ///
+  /// In fr, this message translates to:
+  /// **'Me déconnecter'**
+  String get profileLogoutConfirm;
+
+  /// No description provided for @profileLogoutAllFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce téléphone est déconnecté, mais tes autres appareils n\'ont pas pu l\'être (pas de réseau). Reconnecte-toi et réessaie.'**
+  String get profileLogoutAllFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

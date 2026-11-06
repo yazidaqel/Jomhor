@@ -14,6 +14,7 @@ import 'package:jomhor_fan/features/checkout/holder_name.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
+import 'package:jomhor_fan/features/profile/profile_controller.dart';
 
 /// What screen 4 is for: one price category of one event, `qty` places (from screen 3).
 typedef CheckoutArgs = ({int eventId, String priceCategoryId, int qty});
@@ -92,7 +93,7 @@ class CheckoutState {
 
 /// The signed-in fan (`GET /fan/me`): row 1 of the holders is prefilled with `display_name`.
 final FutureProvider<FanUser> meProvider = FutureProvider.autoDispose<FanUser>(
-  (ref) => ref.watch(checkoutRepositoryProvider).me(),
+  (ref) => ref.watch(authRepositoryProvider).me(),
 );
 
 final RegExp _fieldPath = RegExp(r'^items\[0\]\.holders\[(\d+)\]\.(name|phone)$');
@@ -201,7 +202,10 @@ class CheckoutController extends Notifier<CheckoutState> {
     } on Object {
       me = null; // Unknown: save it anyway, PATCH is idempotent.
     }
-    if (me?.displayName != name) await _repo.setDisplayName(name);
+    if (me?.displayName != name) {
+      await ref.read(authRepositoryProvider).setDisplayName(name);
+      ref.invalidate(profileProvider); // The Profil tab shows the new name.
+    }
   }
 
   /// `SALE_BUSY` answers wait `retry_after_s` (+ jitter up to 3 s) with a visible countdown, then the same

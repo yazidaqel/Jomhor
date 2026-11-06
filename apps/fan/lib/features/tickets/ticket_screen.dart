@@ -26,8 +26,8 @@ String ticketStatusText(AppLocalizations l, FanTicket t) => switch (t.status) {
 /// "3, 4" for the gate codes, with the locale's list separator.
 String gatesText(AppLocalizations l, FanTicket t) => t.gateCodes.join(l.listSeparator);
 
-/// Screen 5 · Mon billet (DESIGN.md + Lot 1 adjustments). Reads the saved tickets only and makes no network
-/// call, so it works in airplane mode. Full brightness and screen kept awake while it is shown.
+/// Screen 5 · Mon billet (DESIGN.md + Lot 1 adjustments). Reads the saved tickets only, so it works in airplane
+/// mode; its one network call is the WhatsApp re-send, on a tap. Full brightness and screen kept awake while shown.
 class TicketScreen extends ConsumerStatefulWidget {
   const new({required this.id, super.key});
 
@@ -139,7 +139,7 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
               ),
             ),
             if (group.length > 1) _Dots(count: group.length, current: _page),
-            const _WhatsApp(),
+            _WhatsApp(ticket: shown),
           ],
         ),
       ),
@@ -489,13 +489,42 @@ class _Dots extends StatelessWidget {
   );
 }
 
-/// Lot 1 action: WhatsApp re-send of the PDF. Disabled until `POST /fan/tickets/{id}/whatsapp` (BE-14) exists.
-class _WhatsApp extends StatelessWidget {
-  const new();
+/// Lot 1 action: WhatsApp re-send of the PDF, for a VALID ticket. The call runs only on a tap.
+class _WhatsApp extends ConsumerStatefulWidget {
+  const new({required this.ticket});
+
+  final FanTicket ticket;
+
+  @override
+  ConsumerState<_WhatsApp> createState() => _WhatsAppState();
+}
+
+class _WhatsAppState extends ConsumerState<_WhatsApp> {
+  var _sending = false;
+
+  Future<void> _send() async {
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
+    final result = await ref.read(resendWhatsAppProvider)(widget.ticket.id);
+    if (mounted) setState(() => _sending = false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(switch (result) {
+          Resend.sent => l.ticketWhatsAppSent,
+          Resend.rateLimited => l.ticketWhatsAppRateLimited,
+          Resend.notValid => l.ticketWhatsAppNotValid,
+          Resend.offline => l.errorNetwork,
+          Resend.failed => l.ticketWhatsAppFailed,
+        }),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final valid = widget.ticket.status == 'VALID';
     return Padding(
       padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.m, JomhorSpace.xl, JomhorSpace.l),
       child: Column(
@@ -505,13 +534,13 @@ class _WhatsApp extends StatelessWidget {
             width: double.infinity,
             child: OutlinedButton.icon(
               key: const Key('ticket.whatsapp'),
-              onPressed: null,
+              onPressed: valid && !_sending ? _send : null,
               icon: const Icon(Icons.send_outlined),
               label: Text(l.ticketWhatsApp),
             ),
           ),
           const SizedBox(height: JomhorSpace.xs),
-          Text(l.ticketWhatsAppSoon, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
+          Text(l.ticketWhatsAppHint, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
         ],
       ),
     );

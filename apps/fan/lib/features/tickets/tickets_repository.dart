@@ -114,6 +114,7 @@ class Tickets extends AsyncNotifier<TicketsState> {
     final before = await future;
     if (!ref.mounted || !ref.read(sessionProvider)) return;
     final tokens = ref.read(tokenStoreProvider);
+    final cache = ref.read(ticketCacheProvider);
     final token = await tokens.read();
     try {
       final res = await ref.read(apiClientProvider).getResponse('/fan/tickets', query: {'with_keys': 'true'});
@@ -126,7 +127,9 @@ class Tickets extends AsyncNotifier<TicketsState> {
       final snapshot = TicketsSnapshot.fromResponse(body, serverTime: serverTime, deviceNow: deviceNow);
       // Signed out (or signed in as someone else) meanwhile: this answer must not land in the cache.
       if (!ref.mounted || token == null || await tokens.read() != token) return;
-      await ref.read(ticketCacheProvider).write(body, snapshot.offset);
+      await cache.write(body, snapshot.offset);
+      // A logout that ran during the write must not leave K_t behind.
+      if (await tokens.read() != token) return await cache.wipe();
       if (ref.mounted) state = AsyncData(TicketsState(snapshot: snapshot));
     } on Object catch (e) {
       // A 401 already signed out (ApiClient.onUnauthorized), which wipes the cache and rebuilds this provider.
@@ -136,3 +139,23 @@ class Tickets extends AsyncNotifier<TicketsState> {
 }
 
 final ticketsProvider = AsyncNotifierProvider<Tickets, TicketsState>(Tickets.new);
+
+enum Resend { sent, rateLimited, notValid, offline, failed }
+
+/// `POST /fan/tickets/{id}/whatsapp` (202): the ticket's PDF goes again to the holder's WhatsApp. Screen 5's only
+/// network call, and only on a tap. 429 = more than 3 re-sends of this ticket in 24 h; 409 = no longer VALID.
+final resendWhatsAppProvider = Provider<Future<Resend> Function(String ticketId)>(
+  (ref) => (id) async {
+    try {
+      await ref.read(apiClientProvider).post('/fan/tickets/${Uri.encodeComponent(id)}/whatsapp');
+      return Resend.sent;
+    } on ApiError catch (e) {
+      return switch (e.status) {
+        _ when e.code == ApiError.network => Resend.offline, // also timeouts
+        429 => Resend.rateLimited,
+        409 => Resend.notValid,
+        _ => Resend.failed,
+      };
+    }
+  },
+);

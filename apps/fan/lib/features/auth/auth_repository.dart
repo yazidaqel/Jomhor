@@ -44,6 +44,12 @@ class AuthRepository {
   Future<FanSession> verify(String e164, String code) async => FanSession.fromJson(
     (await _api.postPublic('/fan/auth/verify', body: {'phone': e164, 'code': code}))! as Map<String, Object?>,
   );
+
+  Future<FanUser> me() async => FanUser.fromJson((await _api.get('/fan/me'))! as Map<String, Object?>);
+
+  /// `PATCH /fan/me`: the server normalises the name (§Holder names) and answers the stored user.
+  Future<FanUser> setDisplayName(String name) async =>
+      FanUser.fromJson((await _api.patch('/fan/me', body: {'display_name': name}))! as Map<String, Object?>);
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) => AuthRepository(ref.watch(apiClientProvider)));

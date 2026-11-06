@@ -37,6 +37,17 @@ void main() {
     expect(await startSession(_BrokenStore(), prefs), isFalse);
   });
 
+  test('signOut never throws: a Keystore failure still signs out', () async {
+    final container = ProviderContainer.test(
+      overrides: [
+        tokenStoreProvider.overrideWithValue(_BrokenStore()),
+        initialSignedInProvider.overrideWithValue(true),
+      ],
+    );
+    await container.read(sessionProvider.notifier).signOut();
+    expect(container.read(sessionProvider), isFalse);
+  });
+
   test('a 401 for an old token does not end a newer session', () async {
     final tokens = MemoryTokenStore('new');
     final container = ProviderContainer.test(
