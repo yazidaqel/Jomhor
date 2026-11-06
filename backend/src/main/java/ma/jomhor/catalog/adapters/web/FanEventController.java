@@ -27,12 +27,12 @@ class FanEventController {
 
     record VenueDto(String name, String city) {}
 
-    record EventDto(int id, UUID organizerId, Event.Type eventType, String title, Instant startsAt,
+    record EventDto(int id, UUID organizerId, Event.Status status, Event.Type eventType, String title, Instant startsAt,
                     Instant doorsOpenAt, String timezone, VenueDto venue, @JsonRawValue String metadata,
                     Instant saleStartsAt, Instant salesCloseAt, boolean onSale, boolean soldOut, Long fromPriceMad,
                     int perAccountLimit) {
         static EventDto of(Event.Listing e) {
-            return new EventDto(e.id(), e.organizerId(), e.eventType(), e.title(), e.startsAt(), e.doorsOpenAt(),
+            return new EventDto(e.id(), e.organizerId(), e.status(), e.eventType(), e.title(), e.startsAt(), e.doorsOpenAt(),
                     e.timezone(), new VenueDto(e.venueName(), e.venueCity()), e.metadata(), e.saleStartsAt(),
                     e.salesCloseAt(), e.onSale(), e.soldOut(), e.fromPriceMad(), e.perAccountLimit());
         }

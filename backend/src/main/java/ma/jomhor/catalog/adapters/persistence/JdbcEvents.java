@@ -215,7 +215,7 @@ class JdbcEvents implements Events {
 
     // Public reads. on_sale mirrors forSale's OPEN; remaining = quota - sold, never sold or quota themselves.
     private static final String LISTING = """
-            select e.id, e.organizer_id, e.event_type, e.title, e.starts_at, e.doors_open_at, v.timezone,
+            select e.id, e.organizer_id, e.status, e.event_type, e.title, e.starts_at, e.doors_open_at, v.timezone,
                    v.name as venue_name, v.city as venue_city, e.metadata::text as metadata, e.sale_starts_at,
                    e.refund_cutoff_at, e.per_account_limit,
                    coalesce(e.status = 'ON_SALE' and now() >= coalesce(e.sale_starts_at, '-infinity')
@@ -317,7 +317,7 @@ class JdbcEvents implements Events {
 
     private static Event.Listing listing(ResultSet rs, int n) throws SQLException {
         return new Event.Listing(rs.getInt("id"), rs.getObject("organizer_id", UUID.class),
-                Event.Type.valueOf(rs.getString("event_type")), rs.getString("title"), instant(rs, "starts_at"),
+                Event.Status.valueOf(rs.getString("status")), Event.Type.valueOf(rs.getString("event_type")), rs.getString("title"), instant(rs, "starts_at"),
                 instant(rs, "doors_open_at"), rs.getString("timezone"), rs.getString("venue_name"),
                 rs.getString("venue_city"), rs.getString("metadata"), instant(rs, "sale_starts_at"),
                 instant(rs, "refund_cutoff_at"), rs.getBoolean("on_sale"), rs.getBoolean("sold_out"),

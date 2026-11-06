@@ -31,7 +31,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 class FanEventApiTest extends OrgApiTest {
 
-    private static final String[] EVENT_KEYS = {"id", "organizer_id", "event_type", "title", "starts_at",
+    private static final String[] EVENT_KEYS = {"id", "organizer_id", "status", "event_type", "title", "starts_at",
             "doors_open_at", "timezone", "venue", "metadata", "sale_starts_at", "sales_close_at", "on_sale", "sold_out",
             "from_price_mad", "per_account_limit"};
     private static final Pattern JSON_KEY = Pattern.compile("\"([A-Za-z_]+)\"\\s*:");
@@ -157,6 +157,7 @@ class FanEventApiTest extends OrgApiTest {
         String json = body(list(a.org().toString(), "2160-01-01T00:00:00Z").andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].id").value(contains(feb, march, gatesOpen)))
                 .andExpect(jsonPath("$[0].organizer_id").value(a.org().toString()))
+                .andExpect(jsonPath("$[0].status").value("ON_SALE"))
                 .andExpect(jsonPath("$[0].event_type").value("FOOTBALL_MATCH"))
                 .andExpect(jsonPath("$[0].title").value("Match"))
                 .andExpect(jsonPath("$[0].starts_at").value("2160-02-01T19:00:00Z"))
@@ -171,6 +172,7 @@ class FanEventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$[0].sold_out").value(false))
                 .andExpect(jsonPath("$[0].from_price_mad").value(5000))
                 .andExpect(jsonPath("$[0].per_account_limit").value(4))
+                .andExpect(jsonPath("$[2].status").value("GATES_OPEN"))
                 .andExpect(jsonPath("$[2].on_sale").value(false))); // GATES_OPEN: listed, not on sale
         assertKeys(json, "$[0]", EVENT_KEYS);
         assertKeys(json, "$[0].venue", "name", "city");
@@ -224,6 +226,7 @@ class FanEventApiTest extends OrgApiTest {
 
         String json = body(mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.status").value("ON_SALE"))
                 .andExpect(jsonPath("$.timezone").value("Africa/Casablanca"))
                 .andExpect(jsonPath("$.on_sale").value(true))
                 .andExpect(jsonPath("$.from_price_mad").value(5000))
@@ -271,6 +274,7 @@ class FanEventApiTest extends OrgApiTest {
         publish(a, draft);
         setStatus(draft, "CLOSED");
         mvc.perform(get("/fan/events/" + draft)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CLOSED"))
                 .andExpect(jsonPath("$.on_sale").value(false));
         list(a.org().toString(), null).andExpect(jsonPath("$", empty()));
     }

@@ -32,6 +32,7 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              - 'docs/token-vectors.json'
               - '.github/workflows/ci.yml'
             backoffice:
               - 'web/backoffice/**'

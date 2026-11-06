@@ -34,13 +34,13 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
      * A non-DRAFT event as the public sees it (GET /fan/events*): no key, no quota or sold. {@code onSale},
      * {@code soldOut} and {@code fromPriceMad} come from the list query (database clock); the detail recomputes them from its price rows ({@link #withStock}).
      */
-    public record Listing(int id, UUID organizerId, Type eventType, String title, Instant startsAt,
+    public record Listing(int id, UUID organizerId, Status status, Type eventType, String title, Instant startsAt,
                           Instant doorsOpenAt, String timezone, String venueName, String venueCity, String metadata,
                           Instant saleStartsAt, Instant salesCloseAt, boolean onSale, boolean soldOut,
                           Long fromPriceMad, int perAccountLimit) {
 
         public Listing withStock(boolean newSoldOut, Long newFromPriceMad) {
-            return new Listing(id, organizerId, eventType, title, startsAt, doorsOpenAt, timezone, venueName,
+            return new Listing(id, organizerId, status, eventType, title, startsAt, doorsOpenAt, timezone, venueName,
                     venueCity, metadata, saleStartsAt, salesCloseAt, onSale, newSoldOut, newFromPriceMad,
                     perAccountLimit);
         }
