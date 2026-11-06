@@ -44,8 +44,10 @@ class OrderApiTest extends OrgApiTest {
 
     private static final String[] RESERVED_KEYS = {"id", "status", "reserved_until", "total_mad", "items"};
     private static final String[] ORDER_KEYS =
-            {"id", "event_id", "channel", "status", "total_mad", "reserved_until", "paid_at", "items", "ticket_ids"};
-    private static final String[] ITEM_KEYS = {"price_category_id", "zone_id", "name", "qty", "unit_price_mad", "holders"};
+            {"id", "event_id", "channel", "status", "payment_status", "total_mad", "reserved_until", "paid_at", "items",
+             "ticket_ids"};
+    private static final String[] ITEM_KEYS =
+            {"price_category_id", "zone_id", "zone_name", "name", "qty", "unit_price_mad", "holders"};
 
     @Autowired
     OrderService orderService;
@@ -129,6 +131,7 @@ class OrderApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.total_mad").value(2 * 5000 + 12550))
                 .andExpect(jsonPath("$.items[0].price_category_id").value(s.priceId()))
                 .andExpect(jsonPath("$.items[0].zone_id").value(s.zoneId()))
+                .andExpect(jsonPath("$.items[0].zone_name").value("Zone NORD"))
                 .andExpect(jsonPath("$.items[0].name").value("Plein tarif"))
                 .andExpect(jsonPath("$.items[0].qty").value(2))
                 .andExpect(jsonPath("$.items[0].unit_price_mad").value(5000))
@@ -157,6 +160,8 @@ class OrderApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.status").value("RESERVED"))
                 .andExpect(jsonPath("$.total_mad").value(2 * 5000 + 12550))
                 .andExpect(jsonPath("$.paid_at").isEmpty())
+                .andExpect(jsonPath("$.payment_status").isEmpty())
+                .andExpect(jsonPath("$.items[0].zone_name").value("Zone NORD"))
                 .andExpect(jsonPath("$.ticket_ids", empty()))
                 .andExpect(jsonPath("$.items.length()").value(2))
                 .andExpect(jsonPath("$.items[?(@.price_category_id == '%s')].unit_price_mad".formatted(vip)).value(12550)));

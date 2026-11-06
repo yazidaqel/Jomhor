@@ -1,7 +1,9 @@
 package ma.jomhor.tickets.application;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import ma.jomhor.tickets.domain.Ticket;
 
 /** Persistence port for tickets. Scoped by organizer_id. Tickets are insert-only here (immutable after issue). */
 public interface Tickets {
@@ -11,4 +13,13 @@ public interface Tickets {
 
     /** Ids of the order's tickets held by {@code holderUserId}, ascending. */
     List<UUID> heldInOrder(UUID org, UUID orderId, UUID holderUserId);
+
+    /**
+     * Every ticket held by {@code holderUserId}, by event then id. A fan read across organizers: the holder is the
+     * scope, and each row's organizer_id scopes whatever is read for it next.
+     */
+    List<Ticket> heldBy(UUID holderUserId);
+
+    /** The database clock (now()), so "past" agrees with every other time rule. */
+    Instant now();
 }

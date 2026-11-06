@@ -10,6 +10,7 @@ import java.util.UUID;
 import ma.jomhor.payments.application.Payments;
 import ma.jomhor.payments.domain.Payment;
 import ma.jomhor.sales.application.PendingPayments;
+import ma.jomhor.sales.application.PendingPayments.AttemptStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -68,6 +69,18 @@ class JdbcPayments implements Payments, PendingPayments {
                         where status = 'PENDING' and created_at > now() - make_interval(secs => :secs)
                         """)
                 .param("secs", age.toSeconds()).query(UUID.class).list());
+    }
+
+    @Override
+    public Optional<AttemptStatus> latestAttempt(UUID org, UUID orderId, Duration pendingFailsAfter) {
+        return jdbc.sql("""
+                        select case when status = 'PENDING' and created_at <= now() - make_interval(secs => :secs)
+                                    then 'FAILED' else status::text end
+                        from payments where organizer_id = :org and order_id = :order
+                        order by status = 'SUCCEEDED' desc, created_at desc, id desc limit 1
+                        """)
+                .param("org", org).param("order", orderId).param("secs", pendingFailsAfter.toSeconds())
+                .query(String.class).optional().map(AttemptStatus::valueOf);
     }
 
     private static Payment payment(ResultSet rs, int n) throws SQLException {

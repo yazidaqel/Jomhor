@@ -1,8 +1,11 @@
 package ma.jomhor.tickets.adapters.persistence;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import ma.jomhor.tickets.application.Tickets;
+import ma.jomhor.tickets.domain.Ticket;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -28,6 +31,24 @@ class JdbcTickets implements Tickets {
                 .param("category", priceCategoryId).param("holder", holderUserId).param("name", holderName)
                 .param("initials", holderInitials)
                 .query(UUID.class).single();
+    }
+
+    @Override
+    public List<Ticket> heldBy(UUID holderUserId) {
+        return jdbc.sql("""
+                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label from tickets
+                        where holder_user_id = :holder order by event_id, id
+                        """)
+                .param("holder", holderUserId)
+                .query((rs, n) -> new Ticket(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
+                        rs.getInt("event_id"), rs.getInt("zone_id"), Ticket.Status.valueOf(rs.getString("status")),
+                        rs.getString("holder_name"), rs.getString("seat_label")))
+                .list();
+    }
+
+    @Override
+    public Instant now() {
+        return jdbc.sql("select now()").query(OffsetDateTime.class).single().toInstant();
     }
 
     @Override

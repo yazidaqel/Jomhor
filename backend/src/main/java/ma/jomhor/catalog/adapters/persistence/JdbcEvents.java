@@ -28,7 +28,11 @@ class JdbcEvents implements Events {
               as timezone,
             series_id, event_type, title, starts_at, doors_open_at, sale_starts_at, status, refund_cutoff_at,
             reentry_policy, per_account_limit, metadata::text as metadata, created_at""";
-    private static final String PRICE_COLUMNS = "id, zone_id, name, price_mad, quota, sold";
+    // zone_name by a scalar subquery, so the same list works after select and returning.
+    private static final String PRICE_COLUMNS = """
+            id, zone_id, name, price_mad, quota, sold,
+            (select z.name from zones z where z.id = price_categories.zone_id
+               and z.organizer_id = price_categories.organizer_id) as zone_name""";
 
     private final JdbcClient jdbc;
 
@@ -326,6 +330,6 @@ class JdbcEvents implements Events {
 
     private static PriceCategory price(ResultSet rs, int n) throws SQLException {
         return new PriceCategory(rs.getObject("id", UUID.class), rs.getInt("zone_id"), rs.getString("name"),
-                rs.getLong("price_mad"), rs.getInt("quota"), rs.getInt("sold"));
+                rs.getLong("price_mad"), rs.getInt("quota"), rs.getInt("sold"), rs.getString("zone_name"));
     }
 }

@@ -13,6 +13,7 @@ import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.application.OrderService.HolderRequest;
 import ma.jomhor.sales.application.OrderService.ItemRequest;
 import ma.jomhor.sales.application.OrderService.View;
+import ma.jomhor.sales.application.PendingPayments.AttemptStatus;
 import ma.jomhor.sales.domain.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -45,12 +46,13 @@ class OrderController {
     /** Only the label: never the full name, the phone or the holding account. */
     record HolderDto(String label) {}
 
-    record ItemDto(UUID priceCategoryId, int zoneId, String name, int qty, long unitPriceMad, List<HolderDto> holders) {}
+    record ItemDto(UUID priceCategoryId, int zoneId, String zoneName, String name, int qty, long unitPriceMad,
+                   List<HolderDto> holders) {}
 
     record Reserved(UUID id, Order.Status status, Instant reservedUntil, long totalMad, List<ItemDto> items) {}
 
-    record OrderDto(UUID id, int eventId, Order.Channel channel, Order.Status status, long totalMad,
-                    Instant reservedUntil, Instant paidAt, List<ItemDto> items, List<UUID> ticketIds) {}
+    record OrderDto(UUID id, int eventId, Order.Channel channel, Order.Status status, AttemptStatus paymentStatus,
+                    long totalMad, Instant reservedUntil, Instant paidAt, List<ItemDto> items, List<UUID> ticketIds) {}
 
     @PostMapping("/fan/orders")
     @ResponseStatus(HttpStatus.CREATED)
@@ -67,14 +69,14 @@ class OrderController {
     OrderDto get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         View v = orders.get(UUID.fromString(jwt.getSubject()), id);
         Order o = v.order();
-        return new OrderDto(o.id(), o.eventId(), o.channel(), o.status(), o.totalMad(), o.reservedUntil(), o.paidAt(),
-                items(v), v.ticketIds());
+        return new OrderDto(o.id(), o.eventId(), o.channel(), o.status(), v.paymentStatus(), o.totalMad(),
+                o.reservedUntil(), o.paidAt(), items(v), v.ticketIds());
     }
 
     private static List<ItemDto> items(View v) {
         return v.order().items().stream().map(i -> {
             SalePrice p = v.categories().get(i.priceCategoryId());
-            return new ItemDto(i.priceCategoryId(), p.zoneId(), p.name(), i.qty(), i.unitPriceMad(),
+            return new ItemDto(i.priceCategoryId(), p.zoneId(), p.zoneName(), p.name(), i.qty(), i.unitPriceMad(),
                     i.holders().stream().map(h -> new HolderDto(HolderNames.label(h.name()))).toList());
         }).toList();
     }

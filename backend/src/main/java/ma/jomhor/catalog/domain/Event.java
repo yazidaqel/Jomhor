@@ -28,7 +28,7 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
     public record Summary(int id, String title, Type eventType, Instant startsAt, Status status, UUID venueId,
                           String venueName, String venueTimezone, long quota, long sold) {}
 
-    public record PriceCategory(UUID id, int zoneId, String name, long priceMad, int quota, int sold) {}
+    public record PriceCategory(UUID id, int zoneId, String name, long priceMad, int quota, int sold, String zoneName) {}
 
     /**
      * A non-DRAFT event as the public sees it (GET /fan/events*): no key, no quota or sold. {@code onSale},

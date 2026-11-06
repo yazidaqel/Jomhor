@@ -57,8 +57,12 @@ public class OrderService {
     /** Same as the fan auth endpoints. */
     private static final Pattern E164 = Pattern.compile("\\+[1-9][0-9]{7,14}");
 
-    /** An order with what the fan sees of each category, and its tickets. */
-    public record View(Order order, Map<UUID, SalePrice> categories, List<UUID> ticketIds) {}
+    /**
+     * An order with what the fan sees of each category, its tickets and its payment status as
+     * {@link PendingPayments#latestAttempt} reports it (null before any /pay).
+     */
+    public record View(Order order, Map<UUID, SalePrice> categories, List<UUID> ticketIds,
+                       PendingPayments.AttemptStatus paymentStatus) {}
 
     /** What became of an order whose card payment succeeded. Anything but PAID needs a manual refund. */
     public enum Settlement { PAID, SOLD_OUT, PER_ACCOUNT_LIMIT, NOT_PAYABLE }
@@ -70,10 +74,12 @@ public class OrderService {
     private final UserService users;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
+    private final Duration pendingReportedFailedAfter;
 
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         UserService users, PlatformTransactionManager transactions,
-                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds) {
+                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
+                        @Value("${sales.pending-payment-reported-failed-after}") Duration pendingReportedFailedAfter) {
         this.orders = orders;
         this.inventory = inventory;
         this.tickets = tickets;
@@ -81,6 +87,7 @@ public class OrderService {
         this.users = users;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
+        this.pendingReportedFailedAfter = pendingReportedFailedAfter;
     }
 
     /**
@@ -142,13 +149,14 @@ public class OrderService {
             lines.add(new Order.Item(category, items.get(i).qty(), taken.get(category).priceMad(), holding));
         }
         long total = lines.stream().mapToLong(l -> l.qty() * l.unitPriceMad()).sum();
-        return new View(orders.insert(org, eventId, userId, channel, total, lines), taken, List.of());
+        return new View(orders.insert(org, eventId, userId, channel, total, lines), taken, List.of(), null);
     }
 
     public View get(UUID userId, UUID orderId) {
         Order order = orders.find(userId, orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
         return new View(order, byId(inventory.prices(order.organizerId(), order.eventId())),
-                tickets.heldInOrder(order.organizerId(), order.id(), userId));
+                tickets.heldInOrder(order.organizerId(), order.id(), userId),
+                pendingPayments.latestAttempt(order.organizerId(), order.id(), pendingReportedFailedAfter).orElse(null));
     }
 
     // ---------- payment (called by payments) ----------

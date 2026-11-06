@@ -259,6 +259,76 @@ class PaymentApiTest extends PaymentTest {
         assertThat(orderStatus(orderId)).isEqualTo("PAID");
     }
 
+    private String paymentStatusOf(String token, String orderId) throws Exception {
+        return JsonPath.read(body(fan(token, get("/fan/orders/" + orderId)).andExpect(status().isOk())), "$.payment_status");
+    }
+
+    /** 04 GET /fan/orders/{id} payment_status: the latest attempt; a PENDING one 10 min old or more reads FAILED. */
+    @Test
+    void paymentStatusIsTheLatestAttempt() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        String orderId = order(fan, s, 1);
+        assertThat(paymentStatusOf(fan, orderId)).isNull();
+        String first = payment(fan, orderId);
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        callback(signed(first, "DECLINED", total(orderId), "FAKE-" + UUID.randomUUID())).andExpect(status().isSeeOther());
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
+
+        // An attempt the fan abandoned on the gateway: still PENDING in the table, reported FAILED from 10 min.
+        // (The declined one is moved further back, so the second stays the latest while it is aged.)
+        jdbc.sql("update payments set created_at = now() - interval '1 hour' where id = ?::uuid").param(first).update();
+        String second = payment(fan, orderId);
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        jdbc.sql("update payments set created_at = now() - interval '9 minutes 50 seconds' where id = ?::uuid")
+                .param(second).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        jdbc.sql("update payments set created_at = now() - interval '10 minutes' where id = ?::uuid").param(second).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
+        assertThat(paymentStatus(second)).isEqualTo("PENDING");
+
+        // Its late success is still taken (plan Q8): PAID, and the order reports SUCCEEDED.
+        callback(approve(second, total(orderId))).andExpect(status().isSeeOther());
+        assertThat(orderStatus(orderId)).isEqualTo("PAID");
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
+        assertThat(tickets(orderId)).isEqualTo(1);
+    }
+
+    /** A success wins over a later attempt: an older attempt approved after a newer one was opened reads SUCCEEDED. */
+    @Test
+    void anOlderSuccessWinsOverALaterAttempt() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        String orderId = order(fan, s, 1);
+        String older = payment(fan, orderId);
+        jdbc.sql("update payments set created_at = now() - interval '5 minutes' where id = ?::uuid").param(older).update();
+        String newer = payment(fan, orderId);
+        callback(approve(older, total(orderId))).andExpect(status().isSeeOther());
+        assertThat(orderStatus(orderId)).isEqualTo("PAID");
+        assertThat(paymentStatus(newer)).isEqualTo("PENDING");
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
+        jdbc.sql("update payments set created_at = now() - interval '11 minutes' where id = ?::uuid").param(newer).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED"); // not the stale newer one's FAILED
+        callback(signed(newer, "DECLINED", total(orderId), "FAKE-" + UUID.randomUUID())).andExpect(status().isSeeOther());
+        assertThat(paymentStatus(newer)).isEqualTo("FAILED");
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
+    }
+
+    /** A stale PENDING attempt doesn't block a new one: /pay still answers while the hold lasts. */
+    @Test
+    void aStalePendingAttemptLeavesPayOpen() throws Exception {
+        Sale s = onSale(10);
+        String fan = fanToken(randomPhone());
+        String orderId = order(fan, s, 1);
+        String stale = payment(fan, orderId);
+        jdbc.sql("update payments set created_at = now() - interval '11 minutes' where id = ?::uuid").param(stale).update();
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("FAILED");
+        String fresh = payment(fan, orderId);
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("PENDING");
+        callback(approve(fresh, total(orderId))).andExpect(status().isSeeOther());
+        assertThat(paymentStatusOf(fan, orderId)).isEqualTo("SUCCEEDED");
+    }
+
     @Test
     void aDeclineLeavesTheOrderPayable() throws Exception {
         Sale s = onSale(10);
