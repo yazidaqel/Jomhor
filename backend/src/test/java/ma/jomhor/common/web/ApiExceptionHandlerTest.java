@@ -14,6 +14,7 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
@@ -25,7 +26,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@WebMvcTest
+// Security filters off: this tests the advice alone; SecurityTest covers 401/403 bodies.
+@WebMvcTest(controllers = ApiExceptionHandlerTest.TestController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @Import(ApiExceptionHandlerTest.TestController.class)
 class ApiExceptionHandlerTest {
 

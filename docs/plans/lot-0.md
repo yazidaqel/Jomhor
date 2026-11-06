@@ -59,6 +59,7 @@ Why this way:
 | Q11 | Event series in Lot 0? | No. `series_id` stays nullable and the B2 "Série" field is hidden until Lot 5 (passes). |
 | Q12 | First organizer and admin in staging/prod | A dev seed (dev profile only) plus a documented SQL snippet. No platform-admin API until Lot 6. |
 | Q13 | JWT revocation and refresh | Lot 0: one HS256 access token (fan 30 d, org 12 h), no refresh. Revisit in Lot 1 before real K_t reaches phones. |
+| Q14 | OTP abuse limits beyond 3 sends / 5 attempts per 10 min (BE-2 review): 15 guesses per 10 min on a staff phone is ~6 %/month for a targeted account; no per-IP cap means SMS pumping once a real provider is live | **Decide before the real `OtpSender` ships (Lot 1).** Proposed default: per-phone daily cap (10 sends, 15 failed attempts / 24 h → lockout), per-IP throttle on both `/*/auth/otp`, send after commit off the request thread. Log adapter only in Lot 0. Also covers a silent lockout: `/org/auth/otp` creates a challenge for any phone (needed so it can't reveal staff), so 3 calls / 10 min lock a fan out without any SMS; the per-IP throttle is the fix. |
 
 ## 4. Contract changes
 

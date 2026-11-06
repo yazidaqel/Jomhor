@@ -73,13 +73,17 @@ the payment is `SUCCEEDED`, and `audit_log` gets `payment.refund_required` (manu
 
 Every `/org/*` call except `/org/auth/*` and `/org/me` needs `X-Organizer-Id`. The server checks
 for an active `staff` row (user_id = token subject). Lot 0 roles: `ADMIN`, `OPS` read and write;
-`FINANCE` read only; `GATE`, `SUPERVISOR` get 403.
+`FINANCE` read only; `GATE`, `SUPERVISOR` get 403. A missing or malformed `X-Organizer-Id` → 400
+`BAD_REQUEST`; no active staff row for it → 403 `FORBIDDEN`.
+
+Fans and staff share one OTP mechanism (`otp_challenges` has no audience): a code proves the
+caller holds the phone; the endpoint decides the token audience.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/org/auth/otp` | `{phone}` → always `202` (no staff enumeration). The code is sent only if the phone belongs to a user with an active staff row. |
-| POST | `/org/auth/verify` | `{phone, code}` → `{token, expires_at, memberships:[{organizer_id, organizer_name, role}]}`. JWT `aud=org`, 12 h. |
-| GET | `/org/me` | `{user, memberships[]}`, no `X-Organizer-Id` (feeds the organizer switcher) |
+| POST | `/org/auth/otp` | `{phone}` → always `202` (no staff enumeration). The code is sent only if the phone belongs to a user with an active staff row. Over the rate limit it still answers `202` and sends nothing (a 429 would reveal staff phones). |
+| POST | `/org/auth/verify` | `{phone, code}` → `{token, expires_at, memberships:[{organizer_id, organizer_name, role}]}`. JWT `aud=org`, 12 h. A phone with no active staff row → `OTP_INVALID`, nothing created. |
+| GET | `/org/me` | `{user:{id, phone, display_name, locale}, memberships:[{organizer_id, organizer_name, role}]}`, no `X-Organizer-Id` (feeds the organizer switcher) |
 | GET, POST | `/org/venues` | `{name, city?, capacity}` → `{id, name, city, capacity}` |
 | GET, PATCH | `/org/venues/{id}` | GET returns `zones[]` and `gates[]` (each gate with `zone_ids[]`) |
 | POST | `/org/venues/{id}/zones` | `{code, name, capacity, seated?}` → `{id, code, name, capacity, seated}` (`id` is an int) |
