@@ -1,0 +1,38 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Java / Gradle
+build/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+out/
+
+# Node
+node_modules/
+dist/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec_overrides.yaml
+
+# Claude Code local settings
+.claude/settings.local.json
+graphify-out/

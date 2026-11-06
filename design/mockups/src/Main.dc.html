@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Accueil — prochain match</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+body{margin:0;background:#0B0F1A}
+a{color:#F5B700}a:hover{color:#FFD24D}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0B0F1A; color: #FFFFFF; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden; position: relative">
+
+  <!-- top bar -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 56px 20px 12px 20px">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="width: 36px; height: 36px; border-radius: 18px; background: {{accent}}; color: #0B0F1A; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 20px">A</div>
+      <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 22px; letter-spacing: 0.5px">{{club}}</div>
+    </div>
+    <button aria-label="Notifications" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #2A3247; background: #141A2B; display: flex; align-items: center; justify-content: center; padding: 0">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0v4l2 3H4l2-3z"></path><path d="M10 19a2 2 0 0 0 4 0"></path></svg>
+    </button>
+  </div>
+
+  <!-- hero: next match -->
+  <div style="margin: 8px 20px 0 20px; border-radius: 24px; background: #141A2B; border: 1px solid #2A3247; padding: 20px; display: flex; flex-direction: column; gap: 14px; position: relative; overflow: hidden">
+    <div style="position: absolute; right: -40px; top: -40px; width: 180px; height: 180px; border-radius: 90px; background: {{accent}}; opacity: 0.12"></div>
+    <div style="font-size: 12px; font-weight: 600; letter-spacing: 1.5px; color: {{accent}}">PROCHAIN MATCH · DOMICILE</div>
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 110px">
+        <div style="width: 64px; height: 64px; border-radius: 32px; background: {{accent}}; color: #0B0F1A; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 30px">A</div>
+        <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 18px">{{club}}</div>
+      </div>
+      <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 40px; color: #9AA3B8">VS</div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 110px">
+        <div style="width: 64px; height: 64px; border-radius: 32px; background: #FFFFFF; color: #0B0F1A; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 30px">R</div>
+        <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 18px">RAPID OUED</div>
+      </div>
+    </div>
+    <div style="text-align: center; font-size: 14px; color: #C7CDDB">Sam. 14 nov. · 20:00 · Stade de l'Atlas</div>
+    <div style="display: flex; justify-content: center; gap: 8px">
+      <div style="min-width: 64px; padding: 8px 10px; border-radius: 12px; background: #0B0F1A; text-align: center"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 26px; line-height: 1">08</div><div style="font-size: 11px; color: #9AA3B8; letter-spacing: 1px">JOURS</div></div>
+      <div style="min-width: 64px; padding: 8px 10px; border-radius: 12px; background: #0B0F1A; text-align: center"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 26px; line-height: 1">14</div><div style="font-size: 11px; color: #9AA3B8; letter-spacing: 1px">HEURES</div></div>
+      <div style="min-width: 64px; padding: 8px 10px; border-radius: 12px; background: #0B0F1A; text-align: center"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 26px; line-height: 1">22</div><div style="font-size: 11px; color: #9AA3B8; letter-spacing: 1px">MIN</div></div>
+    </div>
+    <a href="Match.dc.html" style="display: flex; align-items: center; justify-content: center; height: 52px; border-radius: 16px; background: {{accent}}; color: #0B0F1A; font-weight: 600; font-size: 16px; text-decoration: none">Prendre mes places · dès 50 DH</a>
+  </div>
+
+  <!-- my ticket strip -->
+  <a href="Ticket.dc.html" style="margin: 14px 20px 0 20px; display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 18px; background: #16331F; border: 1px solid #2E6B3F; text-decoration: none; color: #FFFFFF">
+    <div style="width: 40px; height: 40px; border-radius: 12px; background: #2E6B3F; display: flex; align-items: center; justify-content: center">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"></path><path d="M10 6v12"></path></svg>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px; flex-grow: 1">
+      <div style="font-weight: 600; font-size: 15px">Mon billet · Coupe, mer. 9 nov.</div>
+      <div style="font-size: 13px; color: #9FD4AE">Tribune Nord · Porte 4 · ouvre dans 3 jours</div>
+    </div>
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9FD4AE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+  </a>
+
+  <!-- fixtures -->
+  <div style="margin: 20px 20px 0 20px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1">
+    <div style="display: flex; align-items: baseline; justify-content: space-between">
+      <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 22px">Calendrier</div>
+      <a href="#" style="font-size: 13px; text-decoration: none">Tout voir</a>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #141A2B; border: 1px solid #2A3247">
+      <div style="width: 48px; text-align: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; line-height: 1"><div style="font-size: 22px">22</div><div style="font-size: 12px; color: #9AA3B8">NOV</div></div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-weight: 600; font-size: 15px">Union Tanger · Extérieur</div><div style="font-size: 13px; color: #9AA3B8">Championnat · 18:00</div></div>
+      <div style="font-size: 12px; color: #9AA3B8">Bientôt</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #141A2B; border: 1px solid #2A3247">
+      <div style="width: 48px; text-align: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; line-height: 1"><div style="font-size: 22px">29</div><div style="font-size: 12px; color: #9AA3B8">NOV</div></div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-weight: 600; font-size: 15px">Étoile de Fès · Domicile</div><div style="font-size: 13px; color: #9AA3B8">Championnat · 20:00</div></div>
+      <div style="padding: 6px 10px; border-radius: 10px; background: #0B0F1A; color: {{accent}}; font-weight: 600; font-size: 12px">dès 50 DH</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #141A2B; border: 1px solid #2A3247">
+      <div style="width: 48px; text-align: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; line-height: 1"><div style="font-size: 22px">06</div><div style="font-size: 12px; color: #9AA3B8">DÉC</div></div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px"><div style="font-weight: 600; font-size: 15px">Derby · Domicile</div><div style="font-size: 13px; color: #9AA3B8">Championnat · 19:00 · abonnés en priorité</div></div>
+      <div style="padding: 6px 10px; border-radius: 10px; background: #0B0F1A; color: #9AA3B8; font-weight: 600; font-size: 12px">File d'attente</div>
+    </div>
+  </div>
+
+  <!-- bottom nav -->
+  <nav aria-label="Navigation" style="display: flex; justify-content: space-around; align-items: center; height: 84px; padding-bottom: 14px; border-top: 1px solid #2A3247; background: #0B0F1A">
+    <a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; min-height: 44px; justify-content: center; text-decoration: none; color: {{accent}}; font-size: 11px; font-weight: 600"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+    <a href="Ticket.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; min-height: 44px; justify-content: center; text-decoration: none; color: #9AA3B8; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"></path></svg>Billets</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; min-height: 44px; justify-content: center; text-decoration: none; color: #9AA3B8; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"></path></svg>Club</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; min-height: 44px; justify-content: center; text-decoration: none; color: #9AA3B8; font-size: 11px; font-weight: 500"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>Profil</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F5B700","options":["#F5B700","#E63946","#2BB673","#3A86FF"]},"club":{"editor":"text","default":"ATLAS FC"},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#F5B700', club: this.props.club ?? 'ATLAS FC' };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-05T23:55:00Z"
+  },
+  "title": "Jomhor — screen mockups",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "1 · Accueil",
+      "radius": 40
+    },
+    "Match.dc.html": {
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "2 · Match",
+      "radius": 40
+    },
+    "Zones.dc.html": {
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "3 · Choix de zone",
+      "radius": 40,
+      "is_interactive": true
+    },
+    "Checkout.dc.html": {
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "4 · Paiement",
+      "radius": 40,
+      "is_interactive": true
+    },
+    "Ticket.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "5 · Mon billet",
+      "radius": 40
+    },
+    "Scanner.dc.html": {
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "6 · Scanner (porte)",
+      "radius": 40
+    },
+    "ShopEvent.dc.html": {
+      "x": 0,
+      "y": 1300,
+      "w": 1280,
+      "h": 900,
+      "title": "Web shop · page événement (Next.js, SSR)",
+      "expand": "fill"
+    },
+    "ShopOrderStatus.dc.html": {
+      "x": 1360,
+      "y": 1300,
+      "w": 1280,
+      "h": 820,
+      "title": "Web shop · commande · code cash",
+      "expand": "fill"
+    },
+    "BoLive.dc.html": {
+      "x": 0,
+      "y": 2560,
+      "w": 1280,
+      "h": 820,
+      "title": "Back-office · portes en direct (shadcn)",
+      "expand": "fill"
+    },
+    "BoEvent.dc.html": {
+      "x": 1360,
+      "y": 2560,
+      "w": 1280,
+      "h": 1040,
+      "title": "Back-office · configuration événement (shadcn)",
+      "expand": "fill"
+    },
+    "Logo.dc.html": {
+      "x": 0,
+      "y": -1300,
+      "w": 1280,
+      "h": 760,
+      "title": "Logo · identité Jomhor",
+      "radius": 24
+    }
+  },
+  "order": [
+    "Logo.dc.html",
+    "Main.dc.html",
+    "Match.dc.html",
+    "Zones.dc.html",
+    "Checkout.dc.html",
+    "Ticket.dc.html",
+    "Scanner.dc.html",
+    "ShopEvent.dc.html",
+    "ShopOrderStatus.dc.html",
+    "BoLive.dc.html",
+    "BoEvent.dc.html"
+  ],
+  "notes": {
+    "flow": {
+      "x": 0,
+      "y": -300,
+      "text": "Fan app · parcours billet — accueil → match → zone → paiement → billet · + écran scanner porte",
+      "kind": "title1",
+      "maxW": 2740
+    },
+    "ident": {
+      "x": 2820,
+      "y": 0,
+      "w": 300,
+      "text": "Identité club = placeholder (ATLAS FC, ambre sur bleu nuit). Couleur d'accent et nom modifiables via Tweaks sur chaque écran. Remplacer par les couleurs et l'écusson du club réel.",
+      "fill": "orange"
+    },
+    "shop": {
+      "x": 0,
+      "y": 1000,
+      "text": "Web shop (Next.js, SSR) — pages publiques, même identité que l'app, SEO + liens partageables",
+      "kind": "title1",
+      "maxW": 2640
+    },
+    "bo": {
+      "x": 0,
+      "y": 2260,
+      "text": "Back-office organisateur (React + shadcn/ui) — outil interne, thème clair neutre",
+      "kind": "title1",
+      "maxW": 2640
+    },
+    "logo": {
+      "x": 0,
+      "y": -1600,
+      "text": "Identité Jomhor — marque 12 points, wordmark, déclinaisons",
+      "kind": "title1",
+      "maxW": 1280
+    }
+  },
+  "designSystems": []
+}

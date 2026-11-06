@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Web shop — page événement</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+body{margin:0;background:#0B0F1A}
+a{color:#F5B700}a:hover{color:#FFD24D}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #0B0F1A; color: #FFFFFF; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <!-- site header -->
+  <header style="border-bottom: 1px solid #2A3247; background: #0B0F1A">
+    <div style="max-width: 1180px; margin: 0 auto; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+      <div style="display: flex; align-items: center; gap: 12px">
+        <div style="width: 32px; height: 32px; border-radius: 16px; background: {{accent}}; color: #0B0F1A; display: flex; align-items: center; justify-content: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 18px">A</div>
+        <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 20px; letter-spacing: 0.5px">{{club}} · Billetterie</div>
+      </div>
+      <nav aria-label="Principale" style="display: flex; gap: 24px; font-size: 14px; flex-wrap: wrap">
+        <a href="#" style="color: #FFFFFF; text-decoration: none; font-weight: 600">Matchs</a>
+        <a href="#" style="color: #9AA3B8; text-decoration: none">Abonnements</a>
+        <a href="#" style="color: #9AA3B8; text-decoration: none">Mes billets</a>
+        <a href="#" style="color: #9AA3B8; text-decoration: none">Aide</a>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 10px">
+        <div style="font-size: 12px; color: #9AA3B8">FR · AR · EN</div>
+        <a href="#" style="display: flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 12px; border: 1px solid #2A3247; color: #FFFFFF; text-decoration: none; font-size: 14px; font-weight: 500">Se connecter</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- hero -->
+  <section style="background: #141A2B; border-bottom: 1px solid #2A3247; position: relative; overflow: hidden">
+    <div style="position: absolute; right: -120px; top: -160px; width: 480px; height: 480px; border-radius: 240px; background: {{accent}}; opacity: 0.10"></div>
+    <div style="max-width: 1180px; margin: 0 auto; padding: 40px 24px; display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-end; justify-content: space-between; position: relative">
+      <div style="display: flex; flex-direction: column; gap: 12px; flex: 1 1 520px; min-width: 0">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 1.5px; color: {{accent}}">CHAMPIONNAT · JOURNÉE 11 · DOMICILE</div>
+        <h1 style="margin: 0; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 64px; line-height: 0.95; text-transform: uppercase">{{club}} vs Rapid Oued</h1>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px">
+          <div style="padding: 8px 12px; border-radius: 12px; background: #0B0F1A; font-size: 14px">Sam. 14 nov. 2026 · 20:00</div>
+          <div style="padding: 8px 12px; border-radius: 12px; background: #0B0F1A; font-size: 14px">Stade de l'Atlas · Portes 18:30</div>
+          <div style="padding: 8px 12px; border-radius: 12px; background: #16331F; border: 1px solid #2E6B3F; color: #9FD4AE; font-size: 14px">Vente ouverte · 4 billets max par compte</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px">
+        <div style="min-width: 72px; padding: 10px 12px; border-radius: 12px; background: #0B0F1A; text-align: center"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 32px; line-height: 1">08</div><div style="font-size: 11px; color: #9AA3B8; letter-spacing: 1px">JOURS</div></div>
+        <div style="min-width: 72px; padding: 10px 12px; border-radius: 12px; background: #0B0F1A; text-align: center"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 32px; line-height: 1">14</div><div style="font-size: 11px; color: #9AA3B8; letter-spacing: 1px">HEURES</div></div>
+        <div style="min-width: 72px; padding: 10px 12px; border-radius: 12px; background: #0B0F1A; text-align: center"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 32px; line-height: 1">22</div><div style="font-size: 11px; color: #9AA3B8; letter-spacing: 1px">MIN</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- body: zones + summary -->
+  <main style="max-width: 1180px; margin: 0 auto; padding: 32px 24px 48px 24px; width: 100%; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start">
+    <section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <h2 style="margin: 0; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 28px">Choisissez votre zone</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <button style="text-align: left; padding: 18px; border-radius: 18px; background: #141A2B; border: 2px solid {{accent}}; color: #FFFFFF; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 10px"><div style="width: 10px; height: 28px; border-radius: 5px; background: {{accent}}"></div><div style="font-weight: 600; font-size: 16px">Tribune Nord</div></div>
+          <div style="font-size: 13px; color: #9AA3B8">Virage · debout · ambiance</div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 28px">50 DH</div><div style="font-size: 12px; color: #9FD4AE">2 300 restants</div></div>
+        </button>
+        <button style="text-align: left; padding: 18px; border-radius: 18px; background: #141A2B; border: 2px solid #2A3247; color: #FFFFFF; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 10px"><div style="width: 10px; height: 28px; border-radius: 5px; background: #3A86FF"></div><div style="font-weight: 600; font-size: 16px">Latérale Est</div></div>
+          <div style="font-size: 13px; color: #9AA3B8">Assis · places numérotées</div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 28px">120 DH</div><div style="font-size: 12px; color: #9FD4AE">860 restants</div></div>
+        </button>
+        <button style="text-align: left; padding: 18px; border-radius: 18px; background: #141A2B; border: 2px solid #2A3247; color: #FFFFFF; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 10px"><div style="width: 10px; height: 28px; border-radius: 5px; background: #B07CFF"></div><div style="font-weight: 600; font-size: 16px">Tribune d'honneur</div></div>
+          <div style="font-size: 13px; color: #9AA3B8">Assis · couvert · accès rapide</div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 28px">300 DH</div><div style="font-size: 12px; color: #F5A3A3">Dernières places</div></div>
+        </button>
+        <button disabled style="text-align: left; padding: 18px; border-radius: 18px; background: #141A2B; border: 2px solid #2A3247; color: #6B7488; font-family: Inter, sans-serif; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; align-items: center; gap: 10px"><div style="width: 10px; height: 28px; border-radius: 5px; background: #4A5370"></div><div style="font-weight: 600; font-size: 16px">Tribune Sud</div></div>
+          <div style="font-size: 13px">Réservée aux supporters visiteurs</div>
+          <div style="font-size: 14px; font-weight: 600">Complet</div>
+        </button>
+      </div>
+      <div style="padding: 16px 18px; border-radius: 16px; background: #141A2B; border: 1px solid #2A3247; display: flex; flex-wrap: wrap; gap: 16px 32px; font-size: 13px; color: #C7CDDB">
+        <div><strong style="color: #FFFFFF">Paiement</strong> · carte bancaire, cash en agence (Wafacash, Cash Plus), wallet mobile</div>
+        <div><strong style="color: #FFFFFF">Billets</strong> · nominatifs, dans l'app Jomhor, en PDF et sur WhatsApp</div>
+        <div><strong style="color: #FFFFFF">Accès</strong> · QR scanné à la porte, aucune impression obligatoire</div>
+      </div>
+    </section>
+
+    <aside style="flex: 1 1 320px; max-width: 380px; position: sticky; top: 24px; display: flex; flex-direction: column; gap: 14px; padding: 20px; border-radius: 24px; background: #141A2B; border: 1px solid #2A3247">
+      <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 22px">Votre commande</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px">
+        <div>Tribune Nord</div>
+        <div style="display: flex; align-items: center; gap: 10px">
+          <button aria-label="Moins" style="width: 36px; height: 36px; border-radius: 18px; border: 1px solid #2A3247; background: #0B0F1A; color: #FFFFFF; font-size: 18px; padding: 0">−</button>
+          <div style="width: 20px; text-align: center; font-weight: 600">2</div>
+          <button aria-label="Plus" style="width: 36px; height: 36px; border-radius: 18px; border: 1px solid #2A3247; background: #0B0F1A; color: #FFFFFF; font-size: 18px; padding: 0">+</button>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 14px; color: #9AA3B8"><div>2 × 50 DH</div><div>100 DH</div></div>
+      <div style="display: flex; justify-content: space-between; font-size: 14px; color: #9AA3B8"><div>Frais de service</div><div>0 DH</div></div>
+      <div style="height: 1px; background: #2A3247"></div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline"><div style="font-weight: 600">Total</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 30px">100 DH</div></div>
+      <a href="ShopOrderStatus.dc.html" style="display: flex; align-items: center; justify-content: center; height: 54px; border-radius: 16px; background: {{accent}}; color: #0B0F1A; font-weight: 600; font-size: 16px; text-decoration: none">Continuer</a>
+      <div style="font-size: 12px; color: #9AA3B8; text-align: center">Places réservées 8 minutes après cette étape</div>
+    </aside>
+  </main>
+
+  <footer style="margin-top: auto; border-top: 1px solid #2A3247">
+    <div style="max-width: 1180px; margin: 0 auto; padding: 20px 24px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; font-size: 12px; color: #9AA3B8">
+      <div>Propulsé par Jomhor · جمهور</div>
+      <div style="display: flex; gap: 16px"><a href="#" style="color: #9AA3B8; text-decoration: none">CGV</a><a href="#" style="color: #9AA3B8; text-decoration: none">Confidentialité</a><a href="#" style="color: #9AA3B8; text-decoration: none">Contact</a></div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F5B700","options":["#F5B700","#E63946","#2BB673","#3A86FF"]},"club":{"editor":"text","default":"ATLAS FC"},"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#F5B700', club: this.props.club ?? 'ATLAS FC' };
+  }
+}
+</script>
+</body>
+</html>

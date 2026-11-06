@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Choix de zone et quantité</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+body{margin:0;background:#0B0F1A}
+a{color:#F5B700}a:hover{color:#FFD24D}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0B0F1A; color: #FFFFFF; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <!-- header -->
+  <div style="display: flex; align-items: center; gap: 12px; padding: 52px 20px 12px 20px">
+    <a href="Match.dc.html" aria-label="Retour" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #2A3247; background: #141A2B; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg></a>
+    <div style="display: flex; flex-direction: column"><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 22px; line-height: 1">Choisir ma zone</div><div style="font-size: 12px; color: #9AA3B8">Atlas FC vs Rapid Oued · sam. 14 nov.</div></div>
+  </div>
+
+  <!-- stadium map -->
+  <div style="margin: 6px 20px 0 20px; height: 300px; border-radius: 24px; background: #141A2B; border: 1px solid #2A3247; position: relative; overflow: hidden">
+    <div style="position: absolute; left: 20px; top: 12px; font-size: 11px; letter-spacing: 1.5px; color: #9AA3B8; font-weight: 600">PLAN DU STADE · TOUCHEZ UNE ZONE</div>
+    <!-- pitch -->
+    <div style="position: absolute; left: 115px; top: 110px; width: 120px; height: 80px; border-radius: 8px; background: #1E5B37; border: 2px solid #2E8B57; display: flex; align-items: center; justify-content: center"><div style="width: 0px; height: 76px; border-left: 2px solid #2E8B57"></div></div>
+    <!-- zones (buttons) -->
+    <button onClick="{{pickNord}}" style="position: absolute; left: 95px; top: 44px; width: 160px; height: 54px; border-radius: 14px 14px 6px 6px; background: {{nordBg}}; border: 2px solid {{nordBorder}}; color: #FFFFFF; font-family: Inter, sans-serif; font-weight: 600; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0">Tribune Nord<span style="font-size: 11px; font-weight: 500; color: #C7CDDB">50 DH</span></button>
+    <button onClick="{{pickEst}}" style="position: absolute; left: 248px; top: 92px; width: 60px; height: 116px; border-radius: 6px 14px 14px 6px; background: {{estBg}}; border: 2px solid {{estBorder}}; color: #FFFFFF; font-family: Inter, sans-serif; font-weight: 600; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0">Est<span style="font-size: 11px; font-weight: 500; color: #C7CDDB">120 DH</span></button>
+    <button onClick="{{pickHonneur}}" style="position: absolute; left: 42px; top: 92px; width: 60px; height: 116px; border-radius: 14px 6px 6px 14px; background: {{honneurBg}}; border: 2px solid {{honneurBorder}}; color: #FFFFFF; font-family: Inter, sans-serif; font-weight: 600; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0">Honneur<span style="font-size: 11px; font-weight: 500; color: #C7CDDB">300 DH</span></button>
+    <button disabled aria-label="Tribune Sud, complet" style="position: absolute; left: 95px; top: 202px; width: 160px; height: 54px; border-radius: 6px 6px 14px 14px; background: #1A2030; border: 2px solid #2A3247; color: #6B7488; font-family: Inter, sans-serif; font-weight: 600; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0">Tribune Sud<span style="font-size: 11px; font-weight: 500">Visiteurs · complet</span></button>
+    <!-- gates -->
+    <div style="position: absolute; left: 24px; bottom: 12px; font-size: 11px; color: #9AA3B8">Portes 1–2 · Honneur</div>
+    <div style="position: absolute; right: 24px; bottom: 12px; font-size: 11px; color: #9AA3B8">Portes 3–6 · Nord &amp; Est</div>
+  </div>
+
+  <!-- selection -->
+  <div style="margin: 14px 20px 0 20px; display: flex; flex-direction: column; gap: 12px; flex-grow: 1">
+    <div style="padding: 16px; border-radius: 18px; background: #141A2B; border: 1px solid #2A3247; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 12px; color: #9AA3B8">Zone choisie</div><div style="font-weight: 600; font-size: 17px">{{zoneName}}</div></div>
+        <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 24px">{{unitPrice}} DH</div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <div style="font-size: 14px; color: #C7CDDB">Billets · max 4</div>
+        <div style="display: flex; align-items: center; gap: 12px">
+          <button onClick="{{minus}}" aria-label="Moins" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #2A3247; background: #0B0F1A; color: #FFFFFF; font-size: 22px; padding: 0">−</button>
+          <div style="width: 28px; text-align: center; font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 28px">{{qty}}</div>
+          <button onClick="{{plus}}" aria-label="Plus" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #2A3247; background: #0B0F1A; color: #FFFFFF; font-size: 22px; padding: 0">+</button>
+        </div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: #9AA3B8">
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9AA3B8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"></circle><circle cx="17" cy="9" r="2.5"></circle><path d="M3 20a6 6 0 0 1 12 0M15 20a4 4 0 0 1 6-3.5"></path></svg>
+      Les places d'un même achat sont côte à côte. Chaque ami reçoit son propre QR.
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div style="padding: 12px 20px 30px 20px; border-top: 1px solid #2A3247; background: #0B0F1A; display: flex; align-items: center; gap: 12px">
+    <div style="display: flex; flex-direction: column"><div style="font-size: 12px; color: #9AA3B8">Total</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 26px; line-height: 1">{{total}} DH</div></div>
+    <a href="Checkout.dc.html" style="flex-grow: 1; display: flex; align-items: center; justify-content: center; height: 54px; border-radius: 16px; background: {{accent}}; color: #0B0F1A; font-weight: 600; font-size: 16px; text-decoration: none">Continuer</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F5B700","options":["#F5B700","#E63946","#2BB673","#3A86FF"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { zone: 'nord', qty: 2 };
+  }
+  renderVals() {
+    const accent = this.props.accent ?? '#F5B700';
+    const zones = {
+      nord: { name: 'Tribune Nord', price: 50 },
+      est: { name: 'Latérale Est', price: 120 },
+      honneur: { name: "Tribune d'honneur", price: 300 }
+    };
+    const z = this.state.zone;
+    const cur = zones[z];
+    const style = (key) => ({
+      bg: z === key ? accent : '#1A2030',
+      border: z === key ? accent : '#2A3247'
+    });
+    const n = style('nord'), e = style('est'), h = style('honneur');
+    return {
+      accent,
+      qty: this.state.qty,
+      zoneName: cur.name,
+      unitPrice: cur.price,
+      total: cur.price * this.state.qty,
+      nordBg: n.bg, nordBorder: n.border,
+      estBg: e.bg, estBorder: e.border,
+      honneurBg: h.bg, honneurBorder: h.border,
+      pickNord: () => this.setState({ zone: 'nord' }),
+      pickEst: () => this.setState({ zone: 'est' }),
+      pickHonneur: () => this.setState({ zone: 'honneur' }),
+      plus: () => this.setState({ qty: Math.min(4, this.state.qty + 1) }),
+      minus: () => this.setState({ qty: Math.max(1, this.state.qty - 1) })
+    };
+  }
+}
+</script>
+</body>
+</html>

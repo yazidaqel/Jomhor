@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Scanner porte — résultat</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600&display=swap">
+<style>
+body{margin:0;background:#0B0F1A}
+a{color:#F5B700}a:hover{color:#FFD24D}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #0F6B3A; color: #FFFFFF; font-family: Inter, system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden">
+
+  <!-- status bar of the device app -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 52px 20px 0 20px; font-size: 12px; font-weight: 600">
+    <div style="display: flex; align-items: center; gap: 8px"><div style="width: 8px; height: 8px; border-radius: 4px; background: #F5B700"></div>PORTE 4 · NORD · ENTRÉE</div>
+    <div style="display: flex; align-items: center; gap: 6px; opacity: 0.9"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15-6.7M21 12a9 9 0 0 1-15 6.7"></path><path d="M18 3v3h-3M6 21v-3h3"></path></svg>HORS LIGNE · 312 à synchroniser</div>
+  </div>
+
+  <!-- big result -->
+  <div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 0 24px">
+    <div style="width: 120px; height: 120px; border-radius: 60px; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#0F6B3A" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l4 4L19 6"></path></svg></div>
+    <div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 72px; line-height: 1; letter-spacing: 1px">VALIDE</div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; margin-top: 8px">
+      <div style="padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.14); display: flex; flex-direction: column; gap: 2px"><div style="font-size: 11px; letter-spacing: 1px; opacity: 0.8">ZONE</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 24px; line-height: 1">Tribune Nord</div></div>
+      <div style="padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.14); display: flex; flex-direction: column; gap: 2px"><div style="font-size: 11px; letter-spacing: 1px; opacity: 0.8">TITULAIRE</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 24px; line-height: 1">Y. A.</div></div>
+      <div style="padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.14); display: flex; flex-direction: column; gap: 2px"><div style="font-size: 11px; letter-spacing: 1px; opacity: 0.8">N° BILLET</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 24px; line-height: 1; letter-spacing: 1px">7F3A 91C2</div></div>
+      <div style="padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.14); display: flex; flex-direction: column; gap: 2px"><div style="font-size: 11px; letter-spacing: 1px; opacity: 0.8">TYPE</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 700; font-size: 24px; line-height: 1">App · QR tournant</div></div>
+    </div>
+    <div style="font-size: 13px; opacity: 0.85">Validé hors ligne en 84 ms · 19:12:40</div>
+  </div>
+
+  <!-- gate counters -->
+  <div style="margin: 0 20px; padding: 14px 16px; border-radius: 18px; background: rgba(0,0,0,0.25); display: flex; justify-content: space-between">
+    <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 11px; letter-spacing: 1px; opacity: 0.8">ENTRÉS ICI</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 30px; line-height: 1">1 284</div></div>
+    <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 11px; letter-spacing: 1px; opacity: 0.8">REFUSÉS</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 30px; line-height: 1">7</div></div>
+    <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 11px; letter-spacing: 1px; opacity: 0.8">CADENCE</div><div style="font-family: 'Barlow Condensed', Inter, sans-serif; font-weight: 800; font-size: 30px; line-height: 1">21 / min</div></div>
+  </div>
+
+  <!-- bottom bar -->
+  <div style="display: flex; gap: 10px; padding: 14px 20px 30px 20px">
+    <button style="flex-grow: 1; height: 56px; border-radius: 16px; border: 0; background: #FFFFFF; color: #0B0F1A; font-family: Inter, sans-serif; font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B0F1A" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"></path><path d="M4 12h16"></path></svg>Scanner le suivant</button>
+    <button aria-label="Saisie manuelle du numéro" style="width: 56px; height: 56px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.4); background: transparent; display: flex; align-items: center; justify-content: center; padding: 0"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"></rect><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"></path></svg></button>
+    <button aria-label="Superviseur" style="width: 56px; height: 56px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.4); background: transparent; display: flex; align-items: center; justify-content: center; padding: 0"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# Glossary
+
+| Code / term | FR (UI) | AR | Meaning |
+| --- | --- | --- | --- |
+| Jomhor | Jomhor | جمهور | Product name. Arabic/Darija: "the crowd", the fans — the 12th man |
+| organizer | organisateur | المنظم | Tenant: club, promoter, venue |
+| event | événement / match | الحدث / المباراة | One ticketed occurrence; `event_type` says what kind |
+| event_series | saison / édition | الموسم | Groups events; passes attach here |
+| zone | tribune / zone | المدرج | Sector of a venue; `zone_id` travels in the QR |
+| gate | porte | البوابة | Physical entrance; serves one or more zones |
+| pass | abonnement | الاشتراك | Season ticket, materialised as one ticket per event |
+| manifest | manifeste | — | Signed list of an event's tickets downloaded by scanners |
+| K_e | clé d'événement | — | Per-event HMAC key, delivered to enrolled scanners only |
+| K_t | clé de billet | — | Per-ticket key = HMAC(K_e, ticket_id), on the holder's phone |
+| T0 | coup d'envoi / début | البداية | `events.starts_at` |
+| used-set | — | — | Local set of (ticket_id, direction) already scanned |
+
+## Scan result codes
+
+| Code | Screen word (FR) | Colour | Meaning |
+| --- | --- | --- | --- |
+| OK | VALIDE | green | Admitted |
+| DUPLICATE | DÉJÀ UTILISÉ | red | Already entered (time + gate shown) |
+| DUPLICATE_LATE | — | — | Server-side relabel of a later OK for the same ticket |
+| BAD_SIG | NON VALIDE | red | HMAC mismatch |
+| BAD_FORMAT | ILLISIBLE | red | Not a Jomhor token |
+| UNKNOWN | INCONNU | red | Not in the manifest |
+| CANCELLED | ANNULÉ | red | Ticket cancelled / refunded |
+| BLOCKED | BLOQUÉ | red | Blocked by the organizer |
+| WRONG_ZONE | MAUVAISE PORTE | amber | Valid ticket, wrong gate; correct gates shown |
+| WRONG_EVENT | AUTRE ÉVÉNEMENT | red | Token for another event |
+| EXPIRED_SLOT | CODE EXPIRÉ | amber | Rotating QR outside ±1 slot; ask fan to refresh |
+| OVERRIDE | DÉROGATION | blue | Supervisor let the person in; reason logged |
+
+## Order statuses
+
+RESERVED (8 min hold) → PAID · AWAITING_CASH (cash code issued, 24 h) → PAID · EXPIRED ·
+CANCELLED · REFUNDED.

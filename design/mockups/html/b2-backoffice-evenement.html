@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Back-office — configuration d'un événement</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+body{margin:0;background:#F8FAFC}
+a{color:#0F172A}a:hover{color:#334155}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; background: #F8FAFC; color: #0F172A; font-family: Inter, system-ui, sans-serif; display: flex; flex-wrap: wrap">
+
+  <nav aria-label="Navigation" style="flex: 1 1 240px; max-width: 240px; background: #FFFFFF; border-right: 1px solid #E2E8F0; display: flex; flex-direction: column; gap: 4px; padding: 16px 12px; box-sizing: border-box">
+    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px 16px 10px">
+      <div style="width: 28px; height: 28px; border-radius: 8px; background: #0F172A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px">J</div>
+      <div style="font-weight: 700; font-size: 15px">Jomhor</div>
+    </div>
+    <div style="padding: 10px 10px; border-radius: 8px; border: 1px solid #E2E8F0; font-size: 13px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px"><span>ATLAS FC</span><span style="color: #64748B">⌄</span></div>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A; background: #F1F5F9; font-weight: 600">Événements</a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A">Ventes</a>
+    <a href="b4-backoffice-portes-direct.html" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A">Portes · en direct</a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A">Appareils</a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A">Accréditations</a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A">Finance</a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A">Fans · CRM</a>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; font-size: 14px; text-decoration: none; color: #0F172A">Paramètres</a>
+    <div style="margin-top: auto; padding: 10px; font-size: 12px; color: #64748B">Yazid A. · Admin</div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 24px 28px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <div style="font-size: 12px; color: #64748B"><a href="#" style="text-decoration: none; color: #64748B">Événements</a> / Nouvel événement</div>
+        <div style="display: flex; align-items: center; gap: 10px"><h1 style="margin: 0; font-size: 22px; font-weight: 700">ATLAS FC vs Rapid Oued</h1><span style="padding: 3px 8px; border-radius: 999px; background: #F1F5F9; color: #475569; font-size: 12px; font-weight: 600">Brouillon</span></div>
+      </div>
+      <div style="display: flex; gap: 10px">
+        <button style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #E2E8F0; background: #FFFFFF; color: #0F172A; font-family: Inter, sans-serif; font-size: 13px; font-weight: 500">Enregistrer le brouillon</button>
+        <button style="height: 36px; padding: 0 12px; border-radius: 8px; border: 0; background: #0F172A; color: #FFFFFF; font-family: Inter, sans-serif; font-size: 13px; font-weight: 600">Publier · ouvrir la vente</button>
+      </div>
+    </div>
+
+    <!-- tabs -->
+    <div style="display: flex; gap: 4px; border-bottom: 1px solid #E2E8F0; font-size: 13px">
+      <a href="#" style="padding: 10px 12px; text-decoration: none; color: #0F172A; font-weight: 600; border-bottom: 2px solid #0F172A">Général</a>
+      <a href="#" style="padding: 10px 12px; text-decoration: none; color: #64748B">Tarifs &amp; quotas</a>
+      <a href="#" style="padding: 10px 12px; text-decoration: none; color: #64748B">Portes &amp; zones</a>
+      <a href="#" style="padding: 10px 12px; text-decoration: none; color: #64748B">Appareils</a>
+      <a href="#" style="padding: 10px 12px; text-decoration: none; color: #64748B">Règles</a>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+      <!-- general form -->
+      <section style="flex: 999 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+        <div style="padding: 20px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E2E8F0; display: flex; flex-direction: column; gap: 14px">
+          <div style="font-weight: 600; font-size: 14px">Général</div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500">Type d'événement<select style="height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; background: #FFFFFF; color: #0F172A"><option>Match de football</option><option>Concert</option><option>Journée de festival</option><option>Conférence</option><option>Autre</option></select></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500">Série<select style="height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; background: #FFFFFF; color: #0F172A"><option>Saison 2026-27</option></select></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; grid-column: span 2">Titre<input value="Atlas FC vs Rapid Oued" style="height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; color: #0F172A"></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500">Début (T0)<input value="14/11/2026 20:00" style="height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; color: #0F172A"></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500">Ouverture des portes<input value="14/11/2026 18:30" style="height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; color: #0F172A"></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500">Lieu<select style="height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; background: #FFFFFF; color: #0F172A"><option>Stade de l'Atlas · 45 000</option></select></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500">Billets max par compte<input value="4" style="height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; color: #0F172A"></label>
+          </div>
+          <div style="padding: 12px 14px; border-radius: 8px; background: #F8FAFC; border: 1px solid #E2E8F0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 500; color: #475569">Adversaire (métadonnée)<input value="Rapid Oued" style="height: 34px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; color: #0F172A"></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 500; color: #475569">Compétition<input value="Championnat" style="height: 34px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; color: #0F172A"></label>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 500; color: #475569">Journée<input value="11" style="height: 34px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 10px; font-family: Inter, sans-serif; font-size: 13px; color: #0F172A"></label>
+          </div>
+        </div>
+
+        <div style="padding: 20px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E2E8F0; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; justify-content: space-between; align-items: center"><div style="font-weight: 600; font-size: 14px">Tarifs &amp; quotas par zone</div><button style="height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid #E2E8F0; background: #FFFFFF; color: #0F172A; font-family: Inter, sans-serif; font-size: 12px; font-weight: 500">+ Catégorie</button></div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px">
+            <thead><tr style="color: #64748B; text-align: left"><th style="padding: 8px 10px; font-weight: 500">Zone</th><th style="padding: 8px 10px; font-weight: 500">Catégorie</th><th style="padding: 8px 10px; font-weight: 500; text-align: right">Prix (DH)</th><th style="padding: 8px 10px; font-weight: 500; text-align: right">Quota</th><th style="padding: 8px 10px; font-weight: 500; text-align: right">Capacité zone</th></tr></thead>
+            <tbody>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 8px 10px; font-weight: 600">Tribune Nord</td><td style="padding: 8px 10px">Plein tarif</td><td style="padding: 8px 10px; text-align: right"><input value="50" style="width: 72px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right"><input value="18 000" style="width: 88px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right; color: #64748B">20 000</td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 8px 10px; font-weight: 600">Tribune Nord</td><td style="padding: 8px 10px">Abonnés</td><td style="padding: 8px 10px; text-align: right"><input value="0" style="width: 72px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right"><input value="2 000" style="width: 88px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right; color: #64748B"></td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 8px 10px; font-weight: 600">Latérale Est</td><td style="padding: 8px 10px">Plein tarif</td><td style="padding: 8px 10px; text-align: right"><input value="120" style="width: 72px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right"><input value="12 000" style="width: 88px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right; color: #64748B">12 000</td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 8px 10px; font-weight: 600">Tribune d'honneur</td><td style="padding: 8px 10px">Plein tarif</td><td style="padding: 8px 10px; text-align: right"><input value="300" style="width: 72px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right"><input value="2 600" style="width: 88px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right; color: #64748B">3 000</td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 8px 10px; font-weight: 600">Tribune Sud</td><td style="padding: 8px 10px">Visiteurs (hors vente)</td><td style="padding: 8px 10px; text-align: right; color: #64748B">—</td><td style="padding: 8px 10px; text-align: right"><input value="5 000" style="width: 88px; height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; text-align: right; font-family: Inter, sans-serif; font-size: 13px"></td><td style="padding: 8px 10px; text-align: right; color: #64748B">10 000</td></tr>
+            </tbody>
+          </table>
+          <div style="font-size: 12px; color: #64748B">Total mis en vente : 39 600 sur 45 000. Les quotas abonnés sont consommés automatiquement par les abonnements actifs de la série.</div>
+        </div>
+      </section>
+
+      <!-- right column: rules + gates -->
+      <aside style="flex: 1 1 300px; max-width: 360px; display: flex; flex-direction: column; gap: 16px">
+        <div style="padding: 20px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E2E8F0; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-weight: 600; font-size: 14px">Règles</div>
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">Billets nominatifs<input type="checkbox" checked></label>
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">Ré-entrée<select style="height: 32px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 0 8px; font-family: Inter, sans-serif; font-size: 13px; background: #FFFFFF; color: #0F172A"><option>Aucune</option><option>Une sortie</option></select></label>
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">Gel des remboursements<span style="color: #64748B">T0 − 60 min</span></label>
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">File d'attente à l'ouverture<input type="checkbox" checked></label>
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px">Cash en agence<input type="checkbox" checked></label>
+        </div>
+        <div style="padding: 20px; border-radius: 10px; background: #FFFFFF; border: 1px solid #E2E8F0; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-weight: 600; font-size: 14px">Portes → zones</div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center">
+            <thead><tr style="color: #64748B"><th style="padding: 6px; font-weight: 500; text-align: left">Porte</th><th style="padding: 6px; font-weight: 500">Nord</th><th style="padding: 6px; font-weight: 500">Est</th><th style="padding: 6px; font-weight: 500">Honn.</th><th style="padding: 6px; font-weight: 500">Sud</th></tr></thead>
+            <tbody>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 6px; text-align: left; font-weight: 600">P1</td><td><input type="checkbox" aria-label="P1 Nord"></td><td><input type="checkbox" aria-label="P1 Est"></td><td><input type="checkbox" checked aria-label="P1 Honneur"></td><td><input type="checkbox" aria-label="P1 Sud"></td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 6px; text-align: left; font-weight: 600">P2</td><td><input type="checkbox" aria-label="P2 Nord"></td><td><input type="checkbox" aria-label="P2 Est"></td><td><input type="checkbox" checked aria-label="P2 Honneur"></td><td><input type="checkbox" aria-label="P2 Sud"></td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 6px; text-align: left; font-weight: 600">P3</td><td><input type="checkbox" checked aria-label="P3 Nord"></td><td><input type="checkbox" checked aria-label="P3 Est"></td><td><input type="checkbox" aria-label="P3 Honneur"></td><td><input type="checkbox" aria-label="P3 Sud"></td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 6px; text-align: left; font-weight: 600">P4</td><td><input type="checkbox" checked aria-label="P4 Nord"></td><td><input type="checkbox" aria-label="P4 Est"></td><td><input type="checkbox" aria-label="P4 Honneur"></td><td><input type="checkbox" aria-label="P4 Sud"></td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 6px; text-align: left; font-weight: 600">P5</td><td><input type="checkbox" checked aria-label="P5 Nord"></td><td><input type="checkbox" checked aria-label="P5 Est"></td><td><input type="checkbox" aria-label="P5 Honneur"></td><td><input type="checkbox" aria-label="P5 Sud"></td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 6px; text-align: left; font-weight: 600">P6</td><td><input type="checkbox" aria-label="P6 Nord"></td><td><input type="checkbox" checked aria-label="P6 Est"></td><td><input type="checkbox" aria-label="P6 Honneur"></td><td><input type="checkbox" aria-label="P6 Sud"></td></tr>
+              <tr style="border-top: 1px solid #E2E8F0"><td style="padding: 6px; text-align: left; font-weight: 600">P7</td><td><input type="checkbox" aria-label="P7 Nord"></td><td><input type="checkbox" aria-label="P7 Est"></td><td><input type="checkbox" aria-label="P7 Honneur"></td><td><input type="checkbox" checked aria-label="P7 Sud"></td></tr>
+            </tbody>
+          </table>
+          <div style="font-size: 12px; color: #64748B">Repris du lieu ; modifiable par événement.</div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</body>
+</html>
