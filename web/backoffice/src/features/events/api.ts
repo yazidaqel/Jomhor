@@ -3,25 +3,28 @@ import { z } from 'zod'
 import { useOrgMutation, useOrgQuery, type Request } from '@/features/auth/organizer'
 import { path } from '@/lib/api'
 import { integerInput } from '@/lib/forms'
-import { utcToWall, wallToUtc } from './time'
+import { utcToWall, wallToUtc } from '@/lib/time'
 
 // docs/04-api.md §Organizer /org/events*, §Event metadata.
 export const EVENT_TYPES = ['FOOTBALL_MATCH', 'CONCERT', 'FESTIVAL_DAY', 'CONFERENCE', 'OTHER'] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 export type EventStatus = 'DRAFT' | 'ON_SALE' | 'GATES_OPEN' | 'CLOSED'
+// Event ids are integers (the 4-byte event_id of the QR); route params and query keys use their string form.
 export type EventSummary = {
-  id: string
+  id: number
   title: string
   event_type: EventType
   starts_at: string
   status: EventStatus
-  venue: { id: string; name: string }
+  venue: { id: string; name: string; timezone: string }
   quota: number
   sold: number
 }
 export type EventDetail = {
-  id: string
+  id: number
   venue_id: string
+  /** The venue's IANA zone: every wall time of this event is in it. */
+  timezone: string
   series_id: string | null
   event_type: EventType
   title: string
@@ -35,10 +38,14 @@ export type EventDetail = {
   created_at: string
 }
 
+export const REENTRY_POLICIES = ['NONE', 'ONE_EXIT'] as const
+export type Price = { id: string; zone_id: number; name: string; price_mad: number; quota: number; sold: number }
+
 export const useEvents = () => useOrgQuery<EventSummary[]>(['events'], '/org/events')
 export const useEvent = (id: string) => useOrgQuery<EventDetail>(['events', id], path('org', 'events', id))
-/** Event write: refetches this organizer's event list and details only. */
-export const useEventMutation = () => useOrgMutation(['events'], (r: Request, send) => send<EventDetail>(r))
+export const usePrices = (eventId: string) => useOrgQuery<Price[]>(['events', eventId, 'prices'], path('org', 'events', eventId, 'prices'))
+/** Event write (event, prices, publish): refetches this organizer's event list, details and prices only. */
+export const useEventMutation = <R = EventDetail>() => useOrgMutation(['events'], (r: Request, send) => send<R>(r))
 
 /** PATCH is refused outside these (EVENT_NOT_EDITABLE). */
 export const EDITABLE: readonly EventStatus[] = ['DRAFT', 'ON_SALE']
@@ -54,7 +61,7 @@ export const METADATA_KEYS = {
 type MetadataKey = 'opponent' | 'competition' | 'matchday' | 'headliner'
 
 // Form fields carry the API names (`metadata.matchday` included) so VALIDATION_FAILED keys map 1:1.
-const WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/ // datetime-local value, Casablanca wall time
+const WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/ // datetime-local value, wall time in the venue's zone
 
 export function eventSchema(t: TFunction, doorsRequired: boolean) {
   const text = z.string().trim()
@@ -68,6 +75,7 @@ export function eventSchema(t: TFunction, doorsRequired: boolean) {
         .refine((s) => (s === '' ? !doorsRequired : WALL.test(s)), t(doorsRequired ? 'events.form.doorsRequired' : 'events.form.dateInvalid')),
       venue_id: z.string().min(1, t('events.form.venueRequired')),
       per_account_limit: integerInput(t('events.form.limitInvalid'), 1, 20),
+      reentry_policy: z.enum(REENTRY_POLICIES),
       // Raw text for every type's fields; only the current type's are checked (below) and sent (toBody). The others
       // may hold a hidden value from a type picked before, or a stored key that is free for this type.
       metadata: z.object({ opponent: z.string(), competition: z.string(), headliner: z.string(), matchday: z.string() }),
@@ -80,7 +88,9 @@ export function eventSchema(t: TFunction, doorsRequired: boolean) {
         return v.event_type === 'FOOTBALL_MATCH' && typeof v.metadata?.matchday === 'string'
       },
     })
-    .refine((v) => !v.doors_open_at || Date.parse(wallToUtc(v.doors_open_at)) <= Date.parse(wallToUtc(v.starts_at)), {
+    // Both are wall times in the venue's zone, so their text order is their time order.
+    // ponytail: except inside the hour repeated when clocks go back; compare instants if that ever matters.
+    .refine((v) => !v.doors_open_at || v.doors_open_at.slice(0, 16) <= v.starts_at.slice(0, 16), {
       message: t('events.form.doorsAfterStart'),
       path: ['doors_open_at'],
       // Also when other fields are invalid, so every error shows at once; only needs both times to be valid.
@@ -103,24 +113,26 @@ export const emptyForm = (): EventForm => ({
   doors_open_at: '',
   venue_id: '',
   per_account_limit: '4',
+  reentry_policy: 'NONE',
   metadata: { opponent: '', competition: '', headliner: '', matchday: '' },
 })
 
 export const toForm = (e: EventDetail): EventForm => ({
   event_type: e.event_type,
   title: e.title,
-  starts_at: utcToWall(e.starts_at),
-  doors_open_at: e.doors_open_at ? utcToWall(e.doors_open_at) : '',
+  starts_at: utcToWall(e.starts_at, e.timezone),
+  doors_open_at: e.doors_open_at ? utcToWall(e.doors_open_at, e.timezone) : '',
   venue_id: e.venue_id,
   per_account_limit: String(e.per_account_limit),
+  reentry_policy: e.reentry_policy,
   metadata: { opponent: str(e.metadata.opponent), competition: str(e.metadata.competition), headliner: str(e.metadata.headliner), matchday: str(e.metadata.matchday) },
 })
 
 /**
- * The full API body for these values. Metadata holds the type's known keys that are filled in (empty ones are left
+ * The full API body for these values, wall times read in `zone`. Metadata holds the type's known keys that are filled in (empty ones are left
  * out: a known key sent as null fails) plus every other key of `existing`, since a PATCH replaces the whole object.
  */
-function toBody(v: EventValues, existing: Record<string, unknown>) {
+function toBody(v: EventValues, existing: Record<string, unknown>, zone: string) {
   const known: readonly MetadataKey[] = METADATA_KEYS[v.event_type]
   const metadata: Record<string, unknown> = Object.fromEntries(Object.entries(existing).filter(([k]) => !(known as readonly string[]).includes(k)))
   for (const k of known) {
@@ -131,16 +143,17 @@ function toBody(v: EventValues, existing: Record<string, unknown>) {
     venue_id: v.venue_id,
     event_type: v.event_type,
     title: v.title,
-    starts_at: wallToUtc(v.starts_at),
-    ...(v.doors_open_at && { doors_open_at: wallToUtc(v.doors_open_at) }),
+    starts_at: wallToUtc(v.starts_at, zone),
+    ...(v.doors_open_at && { doors_open_at: wallToUtc(v.doors_open_at, zone) }),
     per_account_limit: v.per_account_limit,
+    reentry_policy: v.reentry_policy,
     metadata,
   }
 }
 
-/** POST /org/events body; no metadata when there is none. */
-export function createBody(v: EventValues) {
-  const { metadata, ...body } = toBody(v, {})
+/** POST /org/events body, times in the chosen venue's `zone`; no metadata when there is none. */
+export function createBody(v: EventValues, zone: string) {
+  const { metadata, ...body } = toBody(v, {}, zone)
   return Object.keys(metadata).length ? { ...body, metadata } : body
 }
 
@@ -151,6 +164,6 @@ export function createBody(v: EventValues) {
  */
 export function patchBody(event: EventDetail, v: EventValues) {
   const f = toForm(event)
-  const before: Record<string, unknown> = toBody({ ...f, per_account_limit: event.per_account_limit }, event.metadata)
-  return Object.fromEntries(Object.entries(toBody(v, event.metadata)).filter(([k, x]) => JSON.stringify(x) !== JSON.stringify(before[k])))
+  const before: Record<string, unknown> = toBody({ ...f, per_account_limit: event.per_account_limit }, event.metadata, event.timezone)
+  return Object.fromEntries(Object.entries(toBody(v, event.metadata, event.timezone)).filter(([k, x]) => JSON.stringify(x) !== JSON.stringify(before[k])))
 }

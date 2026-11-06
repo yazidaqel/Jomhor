@@ -62,6 +62,7 @@ export function VenuesPage() {
                 <TableRow>
                   <TableHead>{t('venues.name')}</TableHead>
                   <TableHead>{t('venues.city')}</TableHead>
+                  <TableHead>{t('venues.timezone')}</TableHead>
                   <TableHead className="text-right">{t('venues.capacity')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -74,6 +75,7 @@ export function VenuesPage() {
                       </Link>
                     </TableCell>
                     <TableCell>{v.city}</TableCell>
+                    <TableCell>{v.timezone}</TableCell>
                     <TableCell className="text-right tabular-nums">{v.capacity.toLocaleString(i18n.language)}</TableCell>
                   </TableRow>
                 ))}

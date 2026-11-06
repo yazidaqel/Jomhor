@@ -28,10 +28,13 @@ function changedGates(venue: VenueDetail, edits: Record<string, number[]>): Chan
   })
 }
 
-/** Portes → zones: rows = gates, columns = zones. Save sends one PUT per changed gate, then refetches the venue. */
-export function GateZoneMatrix({ venue }: { venue: VenueDetail }) {
+/**
+ * Portes → zones: rows = gates, columns = zones. Save sends one PUT per changed gate, then refetches the venue.
+ * `readOnly` (an event's B2 tab; Q5: the matrix is per venue in Lot 0) shows it without any write action.
+ */
+export function GateZoneMatrix({ venue, readOnly = false, description }: { venue: VenueDetail; readOnly?: boolean; description?: string }) {
   const { t } = useTranslation()
-  const canWrite = useCanWrite()
+  const canWrite = useCanWrite() && !readOnly
   const { organizer_id: organizerId } = useOrganizer()
   const queryClient = useQueryClient()
   const [edits, setEdits] = useState<Record<string, number[]>>({})
@@ -68,7 +71,7 @@ export function GateZoneMatrix({ venue }: { venue: VenueDetail }) {
     <Card>
       <CardHeader>
         <CardTitle role="heading" aria-level={2}>{t('venues.matrix.title')}</CardTitle>
-        <CardDescription>{t('venues.matrix.description')}</CardDescription>
+        <CardDescription>{description ?? t('venues.matrix.description')}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {venue.zones.length === 0 || venue.gates.length === 0 ? (

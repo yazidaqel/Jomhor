@@ -10,6 +10,7 @@ import { routes } from '@/app/routes'
 import type { Me, Role } from '@/features/auth/organizer'
 import { createQueryClient } from '@/lib/queryClient'
 import { session } from '@/lib/session'
+import { isVenueZone } from '@/lib/time'
 import type { VenueDetail } from './api'
 
 beforeAll(() => {
@@ -41,6 +42,7 @@ const venue = (): VenueDetail => ({
   name: 'Grand Stade',
   city: 'Casablanca',
   capacity: 45000,
+  timezone: 'Africa/Casablanca',
   zones: [
     { id: 3, code: 'EST', name: 'Tribune Est', capacity: 12000, seated: false },
     { id: 1, code: 'HONNEUR', name: 'Tribune d’honneur', capacity: 3000, seated: true },
@@ -239,7 +241,7 @@ it('venue capacity: rejects "12.5" and "abc", sends an integer', async () => {
   await user.click(within(dialog).getByRole('button', { name: fr.common.create }))
 
   await waitFor(() => expect(router.state.location.pathname).toBe('/settings/venues/v-2'))
-  expect(writes(calls)).toEqual([{ method: 'POST', path: '/org/venues', org: 'org-a', body: { name: 'Salle', city: '', capacity: 800 } }])
+  expect(writes(calls)).toEqual([{ method: 'POST', path: '/org/venues', org: 'org-a', body: { name: 'Salle', city: '', capacity: 800, timezone: 'Africa/Casablanca' } }])
 })
 
 it('VALIDATION_FAILED is shown on the fields named in details.fields', async () => {
@@ -342,7 +344,7 @@ it('matrix has row and column headers and labelled cells; capacity is pluralised
   renderApp('/settings/venues/v-1')
   await screen.findByRole('heading', { name: 'Grand Stade' })
 
-  expect(screen.getByText(/^Casablanca · 45\s000 places$/)).toBeTruthy()
+  expect(screen.getByText(/^Casablanca · 45\s000 places · Africa\/Casablanca$/)).toBeTruthy()
   expect(i18n.t('venues.capacityPlaces', { count: 1 })).toBe('1 place')
   expect(screen.getByRole('rowheader', { name: 'P3' })).toBeTruthy()
   expect(screen.getByRole('columnheader', { name: 'NORD Virage Nord' })).toBeTruthy()
@@ -423,4 +425,95 @@ it('switching organizer: writes and refetches are scoped to the selected one; th
     ['DELETE', '/org/venues/v-1/zones/2', 'org-b'],
   ])
   expect(queryClient.getQueryCache().findAll({ queryKey: ['org', 'org-a'] })).toEqual([])
+})
+
+it('venue time zone: defaults to Africa/Casablanca, rejects an unknown id, PATCH sends it only when changed', async () => {
+  const user = userEvent.setup()
+  const { calls } = stubApi('ADMIN', (c) => (c.method === 'PATCH' ? Response.json({ ...venue(), ...(c.body as object) }) : undefined))
+  renderApp('/settings/venues/v-1')
+  await user.click(await screen.findByRole('button', { name: fr.common.edit }))
+  const dialog = await screen.findByRole('dialog', { name: fr.venues.editTitle })
+  const zone = within(dialog).getByLabelText(fr.venues.timezone) as HTMLInputElement
+  expect(zone.value).toBe('Africa/Casablanca')
+  expect(document.querySelectorAll('#venue-timezones option').length).toBe(Intl.supportedValuesOf('timeZone').length) // suggestions
+
+  await user.type(within(dialog).getByLabelText(fr.venues.cityOptional), ' Centre')
+  await user.click(within(dialog).getByRole('button', { name: fr.common.save }))
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)[0]!.body).toEqual({ name: 'Grand Stade', city: 'Casablanca Centre', capacity: 45000 }) // no timezone
+
+  await user.click(await screen.findByRole('button', { name: fr.common.edit }))
+  const again = await screen.findByRole('dialog', { name: fr.venues.editTitle })
+  const zone2 = within(again).getByLabelText(fr.venues.timezone)
+  await user.clear(zone2)
+  await user.type(zone2, 'Mars/Olympus')
+  await user.click(within(again).getByRole('button', { name: fr.common.save }))
+  expect(await within(again).findByText(fr.venues.timezoneInvalid)).toBeTruthy()
+  await user.clear(zone2)
+  await user.type(zone2, 'Europe/Paris')
+  await user.click(within(again).getByRole('button', { name: fr.common.save }))
+  await waitFor(() => expect(writes(calls)).toHaveLength(2))
+  expect(writes(calls)[1]!.body).toEqual({ name: 'Grand Stade', city: 'Casablanca', capacity: 45000, timezone: 'Europe/Paris' }) // the stub keeps the stored city
+})
+
+it('venue time zone: VENUE_IN_USE shows on the time zone field', async () => {
+  const user = userEvent.setup()
+  stubApi('ADMIN', (c) =>
+    c.method === 'PATCH' ? Response.json({ code: 'VENUE_IN_USE', message: 'x', details: {} }, { status: 409 }) : undefined,
+  )
+  renderApp('/settings/venues/v-1')
+  await user.click(await screen.findByRole('button', { name: fr.common.edit }))
+  const dialog = await screen.findByRole('dialog', { name: fr.venues.editTitle })
+  const zone = within(dialog).getByLabelText(fr.venues.timezone)
+  await user.clear(zone)
+  await user.type(zone, 'Europe/Paris')
+  await user.click(within(dialog).getByRole('button', { name: fr.common.save }))
+
+  await waitFor(() => expect(zone.getAttribute('aria-invalid')).toBe('true'))
+  expect(within(dialog).getByText(fr.errors.VENUE_IN_USE)).toBeTruthy()
+  expect(fr.errors.VENUE_IN_USE).toBe('Ce lieu a déjà des événements : son fuseau horaire ne peut plus changer.')
+})
+
+it.each(['UTC', 'GMT', 'EST', 'Etc/GMT+1', 'Etc/UTC', 'SystemV/AST4', '+01:00', 'africa/casablanca', 'Africa/Nowhere', 'Africa/'])(
+  'venue time zone %j is refused before sending',
+  async (zoneId) => {
+    expect(isVenueZone(zoneId)).toBe(false)
+    const user = userEvent.setup()
+    const { calls } = stubApi()
+    renderApp('/settings/venues/v-1')
+    await user.click(await screen.findByRole('button', { name: fr.common.edit }))
+    const dialog = await screen.findByRole('dialog', { name: fr.venues.editTitle })
+    const zone = within(dialog).getByLabelText(fr.venues.timezone)
+    await user.clear(zone)
+    await user.type(zone, zoneId)
+    await user.click(within(dialog).getByRole('button', { name: fr.common.save }))
+    expect(await within(dialog).findByText(fr.venues.timezoneInvalid)).toBeTruthy()
+    expect(writes(calls)).toEqual([])
+  },
+)
+
+it('venue time zone: geographic ids pass, both V8 and Java spellings; the suggestions follow the same rule', () => {
+  for (const ok of ['Africa/Casablanca', 'Europe/Paris', 'Europe/Kyiv', 'Europe/Kiev', 'Asia/Kolkata', 'Asia/Calcutta', 'America/Argentina/Buenos_Aires'])
+    expect(isVenueZone(ok)).toBe(true)
+  const suggested = Intl.supportedValuesOf('timeZone').filter(isVenueZone)
+  expect(suggested).toContain('Africa/Casablanca')
+  expect(suggested.some((z) => z === 'UTC' || z.startsWith('Etc/'))).toBe(false)
+})
+
+it('venue time zone: a server VALIDATION_FAILED on timezone shows the time zone copy', async () => {
+  const user = userEvent.setup()
+  stubApi('ADMIN', (c) =>
+    c.method === 'PATCH'
+      ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { timezone: 'unknown zone' } } }, { status: 422 })
+      : undefined,
+  )
+  renderApp('/settings/venues/v-1')
+  await user.click(await screen.findByRole('button', { name: fr.common.edit }))
+  const dialog = await screen.findByRole('dialog', { name: fr.venues.editTitle })
+  const zone = within(dialog).getByLabelText(fr.venues.timezone)
+  await user.clear(zone)
+  await user.type(zone, 'Europe/Kyiv')
+  await user.click(within(dialog).getByRole('button', { name: fr.common.save }))
+  expect(await within(dialog).findByText(fr.venues.timezoneInvalid)).toBeTruthy()
+  expect(zone.getAttribute('aria-invalid')).toBe('true')
 })

@@ -9,7 +9,7 @@ import { useCanWrite } from '@/features/auth/organizer'
 import { errorKey } from '@/lib/errors'
 import { useNotFoundNotice } from '@/lib/useNotFoundNotice'
 import { useEvents, type EventStatus } from './api'
-import { formatDateTime } from './time'
+import { formatDateTime } from '@/lib/time'
 
 const STATUS_VARIANT = { DRAFT: 'secondary', ON_SALE: 'default', GATES_OPEN: 'default', CLOSED: 'outline' } as const
 
@@ -77,7 +77,11 @@ export function EventsPage() {
                       </Link>
                     </TableCell>
                     <TableCell>{t(`events.types.${e.event_type}`)}</TableCell>
-                    <TableCell className="tabular-nums">{formatDateTime(e.starts_at, i18n.language)}</TableCell>
+                    <TableCell>
+                      {/* Each row in its venue's zone (Q7), named so a different zone stands out. */}
+                      <div className="tabular-nums">{formatDateTime(e.starts_at, i18n.language, e.venue.timezone)}</div>
+                      <div className="text-xs text-muted-foreground">{e.venue.timezone}</div>
+                    </TableCell>
                     <TableCell>{e.venue.name}</TableCell>
                     <TableCell>
                       <StatusBadge status={e.status} />

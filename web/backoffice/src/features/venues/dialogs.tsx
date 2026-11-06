@@ -18,8 +18,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { useOrgMutation } from '@/features/auth/organizer'
 import { path } from '@/lib/api'
 import { integerInput } from '@/lib/forms'
+import { DEFAULT_ZONE, isVenueZone } from '@/lib/time'
 import { showApiError, useVenueMutation, venueErrorKey, type Gate, type Venue, type Zone } from './api'
 
 /** Open state of a dialog, owned by the page so the dialog outlives the table row it acts on. */
@@ -70,6 +72,7 @@ function TextField(props: {
   registration: UseFormRegisterReturn
   inputMode?: 'numeric'
   upper?: boolean
+  list?: string
 }) {
   const { id, error, registration } = props
   const described = [props.hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ')
@@ -79,6 +82,7 @@ function TextField(props: {
       <Input
         id={id}
         inputMode={props.inputMode}
+        list={props.list}
         autoCapitalize={props.upper ? 'characters' : undefined}
         aria-invalid={!!error}
         aria-describedby={described || undefined}
@@ -153,19 +157,33 @@ export function VenueDialog({ venue, onSaved, ...dialog }: DialogProps & { venue
   )
 }
 
+// Suggestions: the zones Intl lists that a venue can use (same rule as the field's validation).
+const TIME_ZONES = Intl.supportedValuesOf('timeZone').filter(isVenueZone)
+
 function VenueForm({ venue, onDone }: { venue?: Venue; onDone: (v: Venue) => void }) {
   const { t } = useTranslation()
   const schema = z.object({
     name: z.string().trim().min(1, t('venues.nameRequired')),
     city: z.string().trim(), // "" clears it (PATCH) or leaves it unset (POST)
     capacity: integerInput(t('venues.venueCapacityInvalid'), 1),
+    timezone: z.string().trim().refine(isVenueZone, t('venues.timezoneInvalid')),
   })
   const form = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { name: venue?.name ?? '', city: venue?.city ?? '', capacity: venue ? String(venue.capacity) : '' },
+    defaultValues: {
+      name: venue?.name ?? '',
+      city: venue?.city ?? '',
+      capacity: venue ? String(venue.capacity) : '',
+      timezone: venue?.timezone ?? DEFAULT_ZONE,
+    },
   })
-  const save = useVenueMutation((body: z.output<typeof schema>, send) =>
-    send<Venue>(venue ? { method: 'PATCH', path: path('org', 'venues', venue.id), body } : { method: 'POST', path: '/org/venues', body }),
+  const save = useVenueMutation(({ timezone, ...rest }: z.output<typeof schema>, send) =>
+    send<Venue>(
+      venue
+        ? // The zone only when changed: once events use the venue, any change is refused (VENUE_IN_USE).
+          { method: 'PATCH', path: path('org', 'venues', venue.id), body: timezone === venue.timezone ? rest : { ...rest, timezone } }
+        : { method: 'POST', path: '/org/venues', body: { ...rest, timezone } },
+    ),
   )
   const { errors } = form.formState
   return (
@@ -180,6 +198,19 @@ function VenueForm({ venue, onDone }: { venue?: Venue; onDone: (v: Venue) => voi
           error={errors.capacity?.message}
           registration={form.register('capacity')}
         />
+        <TextField
+          id="venue-timezone"
+          label={t('venues.timezone')}
+          hint={t('venues.timezoneHint')}
+          list="venue-timezones"
+          error={errors.timezone?.message}
+          registration={form.register('timezone')}
+        />
+        <datalist id="venue-timezones">
+          {TIME_ZONES.map((z) => (
+            <option key={z} value={z} />
+          ))}
+        </datalist>
         <Footer pending={save.isPending} submit={t(venue ? 'common.save' : 'common.create')} rootError={errors.root?.message} />
       </FieldGroup>
     </form>
@@ -304,11 +335,22 @@ function GateForm({ venueId, gate, onDone }: { venueId: string; gate?: Gate; onD
 
 // ---- Delete ----
 
-/** Confirmation; stays open while deleting and shows a refusal (ZONE_IN_USE…). On success, focus goes to `fallbackFocus`. */
-export function DeleteDialog({ title, body, path, open, onOpenChange, fallbackFocus }: DialogProps & { title: string; body: string; path: string }) {
+/**
+ * Confirmation; stays open while deleting and shows a refusal (ZONE_IN_USE, PRICE_IN_USE…). On success, focus goes to
+ * `fallbackFocus`. Afterwards the organizer's queries under `scope` are refetched (default: the venues).
+ */
+export function DeleteDialog({
+  title,
+  body,
+  path,
+  scope = ['venues'],
+  open,
+  onOpenChange,
+  fallbackFocus,
+}: DialogProps & { title: string; body: string; path: string; scope?: readonly unknown[] }) {
   const { t } = useTranslation()
   const { onOpenAutoFocus, onCloseAutoFocus, markGone } = useReturnFocus(fallbackFocus)
-  const remove = useVenueMutation((_: void, send) => send({ method: 'DELETE', path }))
+  const remove = useOrgMutation(scope, (_: void, send) => send({ method: 'DELETE', path }))
   return (
     <AlertDialog
       open={open}

@@ -50,7 +50,7 @@ export function VenuePage() {
             <div>
               <h1 className="text-[22px] font-bold">{venue.data.name}</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                {[venue.data.city, t('venues.capacityPlaces', { count: venue.data.capacity })].filter(Boolean).join(' · ')}
+                {[venue.data.city, t('venues.capacityPlaces', { count: venue.data.capacity }), venue.data.timezone].filter(Boolean).join(' · ')}
               </p>
             </div>
             {canWrite && (
