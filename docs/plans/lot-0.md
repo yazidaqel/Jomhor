@@ -46,7 +46,7 @@ Why this way:
 
 | # | Question | Default for Lot 0 |
 | --- | --- | --- |
-| Q1 | **Decided:** card gateway is Payzone. Kit and sandbox credentials pending | Simulated gateway behind the `CardGateway` port for Lot 0. Payzone adapter (BE-7) once the kit arrives. |
+| Q1 | **Decided:** card gateway is Payzone; keep the simulated gateway until the kit arrives (confirmed 2026-11-06) | Simulated gateway behind the `CardGateway` port for Lot 0. Payzone adapter (BE-7) once the kit arrives. |
 | Q2 | SMS/WhatsApp OTP provider | `OtpSender` port with a log adapter (dev/staging only; prod refuses to start with it). Choose the provider before Lot 1. |
 | Q3 | `users` is global (one fan account across organizers). This breaks the letter of "every table carries `organizer_id`". | Global, written up as an explicit exception: `organizers`, `users`, `otp_challenges`. Organizer ownership of fans comes through `orders`/`tickets`. |
 | Q4 | Back-office login method | Phone OTP, the same machinery as fans. A staff row links to a `users` row. TOTP/2FA for ADMIN in Lot 6. |
@@ -59,7 +59,7 @@ Why this way:
 | Q11 | Event series in Lot 0? | No. `series_id` stays nullable and the B2 "Série" field is hidden until Lot 5 (passes). |
 | Q12 | First organizer and admin in staging/prod | A dev seed (dev profile only) plus a documented SQL snippet. No platform-admin API until Lot 6. |
 | Q13 | JWT revocation and refresh | Lot 0: one HS256 access token (fan 30 d, org 12 h), no refresh. Revisit in Lot 1 before real K_t reaches phones. |
-| Q14 | OTP abuse limits beyond 3 sends / 5 attempts per 10 min (BE-2 review): 15 guesses per 10 min on a staff phone is ~6 %/month for a targeted account; no per-IP cap means SMS pumping once a real provider is live | **Decide before the real `OtpSender` ships (Lot 1).** Proposed default: per-phone daily cap (10 sends, 15 failed attempts / 24 h → lockout), per-IP throttle on both `/*/auth/otp`, send after commit off the request thread. Log adapter only in Lot 0. Also covers a silent lockout: `/org/auth/otp` creates a challenge for any phone (needed so it can't reveal staff), so 3 calls / 10 min lock a fan out without any SMS; the per-IP throttle is the fix. |
+| Q14 | OTP abuse limits beyond 3 sends / 5 attempts per 10 min (BE-2 review): 15 guesses per 10 min on a staff phone is ~6 %/month for a targeted account; no per-IP cap means SMS pumping once a real provider is live | **Decided 2026-11-06: defaults accepted, implement in Lot 1 with the real `OtpSender`.** per-phone daily cap (10 sends, 15 failed attempts / 24 h → lockout), per-IP throttle on both `/*/auth/otp`, send after commit off the request thread. Log adapter only in Lot 0. Also covers a silent lockout: `/org/auth/otp` creates a challenge for any phone (needed so it can't reveal staff), so 3 calls / 10 min lock a fan out without any SMS; the per-IP throttle is the fix. |
 
 ## 4. Contract changes
 
@@ -422,4 +422,4 @@ Never cut:
 | --- | --- | --- |
 | `GATE_IN_USE` on gate delete | 2 | Lot 0 has no table referencing gates; `device_assignments` and `scans` must make delete return 409, not 500 (`ponytail:` note in `VenueService`). |
 | Edge forwards only `/v1/*` | 6 | Paths outside the `/v1` context path get Tomcat's default 404, not the 04 error shape. The ALB must route `/v1/*` only. |
-| OTP abuse limits | 1 | See Q14. |
+| OTP abuse limits | 1 | Q14 decided: per-phone daily cap (10 sends, 15 failed attempts / 24 h → lockout), per-IP throttle on both `/*/auth/otp`, send after commit off the request thread. |
