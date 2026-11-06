@@ -2,6 +2,8 @@ package ma.jomhor.payments;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -10,17 +12,33 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import ma.jomhor.catalog.application.EventService;
+import ma.jomhor.notifications.application.TicketDeliveryService;
+import ma.jomhor.notifications.application.TicketMessenger;
+import ma.jomhor.tickets.TicketPdfApiTest;
+import ma.jomhor.tickets.domain.TicketToken;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Lot 1 exit proof (plan §1), on the simulated gateway: an organizer creates and publishes an event through the
  * API; a fan buys 2 named places by card, the second held by a friend's phone, following the same redirect →
- * hosted page → signed callback → /return path a real gateway takes. After PAID each holder holds their ticket.
+ * hosted page → signed callback → /return path a real gateway takes. After PAID each holder holds their ticket
+ * (rotating QR key in the app, PDF), each gets it on WhatsApp, and the organizer's sales page (B3) shows the sale.
  */
 class Lot1SaleFlowTest extends PaymentTest {
+
+    @Autowired
+    EventService events;
+
+    @Autowired
+    TicketDeliveryService deliveries;
 
     @Test
     void aFanBuysTwoNamedPlacesTheSecondForAFriend() throws Exception {
@@ -119,6 +137,62 @@ class Lot1SaleFlowTest extends PaymentTest {
         // The gateway page and the redirect are gone once the payment is done.
         browse(redirectUrl).andExpect(status().isGone());
         browse(gatewayUrl).andExpect(status().isGone()).andExpect(header().string("Cache-Control", "no-store"));
+
+        // Each holder holds exactly their own ticket, VALID, with K_t = HMAC(K_e, ticket_id) only with with_keys:
+        // a rotating (v2) token signed with it verifies against K_e, as the gate will.
+        UUID buyerTicket = UUID.fromString(listed);
+        UUID friendTicket = ticketHeldBy(orderId, friend);
+        Map<String, UUID> held = Map.of(fan, buyerTicket, friendToken, friendTicket);
+        for (var e : held.entrySet()) {
+            String keyed = body(fan(e.getKey(), get("/fan/tickets?with_keys=true")).andExpect(status().isOk()));
+            assertThat(JsonPath.<List<String>>read(keyed, "$.tickets[*].id")).containsExactly(e.getValue().toString());
+            assertThat(JsonPath.<String>read(keyed, "$.tickets[0].status")).isEqualTo("VALID");
+            byte[] kt = Base64.getUrlDecoder().decode(JsonPath.<String>read(keyed, "$.tickets[0].k_t"));
+            assertThat(kt).isEqualTo(events.withEventKey(org.org(), eventId,
+                    k -> TicketToken.deriveTicketKey(k, e.getValue())));
+            long slot = TicketToken.slotAt(Instant.now());
+            String rotating = TicketToken.encodeRotating(kt, eventId, e.getValue(), zoneId, slot);
+            boolean rotatingOk = events.withEventKey(org.org(), eventId,
+                    k -> TicketToken.verify(TicketToken.decode(rotating), eventId, k, slot).isEmpty());
+            assertThat(rotatingOk).isTrue();
+            assertThat(body(fan(e.getKey(), get("/fan/tickets")).andExpect(status().isOk()))).doesNotContain("k_t");
+        }
+
+        // The friend's PDF: its static (v1) QR decodes to their ticket and verifies against K_e.
+        byte[] pdf = fan(friendToken, get("/fan/tickets/" + friendTicket + "/pdf")).andExpect(status().isOk())
+                .andExpect(content().contentType("application/pdf")).andReturn().getResponse().getContentAsByteArray();
+        TicketToken.Parsed printed = TicketToken.decode(TicketPdfApiTest.qr(pdf).getText());
+        assertThat(printed.version()).isEqualTo(TicketToken.VERSION_STATIC);
+        assertThat(printed.ticketId()).isEqualTo(friendTicket);
+        boolean printedOk = events.withEventKey(org.org(), eventId,
+                k -> TicketToken.verify(printed, eventId, k, 0).isEmpty());
+        assertThat(printedOk).isTrue();
+
+        // WhatsApp: the delivery job sends both tickets, each to its own holder's phone, and marks them SENT.
+        deliveries.deliverDue();
+        assertThat(jdbc.sql("""
+                select d.status::text from ticket_deliveries d join tickets t on t.id = d.ticket_id
+                where t.order_id = ?::uuid
+                """).param(orderId).query(String.class).list()).containsExactly("SENT", "SENT");
+        var messages = ArgumentCaptor.forClass(TicketMessenger.Message.class);
+        verify(ticketMessenger, atLeastOnce()).send(messages.capture());
+        Map<String, String> phoneByTicketNo = Map.of(TicketToken.ticketNo(buyerTicket), phone,
+                TicketToken.ticketNo(friendTicket), friendPhone);
+        List<TicketMessenger.Message> ours = messages.getAllValues().stream()
+                .filter(m -> phoneByTicketNo.containsKey(m.ticketNo())).toList();
+        assertThat(ours).hasSize(2)
+                .allSatisfy(m -> assertThat(m.phoneE164()).isEqualTo(phoneByTicketNo.get(m.ticketNo())));
+
+        // B3: the organizer's sales page shows the sale (2 x 50 DH on the app, nothing held).
+        call(org, get("/org/events/" + eventId + "/sales")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.paid").value(2)).andExpect(jsonPath("$.held").value(0))
+                .andExpect(jsonPath("$.revenue_mad").value(10000))
+                .andExpect(jsonPath("$.channels[?(@.channel == 'APP')].paid").value(2));
+    }
+
+    private UUID ticketHeldBy(String orderId, UUID holder) {
+        return jdbc.sql("select id from tickets where order_id = ?::uuid and holder_user_id = ?").params(orderId, holder)
+                .query(UUID.class).single();
     }
 
     private UUID userId(String phone) {
