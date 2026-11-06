@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
@@ -10,7 +11,10 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'helpers.dart';
 
 void main() {
-  setUp(() => SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty());
+  setUp(() {
+    SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+    FlutterSecureStorage.setMockInitialValues({});
+  });
 
   test('first launch after an install drops a token left in the Keychain', () async {
     final tokens = MemoryTokenStore('left-over-from-a-previous-install');

@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
+import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Whether a token was stored at startup. `main` overrides it with [startSession]'s result.
 final initialSignedInProvider = Provider<bool>((ref) => false);
 
-/// Signed in = a fan session token is stored. Signing out only forgets it locally;
-/// the server-side logout (`POST /fan/me/logout`) is FL-8.
+/// Signed in = a fan session token is stored. Signing out forgets it and wipes the ticket cache (K_t included)
+/// locally; the server-side logout (`POST /fan/me/logout`) is FL-8.
 class Session extends Notifier<bool> {
   @override
   bool build() => ref.read(initialSignedInProvider);
@@ -17,8 +18,12 @@ class Session extends Notifier<bool> {
   }
 
   Future<void> signOut() async {
-    await ref.read(tokenStoreProvider).clear();
-    state = false;
+    try {
+      // Both run even if one fails.
+      await Future.wait([ref.read(tokenStoreProvider).clear(), ref.read(ticketCacheProvider).wipe()]);
+    } finally {
+      state = false;
+    }
   }
 
   /// A request sent with [token] got a 401. Sign out only if that token is still the stored one:

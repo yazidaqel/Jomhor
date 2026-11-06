@@ -7,10 +7,11 @@ import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
+import 'package:jomhor_fan/features/tickets/my_ticket_strip.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 
-/// Screen 1 · Accueil: next event hero + calendar. The "Mon billet" strip comes with FL-7.
+/// Screen 1 · Accueil: next event hero, the "Mon billet" strip (saved tickets) and the calendar.
 class HomeScreen extends ConsumerWidget {
   const new({super.key});
 
@@ -36,12 +37,20 @@ class HomeScreen extends ConsumerWidget {
             ),
             const SizedBox(height: JomhorSpace.l),
             ...events.when(
-              loading: () => [const Center(child: CircularProgressIndicator())],
-              error: (e, _) => [ErrorPanel(error: e, onRetry: () => ref.invalidate(upcomingEventsProvider))],
+              // Without the hero (offline on matchday, say) the strip still leads to the ticket.
+              loading: () => [const MyTicketStrip(), const Center(child: CircularProgressIndicator())],
+              error: (e, _) => [
+                const MyTicketStrip(),
+                ErrorPanel(error: e, onRetry: () => ref.invalidate(upcomingEventsProvider)),
+              ],
               data: (list) => list.isEmpty
-                  ? [Text(l.homeEmpty, style: const TextStyle(color: JomhorColors.textSecondary))]
+                  ? [
+                      const MyTicketStrip(),
+                      Text(l.homeEmpty, style: const TextStyle(color: JomhorColors.textSecondary)),
+                    ]
                   : [
                       _Hero(event: list.first, now: now),
+                      const MyTicketStrip(),
                       if (list.length > 1) ...[
                         const SizedBox(height: JomhorSpace.xl),
                         Text(l.calendar, style: JomhorType.h2),

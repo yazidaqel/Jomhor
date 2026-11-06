@@ -397,4 +397,128 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errorOrderNotPayable => 'Cette commande ne peut plus être payée.';
+
+  @override
+  String get close => 'Fermer';
+
+  @override
+  String get ticketsTitle => 'Mes billets';
+
+  @override
+  String get ticketsUpcoming => 'À venir';
+
+  @override
+  String get ticketsPast => 'Passés';
+
+  @override
+  String get ticketsEmpty => 'Aucun billet pour l\'instant. Tes billets arrivent ici dès que le paiement est confirmé.';
+
+  @override
+  String get ticketsBrowse => 'Voir les matchs';
+
+  @override
+  String get ticketsOffline => 'Hors ligne · billets enregistrés sur ton téléphone';
+
+  @override
+  String ticketRowFacts(String zone, String ticketNo) {
+    return '$zone · N° $ticketNo';
+  }
+
+  @override
+  String get ticketMatchday => 'Mode jour de match';
+
+  @override
+  String get ticketBrightness => 'Luminosité au maximum';
+
+  @override
+  String get ticketZone => 'Zone';
+
+  @override
+  String ticketGates(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes', one: 'Porte');
+    return '$_temp0';
+  }
+
+  @override
+  String ticketGatesList(int count, String codes) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes $codes', one: 'Porte $codes');
+    return '$_temp0';
+  }
+
+  @override
+  String get listSeparator => ', ';
+
+  @override
+  String get ticketKickoff => 'Coup d\'envoi';
+
+  @override
+  String get ticketStart => 'Début';
+
+  @override
+  String get ticketHolder => 'Titulaire';
+
+  @override
+  String get ticketNumber => 'N° billet';
+
+  @override
+  String get ticketSeat => 'Place';
+
+  @override
+  String ticketNextCode(int s) {
+    return 'Nouveau code dans $s s';
+  }
+
+  @override
+  String get ticketWorksOffline => 'Fonctionne sans réseau';
+
+  @override
+  String ticketQrLabel(String ticketNo) {
+    return 'Code QR du billet $ticketNo';
+  }
+
+  @override
+  String get ticketClosed => 'Événement terminé';
+
+  @override
+  String get ticketCancelled => 'Billet annulé';
+
+  @override
+  String get ticketRefunded => 'Billet remboursé';
+
+  @override
+  String get ticketBlocked => 'Billet bloqué. Contacte le club.';
+
+  @override
+  String get ticketNotValid => 'Billet non valide';
+
+  @override
+  String get ticketNotFound => 'Ce billet n\'est pas sur ton téléphone.';
+
+  @override
+  String get ticketWhatsApp => 'WhatsApp';
+
+  @override
+  String get ticketWhatsAppSoon => 'Renvoi du PDF sur WhatsApp · bientôt';
+
+  @override
+  String myTicketTitle(String what, String date) {
+    return 'Mon billet · $what, $date';
+  }
+
+  @override
+  String myTicketStarted(String time) {
+    return 'a commencé à $time';
+  }
+
+  @override
+  String myTicketWhen(int days, String time) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'dans $days jours',
+      one: 'demain à $time',
+      zero: 'aujourd\'hui à $time',
+    );
+    return '$_temp0';
+  }
 }

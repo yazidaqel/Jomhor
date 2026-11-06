@@ -770,6 +770,204 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Cette commande ne peut plus être payée.'**
   String get errorOrderNotPayable;
+
+  /// No description provided for @close.
+  ///
+  /// In fr, this message translates to:
+  /// **'Fermer'**
+  String get close;
+
+  /// No description provided for @ticketsTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mes billets'**
+  String get ticketsTitle;
+
+  /// No description provided for @ticketsUpcoming.
+  ///
+  /// In fr, this message translates to:
+  /// **'À venir'**
+  String get ticketsUpcoming;
+
+  /// No description provided for @ticketsPast.
+  ///
+  /// In fr, this message translates to:
+  /// **'Passés'**
+  String get ticketsPast;
+
+  /// No description provided for @ticketsEmpty.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun billet pour l\'instant. Tes billets arrivent ici dès que le paiement est confirmé.'**
+  String get ticketsEmpty;
+
+  /// No description provided for @ticketsBrowse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voir les matchs'**
+  String get ticketsBrowse;
+
+  /// The refresh failed; the tickets saved on the phone are shown (QR included).
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors ligne · billets enregistrés sur ton téléphone'**
+  String get ticketsOffline;
+
+  /// No description provided for @ticketRowFacts.
+  ///
+  /// In fr, this message translates to:
+  /// **'{zone} · N° {ticketNo}'**
+  String ticketRowFacts(String zone, String ticketNo);
+
+  /// Screen 5 header from kickoff - 4 h. Shown uppercase.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mode jour de match'**
+  String get ticketMatchday;
+
+  /// Screen 5 header icon: the screen is at full brightness while the ticket is shown.
+  ///
+  /// In fr, this message translates to:
+  /// **'Luminosité au maximum'**
+  String get ticketBrightness;
+
+  /// No description provided for @ticketZone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zone'**
+  String get ticketZone;
+
+  /// No description provided for @ticketGates.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{Porte} other{Portes}}'**
+  String ticketGates(int count);
+
+  /// Gate codes after the label, e.g. Porte 4 or Portes 3, 4.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{Porte {codes}} other{Portes {codes}}}'**
+  String ticketGatesList(int count, String codes);
+
+  /// Between items of a short list (gate codes). Arabic uses the Arabic comma.
+  ///
+  /// In fr, this message translates to:
+  /// **', '**
+  String get listSeparator;
+
+  /// No description provided for @ticketKickoff.
+  ///
+  /// In fr, this message translates to:
+  /// **'Coup d\'envoi'**
+  String get ticketKickoff;
+
+  /// Start time label for an event that is not a match.
+  ///
+  /// In fr, this message translates to:
+  /// **'Début'**
+  String get ticketStart;
+
+  /// No description provided for @ticketHolder.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titulaire'**
+  String get ticketHolder;
+
+  /// No description provided for @ticketNumber.
+  ///
+  /// In fr, this message translates to:
+  /// **'N° billet'**
+  String get ticketNumber;
+
+  /// No description provided for @ticketSeat.
+  ///
+  /// In fr, this message translates to:
+  /// **'Place'**
+  String get ticketSeat;
+
+  /// No description provided for @ticketNextCode.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nouveau code dans {s} s'**
+  String ticketNextCode(int s);
+
+  /// No description provided for @ticketWorksOffline.
+  ///
+  /// In fr, this message translates to:
+  /// **'Fonctionne sans réseau'**
+  String get ticketWorksOffline;
+
+  /// Screen reader label of the QR.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code QR du billet {ticketNo}'**
+  String ticketQrLabel(String ticketNo);
+
+  /// No description provided for @ticketClosed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Événement terminé'**
+  String get ticketClosed;
+
+  /// No description provided for @ticketCancelled.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet annulé'**
+  String get ticketCancelled;
+
+  /// No description provided for @ticketRefunded.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet remboursé'**
+  String get ticketRefunded;
+
+  /// No description provided for @ticketBlocked.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet bloqué. Contacte le club.'**
+  String get ticketBlocked;
+
+  /// No description provided for @ticketNotValid.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet non valide'**
+  String get ticketNotValid;
+
+  /// No description provided for @ticketNotFound.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce billet n\'est pas sur ton téléphone.'**
+  String get ticketNotFound;
+
+  /// No description provided for @ticketWhatsApp.
+  ///
+  /// In fr, this message translates to:
+  /// **'WhatsApp'**
+  String get ticketWhatsApp;
+
+  /// Lot 1: the re-send endpoint (BE-14) is not there yet, so the button is disabled.
+  ///
+  /// In fr, this message translates to:
+  /// **'Renvoi du PDF sur WhatsApp · bientôt'**
+  String get ticketWhatsAppSoon;
+
+  /// Screen 1 strip. what = competition or event title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mon billet · {what}, {date}'**
+  String myTicketTitle(String what, String date);
+
+  /// Screen 1 strip once the event has started.
+  ///
+  /// In fr, this message translates to:
+  /// **'a commencé à {time}'**
+  String myTicketStarted(String time);
+
+  /// Screen 1 strip: time left until the event starts.
+  ///
+  /// In fr, this message translates to:
+  /// **'{days, plural, =0{aujourd\'hui à {time}} =1{demain à {time}} other{dans {days} jours}}'**
+  String myTicketWhen(int days, String time);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

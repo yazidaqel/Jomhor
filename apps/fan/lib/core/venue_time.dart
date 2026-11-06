@@ -27,3 +27,10 @@ String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring
   final m = left.isNegative ? 0 : left.inMinutes;
   return (days: m ~/ (24 * 60), hours: m ~/ 60 % 24, minutes: m % 60);
 }
+
+/// Calendar days from [now] to [target] in the venue's zone: 0 = same day, 1 = tomorrow.
+int venueDaysUntil(DateTime now, DateTime target, String zone) {
+  final a = venueTime(now, zone);
+  final b = venueTime(target, zone);
+  return DateTime.utc(b.year, b.month, b.day).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
+}

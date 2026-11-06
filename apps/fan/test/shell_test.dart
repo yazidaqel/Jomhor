@@ -25,7 +25,7 @@ void main() {
     await pumpJomhor(tester, backend: noEvents, tokens: MemoryTokenStore('jwt'));
     await tester.tap(find.text('Billets'));
     await tester.pumpAndSettle();
-    expect(find.text('Billets'), findsNWidgets(2)); // tab label + placeholder title
+    expect(find.text('Mes billets'), findsOneWidget);
   });
 
   testWidgets('labels follow the device locale', (tester) async {

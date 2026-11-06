@@ -11,6 +11,9 @@ import 'package:jomhor_fan/features/checkout/order_screen.dart';
 import 'package:jomhor_fan/features/checkout/zones_screen.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
+import 'package:jomhor_fan/features/tickets/ticket.dart';
+import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
+import 'package:jomhor_fan/features/tickets/tickets_screen.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 
 /// Paths that need a session; events are public (no login prompt to browse), buying is not.
@@ -19,6 +22,14 @@ bool needsSession(String path) =>
     path.startsWith('/profile') ||
     path.startsWith('/orders') ||
     RegExp('^/events/[^/]+/(zones|checkout)').hasMatch(path);
+
+/// `jomhor-fan://tickets` exactly (the web shop's "Ouvrir dans l'app"); nothing else rides on that host.
+bool isTicketsLink(Uri uri) =>
+    uri.scheme == appScheme &&
+    uri.host == 'tickets' &&
+    (uri.path == '' || uri.path == '/') &&
+    !uri.hasQuery &&
+    !uri.hasFragment;
 
 /// Where to go after login: an in-app path only, never another host.
 String afterLogin(String? from) =>
@@ -35,7 +46,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: sessionChanged,
     redirect: (context, state) {
       // `jomhor-fan://orders/{id}` (card return in Custom Tabs or another browser) → the order screen.
+      // `jomhor-fan://tickets` (web shop "Ouvrir dans l'app") → the Billets tab, login-gated below.
       if (state.uri.scheme == appScheme) {
+        if (isTicketsLink(state.uri)) return '/tickets';
         final id = returnedOrderId(state.uri.toString());
         return id == null ? '/' : '/orders/$id';
       }
@@ -54,18 +67,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [GoRoute(path: '/', builder: (context, state) => const HomeScreen())],
           ),
-          for (final (path, title) in <(String, String Function(AppLocalizations))>[
-            ('/tickets', (l) => l.navTickets), // FL-7
-            ('/profile', (l) => l.navProfile), // FL-8
-          ])
-            StatefulShellBranch(
-              routes: [
-                GoRoute(
-                  path: path,
-                  builder: (context, state) => PlaceholderScreen(title: title(AppLocalizations.of(context))),
-                ),
-              ],
-            ),
+          StatefulShellBranch(
+            routes: [GoRoute(path: '/tickets', builder: (context, state) => const TicketsScreen())],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/profile', // FL-8
+                builder: (context, state) => PlaceholderScreen(title: AppLocalizations.of(context).navProfile),
+              ),
+            ],
+          ),
         ],
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
@@ -91,6 +103,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             },
           ),
         ],
+      ),
+      // Screen 5, full screen (no bottom nav). The id is the ticket's UUID, never a key.
+      GoRoute(
+        path: '/tickets/:id',
+        redirect: (context, state) => isTicketId(state.pathParameters['id']!) ? null : '/tickets',
+        builder: (context, state) => TicketScreen(id: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/orders/:id',

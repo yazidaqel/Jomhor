@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -98,7 +99,8 @@ class TestClock {
   }
 }
 
-/// Pumps the whole app (FR) with a fake backend. Returns the container to drive the router and providers.
+/// Pumps the whole app (FR) with a fake backend and an empty in-memory secure storage (the ticket cache);
+/// [keepSecureStorage] keeps what a test put there with `FlutterSecureStorage.setMockInitialValues`. Returns the container to drive the router and providers.
 Future<ProviderContainer> pumpJomhor(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request request) backend,
@@ -106,9 +108,11 @@ Future<ProviderContainer> pumpJomhor(
   String organizerId = testOrganizer,
   TestClock? clock,
   List<Override> overrides = const [],
+  bool keepSecureStorage = false,
 }) async {
   final time = clock ?? TestClock(DateTime.utc(2027, 2, 20, 12));
   tzdata.initializeTimeZones();
+  if (!keepSecureStorage) FlutterSecureStorage.setMockInitialValues({});
   tester.platformDispatcher.localesTestValue = [const Locale('fr', 'MA')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   final store = tokens ?? MemoryTokenStore();

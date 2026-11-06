@@ -2,5 +2,6 @@
   "@@locale": "ar",
   "navHome": "الرئيسية",
   "navTickets": "التذاكر",
-  "navProfile": "الملف الشخصي"
+  "navProfile": "الملف الشخصي",
+  "listSeparator": "، "
 }
