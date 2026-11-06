@@ -1,5 +1,6 @@
 import 'server-only'
 import { isIP } from 'node:net'
+import { cookies } from 'next/headers'
 import { ApiError } from './api'
 
 // Helpers for route handlers: same-origin guard, error responses, the session cookie.
@@ -97,4 +98,11 @@ export function sessionToken(req: Request): string | undefined {
     if (i > 0 && part.slice(0, i).trim() === SESSION_COOKIE) return part.slice(i + 1).trim() || undefined
   }
   return undefined
+}
+
+export const unauthorized = () => errorResponse(401, 'UNAUTHORIZED', 'Not signed in')
+
+/** The fan JWT for server components (pages), from the same httpOnly cookie. */
+export async function currentSession(): Promise<string | undefined> {
+  return (await cookies()).get(SESSION_COOKIE)?.value || undefined
 }

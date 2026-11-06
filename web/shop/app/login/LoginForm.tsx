@@ -20,7 +20,9 @@ async function post(path: string, body: unknown): Promise<string | null> {
   }
 }
 
-const message = (copy: Copy, code: string) => copy.errors[code as keyof Copy['errors']] ?? copy.errors.generic
+// Own keys only: a code such as "constructor" must not pick up an Object.prototype member.
+const message = (copy: Copy, code: string) =>
+  Object.hasOwn(copy.errors, code) ? copy.errors[code as keyof Copy['errors']] : copy.errors.generic
 
 const input =
   'mt-2 block h-cta-height w-full rounded-control border border-border bg-ground px-4 text-body text-text placeholder:text-text-muted aria-invalid:border-danger'

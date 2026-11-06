@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { ESLint } from 'eslint'
-import { expect, it } from 'vitest'
+import { beforeAll, expect, it } from 'vitest'
 import { dirOf, fmt, getDictionary, locales, merge } from './index'
 import { fr } from './fr'
 
@@ -27,6 +27,11 @@ it('fmt fills placeholders', () => {
 
 // The "no hard-coded user-visible strings" guard is ESLint (eslint.config.mjs); this pins what it catches.
 const eslint = new ESLint()
+// The first lint loads the flat config, typescript-eslint and the plugins: seconds on a cold, busy machine (all test
+// files run in parallel). Pay it once here with a generous timeout so no single case races the 5 s default.
+beforeAll(async () => {
+  await eslint.lintText('export {}', { filePath: 'app/warmup/Warmup.tsx' })
+}, 60_000)
 async function literalErrors(jsx: string, filePath = 'app/sample/Sample.tsx') {
   const code = `export function Sample({ ok, d }: { ok: boolean; d: { t: string } }) {\n  return ${jsx}\n}\n`
   const [result] = await eslint.lintText(code, { filePath })

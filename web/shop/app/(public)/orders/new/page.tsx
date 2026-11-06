@@ -1,0 +1,104 @@
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { notFound, redirect } from 'next/navigation'
+import { api, ApiError } from '@/lib/api'
+import { eventSlug, getEvent, saleState } from '@/lib/events'
+import { currentSession } from '@/lib/http'
+import { defaultLocale, fmt, getDictionary } from '@/lib/i18n'
+import { formatDh } from '@/lib/money'
+import { checkoutPath, loginUrl, parseCheckout } from '@/lib/orders'
+import { formatDateTime } from '@/lib/time'
+import { CheckoutForm } from './CheckoutForm'
+
+const d = getDictionary(defaultLocale)
+
+export const metadata: Metadata = { title: d.checkout.metaTitle, robots: { index: false } }
+
+type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
+
+/**
+ * W3 · `/orders/new?event=&price=&qty=` (W2 Continuer). Malformed query or unknown event/price → 404; not signed in
+ * (or session revoked) → login, back here after; sale not open or price sold out → the event page, which says why.
+ */
+export default async function CheckoutPage({ searchParams }: Props) {
+  const q = parseCheckout(await searchParams)
+  if (!q) notFound()
+  const token = await currentSession()
+  if (!token) redirect(loginUrl(checkoutPath(q)))
+  const e = await getEvent(q.event)
+  const zone = e?.zones.find((z) => z.prices.some((p) => p.price_category_id === q.price))
+  const price = zone?.prices.find((p) => p.price_category_id === q.price)
+  if (!e || !zone || !price) notFound()
+  // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
+  if (saleState(e, Date.now()) !== 'ON_SALE' || price.remaining === 0) redirect(`/events/${eventSlug(e)}`)
+  let me: { display_name?: unknown }
+  try {
+    me = await api('/fan/me', { token })
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) redirect(loginUrl(checkoutPath(q)))
+    throw err
+  }
+  const qty = Math.max(1, Math.min(q.qty, e.per_account_limit || q.qty, price.remaining))
+  // Say why when fewer places than asked: the stock (remaining) or the per-account limit.
+  const capped =
+    qty >= q.qty
+      ? null
+      : qty === price.remaining
+        ? fmt(d.checkout.cappedStock, { n: qty })
+        : fmt(d.checkout.cappedLimit, { n: qty })
+  const total = price.price_mad * qty // integer centimes × integer count: exact
+  const zoneLabel = zone.prices.length > 1 ? `${zone.name} · ${price.name}` : zone.name
+  const when = `${formatDateTime(e.starts_at, e.timezone, d.meta.intl)} · ${e.venue.name}`
+
+  return (
+    <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-12">
+      <section aria-labelledby="checkout-title" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
+        <h1 id="checkout-title" className="font-display text-hero uppercase">
+          {d.checkout.title}
+        </h1>
+        <p className="text-body text-text-secondary">{d.checkout.intro}</p>
+        {capped && (
+          <p data-capped className="rounded-control border border-accent/50 bg-accent/10 px-4 py-3 text-body-small text-accent-hover">
+            {capped}
+          </p>
+        )}
+        <CheckoutForm
+          eventId={e.id}
+          priceCategoryId={price.price_category_id}
+          qty={qty}
+          displayName={typeof me?.display_name === 'string' ? me.display_name : null}
+          totalMad={total}
+          copy={{ checkout: d.checkout, errors: d.errors }}
+        />
+      </section>
+      <aside
+        aria-labelledby="summary-title"
+        className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-border bg-surface p-5 md:sticky md:top-6 md:max-w-[380px]"
+      >
+        <h2 id="summary-title" className="font-display text-h2">
+          {d.checkout.summary}
+        </h2>
+        <p className="font-semibold">{e.title}</p>
+        <p className="text-body-small text-text-muted">{when}</p>
+        <hr className="border-border" />
+        <p className="flex justify-between gap-3 text-sm">
+          <span>{fmt(d.checkout.line, { qty, zone: zoneLabel })}</span>
+          <span>{formatDh(total)}</span>
+        </p>
+        <p className="flex justify-between gap-3 text-sm text-text-muted">
+          <span>{d.checkout.fee}</span>
+          <span>{formatDh(0)}</span>
+        </p>
+        <hr className="border-border" />
+        <p className="flex items-baseline justify-between">
+          <span className="font-semibold">{d.checkout.total}</span>
+          <span className="font-display text-[30px] font-extrabold leading-none">{formatDh(total)}</span>
+        </p>
+        <p className="text-body-small text-text-muted">{d.checkout.method}</p>
+        <Link href={`/events/${eventSlug(e)}`} className="flex min-h-touch-min items-center text-body-small font-semibold text-accent hover:underline">
+          {d.checkout.back}
+        </Link>
+      </aside>
+    </main>
+  )
+}
