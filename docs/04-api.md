@@ -76,11 +76,21 @@ gateway (`provider = fake`) that exists only outside prod.
 | POST | `/payments/{provider}/callback` | Server to server (`fake` now, `payzone` later). Signature verified before any state change. Idempotent on `payment_id`. On approval, in one transaction: payment `SUCCEEDED` → order `PAID` → tickets issued (one per unit, holder = buyer). Request format and acknowledgement body come from the adapter. |
 | GET, POST | `/payments/card/{payment_id}/return` | Browser landing after the gateway. **Never changes state.** Lot 0: plain "paiement en cours de confirmation" page. Lot 1: redirects to a fixed client URL per `orders.channel` (no caller-supplied URL). |
 | GET | `/payments/fake/{payment_id}` | Simulated gateway page: amount, "Approuver" / "Refuser". Each button posts a signed callback to `/payments/fake/callback`, then lands on `/return`. Supports a delayed callback. Exists only in `dev`/`test`/`staging`; startup fails if `payments.card.provider=fake` under `prod`. |
+| POST | `/payments/fake/{payment_id}/late` | Simulated gateway only (same profiles): schedules the signed approval after `payments.fake.late-delay`; `410` if the payment isn't `PENDING`. |
 | POST | `/payments/cash/callback` | Agency network (Lot 3), idempotent on `payment_ref` |
+
+Answers: `POST /fan/orders/{id}/pay` → `200`. A callback with a missing, bad or tampered signature →
+401 `UNAUTHORIZED` with a fixed message and empty `details`, nothing written. `/redirect`, `/return`
+and the simulated gateway page are browser pages (FR HTML, e.g. the 410), not the JSON error shape;
+an unknown `payment_id` on `/redirect` is the JSON 404. A success on a `RESERVED` order whose hold
+has passed but that the expiry job hasn't swept yet is a normal `PAID` (the places are still held).
 
 Late success: expiry skips orders with a `PENDING` payment younger than 20 min. A success after
 expiry re-reserves the quota atomically → `PAID`; if no quota is left the order stays `EXPIRED`,
-the payment is `SUCCEEDED`, and `audit_log` gets `payment.refund_required` (manual refund).
+the payment is `SUCCEEDED`, and `audit_log` gets `payment.refund_required` (manual refund) with reason `SOLD_OUT`,
+`PER_ACCOUNT_LIMIT`, `NOT_PAYABLE` (a second success for an order already `PAID`), or
+`AMOUNT_MISMATCH` (an approved callback whose amount differs from the payment: payment `FAILED`,
+order stays payable, the charged amount must be refunded).
 
 ## Organizer
 

@@ -2,39 +2,48 @@ package ma.jomhor.tenancy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 import ma.jomhor.IntegrationTest;
 import ma.jomhor.JomhorApplication;
+import ma.jomhor.payments.application.CardGateway;
 import ma.jomhor.tenancy.application.OtpSender;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 
-/** The log sender prints codes: only dev and staging get it. Anywhere else there is no sender yet, so no start. */
+/**
+ * The log sender prints codes: only dev and staging get it. Anywhere else there is no sender yet, so no start.
+ * Under prod and no profile a stub card gateway is registered, so the OtpSender is the only bean missing.
+ */
 class OtpSenderProfileTest {
 
     @Test
     void prodRefusesToStart() {
-        assertThatThrownBy(() -> start("prod").close())
+        assertThatThrownBy(() -> start("prod", true).close())
                 .hasStackTraceContaining("No qualifying bean of type '" + OtpSender.class.getName() + "'");
     }
 
     @Test
     void noProfileRefusesToStart() {
-        assertThatThrownBy(() -> start(null).close())
+        assertThatThrownBy(() -> start(null, true).close())
                 .hasStackTraceContaining("No qualifying bean of type '" + OtpSender.class.getName() + "'");
     }
 
     @Test
     void stagingStartsWithTheLogSender() {
-        try (var context = start("staging")) {
+        try (var context = start("staging", false)) {
             assertThat(context.getBean(OtpSender.class).getClass().getSimpleName()).isEqualTo("LogOtpSender");
         }
     }
 
-    private static ConfigurableApplicationContext start(String profile) {
+    private static ConfigurableApplicationContext start(String profile, boolean stubCardGateway) {
         var pg = IntegrationTest.POSTGRES;
-        return SpringApplication.run(JomhorApplication.class,
+        var app = new SpringApplication(JomhorApplication.class);
+        if (stubCardGateway) {
+            app.addInitializers(c -> c.getBeanFactory().registerSingleton("stubCardGateway", mock(CardGateway.class)));
+        }
+        return app.run(
                 "--spring.profiles.active=" + (profile == null ? "" : profile),
                 "--server.port=0",
                 "--spring.datasource.url=" + pg.getJdbcUrl(),

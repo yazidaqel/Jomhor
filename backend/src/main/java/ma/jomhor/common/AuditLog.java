@@ -19,4 +19,10 @@ public class AuditLog {
         jdbc.sql("insert into audit_log (organizer_id, actor_type, actor_id, action, target) values (?, 'STAFF', ?, ?, ?)")
                 .params(organizerId, userId, action, target).update();
     }
+
+    /** A system action (no actor); {@code payloadJson} is a JSON object and must never hold a secret. */
+    public void system(UUID organizerId, String action, String target, String payloadJson) {
+        jdbc.sql("insert into audit_log (organizer_id, actor_type, action, target, payload) values (?, 'SYSTEM', ?, ?, ?::jsonb)")
+                .params(organizerId, action, target, payloadJson).update();
+    }
 }

@@ -12,3 +12,10 @@ jomhor:
   jwt-secret: ${JWT_SECRET:dev-only-jwt-secret-not-for-prod-0001}
   otp-secret: ${OTP_SECRET:dev-only-otp-secret-not-for-prod-0001}
   event-key-master: ${EVENT_KEY_MASTER:ZGV2LW9ubHktZXZlbnQta2V5LW1hc3Rlci1ub3QtNHU=} # base64 of "dev-only-event-key-master-not-4u"
+
+payments:
+  card:
+    provider: ${PAYMENTS_CARD_PROVIDER:fake}
+  public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080/v1}
+  fake:
+    secret: ${PAYMENTS_FAKE_SECRET:dev-only-payments-fake-secret-not-for-prod}

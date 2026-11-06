@@ -120,7 +120,6 @@ class PriceApiTest extends OrgApiTest {
         call(a, get(path)).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].price_mad").value(5000));
     }
 
-    // Interim: 04 has no code for a duplicate (event, zone, name) yet (see EventService.nameUnique).
     @Test
     void duplicateNameInAZoneIsRefused() throws Exception {
         Caller a = admin();
@@ -130,9 +129,10 @@ class PriceApiTest extends OrgApiTest {
         int id = event(a, venueId);
         price(a, id, nord, "Plein", 1);
         price(a, id, est, "Plein", 1); // same name, other zone: fine
-        invalid(postPrice(a, id, nord, "Plein", 1), "name");
+        invalid(postPrice(a, id, nord, "Plein", 1).andExpect(jsonPath("$.details.reason").value("NAME_TAKEN")), "name");
         String abonne = price(a, id, nord, "Abonné", 1);
-        invalid(call(a, patch("/org/events/" + id + "/prices/" + abonne), "{\"name\": \"Plein\"}"), "name");
+        invalid(call(a, patch("/org/events/" + id + "/prices/" + abonne), "{\"name\": \"Plein\"}")
+                .andExpect(jsonPath("$.details.reason").value("NAME_TAKEN")), "name");
         call(a, get("/org/events/" + id + "/prices")).andExpect(jsonPath("$.length()").value(3));
     }
 

@@ -208,12 +208,15 @@ public class EventService {
         }
     }
 
-    // ponytail: 04 has no code for a duplicate (event, zone, name); 422 on `name` until the contract names one.
+    /** 04: a name already used for the zone in the event → 422 on `name` with details.reason NAME_TAKEN. */
     private static <T> T nameUnique(Supplier<T> write) {
         try {
             return write.get();
         } catch (DuplicateKeyException e) {
-            throw invalid("name", "already used for this zone");
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("reason", "NAME_TAKEN");
+            details.put("fields", Map.of("name", "already used for this zone"));
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
         }
     }
 

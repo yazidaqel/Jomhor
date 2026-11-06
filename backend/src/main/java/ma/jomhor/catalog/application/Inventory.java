@@ -72,10 +72,38 @@ public class Inventory {
     @Transactional(propagation = Propagation.MANDATORY)
     public Map<UUID, SalePrice> reserve(UUID org, int eventId, Map<UUID, Integer> qtyByCategory) {
         Map<UUID, SalePrice> taken = new TreeMap<>();
-        new TreeMap<>(qtyByCategory).forEach((id, qty) -> taken.put(id, events.take(org, eventId, id, qty).map(Inventory::sale)
-                .orElseThrow(() -> new ApiException("SOLD_OUT", HttpStatus.CONFLICT, "Not enough places left",
-                        Map.of("price_category_id", id.toString())))));
+        UUID full = take(org, eventId, qtyByCategory, taken);
+        if (full != null) {
+            throw new ApiException("SOLD_OUT", HttpStatus.CONFLICT, "Not enough places left",
+                    Map.of("price_category_id", full.toString()));
+        }
         return taken;
+    }
+
+    /**
+     * Like reserve, but a category that doesn't fit gives back what was already taken and returns empty instead
+     * of throwing, so a caller that must commit anyway (a late card success, plan Q8) keeps its transaction.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Map<UUID, SalePrice>> tryReserve(UUID org, int eventId, Map<UUID, Integer> qtyByCategory) {
+        Map<UUID, SalePrice> taken = new TreeMap<>();
+        if (take(org, eventId, qtyByCategory, taken) == null) {
+            return Optional.of(taken);
+        }
+        release(taken.keySet().stream().map(id -> new Hold(org, eventId, id, qtyByCategory.get(id))).toList());
+        return Optional.empty();
+    }
+
+    /** Takes in UUID order into {@code taken}; returns the first category that doesn't fit, or null. */
+    private UUID take(UUID org, int eventId, Map<UUID, Integer> qtyByCategory, Map<UUID, SalePrice> taken) {
+        for (var e : new TreeMap<>(qtyByCategory).entrySet()) {
+            Optional<PriceCategory> row = events.take(org, eventId, e.getKey(), e.getValue());
+            if (row.isEmpty()) {
+                return e.getKey();
+            }
+            taken.put(e.getKey(), sale(row.get()));
+        }
+        return null;
     }
 
     /** Gives every hold back. Each one must fit (sold ≥ qty): anything else is a bug, ReleaseFailed. */

@@ -54,13 +54,12 @@ class OrderController {
         return new Reserved(o.id(), o.status(), o.reservedUntil(), o.totalMad(), items(v));
     }
 
-    // ponytail: ticket_ids stays [] until BE-6 issues tickets.
     @GetMapping("/fan/orders/{id}")
     OrderDto get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         View v = orders.get(UUID.fromString(jwt.getSubject()), id);
         Order o = v.order();
         return new OrderDto(o.id(), o.eventId(), o.status(), o.totalMad(), o.reservedUntil(), o.paidAt(), items(v),
-                List.of());
+                v.ticketIds());
     }
 
     private static List<ItemDto> items(View v) {

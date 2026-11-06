@@ -5,8 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 /** An order with its items. Money in centimes. */
-public record Order(UUID id, UUID organizerId, int eventId, Status status, long totalMad, Instant reservedUntil,
-                    Instant paidAt, List<Item> items) {
+public record Order(UUID id, UUID organizerId, int eventId, UUID userId, Status status, long totalMad,
+                    Instant reservedUntil, Instant paidAt, List<Item> items) {
 
     /** docs/06-glossary.md §Order statuses. */
     public enum Status { RESERVED, AWAITING_CASH, PAID, EXPIRED, CANCELLED, REFUNDED }
@@ -16,4 +16,12 @@ public record Order(UUID id, UUID organizerId, int eventId, Status status, long 
 
     /** unit_price_mad is the snapshot taken at reservation. */
     public record Item(UUID priceCategoryId, int qty, long unitPriceMad) {}
+
+    public Order withItems(List<Item> newItems) {
+        return new Order(id, organizerId, eventId, userId, status, totalMad, reservedUntil, paidAt, newItems);
+    }
+
+    public int places() {
+        return items.stream().mapToInt(Item::qty).sum();
+    }
 }

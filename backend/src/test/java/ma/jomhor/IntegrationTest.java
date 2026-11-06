@@ -16,13 +16,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-/** Full app on one shared Postgres 18 container, with test secrets and a mock OtpSender. */
+/** Full app (test profile: simulated card gateway) on one shared Postgres 18 container, test secrets, a mock OtpSender. */
+@ActiveProfiles("test")
 @SpringBootTest(properties = {IntegrationTest.JWT_SECRET, IntegrationTest.OTP_SECRET, IntegrationTest.EVENT_KEY_MASTER})
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {

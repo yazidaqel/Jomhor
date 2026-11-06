@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,7 +20,7 @@ import org.springframework.stereotype.Repository;
 class JdbcOrders implements Orders {
 
     private static final String ORDER_COLUMNS =
-            "id, organizer_id, event_id, status, total_mad, reserved_until, paid_at";
+            "id, organizer_id, event_id, user_id, status, total_mad, reserved_until, paid_at";
 
     private final JdbcClient jdbc;
 
@@ -72,32 +73,53 @@ class JdbcOrders implements Orders {
         return jdbc.sql("select " + ORDER_COLUMNS + " from orders where id = :id and user_id = :user")
                 .param("id", orderId).param("user", userId)
                 .query((rs, n) -> order(rs, null)).optional()
-                .map(o -> new Order(o.id(), o.organizerId(), o.eventId(), o.status(), o.totalMad(), o.reservedUntil(),
-                        o.paidAt(), items(o.organizerId(), o.id())));
+                .map(o -> o.withItems(items(o.organizerId(), o.id())));
     }
 
-    // ponytail: reads payments (BE-6's table) for the Q8 skip; becomes a payments query once that module exists.
     @Override
-    public List<Expired> expireDue(int limit) {
+    public Optional<Locked> lock(UUID orderId) {
+        return jdbc.sql("select " + ORDER_COLUMNS + ", reserved_until > now() as holding from orders where id = :id"
+                        + " for no key update")
+                .param("id", orderId)
+                .query((rs, n) -> new Locked(order(rs, null), rs.getBoolean("holding"))).optional()
+                .map(l -> new Locked(l.order().withItems(items(l.order().organizerId(), l.order().id())), l.holding()));
+    }
+
+    @Override
+    public void markPaid(UUID org, UUID orderId, String paymentRef) {
+        jdbc.sql("""
+                        update orders set status = 'PAID', paid_at = now(), payment_method = 'CARD', payment_ref = :ref
+                        where organizer_id = :org and id = :id
+                        """)
+                .param("org", org).param("id", orderId).param("ref", paymentRef).update();
+    }
+
+    @Override
+    public List<UUID> claimDue(int limit, Collection<UUID> exclude) {
+        return jdbc.sql("""
+                        select id from orders
+                        where status = 'RESERVED' and reserved_until < now() and not (id = any(:exclude))
+                        order by reserved_until
+                        limit :limit
+                        for no key update skip locked
+                        """)
+                .param("exclude", exclude.toArray(UUID[]::new)).param("limit", limit)
+                .query(UUID.class).list();
+    }
+
+    @Override
+    public List<Expired> expire(Collection<UUID> orderIds) {
         return jdbc.sql("""
                         with expired as (
                           update orders set status = 'EXPIRED'
-                          where id in (
-                            select o.id from orders o
-                            where o.status = 'RESERVED' and o.reserved_until < now()
-                              and not exists (select 1 from payments p
-                                              where p.order_id = o.id and p.organizer_id = o.organizer_id
-                                                and p.status = 'PENDING' and p.created_at > now() - interval '20 minutes')
-                            order by o.reserved_until
-                            limit :limit
-                            for no key update skip locked)
+                          where id = any(:ids) and status = 'RESERVED'
                           returning id, organizer_id, event_id)
                         select e.organizer_id, e.event_id, i.price_category_id, sum(i.qty) as qty,
                                array_agg(e.id order by e.id) as order_ids
                         from expired e join order_items i on i.order_id = e.id and i.organizer_id = e.organizer_id
                         group by e.organizer_id, e.event_id, i.price_category_id
                         """)
-                .param("limit", limit)
+                .param("ids", orderIds.toArray(UUID[]::new))
                 .query((rs, n) -> new Expired(new Hold(rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"),
                         rs.getObject("price_category_id", UUID.class), rs.getInt("qty")),
                         List.of((UUID[]) rs.getArray("order_ids").getArray())))
@@ -117,8 +139,8 @@ class JdbcOrders implements Orders {
 
     private static Order order(ResultSet rs, List<Order.Item> items) throws SQLException {
         return new Order(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"),
-                Order.Status.valueOf(rs.getString("status")), rs.getLong("total_mad"), instant(rs, "reserved_until"),
-                instant(rs, "paid_at"), items);
+                rs.getObject("user_id", UUID.class), Order.Status.valueOf(rs.getString("status")), rs.getLong("total_mad"),
+                instant(rs, "reserved_until"), instant(rs, "paid_at"), items);
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {

@@ -1,5 +1,6 @@
 package ma.jomhor.sales.application;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,11 +23,24 @@ public interface Orders {
     Optional<Order> find(UUID userId, UUID orderId);
 
     /**
-     * Moves up to {@code limit} RESERVED orders past reserved_until to EXPIRED, skipping those with a PENDING
-     * payment younger than 20 min and rows another instance is working on. Returns their items, summed per
-     * price category, to release in the same transaction.
+     * The order with its items, its row locked ({@code for no key update}) until the end of the transaction:
+     * the same strength as the expiry claim, so pay, settle and expiry on one order run one after the other.
      */
-    List<Expired> expireDue(int limit);
+    Optional<Locked> lock(UUID orderId);
+
+    /** A locked order, and whether its hold still runs by the database clock (reserved_until > now()). */
+    record Locked(Order order, boolean holding) {}
+
+    void markPaid(UUID org, UUID orderId, String paymentRef);
+
+    /**
+     * Locks up to {@code limit} RESERVED orders past reserved_until, oldest first, leaving out {@code exclude}
+     * and rows another transaction holds (skip locked).
+     */
+    List<UUID> claimDue(int limit, Collection<UUID> exclude);
+
+    /** RESERVED → EXPIRED for these (already locked) orders; their items summed per price category. */
+    List<Expired> expire(Collection<UUID> orderIds);
 
     /** The places of one price category held by the orders just expired. */
     record Expired(Hold hold, List<UUID> orderIds) {}
