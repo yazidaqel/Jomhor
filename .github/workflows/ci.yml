@@ -23,6 +23,7 @@ jobs:
       backoffice: ${{ steps.filter.outputs.backoffice }}
       core: ${{ steps.filter.outputs.core }}
       fan: ${{ steps.filter.outputs.fan }}
+      scanner: ${{ steps.filter.outputs.scanner }}
       shop: ${{ steps.filter.outputs.shop }}
     steps:
       - uses: actions/checkout@v7
@@ -33,6 +34,7 @@ jobs:
             backend:
               - 'backend/**'
               - 'docs/token-vectors.json'
+              - 'docs/gate-vectors.json'
               - '.github/workflows/ci.yml'
             backoffice:
               - 'web/backoffice/**'
@@ -44,6 +46,13 @@ jobs:
             fan:
               - 'apps/fan/**'
               - 'packages/core/**'
+              - 'design/tokens.json'
+              - '.github/workflows/ci.yml'
+            scanner:
+              - 'apps/scanner/**'
+              - 'packages/core/**'
+              - 'docs/gate-vectors.json'
+              - 'docs/token-vectors.json'
               - 'design/tokens.json'
               - '.github/workflows/ci.yml'
             shop:
@@ -118,6 +127,33 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - run: flutter analyze --fatal-infos
       - run: flutter test
+
+  scanner:
+    needs: changes
+    if: needs.changes.outputs.scanner == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/scanner
+    steps:
+      - uses: actions/checkout@v7
+      # Skip cleanly until apps/scanner exists (Lot 2 FL tasks create it).
+      - id: present
+        working-directory: .
+        run: if [ -f apps/scanner/pubspec.yaml ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; else echo "apps/scanner absent, skipping"; fi
+      - if: steps.present.outputs.yes == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - if: steps.present.outputs.yes == 'true'
+        run: flutter pub get
+      - if: steps.present.outputs.yes == 'true'
+        run: dart format --output=none --set-exit-if-changed lib test tool
+      - if: steps.present.outputs.yes == 'true'
+        run: flutter analyze --fatal-infos
+      - if: steps.present.outputs.yes == 'true'
+        run: flutter test
 
   shop:
     needs: changes

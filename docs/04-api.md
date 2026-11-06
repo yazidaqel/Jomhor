@@ -9,23 +9,25 @@ Three audiences, three auth schemes:
 | --- | --- | --- |
 | Fan (app, web shop) | Bearer JWT from phone-OTP login, carrying a revocable session `sid`; `GET /fan/events*` is public | `/fan/...` |
 | Organizer (back-office) | Bearer JWT, staff account, `X-Organizer-Id` | `/org/...` |
-| Gate (scanner) | Device signature (Ed25519 over method+path+body+timestamp) + staff PIN session token | `/gate/...` |
+| Gate (scanner) | Device signature, ECDSA P-256 key in Android Keystore (§Gate auth). No server session: staff PINs are checked on the device (§Gate PINs) | `/gate/...` |
 | Card gateway | Gateway signature, verified per provider | `/payments/...` |
 
-Error codes (Lot 0 and Lot 1; later lots add theirs here):
+Error codes (Lot 0, Lot 1 and Lot 2; later lots add theirs here):
 
 | Code | HTTP | When |
 | --- | --- | --- |
 | `VALIDATION_FAILED` | 422 | Bad body; `details.fields{}` |
 | `BAD_REQUEST` | 4xx | Request rejected by the framework before reaching a handler (bad path/query type, missing header, wrong method or media type); HTTP status kept |
 | `INTERNAL_ERROR` | 500 | Anything unexpected; fixed message, `details: {}`, logged server-side, never echoes the exception |
-| `UNAUTHORIZED` | 401 | Missing, invalid or wrong-audience token; fan token whose session is revoked or expired |
+| `UNAUTHORIZED` | 401 | Missing, invalid or wrong-audience token; fan token whose session is revoked or expired; gate: missing or bad device signature, unknown device, bad or expired `enrol_code` (fixed message, empty `details`) |
+| `DEVICE_CLOCK_SKEW` | 401 | `X-Device-Time` more than 5 min from server time; `details.server_time`. The device fixes its offset and retries once |
 | `FORBIDDEN` | 403 | No active staff row for `X-Organizer-Id`, or role not allowed |
+| `DEVICE_NOT_ACTIVE` | 403 | Device `PENDING` or `REVOKED`; `details.status`. On `REVOKED` the scanner wipes K_e, manifest, staff list and scans |
 | `NOT_FOUND` | 404 | Unknown id, or an id of another organizer or user |
 | `OTP_INVALID` / `OTP_EXPIRED` | 401 | Verify failed |
 | `OTP_RATE_LIMITED` | 429 | Any OTP limit in §Fan auth (per phone, per IP, or phone locked after failed codes) |
 | `EVENT_NOT_ON_SALE` | 409 | Order outside the sale window. `details.reason`: `NOT_ON_SALE` (status), `NOT_STARTED` (+ `details.sale_starts_at`), `CLOSED` (at or after `refund_cutoff_at`) |
-| `EVENT_NOT_EDITABLE` | 409 | Event PATCH, price write or publish when the status doesn't allow it (PATCH and prices: only `DRAFT`/`ON_SALE`; publish: only `DRAFT`, so the losing side of a double publish gets it too) |
+| `EVENT_NOT_EDITABLE` | 409 | Event PATCH, price write or publish when the status doesn't allow it (PATCH and prices: only `DRAFT`/`ON_SALE`; publish: only `DRAFT`, so the losing side of a double publish gets it too); close outside `ON_SALE`/`GATES_OPEN` or before `starts_at`; assignment PUT on a `CLOSED` event |
 | `SOLD_OUT` | 409 | `details.price_category_id` |
 | `PER_ACCOUNT_LIMIT` | 409 | `details.limit`, `details.held` |
 | `SALE_BUSY` | 429 | Basic on-sale queue is full; `details.retry_after_s` (int, 5–30, with jitter). Retry the same request. |
@@ -34,9 +36,14 @@ Error codes (Lot 0 and Lot 1; later lots add theirs here):
 | `ORDER_EXPIRED` / `ORDER_NOT_PAYABLE` | 409 | Pay on a non-`RESERVED` order |
 | `CODE_TAKEN` | 409 | Duplicate zone or gate code in a venue |
 | `VENUE_IN_USE` | 409 | Changing a venue's `timezone` once events reference the venue |
-| `ZONE_IN_USE` / `GATE_IN_USE` / `PRICE_IN_USE` | 409 | Delete of a referenced row. `gate_zones` mappings do not count: they are removed with their zone or gate. References are price categories, order items, tickets (Lot 2: device assignments, scans). |
+| `ZONE_IN_USE` / `GATE_IN_USE` / `PRICE_IN_USE` | 409 | Delete of a referenced row. `gate_zones` mappings do not count: they are removed with their zone or gate. References are price categories, order items, tickets. Lot 2: device assignments and scans reference gates. |
 | `QUOTA_EXCEEDS_CAPACITY` / `QUOTA_BELOW_SOLD` | 422 | Price category quota rules |
 | `REFUND_FROZEN` | 409 | Refund or cancel after `refund_cutoff_at` |
+| `DEVICE_REVOKED` | 409 | Approve on a `REVOKED` device |
+| `DEVICE_IN_USE` | 409 | Assignment PUT that removes a device with scans on the event; `details.device_ids` |
+| `MANIFEST_NOT_READY` | 409 | Before `manifest_available_at`, or no version built yet; `details.available_at` |
+| `EVENT_CLOSED` | 409 | Manifest request on a `CLOSED` event |
+| `EVENT_NOT_CLOSED` | 409 | `closed-ack` before the event is `CLOSED` |
 
 No pagination in Lot 0. Lists are per organizer and small, in a stable order: by name for
 venues, by code for zones and gates, by `starts_at` for events, by `zone_id` then `name` for prices,
@@ -129,7 +136,7 @@ order stays payable, the charged amount must be refunded).
 Every `/org/*` call except `/org/auth/*` and `/org/me` needs `X-Organizer-Id`. The server checks
 for an active `staff` row (user_id = token subject). Lot 0 roles: `ADMIN`, `OPS` read and write;
 `FINANCE` read only; `GATE`, `SUPERVISOR` get 403. A missing or malformed `X-Organizer-Id` → 400
-`BAD_REQUEST`; no active staff row for it → 403 `FORBIDDEN`.
+`BAD_REQUEST`; no active staff row for it → 403 `FORBIDDEN`. Lot 2: devices, staff, assignments and close are ADMIN/OPS; `/live` and `/reconciliation` are also FINANCE (read). GATE/SUPERVISOR still get 403 on `/org`: they only use the scanner.
 
 Fans and staff use the same OTP mechanism, counted per audience (`otp_challenges.audience`): a
 code verifies only on the endpoint family that requested it, and staff requests never use up a fan's
@@ -154,19 +161,26 @@ created in the last 24 h, so it can lift up to 5 min before the oldest failure i
 | PATCH, DELETE | `/org/venues/{id}/gates/{gate_id}` | DELETE only if unreferenced (`GATE_IN_USE`) |
 | PUT | `/org/gates/{id}/zones` | `{zone_ids:[...]}` replaces the set. Zones must belong to the gate's venue. |
 | GET | `/org/events?status=&from=` | `[{id, title, event_type, starts_at, status, venue:{id, name, timezone}, quota, sold}]` by `starts_at` |
-| POST | `/org/events` | `{venue_id, event_type, title, starts_at, doors_open_at?, reentry_policy?, per_account_limit?, metadata?}` → `201` event in `DRAFT`. **K_e (32 random bytes) is generated and encrypted in the same transaction and never returned.** A `venue_id` that is unknown or another organizer's → 422 `VALIDATION_FAILED` on `venue_id`. Lot 0 has no version field: concurrent edits of one event are last-write-wins. | **Lot 1:** + `sale_starts_at?`, which must be before `starts_at − 60 min` (422 on `sale_starts_at`), checked on every write that changes either field.
-| GET, PATCH | `/org/events/{id}` | Event (`id` is an int, the 4-byte `event_id` of the QR) `{id, venue_id, timezone, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at, reentry_policy, per_account_limit, metadata, created_at}`. PATCH allowed in `DRAFT`/`ON_SALE`. `venue_id` and `event_type` are fixed after create (a different value → 422). Changing `starts_at` while `ON_SALE` recomputes `refund_cutoff_at`. `metadata` in a PATCH replaces the whole object. `doors_open_at` cannot be cleared in Lot 0. | **Lot 1:** the shape adds `sale_starts_at`; PATCH may move it while `DRAFT`/`ON_SALE`; it can't be cleared (to open now, set it to now).
+| POST | `/org/events` | `{venue_id, event_type, title, starts_at, doors_open_at?, reentry_policy?, per_account_limit?, metadata?}` → `201` event in `DRAFT`. **K_e (32 random bytes) is generated and encrypted in the same transaction and never returned.** A `venue_id` that is unknown or another organizer's → 422 `VALIDATION_FAILED` on `venue_id`. Lot 0 has no version field: concurrent edits of one event are last-write-wins. | **Lot 1:** + `sale_starts_at?`, which must be before `starts_at − 60 min` (422 on `sale_starts_at`), checked on every write that changes either field. **Lot 2:** `reentry_policy: ONE_EXIT` → 422 `VALIDATION_FAILED` on `reentry_policy`, `details.reason` `NOT_SUPPORTED` (re-entry not built; plan lot-2 Q33).
+| GET, PATCH | `/org/events/{id}` | Event (`id` is an int, the 4-byte `event_id` of the QR) `{id, venue_id, timezone, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at, reentry_policy, per_account_limit, metadata, created_at}`. PATCH allowed in `DRAFT`/`ON_SALE`. `venue_id` and `event_type` are fixed after create (a different value → 422). Changing `starts_at` while `ON_SALE` recomputes `refund_cutoff_at`. `metadata` in a PATCH replaces the whole object. `doors_open_at` cannot be cleared in Lot 0. | **Lot 1:** the shape adds `sale_starts_at`; PATCH may move it while `DRAFT`/`ON_SALE`; it can't be cleared (to open now, set it to now). **Lot 2:** `reentry_policy: ONE_EXIT` → 422 `VALIDATION_FAILED` on `reentry_policy`, `details.reason` `NOT_SUPPORTED` (re-entry not built; plan lot-2 Q33).
 | GET, POST | `/org/events/{id}/prices` | `{zone_id, name, price_mad, quota}` → `{id, zone_id, name, price_mad, quota, sold}`. The zone must be in the event's venue; Σ quota per zone ≤ zone capacity. A name already used for that zone in the event → 422 `VALIDATION_FAILED` on `name` with `details.reason` `NAME_TAKEN` (clients match the reason, never the message text). |
 | PATCH, DELETE | `/org/events/{id}/prices/{price_id}` | PATCH `{name?, price_mad?, quota?}`; `zone_id` is fixed after create (a different value → 422). `quota ≥ sold`. A price change applies to new orders only (snapshot in `order_items`). DELETE only if `sold = 0` (`PRICE_IN_USE`). |
 | POST | `/org/events/{id}/publish` | `DRAFT` → `ON_SALE`. Needs ≥ 1 category with quota > 0 and `starts_at > now`. Sets `refund_cutoff_at = starts_at − 60 min`. Writes `audit_log` `event.publish`. → `200` with the event (GET shape). Unmet precondition → 422 `VALIDATION_FAILED` with `details.reason` `NO_QUOTA` (`fields.prices`) or `STARTS_IN_PAST` (`fields.starts_at`). |
 | GET | `/org/events/{id}/sales` | ADMIN, OPS, FINANCE. `{event_id, quota, paid, held, revenue_mad, zones:[{zone_id, code, name, quota, paid, held, revenue_mad}], channels:[{channel, paid, revenue_mad}], refunds_required:[{payment_id, order_id, amount_mad, reason, at}]}`. `paid` = places in `PAID` orders; `held` = places in `RESERVED` orders still held; `revenue_mad` = Σ qty × `unit_price_mad` of `PAID` orders (gross, no fees); `refunds_required` = this event's `payment.refund_required` audit rows, newest first. `zones` = the zones with at least one price category on the event, by `code`; `channels` = every `sales_channel` (`APP`, `WEB`, `POS`), zeros included. Types: `zone_id` int, `payment_id`/`order_id` UUID, `reason` one of `SOLD_OUT`, `PER_ACCOUNT_LIMIT`, `NOT_PAYABLE`, `AMOUNT_MISMATCH` (§Payments). Unknown or other organizer's event → 404. |
 | POST | `/org/tickets/{id}/block` · `/unblock` · `/refund` | Refused after `refund_cutoff_at` (`REFUND_FROZEN`) |
 | POST | `/org/events/{id}/invitations` | Bulk accreditations `[{phone?, name, zone_id, count}]` → tickets with method FREE |
-| CRUD | `/org/devices` | Enrol (approve `PENDING` → `ACTIVE`), revoke |
-| PUT | `/org/events/{id}/devices` | Assignments `[{device_id, gate_id}]` |
-| GET | `/org/events/{id}/live` | Dashboard: per gate `{entered, rejected_by_reason, overrides, rate_per_min, last_sync_at}`; SSE at `/org/events/{id}/live/stream` |
-| POST | `/org/events/{id}/close` | Marks `CLOSED`, triggers device wipe on next sync, builds reconciliation |
-| GET | `/org/events/{id}/reconciliation` | Sold / scanned / rejected / overrides per zone and gate; CSV at `.csv` |
+| POST | `/org/devices/enrol-codes` | → `201 {enrol_code, expires_at}`. JWT `aud=enrol`, `sub` = organizer, 30 min, reusable for a batch. B6 renders it as a QR. |
+| GET | `/org/devices` | `[{id, label, status, fingerprint, enrolled_at, approved_at, last_seen_at}]`, `PENDING` first, then by label. `fingerprint` per §Gate auth. |
+| POST | `/org/devices/{id}/approve` | `PENDING` → `ACTIVE`; `ACTIVE` → `200` unchanged; `REVOKED` → 409 `DEVICE_REVOKED`. Audit `device.approve`. → device. |
+| POST | `/org/devices/{id}/revoke` | Any status → `REVOKED` (idempotent). Audit `device.revoke`. → device. |
+| GET, PUT | `/org/events/{id}/devices` | GET `[{device_id, label, status, gate_id, gate_code, manifest_version, last_seen_at, closed_ack_at}]` by gate code, then label. PUT `{assignments:[{device_id, gate_id}]}` replaces the set. Devices must be `ACTIVE` and this organizer's; gates must be of the event's venue (422 on `assignments[i].device_id` / `.gate_id`). Removing a device that has scans on the event → 409 `DEVICE_IN_USE`. `CLOSED` → 409 `EVENT_NOT_EDITABLE`. → GET shape. |
+| GET | `/org/staff` | `[{id, name, role, active, has_pin}]` by name (every staff row; back-office staff have `has_pin: false`). |
+| POST | `/org/staff` | `{name, role: GATE\|SUPERVISOR}` → `201 {id, name, role, active, has_pin: true, pin}`. `name` per §Holder names. `pin` = 4 random digits, returned only here and by `/pin`. |
+| PATCH | `/org/staff/{id}` | `{name?, active?}`; GATE/SUPERVISOR rows only (others → 404). |
+| POST | `/org/staff/{id}/pin` | New random PIN → `{pin}`. Audit `staff.pin_reset`. Devices get it at their next `GET /gate/events`. |
+| GET | `/org/events/{id}/live` | §Gate reports. B4 refetches every 5 s; no stream. |
+| POST | `/org/events/{id}/close` | `ON_SALE`/`GATES_OPEN` and `now ≥ starts_at` → `CLOSED`, else 409 `EVENT_NOT_EDITABLE`. Audit `event.close`. → event (GET shape). From then on: no `k_t`, manifest 409 `EVENT_CLOSED`, devices drain and wipe; scans are still accepted. |
+| GET | `/org/events/{id}/reconciliation` | §Gate reports. `.csv`: `;`-separated, UTF-8 with BOM, FR headers, one row per zone, then per gate, then the total, with a `kind` column (`zone`/`gate`/`total`). |
 | GET | `/org/finance/settlements` | Settlement statements, VAT invoices |
 | GET | `/org/crm/export.csv` | Fan base export (holders who opted in) |
 
@@ -186,16 +200,77 @@ validates per type with zod.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/gate/devices/enrol` | `{public_key, label, enrol_code}` → `{device_id}` (status `PENDING` until approved) |
-| POST | `/gate/session` | `{device_id, staff_pin}` → `{session_token, staff_id, server_time}` |
-| GET | `/gate/events` | Events this device is assigned to, with `gate` and `allowed_zone_ids` |
-| GET | `/gate/events/{id}/manifest?since={version}` | Full manifest when `since` absent, else delta. Response `{version, signature, rows:[{ticket_id, zone_id, status, holder_initials}], removed:[ticket_id], event_key (base64, full response only), server_time, reentry_policy}` — gzipped |
-| POST | `/gate/events/{id}/scans` | `{device_id, cursor, scans:[{scan_id, ticket_id?, direction, result, device_time, token_version?, override_reason?, supervisor_id?}]}` (≤500) → `{acked:[scan_id], manifest_version, used_since:[{ticket_id, direction, first_at, gate_code}], cursor, server_time}` |
-| POST | `/gate/events/{id}/closed-ack` | Device confirms it wiped keys and logs |
+| POST | `/gate/devices/enrol` | Signed with the new key, without `X-Device-Id` (verified against `public_key`). `{public_key, label, enrol_code}` → `201 {device_id, status: PENDING, fingerprint, manifest_public_key, server_time}`. `public_key` = base64url SPKI DER (P-256); `label` 1–40 chars; `enrol_code` binds the device to that organizer. A known `public_key` → `200` with the existing device. `manifest_public_key` = server Ed25519 key, base64url raw 32 bytes, pinned by the device. |
+| GET | `/gate/events` | `ACTIVE` device (`PENDING` → 403 `DEVICE_NOT_ACTIVE`, which the app polls while it waits for approval). → `{server_time, device:{id, label, status}, events:[{id, title, event_type, status, starts_at, timezone, venue:{name}, gate:{id, code, name}, reentry_policy, manifest_available_at, manifest_version}], staff:[{staff_id, label, role, pin_verifier}]}`. `events` = this device's assignments with status `ON_SALE`/`GATES_OPEN`, or `CLOSED` and not yet acked; by `starts_at`. `manifest_available_at` = `starts_at − gate.manifest-lead`. `manifest_version` = latest built, or null. `staff` = this organizer's active GATE/SUPERVISOR staff with a PIN; `label` = holder_label of the name. `Cache-Control: no-store`. |
+| GET | `/gate/events/{id}/manifest?since=` | Device `ACTIVE` and assigned to the event (else 404). `CLOSED` → 409 `EVENT_CLOSED`; before `manifest_available_at` or nothing built → 409 `MANIFEST_NOT_READY`. → gzip `{event_id, version, since, rows, payload, signature, event_key?, server_time}`. `since` absent, unknown or above the latest → full (`since: 0`) **with `event_key`** (base64url, 32 bytes); otherwise a delta from `since`, without `event_key`. `payload` = §Manifest payload; `signature` = base64url Ed25519 over the UTF-8 bytes of `payload`. Sets `device_assignments.manifest_version`. `Cache-Control: no-store`. |
+| POST | `/gate/events/{id}/scans` | Device `ACTIVE` and assigned (any event status, `CLOSED` included). `{cursor, scans:[{scan_id, ticket_id?, gate_id, staff_id, direction, result, token_version?, device_time, override_reason?, supervisor_id?}]}`: 0–500 rows (more → 422; an empty batch is a poll). → `{acked:[scan_id], errors:[{scan_id, field}], used_since:[{ticket_id, direction, first_at, gate_code}], cursor, more, manifest_version, event_status, server_time}`. Rules below. |
+| POST | `/gate/events/{id}/closed-ack` | Event `CLOSED` (else 409 `EVENT_NOT_CLOSED`) → sets `closed_ack_at` (idempotent) → `204`. Sent after the device has drained its queue and wiped. |
 
-Sync rules: idempotent on `scan_id`; server never rejects a batch for one bad row (it
-acks the valid ones and returns `errors[]`); `used_since` is bounded by `cursor`
-(server-side sequence) so a device catches up in one call.
+Sync rules:
+
+| Rule | Value |
+| --- | --- |
+| Insert | `INSERT … ON CONFLICT (scan_id) DO NOTHING`, one transaction per batch under `pg_advisory_xact_lock` on the event |
+| Row checks | `scan_id` a UUIDv7; `result` a device code; `direction` `IN`; `ticket_id` present iff the result comes after authentication (OK, DUPLICATE, UNKNOWN, CANCELLED, BLOCKED, WRONG_ZONE, OVERRIDE) and is a ticket of this event; `gate_id` a gate of the venue; `staff_id` staff of the organizer; `override_reason` + `supervisor_id` (a SUPERVISOR) iff `OVERRIDE`. A failing row is not stored; it goes in `errors` with the first failing field, and in `audit_log` (`scan.refused`: device, scan_id, field) |
+| Ack | `acked` = every row of the batch, whether stored, already present or refused. The device marks them all synced; a batch is never refused for one row |
+| `device_time` | Stored as sent, never rejected for skew; `received_at` sits next to it so drift stays visible |
+| `used_since` | Admitted (OK, OVERRIDE) scans of this event from **other** devices with `seq > cursor`, by `seq`, at most 5,000. `first_at` = their `device_time`; `cursor` = the last `seq` returned (or unchanged); `more = true` → the device calls again at once |
+| `event_status` | `CLOSED` → the device sends every unsynced row, wipes K_e, manifest, used-set and synced scans, then calls `closed-ack` |
+
+## Gate auth
+
+```
+X-Device-Id:        <device uuid>        (absent only on POST /gate/devices/enrol)
+X-Device-Time:      <unix ms>            (device clock + server offset)
+X-Device-Signature: base64url (no padding) of the DER ECDSA P-256 / SHA-256 signature over:
+
+"JMH-GATE-1" LF METHOD LF PATH LF X-Device-Time LF lowercase-hex(SHA-256(body))
+```
+
+| Rule | Value |
+| --- | --- |
+| PATH | Raw path + query exactly as sent, including `/v1` (`/v1/gate/events/12/manifest?since=3`) |
+| body | Raw request bytes (requests are not compressed); empty body → SHA-256 of the empty string |
+| Server order | Device known (enrol: key from the body) → signature → \|time − now\| ≤ 5 min (else `DEVICE_CLOCK_SKEW`) → status `ACTIVE` (except enrol, and `GET /gate/events` which answers 403 for `PENDING`). Then `devices.last_seen_at = now()` |
+| Replay | Accepted within the 5-min window: GETs are reads, scans are idempotent, enrol is idempotent per key; TLS throughout |
+| `server_time` | In every gate JSON response (RFC 3339, ms). The device offset = `server_time` − the midpoint of request send and response receive |
+| Fingerprint | First 8 hex chars of SHA-256(SPKI DER), uppercase, grouped 4-4 (`AB12 CD34`) |
+
+## Gate PINs
+
+| Rule | Value |
+| --- | --- |
+| PIN | 4 random digits from the server (`POST /org/staff`, `/pin`), shown once, never stored in clear |
+| Verifier | `pbkdf2-sha256$10000$<salt>$<hash>`: PBKDF2-HMAC-SHA256 of the UTF-8 PIN, 16-byte random salt, 10,000 iterations, 32 bytes, base64url without padding |
+| Device | Unlock = pick a name from `staff`, then the PIN. 5 wrong PINs → locked 5 min. 10 min idle → locked. Override and gate change = a SUPERVISOR picks their name, then types their PIN |
+
+## Manifest payload
+
+UTF-8 text, LF line ends, TAB-separated; the server replaces any TAB, CR or LF inside a text field with a space.
+
+```
+JMH-MANIFEST	1
+event	{event_id}
+version	{version}
+since	{0 for full, else the base version}
+built_at	{RFC 3339}
+reentry	{NONE|ONE_EXIT}
+rows	{ticket rows in this version, full count}
+Z	{zone_id}	{code}	{name}                         every zone of the venue, by zone_id
+G	{gate_id}	{code}	{name}	{zone_id,zone_id,...}   every gate of the venue, by code; zone ids ascending
+T	{ticket_id}	{zone_id}	{status}	{holder_initials or empty}
+```
+
+Full: one `T` per ticket of the event, by `ticket_id`. Delta: `T` only for tickets added or whose status changed since `since` (Z and G lines always complete). The device applies a delta only if its version equals `since`; afterwards its row count must equal `rows`, otherwise it refetches the full manifest. Status → result: VALID → continue, CANCELLED/REFUNDED → `CANCELLED`, BLOCKED → `BLOCKED`. No name, phone or ID number ever goes in the payload. 45,000 rows ≈ 2.6 MB of text, about 1.2 MB gzipped (02:66 says under 1 MB: accepted).
+
+## Gate reports
+
+Admitted = `OK` or `OVERRIDE`. Canonical = per ticket, the admitted scan with the earliest `device_time` (tie: lowest `scan_id`). Refused = any other device result. `sold` = tickets `VALID` (Lot 3 revisits once refunds exist).
+
+| Endpoint | Shape and definitions |
+| --- | --- |
+| `GET /org/events/{id}/live` | `{event_id, status, starts_at, server_time, sold, entered, rate_per_min, rate_per_min_prev, refused:{total, by_result:{DUPLICATE: n, …}}, duplicates_late, overrides:{total, cap_per_device: 20, by_device:[{device_id, label, count}]}, gates:[{gate_id, code, zone_codes[], devices_total, devices_online, entered, refused, overrides, rate_per_min, last_sync_at}], devices_stale:[{device_id, label, gate_code, last_seen_at}]}`. `entered` = tickets with a canonical scan (per gate: canonical scans at that gate). `duplicates_late` = admitted − canonical. `rate_per_min` = admitted scans with `device_time` in the last 5 min ÷ 5 (integer); `_prev` = the 5 min before that. Online = `last_seen_at` within 2 min; stale = assigned and silent for more than 5 min (or never seen). `gates` = gates with an assigned device or a scan, by code. `by_device` = devices with ≥ 1 override, by count desc. |
+| `GET /org/events/{id}/reconciliation` | `{event_id, status, generated_at, final, devices:{assigned, acked, unsynced:[{device_id, label, last_seen_at}]}, totals:{sold, entered, no_show, refused_by_result{}, duplicates_late, overrides_by_reason{}}, zones:[{zone_id, code, name, sold, entered, no_show, overrides}], gates:[{gate_id, code, entered, refused_by_result{}, duplicates_late, overrides}]}`. Zones by the ticket's zone, gates by the scan's gate. `no_show` = sold tickets with no canonical scan. `final` = `CLOSED` and every assigned device acked. `unsynced` = assigned devices not acked. |
 
 ## Token (shared by `packages/core` and the backend)
 
@@ -219,3 +294,7 @@ rotating tokens. Field encodings: `k_e` lowercase hex (64 chars); `event_id`, `z
 `expected_token` base64url without padding. Include the edge values (`event_id` 0xFFFFFFFF,
 `zone_id` 0xFFFF, `slot` 0xFFFFFFFF). `packages/core` golden-tests against the same file. Regenerate with `./gradlew test -Djomhor.writeVectors=true` (backend) only when
 the layout changes; both `TokenVectorsTest` and the `packages/core` golden test read the committed file.
+
+## Gate vectors
+
+`GateVectorsTest` (backend) writes `docs/gate-vectors.json` under the same rules as the token vectors (CI fails if it is missing or differs): `{signing:[{method, path, time, body, expected_string, expected_body_sha256}], fingerprints:[{public_key, fingerprint}], manifest:[{public_key, payload, signature}], pins:[{pin, verifier, ok}]}`. Ed25519 is deterministic, so a fixed test key gives fixed signatures. `apps/scanner` golden-tests against it.

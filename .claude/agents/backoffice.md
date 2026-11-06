@@ -18,7 +18,7 @@ Rules:
 - Event metadata fields depend on `event_type` (football: adversaire, compétition, journée) and
   are sent inside `metadata`, never as dedicated top-level fields.
 - Money in integer centimes end to end; DH inputs convert to centimes with integer maths.
-- Live gate page: SSE stream + refetch <= 5 s; unsynced devices are a warning, not an error
+- Live gate page: refetch every 5 s; unsynced devices are a warning, not an error
   (offline validation still works).
 - Copy via i18n, FR default; organizers are addressed with "vous".
 

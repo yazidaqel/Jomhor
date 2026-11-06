@@ -22,8 +22,8 @@ The server is the only source of truth for tickets; a scanner is a trusted-but-l
 | Ticketing API (Spring Boot) | Issues tickets, builds manifests, receives scans, resolves duplicates | Nothing external | All ticket records, master key, event keys |
 | Fan app (Flutter) | Shows rotating QR, works offline once the ticket is loaded | Server over TLS, logged-in user | Per-ticket key for the user's own tickets |
 | Web shop / PDF, POS print | Static QR tickets | Server | Nothing after issue |
-| Scanner app (Flutter) | Validates offline, logs scans, syncs | Server (signed manifest), enrolled device, staff PIN | Event key, manifest, local scan log |
-| Gate sync API | Enrols devices, serves manifest + deltas, ingests scans | Device certificate + staff session | Device registry |
+| Scanner app (Flutter) | Validates offline, logs scans, syncs | Server (signed manifest), enrolled device key, staff PIN checked locally | Event key, manifest, local scan log |
+| Gate sync API | Enrols devices, serves manifest + deltas, ingests scans | Device signature | Device registry |
 | Back-office (React) | Event setup, gate/zone mapping, live counts, reconciliation | Organizer admin login | Reports |
 | Supervisor | Overrides at the gate with PIN + reason | Organizer | Override PIN |
 
@@ -60,14 +60,14 @@ Rules: no personal data in the QR. The ticket number (last 8 chars of ticket\_id
 
 Every scanner downloads a signed snapshot of the event's tickets before it loses signal; later changes arrive as small deltas while signal lasts. T0 below = the event's `starts_at`.
 
-1. Device enrolment (once per device): the scanner generates a keypair in Android Keystore, the back-office approves the device, the server records its public key. From then on every sync call is signed by the device and authorised by a staff PIN session.
+1. Device enrolment (once per device): the scanner generates an ECDSA P-256 keypair in Android Keystore and scans an enrol QR from the back-office. The admin approves the device after matching its fingerprint. Every gate call is signed by the device key (docs/04-api.md §Gate auth). Staff PINs are checked on the device.
 2. Event assignment: an admin assigns devices to an event and a gate. Only assigned devices can pull that event's manifest and K\_e.
-3. Manifest build: the server builds manifest v1 at T0 − 3 h, then a new version every 5 minutes until T0 + 30 min. Each version is Ed25519-signed by the server.
-4. Download: the scanner pulls the full manifest once (45,000 rows × \~40 bytes ≈ 1.8 MB before compression, under 1 MB gzipped), then `GET /events/{id}/manifest?since=vN` for deltas. K\_e travels in the same authenticated response and is stored in Keystore.
+3. Manifest build: the server builds manifest v1 at T0 − 3 h (config), then checks every 5 minutes until T0 + 30 min; a version is built only when rows changed. Each version is Ed25519-signed by the server over its text payload.
+4. Download: the scanner pulls the full manifest once (45,000 rows × \~40 bytes ≈ 1.8 MB before compression, under 1 MB gzipped), then `GET /gate/events/{id}/manifest?since=vN` for deltas. K\_e travels in the same authenticated response and is stored with `flutter_secure_storage` (Keystore-wrapped).
 5. Verify: the scanner refuses any manifest whose signature fails and keeps the last good one.
 6. After event close: the server marks the event closed; on next sync the scanner wipes K\_e, the manifest and the synced scan log.
 
-Manifest row: ticket\_id, zone\_id, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_initials, reentry\_allowed. No full names, no ID numbers.
+Manifest row: ticket\_id, zone\_id, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_initials. The re-entry policy and the venue gates and zones come in the payload. No full names, no ID numbers.
 
 Accepted risk: a ticket cancelled after a scanner's last delta still scans green at that gate. This is bounded by freezing refunds and cancellations at T0 − 60 min, the moment signal is assumed to be gone.
 
@@ -92,16 +92,16 @@ UI rule for reds: one short word in large type plus the reason, and the ticket n
 
 Scans are append-only on the device and idempotent on the server, so a sync can be retried any number of times and a device can be lost mid-event without corrupting the record.
 
-Sync loop (background isolate, runs whenever the device has any connectivity):
+Sync loop (off the scan path: Drift runs in its own isolate and the loop never blocks a scan; it runs whenever the device has any connectivity):
 
-1. Every 10 s, or immediately after a scan if online: `POST /events/{id}/scans` with up to 500 unsynced rows, signed by the device key.
-2. Server inserts with `ON CONFLICT (scan_id) DO NOTHING` and returns: acknowledged scan\_ids, the current manifest version, and `used_since=<cursor>` — the ticket\_ids first-scanned on other devices since this device's last cursor.
+1. Every 10 s, or immediately after a scan if online: `POST /gate/events/{id}/scans` with up to 500 unsynced rows, signed by the device key.
+2. Server inserts with `ON CONFLICT (scan_id) DO NOTHING` and returns: acknowledged scan\_ids, the current manifest version, and `used_since=<cursor>` — the ticket\_ids first-scanned on other devices since this device's last cursor (the server arrival sequence, `scans.seq`).
 3. Device marks rows synced, merges the remote used-set into its local one, and pulls the manifest delta if its version is behind.
 4. On failure: exponential backoff from 2 s to 60 s, never drops rows. Rows survive app restarts; the local log is only truncated after the server closes the event.
 
-Duplicate resolution on the server: the canonical entry for a ticket is the scan with the earliest device\_time among `OK` results; every later `OK` for the same ticket and direction is re-labelled `DUPLICATE_LATE`. Both the device clock and the server receive time are stored, so clock drift is visible rather than hidden.
+Duplicate resolution on the server: the canonical entry for a ticket is the admitted (OK/OVERRIDE) scan with the earliest device\_time; later admitted scans for the same ticket and direction are **reported** as `DUPLICATE_LATE`. Scans are never updated. Both the device clock and the server receive time are stored, so clock drift is visible rather than hidden.
 
-Clocks: devices sync time from the server at every sync and at enrolment; the app refuses to go into event mode if drift exceeds 20 s.
+Clocks: devices sync time from the server at every sync and at enrolment; drift = abs(server offset); above 20 s the app refuses event mode until the device clock is fixed. The offset is applied to every timestamp and slot.
 
 V2 option, not in v1: Bluetooth gossip of the used-set between scanners at the same gate, so duplicates propagate even with zero mobile signal.
 
@@ -128,39 +128,41 @@ Server (PostgreSQL):
 | payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref |
 | tickets | One seat / admission | id (UUID), order\_id, event\_id, zone\_id, seat\_label, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_user\_id, holder\_name (never in a manifest), holder\_initials, issued\_at |
 | passes | Season ticket / multi-event bundle | id, series\_id, user\_id, zone\_id, status; materialised as one ticket per event |
-| devices | Enrolled scanners | id, organizer\_id, public\_key, label, status (PENDING, ACTIVE, REVOKED), last\_seen\_at |
-| device\_assignments | Device ↔ event ↔ gate | organizer\_id, device\_id, event\_id, gate\_id |
-| manifests | Signed snapshots | id, organizer\_id, event\_id, version, built\_at, signature, row\_count |
-| scans | Append-only gate log | scan\_id (UUIDv7, PK), organizer\_id, ticket\_id, event\_id, device\_id, gate\_id, direction (IN, OUT), result, device\_time, received\_at, override\_reason, supervisor\_id |
-| staff | Back-office staff, gate staff & supervisors | id, organizer\_id, user\_id (OTP login, nullable), name, role, pin\_hash |
+| devices | Enrolled scanners | id, organizer\_id, label, public\_key (ECDSA P-256 SPKI DER), status (PENDING, ACTIVE, REVOKED), enrolled\_at, approved\_at, revoked\_at, last\_seen\_at |
+| device\_assignments | Device ↔ event ↔ gate | organizer\_id, device\_id, event\_id, gate\_id, manifest\_version, closed\_ack\_at |
+| manifests | Signed snapshots | id, organizer\_id, event\_id, version, built\_at, row\_count, signature (Ed25519 over the text payload), body (gzip) |
+| scans | Append-only gate log | scan\_id (UUIDv7, PK), seq (server arrival order), organizer\_id, event\_id, ticket\_id, device\_id, gate\_id, staff\_id, direction (IN, OUT), result, token\_version, device\_time, received\_at, override\_reason, supervisor\_id |
+| staff | Back-office staff, gate staff & supervisors | id, organizer\_id, user\_id (OTP login, nullable), name, role, pin\_hash (PIN verifier, GATE/SUPERVISOR) |
 | users | Fan / staff identity (platform-wide, no organizer\_id) | id, phone\_e164, display\_name, locale |
 | otp\_challenges | Phone OTP (platform-wide) | id, phone\_e164, audience (fan, org), ip, code\_hash, attempts, expires\_at |
 | fan\_sessions | Revocable fan login sessions (platform-wide) | id (JWT sid), user\_id, expires\_at, revoked\_at |
 | ticket\_deliveries | WhatsApp delivery outbox | id, organizer\_id, ticket\_id, status (PENDING, SENT, FAILED), attempts, next\_attempt\_at |
 
-Indexes that matter: `scans (ticket_id, direction, device_time)` for canonical-first resolution; `scans (event_id, received_at)` for the live dashboard; `tickets (event_id, status)` for manifest builds; a GIN index on `events.metadata` only if type-specific search is needed. A partial unique index on `scans (ticket_id, direction) WHERE result = 'OK'` is deliberately not used, because the first `OK` must be chosen by device\_time after the fact, not by arrival order.
+Indexes that matter: `scans (event_id, ticket_id, device_time)` for canonical-first resolution; `scans (event_id, seq)` for `used_since`; `scans (event_id, gate_id, device_time)` for the live dashboard; `tickets (event_id, status)` for manifest builds; a GIN index on `events.metadata` only if type-specific search is needed. A partial unique index on `scans (ticket_id, direction) WHERE result = 'OK'` is deliberately not used, because the first `OK` must be chosen by device\_time after the fact, not by arrival order.
 
 Scanner (SQLite):
 
 | Table | Purpose | Key columns |
 | --- | --- | --- |
-| config | One row | event\_id, gate\_id, device\_id, manifest\_version, allowed\_zones, reentry\_policy, server\_time\_offset |
-| manifest\_tickets | Local copy | ticket\_id (PK), zone\_id, status, holder\_initials |
-| used | Used-set, own + remote | ticket\_id, direction, first\_at, source (LOCAL, REMOTE) |
-| scans | Local log | scan\_id (PK), ticket\_id, result, direction, device\_time, synced (0/1), override\_reason |
+| config | One row | device\_id, device\_status, manifest\_public\_key, server\_time\_offset\_ms, event\_id, starts\_at, event\_status, gate\_id, manifest\_version, reentry\_policy, sync\_cursor, staff\_id, mode |
+| zones, gates | Venue copy from the manifest | zone\_id, code, name · gate\_id, code, name, zone\_ids |
+| staff | Gate staff and PIN verifiers | staff\_id, label, role, pin\_verifier |
+| manifest\_tickets | Local copy | ticket\_id (PK), ticket\_no, zone\_id, status, holder\_initials |
+| used | Used-set, own + remote | ticket\_id, direction, first\_at, gate\_code, source (LOCAL, REMOTE) |
+| scans | Local log | scan\_id (PK), ticket\_id, gate\_id, staff\_id, direction, result, token\_version, device\_time, synced (0/1), override\_reason, supervisor\_id |
 
-K\_e never sits in SQLite; it lives in Android Keystore and is wiped at event close.
+K\_e never sits in SQLite; it lives in `flutter_secure_storage` (Android Keystore-wrapped) and is wiped at event close.
 
 ## Gate, zone & re-entry rules; supervisor override
 
 A ticket opens any gate that serves its zone, once, unless the event's re-entry policy says otherwise; everything outside that rule goes through a logged supervisor override.
 
 - Zone binding: `gate_zones` decides acceptance. A Tribune Nord ticket at a Virage gate is `WRONG_ZONE`, with the correct gates named on screen.
-- Re-entry policy per event: `NONE` (default), or `ONE_EXIT` (one `OUT` scan then one `IN` scan allowed, within the event window). An `OUT` scan requires the scanner to be in exit mode, so a fan cannot trigger it by accident.
-- Device mode is locked to a gate at event start; changing gate requires the supervisor PIN.
-- Supervisor override: PIN, a reason from a fixed list (ID\_CHECKED, DEVICE\_FAULT, DAMAGED\_TICKET, OTHER), and the ticket number typed or scanned. Produces a scan row with result `OVERRIDE`; capped at 20 per device per event, with the count shown live in the back-office.
+- Re-entry policy per event: `NONE` (default), or `ONE_EXIT` (one `OUT` scan then one `IN` scan allowed, within the event window). An `OUT` scan requires the scanner to be in exit mode, so a fan cannot trigger it by accident. Lot 2 implements `NONE`; the API refuses `ONE_EXIT` until it is built.
+- Device mode is locked to a gate at event start; changing gate requires a supervisor PIN and works offline (gates come in the manifest).
+- Supervisor override: PIN, a reason from a fixed list (ID\_CHECKED, DEVICE\_FAULT, DAMAGED\_TICKET, OTHER), and the ticket must be found in the manifest (scanned, or a typed number that lists every match). Produces a scan row with result `OVERRIDE`; capped at 20 per device per event, with the count shown live in the back-office.
 - Manual lookup: by the printed ticket number, shows zone, status and holder initials only. No name search at the gate.
-- Staff sessions: 4-digit PIN per staff member, auto-lock after 10 min idle, every scan carries the staff\_id of the open session.
+- Staff sessions: 4-digit PIN per staff member, generated by the server, checked on the device, auto-lock after 10 min idle, every scan carries the staff\_id of the open session.
 
 ## Threat model & mitigations
 
@@ -171,7 +173,7 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | Screenshot of an app ticket shared with friends | Rotating QR, 90 s acceptance window; K\_t only on the buyer's logged-in device | Two people at two gates within 90 s: the second is `DUPLICATE` after sync, or passes if both gates are offline |
 | PDF ticket printed twice | First scan wins, second is `DUPLICATE` once gates have synced | Same offline window as above; mitigated by naming the gate on the red screen so staff can escalate |
 | Forged QR | 128-bit HMAC tag with K\_e, which never leaves enrolled devices | None practical |
-| Lost or stolen scanner | Keystore-bound K\_e, staff PIN lock, remote revoke, key wiped at event close | Attacker with an unlocked device during the event could read the manifest (no PII in it) |
+| Lost or stolen scanner | Keystore-wrapped K\_e, staff PIN lock, key wiped at event close; the P-256 device key is non-exportable; revoke → next call 403 → wipe | Attacker with an unlocked device during the event could read the manifest (no PII in it) |
 | Insider issues free tickets | Every ticket comes from an order; manifests are signed; sold vs scanned reconciled per zone after every event | Collusion with POS cash sales: covered by POS reconciliation against cash deposits |
 | Ticket cancelled after last delta | Refund/cancel freeze at T0 − 60 min | Cancellations in the last hour are not possible, by policy |
 | Fan phone clock tampered | Server time offset pushed to the app; ±1 slot tolerance | None practical |

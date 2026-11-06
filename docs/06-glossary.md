@@ -14,6 +14,9 @@
 | K_t | clé de billet | — | Per-ticket key = HMAC(K_e, ticket_id), on the holder's phone |
 | T0 | coup d'envoi / début | البداية | `events.starts_at` |
 | used-set | — | — | Local set of (ticket_id, direction) already scanned |
+| enrol QR | QR d'enrôlement | — | Back-office QR carrying the `enrol_code` that binds a scanner to the organizer (30 min) |
+| fingerprint | empreinte | — | First 8 hex chars of SHA-256 of the device public key (`AB12 CD34`), matched before approval |
+| canonical scan | entrée retenue | — | Per ticket, the admitted (OK/OVERRIDE) scan with the earliest device_time; counts as the entry |
 
 ## Scan result codes
 
@@ -21,7 +24,7 @@
 | --- | --- | --- | --- |
 | OK | VALIDE | green | Admitted |
 | DUPLICATE | DÉJÀ UTILISÉ | red | Already entered (time + gate shown) |
-| DUPLICATE_LATE | — | — | Server-side relabel of a later OK for the same ticket |
+| DUPLICATE_LATE | — | — | Derived in reports: a later admitted scan of an already admitted ticket. Never stored. |
 | BAD_SIG | NON VALIDE | red | HMAC mismatch |
 | BAD_FORMAT | ILLISIBLE | red | Not a Jomhor token |
 | UNKNOWN | INCONNU | red | Not in the manifest |

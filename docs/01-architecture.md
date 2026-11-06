@@ -39,10 +39,10 @@ flowchart TB
 | Web shop | Same purchase flow, PDF with static QR | Nothing after issue |
 | Scanner app | Enrolment, manifest download, offline validation, local log, background sync, supervisor override | K_e in Keystore, manifest + scans in SQLite |
 | Back-office | Event setup, zone/gate mapping, devices, live dashboard, reconciliation, finance, CRM, campaigns | Nothing (API client) |
-| Kafka | `scan.ingested` → dashboard projection; `order.paid` → ticket issue + WhatsApp delivery | — |
+| Kafka | Target: `scan.ingested` → dashboard projection; `order.paid` → ticket issue + WhatsApp delivery. Lot 2: the dashboard reads the scans table directly (polled every 5 s). Kafka arrives with its first real async consumer (Lot 4 fan push, or Lot 6 load results). | — |
 
 Lot 1: `order.paid` → WhatsApp delivery goes through a DB outbox (`ticket_deliveries`) polled by
-`notifications`. Kafka comes in when the scan dashboard needs it (Lot 2).
+`notifications`.
 
 ## Backend modules (modular monolith)
 
@@ -57,6 +57,6 @@ never through each other's repositories.
 2. Gate: device enrol → event assignment → manifest + K_e download at T0 − 3 h → offline
    validate → background sync → server resolves first-scan-wins → dashboard.
 3. Close: event closed → devices wipe → reconciliation report (sold / scanned / rejected /
-   overrides per zone and gate) → settlement.
+   overrides per zone and gate; computed on read, final once every device acked) → settlement.
 
 Details: `02-gate-validation-and-data-model.md`.
