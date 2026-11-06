@@ -343,3 +343,5 @@ Never cut: K_t only to the holder behind `with_keys` and absent from the shop; `
 | Ranked virtual queue, verified fans, holder caps | 5 | Q18, Q19 |
 | `otp_challenges` / `ticket_deliveries` retention purge | 6 | IP addresses and delivery rows are personal data (CNDP) |
 | Lost-phone re-issue | 4 | Residual risk of Q13 |
+| Client IP trust chain (WS-1 review) | BE-9 + Q24 | The shop forwards exactly one `X-Forwarded-For` value (the entry `TRUSTED_PROXY_HOPS` from the right, default 1 = ALB) or none. Backend: `server.forward-headers-strategy=native`, `server.tomcat.remoteip.remote-ip-header=X-Forwarded-For`, `server.tomcat.remoteip.internal-proxies` set **explicitly** to the shop and ALB private subnets (never Spring's default private-range regex). Infra: shop and API targets accept traffic only from the ALB security group; ALB XFF mode `append`. BE-9 test adds: a shop-shaped peer forwarding one entry is bucketed by that entry. |
+| Phone input strips U+202A–U+202E | BO-6 | The back-office phone normaliser misses these bidi controls (WS-1 review); fix with BO-6. |

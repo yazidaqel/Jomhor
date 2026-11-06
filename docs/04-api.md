@@ -66,6 +66,12 @@ returns the same representation as the matching GET.
 | POST | `/fan/tickets/{id}/transfer` | Lot 4. `{to_phone}`. K_t = HMAC(K_e, ticket_id), so a new K_t needs a new ticket: the ticket becomes `CANCELLED` and a new ticket is issued to the recipient. |
 | GET | `/fan/gates/{event_id}/load` | Lot 4 |
 
+Public event reads: an `Authorization` header sent anyway is ignored (never a 401); `organizer` is
+optional (absent = every organizer's listed events, each row carries `organizer_id`; the shop and the
+app always send it); the detail lists only zones that have at least one price category for the event;
+`gate_codes` sort byte-wise; no cache headers (the shop revalidates on its side). The org event list
+row does not carry `sale_starts_at` (only GET/PATCH `/org/events/{id}` do).
+
 On payment success every holder's ticket is issued with `holder_user_id`, `holder_name` and `holder_initials`. One WhatsApp delivery is queued per ticket, to the holder's phone (an outbox, sent after commit, at least once).
 
 Order rules: item validation errors use `details.fields["items[i].price_category_id"]`-style
