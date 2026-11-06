@@ -1,6 +1,6 @@
 # Lot 1 · Sell & deliver: implementation plan
 
-As of 2026-11-06 · owner: tech-lead · status: **proposed**. The contract changes in §4 need founder approval before any builder starts.
+As of 2026-11-06 · owner: tech-lead · status: **approved 2026-11-06**; §4 applied to the docs.
 
 ## 1. Lot
 

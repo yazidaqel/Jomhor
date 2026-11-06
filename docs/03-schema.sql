@@ -5,7 +5,7 @@
 create extension if not exists pgcrypto;
 
 -- Tenant rule: every table carries organizer_id, except platform identity tables
--- organizers, users, otp_challenges (one fan account across organizers).
+-- organizers, users, otp_challenges, fan_sessions (one fan account across organizers).
 -- audit_log.organizer_id is nullable for SYSTEM actions.
 -- Every query on a tenant table filters by organizer_id (no composite FKs: app scoping
 -- is needed anyway to return 404 on foreign ids; tested per endpoint).
@@ -48,13 +48,27 @@ create table staff (
 create table otp_challenges (
   id            uuid primary key default gen_random_uuid(),
   phone_e164    text not null,
+  audience      text not null default 'fan' check (audience in ('fan','org')),  -- a code verifies only on its own audience
+  ip            inet,                                 -- requester (trusted-proxy resolved), for the per-IP throttle
   code_hash     text not null,                        -- HMAC-SHA256(server secret, code); the code is never stored
   attempts      smallint not null default 0 check (attempts <= 5),
   expires_at    timestamptz not null,                 -- created_at + 5 min
   consumed_at   timestamptz,
   created_at    timestamptz not null default now()
 );
-create index on otp_challenges (phone_e164, created_at desc);   -- rate limit: max 3 per phone per 10 min
+create index on otp_challenges (phone_e164, audience, created_at desc);
+  -- per phone+audience: 3 sends / 10 min, 10 sends / 24 h; sum(attempts) of failed codes >= 15 in 24 h -> locked
+create index on otp_challenges (ip, created_at desc);   -- per IP: docs/04-api.md §Fan auth
+
+create table fan_sessions (
+  id            uuid primary key default gen_random_uuid(),   -- JWT `sid`
+  user_id       uuid not null references users(id),
+  created_at    timestamptz not null default now(),
+  expires_at    timestamptz not null,                 -- = JWT exp (30 d)
+  revoked_at    timestamptz
+);
+create index on fan_sessions (user_id) where revoked_at is null;
+
 
 -- ---------- catalog ----------
 create table venues (
@@ -119,6 +133,7 @@ create table events (
   refund_cutoff_at  timestamptz,                      -- default T0 - 60 min, set on publish
   reentry_policy    reentry_policy not null default 'NONE',
   per_account_limit smallint not null default 4,
+  sale_starts_at    timestamptz,                      -- null = on sale from publish; must be < starts_at - 60 min (orders accepted while ON_SALE and sale_starts_at <= now < refund_cutoff_at)
   metadata          jsonb not null default '{}'::jsonb, -- keys per event_type: docs/04-api.md §Event metadata
   created_at        timestamptz not null default now()
 );
@@ -167,6 +182,8 @@ create table order_items (
   price_category_id uuid not null references price_categories(id),
   qty               smallint not null check (qty > 0),
   unit_price_mad    bigint not null check (unit_price_mad >= 0),  -- snapshot at reservation
+  holders           jsonb not null default '[]'::jsonb,            -- [{"name": "Yazid Aqel", "user_id": "<uuid>"}], one per place; no phone stored
+  constraint order_items_holders_len check (jsonb_array_length(holders) = qty) not valid,  -- Lot 0 rows keep []
   unique (order_id, price_category_id)
 );
 
@@ -180,7 +197,8 @@ create table tickets (
   zone_id           smallint not null references zones(id),
   price_category_id uuid not null references price_categories(id),
   holder_user_id    uuid references users(id),
-  holder_initials   text,                              -- 'Y. A.' — never the full name in the manifest
+  holder_initials   text,                              -- 'Y. A.' — derived from holder_name at issue; never the full name in the manifest
+  holder_name       text,                              -- full name as entered (docs/04-api.md §Holder names); never in a QR or manifest
   seat_label        text,
   status            ticket_status not null default 'VALID',
   issued_at         timestamptz not null default now()
@@ -228,6 +246,23 @@ create table payments (
 );
 create index on payments (order_id);
 create unique index on payments (provider, provider_ref) where provider_ref is not null;
+
+-- ---------- notifications ----------
+create type delivery_status as enum ('PENDING','SENT','FAILED');
+
+create table ticket_deliveries (                       -- outbox: WhatsApp ticket messages (only channel in Lot 1)
+  id               uuid primary key default gen_random_uuid(),
+  organizer_id     uuid not null references organizers(id),
+  ticket_id        uuid not null references tickets(id),  -- recipient = tickets.holder_user_id, phone read at send time
+  status           delivery_status not null default 'PENDING',
+  attempts         smallint not null default 0,
+  next_attempt_at  timestamptz not null default now(),
+  last_error       text,                               -- provider error code only; no phone, no message body
+  created_at       timestamptz not null default now(),
+  sent_at          timestamptz
+);
+create index on ticket_deliveries (next_attempt_at) where status = 'PENDING';
+create index on ticket_deliveries (ticket_id, created_at desc);   -- re-send limit
 
 -- ---------- gate ----------
 create type device_status as enum ('PENDING','ACTIVE','REVOKED');

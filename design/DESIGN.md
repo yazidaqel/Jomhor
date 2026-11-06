@@ -198,6 +198,22 @@ devices unsynced > 5 min (reassuring copy: offline validation still active); per
 green/amber/red, dernière sync) with the problem gate row tinted; footnote explaining
 "charge". Data: `GET /org/events/{id}/live` + SSE stream, refresh ≤ 5 s.
 
+## Lot 1 adjustments
+
+These override the screen specs above for Lot 1 (see `docs/plans/lot-1.md`).
+
+| Where | Change |
+| --- | --- |
+| Screen 1 | "Vente le {date}" comes from `sale_starts_at` (venue time zone). "File d'attente" chip/CTA state = the client is retrying after `SALE_BUSY`. "Liste d'attente" (sold out) → Lot 5. Bottom nav in Lot 1: Accueil · Billets · Profil (Club in Lot 4). |
+| Screen 2 | "Dernières places" when `remaining ≤ 50`. |
+| Screen 3 | Lot 1: zone row cards (same as screen 2) + stepper; the stadium map comes later (Q22). |
+| Screen 4 | "BILLETS NOMINATIFS": each row has a **name** input (required, Latin) and an optional WhatsApp-number input. Row 1 is prefilled from `display_name` with no phone. Lot 1 shows only Carte bancaire; Cash and Wallet in Lot 3. Busy state: "Beaucoup de monde en ce moment · nouvel essai dans {s} s". |
+| Screen 5 | "TITULAIRE" = `holder_label`. Lot 1 actions: WhatsApp (re-send PDF) only; Transférer (Lot 4) and Apple/Google Wallet (Lot 4) are hidden. |
+| W3 / W4 | W3 Lot 1: card only. `/orders/[id]` in Lot 1 shows "paiement en cours" + polling → `PAID` → link to W5; the cash code layout is Lot 3. |
+| W5 / W6 | W6 is a route handler proxying `/fan/tickets/{id}/pdf`. |
+| B2 | Général: "Ouverture de la vente" (venue time zone). Règles: "Billets nominatifs · toujours" (read-only). |
+| B3 | Lot 1: Ventes (KPIs, per zone, per channel, "Remboursements à faire"). |
+
 ## Theming per organizer
 
 `accent`, `onAccent`, crest asset, display font (optional) come from
