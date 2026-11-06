@@ -351,3 +351,4 @@ create table audit_log (
   payload       jsonb,
   at            timestamptz not null default now()
 );
+create index on audit_log (organizer_id, action, at);

@@ -5,6 +5,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
 import ma.jomhor.catalog.domain.Event.Status;
@@ -49,6 +51,9 @@ public class EventService {
 
     /** GET /fan/events/{id}: the event and its zones with prices. */
     public record PublicEvent(Event.Listing event, List<Event.ZoneListing> zones) {}
+
+    /** A zone with at least one of the event's price categories, and those categories (sales' read model). */
+    public record PricedZone(int zoneId, String code, String name, List<PriceCategory> prices) {}
 
     private final Events events;
     private final KeyEncryptor keys;
@@ -175,6 +180,19 @@ public class EventService {
     }
 
     // ---------- prices ----------
+
+    /**
+     * GET /org/events/{id}/sales: the event's priced zones, by code. Unknown event or another organizer's → 404.
+     * Two reads: run it in the caller's REPEATABLE READ transaction for one snapshot.
+     */
+    public List<PricedZone> pricedZones(UUID org, int eventId) {
+        Map<Integer, List<PriceCategory>> byZone = prices(org, eventId).stream()
+                .collect(Collectors.groupingBy(PriceCategory::zoneId));
+        return events.zoneListings(org, eventId).stream()
+                .map(z -> new PricedZone(z.id(), z.code(), z.name(), byZone.getOrDefault(z.id(), List.of())))
+                .sorted(Comparator.comparing(PricedZone::code))
+                .toList();
+    }
 
     public List<PriceCategory> prices(UUID org, int eventId) {
         get(org, eventId);

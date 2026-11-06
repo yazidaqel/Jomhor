@@ -15,10 +15,10 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV9Apply() {
+    void v1ToV10Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
     }
 
     @Test

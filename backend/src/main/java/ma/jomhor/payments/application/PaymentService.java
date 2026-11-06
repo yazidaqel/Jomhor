@@ -171,6 +171,7 @@ public class PaymentService {
 
     /** audit_log payment.refund_required; amount_mad is what the gateway charged. No secret in the payload. */
     private void refundRequired(Payment p, CallbackVerdict v, String reason) {
+        // Read back by sales' JdbcOrders.refundsRequired (GET /org/events/{id}/sales): keep these keys.
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("payment_id", p.id().toString());
         payload.put("order_id", p.orderId().toString());

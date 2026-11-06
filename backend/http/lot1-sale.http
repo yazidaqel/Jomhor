@@ -129,3 +129,9 @@ Authorization: Bearer {{fanToken}}
 #    A 4th re-send of one ticket within 24 h -> 429 DELIVERY_RATE_LIMITED (the automatic send after payment is not counted).
 POST {{base}}/fan/tickets/{{ticketId}}/whatsapp
 Authorization: Bearer {{fanToken}}
+
+### 14. Organizer (ADMIN, OPS or FINANCE): sales of the event -> paid = 2, held = 0, revenue_mad = 10000 (centimes),
+#    the zone, APP / WEB / POS (zeros included), refunds_required = [] unless a card was charged without tickets
+GET {{base}}/org/events/{{eventId}}/sales
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}

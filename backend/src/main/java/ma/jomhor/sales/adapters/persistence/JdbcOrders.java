@@ -187,4 +187,40 @@ class JdbcOrders implements Orders {
         OffsetDateTime t = rs.getObject(column, OffsetDateTime.class);
         return t == null ? null : t.toInstant();
     }
+
+    @Override
+    public List<SalesLine> salesLines(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select i.price_category_id, o.channel::text as channel,
+                               coalesce(sum(i.qty) filter (where o.status = 'PAID'), 0) as paid,
+                               coalesce(sum(i.qty) filter (where o.status = 'RESERVED' and o.reserved_until > now()), 0) as held,
+                               coalesce(sum(i.qty * i.unit_price_mad) filter (where o.status = 'PAID'), 0) as revenue_mad
+                        from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
+                        where o.organizer_id = :org and o.event_id = :event and o.status in ('PAID', 'RESERVED')
+                        group by i.price_category_id, o.channel
+                        """)
+                .param("org", org).param("event", eventId)
+                .query((rs, n) -> new SalesLine(rs.getObject("price_category_id", UUID.class), rs.getString("channel"),
+                        rs.getLong("paid"), rs.getLong("held"), rs.getLong("revenue_mad")))
+                .list();
+    }
+
+    // audit_log (common) written by PaymentService.refundRequired, whose payload keys this reads; the event comes
+    // from the order the payload names. Index audit_log (organizer_id, action, at), V10.
+    @Override
+    public List<RefundRequired> refundsRequired(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select a.payload ->> 'payment_id' as payment_id, o.id as order_id,
+                               cast(a.payload ->> 'amount_mad' as bigint) as amount_mad, a.payload ->> 'reason' as reason, a.at
+                        from audit_log a
+                        join orders o on o.organizer_id = a.organizer_id and o.id = cast(a.payload ->> 'order_id' as uuid)
+                        where a.organizer_id = :org and a.action = 'payment.refund_required' and o.event_id = :event
+                        order by a.at desc, a.id desc
+                        """)
+                .param("org", org).param("event", eventId)
+                .query((rs, n) -> new RefundRequired(UUID.fromString(rs.getString("payment_id")),
+                        rs.getObject("order_id", UUID.class), rs.getLong("amount_mad"), rs.getString("reason"),
+                        instant(rs, "at")))
+                .list();
+    }
 }
