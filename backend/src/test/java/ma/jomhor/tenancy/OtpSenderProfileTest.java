@@ -41,6 +41,7 @@ class OtpSenderProfileTest {
                 "--spring.datasource.username=" + pg.getUsername(),
                 "--spring.datasource.password=" + pg.getPassword(),
                 "--jomhor.jwt-secret=test-only-jwt-secret-0123456789abcdef",
-                "--jomhor.otp-secret=test-only-otp-secret-0123456789abcdef");
+                "--jomhor.otp-secret=test-only-otp-secret-0123456789abcdef",
+                "--" + IntegrationTest.EVENT_KEY_MASTER);
     }
 }

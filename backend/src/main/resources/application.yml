@@ -12,8 +12,15 @@ spring:
     password: ${DB_PASSWORD}
   jackson:
     property-naming-strategy: SNAKE_CASE
+    # Integers stay integers (money is centimes): 50.5 or "5000" for an int/long field is a 422, not a coercion.
+    deserialization:
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
 
 jomhor:
   # >= 32 bytes each, from env only. Startup fails if missing or short.
   jwt-secret: ${JWT_SECRET}
   otp-secret: ${OTP_SECRET}
+  # AES-256 master key for event keys (K_e) at rest: base64 of exactly 32 bytes, from env only.
+  event-key-master: ${EVENT_KEY_MASTER}

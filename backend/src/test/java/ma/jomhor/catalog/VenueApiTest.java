@@ -18,70 +18,23 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import javax.sql.DataSource;
-import ma.jomhor.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * Contract: /org/venues, /org/venues/{id}, /org/venues/{id}/zones[/{zone_id}], /org/venues/{id}/gates[/{gate_id}],
  * /org/gates/{id}/zones (docs/04-api.md §Organizer). Tenant scoping, CODE_TAKEN, ZONE_IN_USE, FINANCE read-only.
  */
-class VenueApiTest extends IntegrationTest {
-
-    record Caller(UUID org, String token) {}
+class VenueApiTest extends OrgApiTest {
 
     @Autowired
     DataSource dataSource;
-
-    private Caller caller(UUID org, String role) throws Exception {
-        String phone = randomPhone();
-        staff(org, phone, role, true);
-        return new Caller(org, orgToken(phone));
-    }
-
-    private Caller admin() throws Exception {
-        return caller(organizer("Org " + UUID.randomUUID()), "ADMIN");
-    }
-
-    private ResultActions call(Caller c, MockHttpServletRequestBuilder req) throws Exception {
-        return mvc.perform(req.header("Authorization", "Bearer " + c.token()).header("X-Organizer-Id", c.org()));
-    }
-
-    private ResultActions call(Caller c, MockHttpServletRequestBuilder req, String body) throws Exception {
-        return call(c, req.contentType(MediaType.APPLICATION_JSON).content(body));
-    }
-
-    private static String body(ResultActions r) throws Exception {
-        return r.andReturn().getResponse().getContentAsString();
-    }
-
-    /** The object at {@code path} has exactly these keys (the 04 shape, snake_case, nothing more). */
-    private static void assertKeys(String json, String path, String... keys) {
-        Map<String, Object> object = JsonPath.read(json, path);
-        assertThat(object.keySet()).containsExactlyInAnyOrder(keys);
-    }
-
-    private String venue(Caller c, String name) throws Exception {
-        String json = body(call(c, post("/org/venues"), "{\"name\": \"%s\", \"capacity\": 1000}".formatted(name))
-                .andExpect(status().isCreated()));
-        return JsonPath.read(json, "$.id");
-    }
-
-    private int zone(Caller c, String venueId, String code) throws Exception {
-        String json = body(call(c, post("/org/venues/" + venueId + "/zones"),
-                "{\"code\": \"%s\", \"name\": \"Zone %s\", \"capacity\": 100}".formatted(code, code))
-                .andExpect(status().isCreated()));
-        return JsonPath.read(json, "$.id");
-    }
 
     private String gate(Caller c, String venueId, String code) throws Exception {
         String json = body(call(c, post("/org/venues/" + venueId + "/gates"),

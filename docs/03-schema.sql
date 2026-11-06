@@ -304,6 +304,7 @@ create table settlements (
 );
 
 -- ---------- audit ----------
+-- Owned by the shared kernel (backend `ma.jomhor.common.AuditLog`): every module writes through it.
 create table audit_log (
   id            bigserial primary key,
   organizer_id  uuid,

@@ -2,6 +2,7 @@ package ma.jomhor.common.web;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.PropertyNamingStrategies;
 
 @RestControllerAdvice
@@ -40,8 +42,15 @@ public class ApiExceptionHandler {
         return validationFailed(fields);
     }
 
+    /** A value of the wrong type (e.g. 50.5 for an integer) names its field; plain malformed JSON has none. */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<ApiError> unreadable(HttpMessageNotReadableException e) {
+        if (e.getCause() instanceof JacksonException j && !j.getPath().isEmpty()) {
+            String field = j.getPath().stream()
+                    .map(r -> r.getPropertyName() != null ? r.getPropertyName() : String.valueOf(r.getIndex()))
+                    .collect(Collectors.joining("."));
+            return validationFailed(Map.of(field, "invalid value"));
+        }
         return validationFailed(Map.of());
     }
 

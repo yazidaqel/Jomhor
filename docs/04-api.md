@@ -25,7 +25,7 @@ Error codes (Lot 0; later lots add theirs here):
 | `OTP_INVALID` / `OTP_EXPIRED` | 401 | Verify failed |
 | `OTP_RATE_LIMITED` | 429 | > 3 sends per phone per 10 min |
 | `EVENT_NOT_ON_SALE` | 409 | Order on an event that is not `ON_SALE` |
-| `EVENT_NOT_EDITABLE` | 409 | Edit after `ON_SALE` (except allowed fields) or when `CLOSED` |
+| `EVENT_NOT_EDITABLE` | 409 | Event PATCH, price write or publish when the status doesn't allow it (PATCH and prices: only `DRAFT`/`ON_SALE`; publish: only `DRAFT`, so the losing side of a double publish gets it too) |
 | `SOLD_OUT` | 409 | `details.price_category_id` |
 | `PER_ACCOUNT_LIMIT` | 409 | `details.limit`, `details.held` |
 | `ORDER_EXPIRED` / `ORDER_NOT_PAYABLE` | 409 | Pay on a non-`RESERVED` order |
@@ -35,7 +35,9 @@ Error codes (Lot 0; later lots add theirs here):
 | `REFUND_FROZEN` | 409 | Refund or cancel after `refund_cutoff_at` |
 
 No pagination in Lot 0. Lists are per organizer and small, in a stable order: by name for
-venues, by code for zones and gates, ids ascending inside arrays such as `zone_ids`.
+venues, by code for zones and gates, by `starts_at` for events, by `zone_id` then `name` for prices,
+ids ascending inside arrays such as `zone_ids`. Integer fields reject floats and strings (`50.5`,
+`5000.0`, `"5000"` → 422).
 
 Conventions: create → `201` with the resource; delete → `204`; PATCH is partial (a missing or
 `null` field is left unchanged; send `""` to clear an optional text field such as `city`) and
@@ -98,10 +100,10 @@ caller holds the phone; the endpoint decides the token audience.
 | PUT | `/org/gates/{id}/zones` | `{zone_ids:[...]}` replaces the set. Zones must belong to the gate's venue. |
 | GET | `/org/events?status=&from=` | `[{id, title, event_type, starts_at, status, venue:{id, name}, quota, sold}]` by `starts_at` |
 | POST | `/org/events` | `{venue_id, event_type, title, starts_at, doors_open_at?, reentry_policy?, per_account_limit?, metadata?}` → `201` event in `DRAFT`. **K_e (32 random bytes) is generated and encrypted in the same transaction and never returned.** |
-| GET, PATCH | `/org/events/{id}` | Event `{id, venue_id, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at, reentry_policy, per_account_limit, metadata, created_at}`. PATCH allowed in `DRAFT`/`ON_SALE`. `venue_id` and `event_type` are fixed after create. Changing `starts_at` while `ON_SALE` recomputes `refund_cutoff_at`. |
-| GET, POST | `/org/events/{id}/prices` | `{zone_id, name, price_mad, quota}` → `{id, zone_id, name, price_mad, quota, sold}`. The zone must be in the event's venue; Σ quota per zone ≤ zone capacity. |
-| PATCH, DELETE | `/org/events/{id}/prices/{price_id}` | `quota ≥ sold`. A price change applies to new orders only (snapshot in `order_items`). DELETE only if `sold = 0` (`PRICE_IN_USE`). |
-| POST | `/org/events/{id}/publish` | `DRAFT` → `ON_SALE`. Needs ≥ 1 category with quota > 0 and `starts_at > now`. Sets `refund_cutoff_at = starts_at − 60 min`. Writes `audit_log` `event.publish`. |
+| GET, PATCH | `/org/events/{id}` | Event `{id, venue_id, series_id, event_type, title, starts_at, doors_open_at, status, refund_cutoff_at, reentry_policy, per_account_limit, metadata, created_at}`. PATCH allowed in `DRAFT`/`ON_SALE`. `venue_id` and `event_type` are fixed after create (a different value → 422). Changing `starts_at` while `ON_SALE` recomputes `refund_cutoff_at`. `metadata` in a PATCH replaces the whole object. `doors_open_at` cannot be cleared in Lot 0. |
+| GET, POST | `/org/events/{id}/prices` | `{zone_id, name, price_mad, quota}` → `{id, zone_id, name, price_mad, quota, sold}`. The zone must be in the event's venue; Σ quota per zone ≤ zone capacity. A name already used for that zone in the event → 422 `VALIDATION_FAILED` on `name`. |
+| PATCH, DELETE | `/org/events/{id}/prices/{price_id}` | PATCH `{name?, price_mad?, quota?}`; `zone_id` is fixed after create (a different value → 422). `quota ≥ sold`. A price change applies to new orders only (snapshot in `order_items`). DELETE only if `sold = 0` (`PRICE_IN_USE`). |
+| POST | `/org/events/{id}/publish` | `DRAFT` → `ON_SALE`. Needs ≥ 1 category with quota > 0 and `starts_at > now`. Sets `refund_cutoff_at = starts_at − 60 min`. Writes `audit_log` `event.publish`. → `200` with the event (GET shape). Unmet precondition → 422 `VALIDATION_FAILED` with `details.reason` `NO_QUOTA` (`fields.prices`) or `STARTS_IN_PAST` (`fields.starts_at`). |
 | GET | `/org/events/{id}/sales` | Sold / remaining per zone, by channel, revenue |
 | POST | `/org/tickets/{id}/block` · `/unblock` · `/refund` | Refused after `refund_cutoff_at` (`REFUND_FROZEN`) |
 | POST | `/org/events/{id}/invitations` | Bulk accreditations `[{phone?, name, zone_id, count}]` → tickets with method FREE |
@@ -122,7 +124,8 @@ caller holds the phone; the endpoint decides the token audience.
 | others | free |
 
 The server requires a JSON object of at most 4 KB, type-checks the known keys and keeps unknown
-keys. The back-office validates per type with zod.
+keys. A known key sent as `null` fails the type check: leave empty keys out. The back-office
+validates per type with zod.
 
 ## Gate (scanner)
 

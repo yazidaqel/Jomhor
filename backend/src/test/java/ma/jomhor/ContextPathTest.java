@@ -15,7 +15,8 @@ import org.springframework.web.client.RestClient;
  * security chains and the X-Organizer-Id interceptor still match their paths under it.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {IntegrationTest.JWT_SECRET, IntegrationTest.OTP_SECRET})
+        properties = {IntegrationTest.JWT_SECRET, IntegrationTest.OTP_SECRET,
+                IntegrationTest.EVENT_KEY_MASTER})
 class ContextPathTest extends IntegrationTest {
 
     @Value("${local.server.port}")
