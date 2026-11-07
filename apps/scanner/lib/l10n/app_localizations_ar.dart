@@ -25,9 +25,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceActive => 'الجهاز مفعل';
 
   @override
-  String get homeOpenScanner => 'فتح الماسح';
-
-  @override
   String get scanInactive => 'وضع الحدث غير مفعل';
 
   @override
@@ -180,4 +177,151 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get scanCountersStale => 'العدادات غير متاحة';
+
+  @override
+  String get enrolTitle => 'التسجيل';
+
+  @override
+  String get enrolScan => 'امسح رمز QR للتسجيل';
+
+  @override
+  String get enrolCodeRead => 'تمت قراءة رمز التسجيل';
+
+  @override
+  String get enrolCodeInvalid => 'هذا ليس رمز تسجيل Jomhor.';
+
+  @override
+  String get enrolLabel => 'اسم الجهاز';
+
+  @override
+  String get enrolLabelHint => 'مثال: لوحة الباب 3';
+
+  @override
+  String get enrolLabelInvalid => 'من 1 إلى 40 حرفًا.';
+
+  @override
+  String get enrolSubmit => 'تسجيل الجهاز';
+
+  @override
+  String get enrolFingerprint => 'البصمة';
+
+  @override
+  String get enrolPendingHint => 'تحقق من أن لوحة الإدارة تعرض نفس البصمة، ثم وافق على الجهاز.';
+
+  @override
+  String get errorNetwork => 'لا اتصال بالخادم. أعد المحاولة.';
+
+  @override
+  String get errorEnrolCode => 'رمز التسجيل غير صالح أو منتهي. اعرض رمزًا جديدًا في لوحة الإدارة.';
+
+  @override
+  String get errorGeneric => 'خطأ في الخادم. أعد المحاولة.';
+
+  @override
+  String get eventTitle => 'الحدث';
+
+  @override
+  String get eventNone => 'لا يوجد حدث مخصص لهذا الجهاز.';
+
+  @override
+  String get eventNoneHint => 'خصص الجهاز لبوابة في لوحة الإدارة (الحدث، تبويب الأجهزة).';
+
+  @override
+  String eventGate(String code, String name) {
+    return 'البوابة $code · $name';
+  }
+
+  @override
+  String eventManifestAt(String time) {
+    return 'البيان متاح على الساعة $time';
+  }
+
+  @override
+  String get eventLoad => 'تحميل البيان';
+
+  @override
+  String get eventRetry => 'أعد المحاولة';
+
+  @override
+  String get eventStageDownloading => 'جارٍ تنزيل البيان…';
+
+  @override
+  String get eventStageVerifying => 'جارٍ التحقق من التوقيع…';
+
+  @override
+  String get eventStageSaving => 'جارٍ الحفظ…';
+
+  @override
+  String eventLoaded(int version, int rows) {
+    return 'البيان v$version · $rows تذكرة';
+  }
+
+  @override
+  String eventDriftOk(int seconds) {
+    return 'الساعة متحقق منها · فرق $seconds ث';
+  }
+
+  @override
+  String eventDriftRefused(int seconds) {
+    return 'الساعة متأخرة أو متقدمة بـ $seconds ث (الحد 20 ث). اضبط وقت الجهاز ثم أعد المحاولة.';
+  }
+
+  @override
+  String get eventDriftUnknown => 'لم يتم التحقق من الساعة: صِل الجهاز بالشبكة.';
+
+  @override
+  String get eventRejected => 'تم رفض البيان: توقيع أو محتوى غير صالح. يُحتفظ بآخر بيان صالح.';
+
+  @override
+  String eventNotReady(String time) {
+    return 'البيان غير متاح بعد (على الساعة $time).';
+  }
+
+  @override
+  String get eventNotReadyNoTime => 'البيان غير متاح بعد.';
+
+  @override
+  String get eventClosed => 'تم إغلاق الحدث.';
+
+  @override
+  String get unlockTitle => 'فتح القفل';
+
+  @override
+  String get unlockPickName => 'من أنت؟';
+
+  @override
+  String get unlockNoStaff => 'لا يوجد طاقم بوابة. صِل الجهاز لتحميل القائمة.';
+
+  @override
+  String unlockPin(String name) {
+    return 'الرمز السري لـ $name';
+  }
+
+  @override
+  String unlockWrong(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'رمز خاطئ · $count محاولات متبقية',
+      one: 'رمز خاطئ · محاولة واحدة متبقية',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String unlockLocked(String time) {
+    return 'محاولات كثيرة. أعد المحاولة على الساعة $time.';
+  }
+
+  @override
+  String get unlockChangeName => 'تغيير الاسم';
+
+  @override
+  String get unlockDelete => 'حذف';
+
+  @override
+  String get roleSupervisor => 'مشرف';
+
+  @override
+  String get roleGate => 'مراقب';
 }

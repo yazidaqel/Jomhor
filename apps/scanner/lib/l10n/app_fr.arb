@@ -17,10 +17,6 @@
   "@deviceActive": {
     "description": "Home status: the admin approved the device."
   },
-  "homeOpenScanner": "Ouvrir le scanner",
-  "@homeOpenScanner": {
-    "description": "Home button to the scan screen (DESIGN screen 6)."
-  },
   "scanInactive": "Mode événement inactif",
   "@scanInactive": {
     "description": "Scan screen when no event is loaded, the gate is unset, the device is locked or K_e is absent."
@@ -186,5 +182,148 @@
   "scanCountersStale": "Compteurs indisponibles",
   "@scanCountersStale": {
     "description": "Under the counters card when the counters could not be refreshed; they keep their last values."
-  }
+  },
+  "enrolTitle": "Enrôlement",
+  "@enrolTitle": {
+    "description": "Enrolment screen title (DESIGN Lot 2 adjustments)."
+  },
+  "enrolScan": "Scanner le QR d'enrôlement",
+  "@enrolScan": {
+    "description": "Opens the camera for the back-office enrol QR."
+  },
+  "enrolCodeRead": "QR d'enrôlement lu",
+  "enrolCodeInvalid": "Ce QR n'est pas un QR d'enrôlement Jomhor.",
+  "@enrolCodeInvalid": {
+    "description": "A scanned QR that is not an enrol code (a ticket, say)."
+  },
+  "enrolLabel": "Nom de l'appareil",
+  "@enrolLabel": {
+    "description": "Device label input, 1 to 40 characters, shown in the back-office."
+  },
+  "enrolLabelHint": "Ex. Tablette Bâb 3",
+  "enrolLabelInvalid": "Entre 1 et 40 caractères.",
+  "enrolSubmit": "Enrôler l'appareil",
+  "enrolFingerprint": "EMPREINTE",
+  "@enrolFingerprint": {
+    "description": "Label above the device key fingerprint (AB12 CD34)."
+  },
+  "enrolPendingHint": "Vérifiez que le back-office affiche la même empreinte, puis approuvez l'appareil.",
+  "errorNetwork": "Pas de connexion au serveur. Réessayez.",
+  "errorEnrolCode": "QR d'enrôlement invalide ou expiré. Affichez-en un nouveau dans le back-office.",
+  "errorGeneric": "Erreur du serveur. Réessayez.",
+  "eventTitle": "Événement",
+  "@eventTitle": {
+    "description": "Event mode screen title."
+  },
+  "eventNone": "Aucun événement assigné à cet appareil.",
+  "eventNoneHint": "Assignez l'appareil à une porte dans le back-office (événement, onglet Appareils).",
+  "eventGate": "Porte {code} · {name}",
+  "@eventGate": {
+    "description": "Assigned gate.",
+    "placeholders": {
+      "code": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "eventManifestAt": "Manifeste disponible à {time}",
+  "@eventManifestAt": {
+    "description": "When the server serves the manifest, in the event's zone.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "eventLoad": "Charger le manifeste",
+  "eventRetry": "Réessayer",
+  "eventStageDownloading": "Téléchargement du manifeste…",
+  "eventStageVerifying": "Vérification de la signature…",
+  "eventStageSaving": "Enregistrement…",
+  "eventLoaded": "Manifeste v{version} · {rows} billets",
+  "@eventLoaded": {
+    "description": "Last manifest applied.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      },
+      "rows": {
+        "type": "int"
+      }
+    }
+  },
+  "eventDriftOk": "Horloge vérifiée · écart {seconds} s",
+  "@eventDriftOk": {
+    "description": "Drift check passed (docs/02: at most 20 s).",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "eventDriftRefused": "Horloge décalée de {seconds} s (max 20 s). Réglez l'heure de l'appareil, puis réessayez.",
+  "@eventDriftRefused": {
+    "description": "Drift check failed: event mode refused.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "eventDriftUnknown": "Horloge non vérifiée : connectez l'appareil au réseau.",
+  "eventRejected": "Manifeste refusé : signature ou contenu invalide. Le dernier manifeste valide est conservé.",
+  "eventNotReady": "Manifeste pas encore disponible (à {time}).",
+  "@eventNotReady": {
+    "description": "MANIFEST_NOT_READY.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "eventNotReadyNoTime": "Manifeste pas encore disponible.",
+  "eventClosed": "Événement clôturé.",
+  "unlockTitle": "Déverrouillage",
+  "@unlockTitle": {
+    "description": "Staff unlock screen title."
+  },
+  "unlockPickName": "Qui êtes-vous ?",
+  "unlockNoStaff": "Aucun membre de l'équipe de porte. Connectez l'appareil pour charger la liste.",
+  "unlockPin": "PIN de {name}",
+  "@unlockPin": {
+    "description": "Above the PIN pad.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "unlockWrong": "{count, plural, =1{PIN incorrect · 1 essai restant} other{PIN incorrect · {count} essais restants}}",
+  "@unlockWrong": {
+    "description": "Wrong PIN; after 5 the device locks for 5 min.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "unlockLocked": "Trop d'essais. Réessayez à {time}.",
+  "@unlockLocked": {
+    "description": "PIN lockout.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "unlockChangeName": "Changer de nom",
+  "unlockDelete": "Effacer",
+  "@unlockDelete": {
+    "description": "PIN pad backspace (screen reader)."
+  },
+  "roleSupervisor": "Superviseur",
+  "roleGate": "Contrôleur"
 }

@@ -90,6 +90,15 @@ class Config extends Table with TableInfo<Config, ConfigData> {
     requiredDuringInsert: false,
     $customConstraints: '',
   );
+  static const VerificationMeta _eventTimezoneMeta = const VerificationMeta('eventTimezone');
+  late final GeneratedColumn<String> eventTimezone = GeneratedColumn<String>(
+    'event_timezone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: '',
+  );
   static const VerificationMeta _eventStatusMeta = const VerificationMeta('eventStatus');
   late final GeneratedColumn<String> eventStatus = GeneratedColumn<String>(
     'event_status',
@@ -168,6 +177,7 @@ class Config extends Table with TableInfo<Config, ConfigData> {
     eventId,
     eventTitle,
     startsAt,
+    eventTimezone,
     eventStatus,
     gateId,
     manifestVersion,
@@ -220,6 +230,12 @@ class Config extends Table with TableInfo<Config, ConfigData> {
     }
     if (data.containsKey('starts_at')) {
       context.handle(_startsAtMeta, startsAt.isAcceptableOrUnknown(data['starts_at']!, _startsAtMeta));
+    }
+    if (data.containsKey('event_timezone')) {
+      context.handle(
+        _eventTimezoneMeta,
+        eventTimezone.isAcceptableOrUnknown(data['event_timezone']!, _eventTimezoneMeta),
+      );
     }
     if (data.containsKey('event_status')) {
       context.handle(_eventStatusMeta, eventStatus.isAcceptableOrUnknown(data['event_status']!, _eventStatusMeta));
@@ -275,6 +291,7 @@ class Config extends Table with TableInfo<Config, ConfigData> {
       eventId: attachedDatabase.typeMapping.read(DriftSqlType.int, data['${effectivePrefix}event_id']),
       eventTitle: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}event_title']),
       startsAt: attachedDatabase.typeMapping.read(DriftSqlType.int, data['${effectivePrefix}starts_at']),
+      eventTimezone: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}event_timezone']),
       eventStatus: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}event_status']),
       gateId: attachedDatabase.typeMapping.read(DriftSqlType.string, data['${effectivePrefix}gate_id']),
       manifestVersion: attachedDatabase.typeMapping.read(DriftSqlType.int, data['${effectivePrefix}manifest_version'])!,
@@ -316,6 +333,9 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
   final int? startsAt;
 
   /// epoch ms
+  final String? eventTimezone;
+
+  /// IANA zone of the venue (GET /gate/events timezone); times on screen use it
   final String? eventStatus;
   final String? gateId;
 
@@ -337,6 +357,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
     this.eventId,
     this.eventTitle,
     this.startsAt,
+    this.eventTimezone,
     this.eventStatus,
     this.gateId,
     required this.manifestVersion,
@@ -373,6 +394,9 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
     if (!nullToAbsent || startsAt != null) {
       map['starts_at'] = Variable<int>(startsAt);
     }
+    if (!nullToAbsent || eventTimezone != null) {
+      map['event_timezone'] = Variable<String>(eventTimezone);
+    }
     if (!nullToAbsent || eventStatus != null) {
       map['event_status'] = Variable<String>(eventStatus);
     }
@@ -400,6 +424,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
       eventId: eventId == null && nullToAbsent ? const Value.absent() : Value(eventId),
       eventTitle: eventTitle == null && nullToAbsent ? const Value.absent() : Value(eventTitle),
       startsAt: startsAt == null && nullToAbsent ? const Value.absent() : Value(startsAt),
+      eventTimezone: eventTimezone == null && nullToAbsent ? const Value.absent() : Value(eventTimezone),
       eventStatus: eventStatus == null && nullToAbsent ? const Value.absent() : Value(eventStatus),
       gateId: gateId == null && nullToAbsent ? const Value.absent() : Value(gateId),
       manifestVersion: Value(manifestVersion),
@@ -422,6 +447,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
       eventId: serializer.fromJson<int?>(json['event_id']),
       eventTitle: serializer.fromJson<String?>(json['event_title']),
       startsAt: serializer.fromJson<int?>(json['starts_at']),
+      eventTimezone: serializer.fromJson<String?>(json['event_timezone']),
       eventStatus: serializer.fromJson<String?>(json['event_status']),
       gateId: serializer.fromJson<String?>(json['gate_id']),
       manifestVersion: serializer.fromJson<int>(json['manifest_version']),
@@ -444,6 +470,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
       'event_id': serializer.toJson<int?>(eventId),
       'event_title': serializer.toJson<String?>(eventTitle),
       'starts_at': serializer.toJson<int?>(startsAt),
+      'event_timezone': serializer.toJson<String?>(eventTimezone),
       'event_status': serializer.toJson<String?>(eventStatus),
       'gate_id': serializer.toJson<String?>(gateId),
       'manifest_version': serializer.toJson<int>(manifestVersion),
@@ -464,6 +491,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
     Value<int?> eventId = const Value.absent(),
     Value<String?> eventTitle = const Value.absent(),
     Value<int?> startsAt = const Value.absent(),
+    Value<String?> eventTimezone = const Value.absent(),
     Value<String?> eventStatus = const Value.absent(),
     Value<String?> gateId = const Value.absent(),
     int? manifestVersion,
@@ -481,6 +509,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
     eventId: eventId.present ? eventId.value : this.eventId,
     eventTitle: eventTitle.present ? eventTitle.value : this.eventTitle,
     startsAt: startsAt.present ? startsAt.value : this.startsAt,
+    eventTimezone: eventTimezone.present ? eventTimezone.value : this.eventTimezone,
     eventStatus: eventStatus.present ? eventStatus.value : this.eventStatus,
     gateId: gateId.present ? gateId.value : this.gateId,
     manifestVersion: manifestVersion ?? this.manifestVersion,
@@ -500,6 +529,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
       eventId: data.eventId.present ? data.eventId.value : this.eventId,
       eventTitle: data.eventTitle.present ? data.eventTitle.value : this.eventTitle,
       startsAt: data.startsAt.present ? data.startsAt.value : this.startsAt,
+      eventTimezone: data.eventTimezone.present ? data.eventTimezone.value : this.eventTimezone,
       eventStatus: data.eventStatus.present ? data.eventStatus.value : this.eventStatus,
       gateId: data.gateId.present ? data.gateId.value : this.gateId,
       manifestVersion: data.manifestVersion.present ? data.manifestVersion.value : this.manifestVersion,
@@ -522,6 +552,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
           ..write('eventId: $eventId, ')
           ..write('eventTitle: $eventTitle, ')
           ..write('startsAt: $startsAt, ')
+          ..write('eventTimezone: $eventTimezone, ')
           ..write('eventStatus: $eventStatus, ')
           ..write('gateId: $gateId, ')
           ..write('manifestVersion: $manifestVersion, ')
@@ -544,6 +575,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
     eventId,
     eventTitle,
     startsAt,
+    eventTimezone,
     eventStatus,
     gateId,
     manifestVersion,
@@ -565,6 +597,7 @@ class ConfigData extends DataClass implements Insertable<ConfigData> {
           other.eventId == this.eventId &&
           other.eventTitle == this.eventTitle &&
           other.startsAt == this.startsAt &&
+          other.eventTimezone == this.eventTimezone &&
           other.eventStatus == this.eventStatus &&
           other.gateId == this.gateId &&
           other.manifestVersion == this.manifestVersion &&
@@ -584,6 +617,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
   final Value<int?> eventId;
   final Value<String?> eventTitle;
   final Value<int?> startsAt;
+  final Value<String?> eventTimezone;
   final Value<String?> eventStatus;
   final Value<String?> gateId;
   final Value<int> manifestVersion;
@@ -601,6 +635,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
     this.eventId = const Value.absent(),
     this.eventTitle = const Value.absent(),
     this.startsAt = const Value.absent(),
+    this.eventTimezone = const Value.absent(),
     this.eventStatus = const Value.absent(),
     this.gateId = const Value.absent(),
     this.manifestVersion = const Value.absent(),
@@ -619,6 +654,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
     this.eventId = const Value.absent(),
     this.eventTitle = const Value.absent(),
     this.startsAt = const Value.absent(),
+    this.eventTimezone = const Value.absent(),
     this.eventStatus = const Value.absent(),
     this.gateId = const Value.absent(),
     this.manifestVersion = const Value.absent(),
@@ -637,6 +673,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
     Expression<int>? eventId,
     Expression<String>? eventTitle,
     Expression<int>? startsAt,
+    Expression<String>? eventTimezone,
     Expression<String>? eventStatus,
     Expression<String>? gateId,
     Expression<int>? manifestVersion,
@@ -655,6 +692,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
       if (eventId != null) 'event_id': eventId,
       if (eventTitle != null) 'event_title': eventTitle,
       if (startsAt != null) 'starts_at': startsAt,
+      if (eventTimezone != null) 'event_timezone': eventTimezone,
       if (eventStatus != null) 'event_status': eventStatus,
       if (gateId != null) 'gate_id': gateId,
       if (manifestVersion != null) 'manifest_version': manifestVersion,
@@ -675,6 +713,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
     Value<int?>? eventId,
     Value<String?>? eventTitle,
     Value<int?>? startsAt,
+    Value<String?>? eventTimezone,
     Value<String?>? eventStatus,
     Value<String?>? gateId,
     Value<int>? manifestVersion,
@@ -693,6 +732,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
       eventId: eventId ?? this.eventId,
       eventTitle: eventTitle ?? this.eventTitle,
       startsAt: startsAt ?? this.startsAt,
+      eventTimezone: eventTimezone ?? this.eventTimezone,
       eventStatus: eventStatus ?? this.eventStatus,
       gateId: gateId ?? this.gateId,
       manifestVersion: manifestVersion ?? this.manifestVersion,
@@ -733,6 +773,9 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
     if (startsAt.present) {
       map['starts_at'] = Variable<int>(startsAt.value);
     }
+    if (eventTimezone.present) {
+      map['event_timezone'] = Variable<String>(eventTimezone.value);
+    }
     if (eventStatus.present) {
       map['event_status'] = Variable<String>(eventStatus.value);
     }
@@ -769,6 +812,7 @@ class ConfigCompanion extends UpdateCompanion<ConfigData> {
           ..write('eventId: $eventId, ')
           ..write('eventTitle: $eventTitle, ')
           ..write('startsAt: $startsAt, ')
+          ..write('eventTimezone: $eventTimezone, ')
           ..write('eventStatus: $eventStatus, ')
           ..write('gateId: $gateId, ')
           ..write('manifestVersion: $manifestVersion, ')
@@ -2782,6 +2826,7 @@ typedef $ConfigCreateCompanionBuilder = ConfigCompanion Function({
   Value<int?> eventId,
   Value<String?> eventTitle,
   Value<int?> startsAt,
+  Value<String?> eventTimezone,
   Value<String?> eventStatus,
   Value<String?> gateId,
   Value<int> manifestVersion,
@@ -2800,6 +2845,7 @@ typedef $ConfigUpdateCompanionBuilder = ConfigCompanion Function({
   Value<int?> eventId,
   Value<String?> eventTitle,
   Value<int?> startsAt,
+  Value<String?> eventTimezone,
   Value<String?> eventStatus,
   Value<String?> gateId,
   Value<int> manifestVersion,
@@ -2842,6 +2888,9 @@ class $ConfigFilterComposer extends Composer<_$ScannerDatabase, Config> {
 
   ColumnFilters<int> get startsAt =>
       $composableBuilder(column: $table.startsAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get eventTimezone =>
+      $composableBuilder(column: $table.eventTimezone, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get eventStatus =>
       $composableBuilder(column: $table.eventStatus, builder: (column) => ColumnFilters(column));
@@ -2898,6 +2947,9 @@ class $ConfigOrderingComposer extends Composer<_$ScannerDatabase, Config> {
   ColumnOrderings<int> get startsAt =>
       $composableBuilder(column: $table.startsAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get eventTimezone =>
+      $composableBuilder(column: $table.eventTimezone, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get eventStatus =>
       $composableBuilder(column: $table.eventStatus, builder: (column) => ColumnOrderings(column));
 
@@ -2949,6 +3001,9 @@ class $ConfigAnnotationComposer extends Composer<_$ScannerDatabase, Config> {
   GeneratedColumn<String> get eventTitle => $composableBuilder(column: $table.eventTitle, builder: (column) => column);
 
   GeneratedColumn<int> get startsAt => $composableBuilder(column: $table.startsAt, builder: (column) => column);
+
+  GeneratedColumn<String> get eventTimezone =>
+      $composableBuilder(column: $table.eventTimezone, builder: (column) => column);
 
   GeneratedColumn<String> get eventStatus =>
       $composableBuilder(column: $table.eventStatus, builder: (column) => column);
@@ -3002,6 +3057,7 @@ class $ConfigTableManager
                 Value<int?> eventId = const Value.absent(),
                 Value<String?> eventTitle = const Value.absent(),
                 Value<int?> startsAt = const Value.absent(),
+                Value<String?> eventTimezone = const Value.absent(),
                 Value<String?> eventStatus = const Value.absent(),
                 Value<String?> gateId = const Value.absent(),
                 Value<int> manifestVersion = const Value.absent(),
@@ -3019,6 +3075,7 @@ class $ConfigTableManager
                 eventId: eventId,
                 eventTitle: eventTitle,
                 startsAt: startsAt,
+                eventTimezone: eventTimezone,
                 eventStatus: eventStatus,
                 gateId: gateId,
                 manifestVersion: manifestVersion,
@@ -3038,6 +3095,7 @@ class $ConfigTableManager
                 Value<int?> eventId = const Value.absent(),
                 Value<String?> eventTitle = const Value.absent(),
                 Value<int?> startsAt = const Value.absent(),
+                Value<String?> eventTimezone = const Value.absent(),
                 Value<String?> eventStatus = const Value.absent(),
                 Value<String?> gateId = const Value.absent(),
                 Value<int> manifestVersion = const Value.absent(),
@@ -3055,6 +3113,7 @@ class $ConfigTableManager
                 eventId: eventId,
                 eventTitle: eventTitle,
                 startsAt: startsAt,
+                eventTimezone: eventTimezone,
                 eventStatus: eventStatus,
                 gateId: gateId,
                 manifestVersion: manifestVersion,

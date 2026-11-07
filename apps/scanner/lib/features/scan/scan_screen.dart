@@ -96,7 +96,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   }
 }
 
-Widget _camera(ValueChanged<String> onCode) => _Camera(onCode: onCode);
+Widget _camera(ValueChanged<String> onCode) => QrCamera(onCode: onCode);
 
 class _Scanning extends StatelessWidget {
   const new({required this.desk, required this.stale, required this.topLine, required this.camera});
@@ -205,18 +205,19 @@ class _Inactive extends StatelessWidget {
 }
 
 /// The back camera, QR only. The bundled ML Kit model works without Play Services downloads (offline gates).
-class _Camera extends StatefulWidget {
-  const new({required this.onCode});
+/// Also reads the enrol QR (lib/features/enrol).
+class QrCamera extends StatefulWidget {
+  const new({required this.onCode, super.key});
 
   final ValueChanged<String> onCode;
 
   @override
-  State<_Camera> createState() => _CameraState();
+  State<QrCamera> createState() => _QrCameraState();
 }
 
 /// Owns the controller for the screen's lifetime; stops the camera when the app leaves the foreground and
 /// starts it again on resume (mobile_scanner leaves that to the owner of an explicit controller).
-class _CameraState extends State<_Camera> with WidgetsBindingObserver {
+class _QrCameraState extends State<QrCamera> with WidgetsBindingObserver {
   final _controller = MobileScannerController(formats: const [BarcodeFormat.qrCode]);
 
   @override

@@ -9,7 +9,7 @@ Future<void> main() async {
   AppConfig.checkApiUrl();
   WidgetsFlutterBinding.ensureInitialized();
   final db = ScannerDatabase.open();
-  final config = await db.readConfig();
+  final config = await db.openLocked();
   runApp(
     ProviderScope(
       overrides: [

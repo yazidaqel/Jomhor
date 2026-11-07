@@ -2,8 +2,11 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
 import 'package:jomhor_scanner/app/app.dart';
 import 'package:jomhor_scanner/app/config.dart';
+import 'package:jomhor_scanner/core/device_key.dart';
+import 'package:jomhor_scanner/core/gate/gate_client.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 
@@ -39,7 +42,23 @@ void main() {
     tester.platformDispatcher.localesTestValue = [locale];
     addTearDown(tester.platformDispatcher.clearLocalesTestValue);
     await tester.pumpWidget(
-      ProviderScope(overrides: [databaseProvider.overrideWithValue(db)], child: const ScannerApp()),
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          deviceKeyProvider.overrideWithValue(FakeDeviceKey()),
+          // A PENDING device polls GET /gate/events: the server keeps answering 403 PENDING.
+          httpClientProvider.overrideWithValue(
+            MockClient(
+              (_) async => json({
+                'code': 'DEVICE_NOT_ACTIVE',
+                'message': 'pending',
+                'details': {'status': 'PENDING'},
+              }, 403),
+            ),
+          ),
+        ],
+        child: const ScannerApp(),
+      ),
     );
     await tester.pumpAndSettle();
     return db;
@@ -47,7 +66,7 @@ void main() {
 
   testWidgets('a new device opens on "Appareil non enrôlé" (FR), and follows config', (tester) async {
     final db = await pumpApp(tester, const Locale('fr', 'MA'));
-    expect(find.text('Jomhor Porte'), findsOneWidget);
+    expect(find.text('Enrôlement'), findsOneWidget);
     expect(find.text('Appareil non enrôlé'), findsOneWidget);
 
     await tester.runAsync(

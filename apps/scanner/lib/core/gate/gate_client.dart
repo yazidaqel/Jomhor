@@ -7,10 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:jomhor_scanner/app/config.dart';
 import 'package:jomhor_scanner/core/device_key.dart';
+import 'package:jomhor_scanner/core/event_key.dart';
 import 'package:jomhor_scanner/core/server_clock.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
 
 export 'package:jomhor_scanner/core/server_clock.dart';
+
+/// Turns response bytes into the decoded JSON body.
+typedef BodyDecoder = FutureOr<Object?> Function(Uint8List bytes);
 
 /// docs/04-api.md §Gate auth: the exact string the device key signs.
 String gateSigningString({
@@ -35,6 +39,12 @@ class GateApiError implements Exception {
 
   static const clockSkew = 'DEVICE_CLOCK_SKEW';
 
+  /// 403, `details.status` PENDING or REVOKED.
+  static const notActive = 'DEVICE_NOT_ACTIVE';
+
+  /// 409 before `manifest_available_at`, `details.available_at`.
+  static const manifestNotReady = 'MANIFEST_NOT_READY';
+
   final int status;
   final String code;
   final String message;
@@ -54,6 +64,7 @@ class GateClient {
     required this._clock,
     required this._deviceId,
     this.onOffset,
+    this.onRevoked,
     this.timeout = const Duration(seconds: 30),
   });
 
@@ -73,28 +84,43 @@ class GateClient {
   /// Persists a new offset (server − device ms) measured at device time `atDeviceMs`.
   final Future<void> Function(int offsetMs, int atDeviceMs)? onOffset;
 
-  Future<Object?> get(String path, {Map<String, String>? query}) => _send('GET', path, query: query);
+  /// Runs before the error is thrown when any gate call answers 403 `DEVICE_NOT_ACTIVE` with status REVOKED
+  /// (docs/04: the scanner wipes K_e, manifest, staff list and scans), so every caller gets the wipe.
+  final Future<void> Function()? onRevoked;
+
+  /// [decode] replaces the JSON decoding of the response bytes (the manifest decodes, verifies and parses in a
+  /// background isolate). It must return the decoded JSON, at least `server_time` and the 04 error fields.
+  Future<Object?> get(String path, {Map<String, String>? query, BodyDecoder? decode}) =>
+      _send('GET', path, query: query, decode: decode);
 
   Future<Object?> post(String path, {Object? body}) => _send('POST', path, body: body);
 
   /// Returns the decoded JSON body (null when empty, e.g. 204). Throws [GateApiError] on a non-2xx status or
   /// a network failure. On `DEVICE_CLOCK_SKEW` the offset is fixed from `details.server_time`, and the
   /// request is signed again with the corrected time and retried once.
-  Future<Object?> _send(String method, String path, {Map<String, String>? query, Object? body}) async {
+  Future<Object?> _send(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    Object? body,
+    BodyDecoder? decode,
+  }) async {
     final parsed = Uri.parse('$baseUrl$path');
     final url = query == null ? parsed : parsed.replace(queryParameters: query);
     // Signed and sent as these exact bytes; requests are never compressed.
     final bytes = body == null ? Uint8List(0) : utf8.encode(jsonEncode(body));
     final deviceId = await _deviceId();
     try {
-      return await _exchange(method, url, bytes, deviceId);
+      return await _exchange(method, url, bytes, deviceId, decode ?? _jsonBody);
     } on GateApiError catch (e) {
       if (e.code != GateApiError.clockSkew) rethrow;
-      return await _exchange(method, url, bytes, deviceId);
+      return await _exchange(method, url, bytes, deviceId, decode ?? _jsonBody);
     }
   }
 
-  Future<Object?> _exchange(String method, Uri url, Uint8List bytes, String? deviceId) async {
+  static Object? _jsonBody(Uint8List bytes) => jsonDecode(utf8.decode(bytes));
+
+  Future<Object?> _exchange(String method, Uri url, Uint8List bytes, String? deviceId, BodyDecoder decode) async {
     final time = _clock.nowMs();
     final signature = await _key.sign(
       utf8.encode(gateSigningString(method: method, path: signedPath(url), timeMs: time, body: bytes)),
@@ -126,7 +152,7 @@ class GateClient {
     final Object? json;
     try {
       // bodyBytes: `response.body` falls back to latin1 without a charset.
-      json = response.bodyBytes.isEmpty ? null : jsonDecode(utf8.decode(response.bodyBytes));
+      json = response.bodyBytes.isEmpty ? null : await decode(response.bodyBytes);
     } on FormatException {
       throw GateApiError(status: status, code: GateApiError.unexpectedResponse, message: 'Body is not JSON');
     }
@@ -153,12 +179,20 @@ class GateClient {
     if (status >= 200 && status < 300) return json;
     if (json case {'code': final String code, 'message': final String message}) {
       final details = json['details'];
-      throw GateApiError(
+      final error = GateApiError(
         status: status,
         code: code,
         message: message,
         details: details is Map<String, Object?> ? details : const {},
       );
+      if (status == 403 && code == GateApiError.notActive && error.details['status'] == 'REVOKED') {
+        try {
+          await onRevoked?.call();
+        } on Object {
+          // The caller still gets the 403; the next gate call answers REVOKED again and retries the wipe.
+        }
+      }
+      throw error;
     }
     throw GateApiError(status: status, code: GateApiError.unexpectedResponse, message: 'HTTP $status');
   }
@@ -180,5 +214,15 @@ final gateClientProvider = Provider<GateClient>((ref) {
     clock: ref.watch(serverClockProvider),
     deviceId: () async => (await db.readConfig()).deviceId,
     onOffset: db.saveServerOffset,
+    // REVOKED: the database first, then K_e from memory and all of secure storage (K_e, PIN lockout), each
+    // step running even if an earlier one throws.
+    onRevoked: () async {
+      try {
+        await db.wipeAll();
+      } finally {
+        ref.read(eventKeyProvider.notifier).wipe();
+        await ref.read(secureStorageProvider).deleteAll();
+      }
+    },
   );
 });

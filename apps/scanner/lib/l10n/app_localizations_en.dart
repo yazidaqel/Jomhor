@@ -25,9 +25,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceActive => 'Device active';
 
   @override
-  String get homeOpenScanner => 'Open scanner';
-
-  @override
   String get scanInactive => 'Event mode inactive';
 
   @override
@@ -180,4 +177,151 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get scanCountersStale => 'Counters unavailable';
+
+  @override
+  String get enrolTitle => 'Enrolment';
+
+  @override
+  String get enrolScan => 'Scan the enrolment QR';
+
+  @override
+  String get enrolCodeRead => 'Enrolment QR read';
+
+  @override
+  String get enrolCodeInvalid => 'This is not a Jomhor enrolment QR.';
+
+  @override
+  String get enrolLabel => 'Device name';
+
+  @override
+  String get enrolLabelHint => 'e.g. Tablet Gate 3';
+
+  @override
+  String get enrolLabelInvalid => 'Between 1 and 40 characters.';
+
+  @override
+  String get enrolSubmit => 'Enrol device';
+
+  @override
+  String get enrolFingerprint => 'FINGERPRINT';
+
+  @override
+  String get enrolPendingHint => 'Check the back-office shows the same fingerprint, then approve the device.';
+
+  @override
+  String get errorNetwork => 'No connection to the server. Try again.';
+
+  @override
+  String get errorEnrolCode => 'Enrolment QR invalid or expired. Show a new one in the back-office.';
+
+  @override
+  String get errorGeneric => 'Server error. Try again.';
+
+  @override
+  String get eventTitle => 'Event';
+
+  @override
+  String get eventNone => 'No event assigned to this device.';
+
+  @override
+  String get eventNoneHint => 'Assign the device to a gate in the back-office (event, Devices tab).';
+
+  @override
+  String eventGate(String code, String name) {
+    return 'Gate $code · $name';
+  }
+
+  @override
+  String eventManifestAt(String time) {
+    return 'Manifest available at $time';
+  }
+
+  @override
+  String get eventLoad => 'Load the manifest';
+
+  @override
+  String get eventRetry => 'Try again';
+
+  @override
+  String get eventStageDownloading => 'Downloading the manifest…';
+
+  @override
+  String get eventStageVerifying => 'Checking the signature…';
+
+  @override
+  String get eventStageSaving => 'Saving…';
+
+  @override
+  String eventLoaded(int version, int rows) {
+    return 'Manifest v$version · $rows tickets';
+  }
+
+  @override
+  String eventDriftOk(int seconds) {
+    return 'Clock checked · $seconds s off';
+  }
+
+  @override
+  String eventDriftRefused(int seconds) {
+    return 'Clock $seconds s off (max 20 s). Set the device time, then try again.';
+  }
+
+  @override
+  String get eventDriftUnknown => 'Clock not checked: connect the device.';
+
+  @override
+  String get eventRejected => 'Manifest refused: invalid signature or content. The last good manifest is kept.';
+
+  @override
+  String eventNotReady(String time) {
+    return 'Manifest not available yet (at $time).';
+  }
+
+  @override
+  String get eventNotReadyNoTime => 'Manifest not available yet.';
+
+  @override
+  String get eventClosed => 'Event closed.';
+
+  @override
+  String get unlockTitle => 'Unlock';
+
+  @override
+  String get unlockPickName => 'Who are you?';
+
+  @override
+  String get unlockNoStaff => 'No gate staff yet. Connect the device to load the list.';
+
+  @override
+  String unlockPin(String name) {
+    return 'PIN for $name';
+  }
+
+  @override
+  String unlockWrong(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Wrong PIN · $count tries left',
+      one: 'Wrong PIN · 1 try left',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String unlockLocked(String time) {
+    return 'Too many tries. Try again at $time.';
+  }
+
+  @override
+  String get unlockChangeName => 'Change name';
+
+  @override
+  String get unlockDelete => 'Delete';
+
+  @override
+  String get roleSupervisor => 'Supervisor';
+
+  @override
+  String get roleGate => 'Gate staff';
 }

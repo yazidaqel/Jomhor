@@ -11,7 +11,14 @@ import 'package:jomhor_scanner/features/scan/validator.dart';
 
 /// A scan as the result screen shows it.
 final class ScanOutcome {
-  const new({required this.verdict, required this.scanId, required this.atMs, required this.elapsedMs, this.zoneName});
+  const new({
+    required this.verdict,
+    required this.scanId,
+    required this.atMs,
+    required this.elapsedMs,
+    this.zoneName,
+    this.timeZone,
+  });
 
   final Verdict verdict;
   final String scanId;
@@ -22,6 +29,9 @@ final class ScanOutcome {
   /// From the raw string to the committed scan row ("Validé hors ligne en {ms} ms").
   final int elapsedMs;
   final String? zoneName;
+
+  /// The event's IANA zone (docs/05 `config.event_timezone`): result times are shown in it.
+  final String? timeZone;
 }
 
 /// Top line and counters card of screen 6, for the device's current gate.
@@ -140,7 +150,14 @@ class ScanService {
       final zone = verdict.zoneId == null
           ? null
           : await (_db.select(_db.zones)..where((z) => z.zoneId.equals(verdict.zoneId!))).getSingleOrNull();
-      return ScanOutcome(verdict: verdict, scanId: scanId, atMs: now, elapsedMs: 0, zoneName: zone?.name);
+      return ScanOutcome(
+        verdict: verdict,
+        scanId: scanId,
+        atMs: now,
+        elapsedMs: 0,
+        zoneName: zone?.name,
+        timeZone: config.eventTimezone,
+      );
     });
     return ScanOutcome(
       verdict: outcome.verdict,
@@ -148,6 +165,7 @@ class ScanService {
       atMs: outcome.atMs,
       elapsedMs: watch.elapsedMilliseconds,
       zoneName: outcome.zoneName,
+      timeZone: outcome.timeZone,
     );
   }
 

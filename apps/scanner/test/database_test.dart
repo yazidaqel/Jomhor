@@ -1,6 +1,9 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:jomhor_scanner/data/scanner_database.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import 'helpers.dart';
@@ -49,6 +52,31 @@ void main() {
     expect(expected.keys, containsAll(['table config', 'table manifest_tickets', 'table used', 'table scans']));
     expect(expected['index sql idx_scans_unsynced'], contains('where synced = 0'));
     expect(actual, expected);
+  });
+
+  test('a schema 1 database (before config.event_timezone) is migrated in place, rows kept', () async {
+    final v1 = File('../../docs/05-scanner-sqlite.sql')
+        .readAsStringSync()
+        .split('\n')
+        .where((line) => !line.trimLeft().startsWith('event_timezone'))
+        .join('\n');
+    final raw = sqlite3.openInMemory()
+      ..execute(v1)
+      ..execute("INSERT INTO config (id, device_id) VALUES (1, 'd-1'); PRAGMA user_version = 1;");
+    final db = ScannerDatabase(NativeDatabase.opened(raw));
+    addTearDown(db.close);
+    final config = await db.readConfig();
+    expect((config.deviceId, config.eventTimezone), ('d-1', null));
+    await db.update(db.config).write(const ConfigCompanion(eventTimezone: Value('Asia/Tokyo')));
+    expect((await db.readConfig()).eventTimezone, 'Asia/Tokyo');
+  });
+
+  test('the app opens locked: a staff session never survives a restart', () async {
+    final db = memoryDatabase();
+    addTearDown(db.close);
+    await db.update(db.config).write(const ConfigCompanion(staffId: Value('s-1')));
+    expect((await db.openLocked()).staffId, isNull);
+    expect((await db.readConfig()).staffId, isNull);
   });
 
   test('config holds one row only (check id = 1)', () async {

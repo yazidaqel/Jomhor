@@ -25,9 +25,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deviceActive => 'Appareil actif';
 
   @override
-  String get homeOpenScanner => 'Ouvrir le scanner';
-
-  @override
   String get scanInactive => 'Mode événement inactif';
 
   @override
@@ -180,4 +177,152 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get scanCountersStale => 'Compteurs indisponibles';
+
+  @override
+  String get enrolTitle => 'Enrôlement';
+
+  @override
+  String get enrolScan => 'Scanner le QR d\'enrôlement';
+
+  @override
+  String get enrolCodeRead => 'QR d\'enrôlement lu';
+
+  @override
+  String get enrolCodeInvalid => 'Ce QR n\'est pas un QR d\'enrôlement Jomhor.';
+
+  @override
+  String get enrolLabel => 'Nom de l\'appareil';
+
+  @override
+  String get enrolLabelHint => 'Ex. Tablette Bâb 3';
+
+  @override
+  String get enrolLabelInvalid => 'Entre 1 et 40 caractères.';
+
+  @override
+  String get enrolSubmit => 'Enrôler l\'appareil';
+
+  @override
+  String get enrolFingerprint => 'EMPREINTE';
+
+  @override
+  String get enrolPendingHint => 'Vérifiez que le back-office affiche la même empreinte, puis approuvez l\'appareil.';
+
+  @override
+  String get errorNetwork => 'Pas de connexion au serveur. Réessayez.';
+
+  @override
+  String get errorEnrolCode => 'QR d\'enrôlement invalide ou expiré. Affichez-en un nouveau dans le back-office.';
+
+  @override
+  String get errorGeneric => 'Erreur du serveur. Réessayez.';
+
+  @override
+  String get eventTitle => 'Événement';
+
+  @override
+  String get eventNone => 'Aucun événement assigné à cet appareil.';
+
+  @override
+  String get eventNoneHint => 'Assignez l\'appareil à une porte dans le back-office (événement, onglet Appareils).';
+
+  @override
+  String eventGate(String code, String name) {
+    return 'Porte $code · $name';
+  }
+
+  @override
+  String eventManifestAt(String time) {
+    return 'Manifeste disponible à $time';
+  }
+
+  @override
+  String get eventLoad => 'Charger le manifeste';
+
+  @override
+  String get eventRetry => 'Réessayer';
+
+  @override
+  String get eventStageDownloading => 'Téléchargement du manifeste…';
+
+  @override
+  String get eventStageVerifying => 'Vérification de la signature…';
+
+  @override
+  String get eventStageSaving => 'Enregistrement…';
+
+  @override
+  String eventLoaded(int version, int rows) {
+    return 'Manifeste v$version · $rows billets';
+  }
+
+  @override
+  String eventDriftOk(int seconds) {
+    return 'Horloge vérifiée · écart $seconds s';
+  }
+
+  @override
+  String eventDriftRefused(int seconds) {
+    return 'Horloge décalée de $seconds s (max 20 s). Réglez l\'heure de l\'appareil, puis réessayez.';
+  }
+
+  @override
+  String get eventDriftUnknown => 'Horloge non vérifiée : connectez l\'appareil au réseau.';
+
+  @override
+  String get eventRejected =>
+      'Manifeste refusé : signature ou contenu invalide. Le dernier manifeste valide est conservé.';
+
+  @override
+  String eventNotReady(String time) {
+    return 'Manifeste pas encore disponible (à $time).';
+  }
+
+  @override
+  String get eventNotReadyNoTime => 'Manifeste pas encore disponible.';
+
+  @override
+  String get eventClosed => 'Événement clôturé.';
+
+  @override
+  String get unlockTitle => 'Déverrouillage';
+
+  @override
+  String get unlockPickName => 'Qui êtes-vous ?';
+
+  @override
+  String get unlockNoStaff => 'Aucun membre de l\'équipe de porte. Connectez l\'appareil pour charger la liste.';
+
+  @override
+  String unlockPin(String name) {
+    return 'PIN de $name';
+  }
+
+  @override
+  String unlockWrong(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PIN incorrect · $count essais restants',
+      one: 'PIN incorrect · 1 essai restant',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String unlockLocked(String time) {
+    return 'Trop d\'essais. Réessayez à $time.';
+  }
+
+  @override
+  String get unlockChangeName => 'Changer de nom';
+
+  @override
+  String get unlockDelete => 'Effacer';
+
+  @override
+  String get roleSupervisor => 'Superviseur';
+
+  @override
+  String get roleGate => 'Contrôleur';
 }

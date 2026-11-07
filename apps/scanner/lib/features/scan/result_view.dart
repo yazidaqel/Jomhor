@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:jomhor_core/jomhor_core.dart';
+import 'package:jomhor_scanner/core/event_time.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
@@ -46,15 +46,13 @@ IconData resultIcon(ScanResult r) => switch (r) {
   _ => Icons.close_rounded,
 };
 
-String clockTime(int ms) => DateFormat('HH:mm:ss').format(DateTime.fromMillisecondsSinceEpoch(ms));
-
 String? resultReason(AppLocalizations l, ScanOutcome o) {
   final v = o.verdict;
   return switch (v.result) {
     ScanResult.OK => null,
     ScanResult.DUPLICATE => switch ((v.firstAt, v.firstGateCode)) {
-      (final at?, final gate?) when gate.isNotEmpty => l.reasonDuplicate(clockTime(at), gate),
-      (final at?, _) => l.reasonDuplicateNoGate(clockTime(at)),
+      (final at?, final gate?) when gate.isNotEmpty => l.reasonDuplicate(clockTime(at, o.timeZone), gate),
+      (final at?, _) => l.reasonDuplicateNoGate(clockTime(at, o.timeZone)),
       _ => null,
     },
     ScanResult.BAD_SIG => l.reasonBadSig,
@@ -127,8 +125,8 @@ class ResultView extends StatelessWidget {
                               footer: o == null
                                   ? null
                                   : result == ScanResult.OK
-                                  ? l.scanCheckedOk(o.elapsedMs, clockTime(o.atMs))
-                                  : l.scanCheckedRefused(o.elapsedMs, clockTime(o.atMs)),
+                                  ? l.scanCheckedOk(o.elapsedMs, clockTime(o.atMs, o.timeZone))
+                                  : l.scanCheckedRefused(o.elapsedMs, clockTime(o.atMs, o.timeZone)),
                               color: color,
                               ink: ink,
                             ),

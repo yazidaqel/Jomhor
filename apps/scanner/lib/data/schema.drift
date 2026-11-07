@@ -11,6 +11,7 @@ create table config (
   event_id              integer,
   event_title           text,
   starts_at             integer,                 -- epoch ms
+  event_timezone        text,                    -- IANA zone of the venue (GET /gate/events timezone); times on screen use it
   event_status          text,
   gate_id               text,                    -- current gate: assignment, or a supervisor gate change
   manifest_version      integer not null default 0,

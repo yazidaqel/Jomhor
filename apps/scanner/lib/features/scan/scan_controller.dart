@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_core/jomhor_core.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
 import 'package:jomhor_scanner/features/scan/validator.dart' show uuidString;
+import 'package:jomhor_scanner/features/staff/staff_session.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
 
 bool isAdmitted(ScanResult r) => r == ScanResult.OK || r == ScanResult.OVERRIDE;
@@ -119,6 +120,8 @@ class ScanController extends Notifier<ScanState> {
   Future<void> submit(String raw, {bool wedge = false}) async {
     final value = raw.trim();
     if (value.isEmpty) return;
+    // A scan is activity: a gate scanning by camera never touches the screen, and must not idle-lock.
+    ref.read(staffSessionProvider).touch();
     if (_busy) {
       if (wedge) _pending = value;
       return;

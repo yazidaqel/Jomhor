@@ -490,6 +490,7 @@ Never cut: no network on the scan path; manifest signature check with a pinned k
 | PINs | PIN generated with `SecureRandom`, returned once, never logged, never in the back-office query cache; verifier format exact; only GATE/SUPERVISOR rows shipped; lockout on the device. |
 | Tenancy | Every new table has `organizer_id` and every query filters on it; devices, staff, assignments and reports of org A → 404 for org B; the `/gate/events` staff list holds the device's organizer only. |
 | Contract | Every new or changed 04 row has a contract test; error codes exactly as 04; `V11` names = 03; Drift tables = 05; both vectors files unchanged unless the layout changed. |
+| Residual risks (accepted) | The PIN lockout runs on the corrected wall clock: moving the system clock forward ends it early (Q31: the PIN is a UI lock, the device key is the boundary). Casablanca offsets follow the bundled tzdata (JDK and the scanner's `timezone` package, 2026e = UTC+0 in Nov 2026): keep both current. |
 | Clients | No hard-coded strings (FR via l10n/i18n); the scanner result is never colour-only (word + icon); touch targets ≥ 44 px; B4 stale devices use warning copy; organizers addressed with "vous". |
 
 ## 7. Carried forward
