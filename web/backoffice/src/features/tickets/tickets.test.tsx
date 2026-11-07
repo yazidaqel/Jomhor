@@ -64,6 +64,8 @@ const row = (over: Partial<TicketRow>): TicketRow => ({
   payment_method: 'CARD',
   issued_at: '2026-11-05T10:00:00Z',
   refund: null,
+  transferred_to: null,
+  transferred_from: null,
   ...over,
 })
 const ROWS: TicketRow[] = [
@@ -321,4 +323,23 @@ it('the event page links to B12 once published', async () => {
   const user = userEvent.setup()
   await user.click(await screen.findByRole('link', { name: fr.tickets.title }))
   expect(router.state.location.pathname).toBe('/events/1/tickets')
+})
+
+it('transfer columns show both ticket numbers; clicking one searches that number and refills the box', async () => {
+  const chain = [
+    row({ id: 't-old', ticket_no: '4D5C 6B7A', status: 'CANCELLED', transferred_to: '7E7E 0A0B' }),
+    row({ id: 't-new', ticket_no: '7E7E 0A0B', holder_label: 'يزيد ع.', transferred_from: '4D5C 6B7A' }),
+  ]
+  const calls = stubApi('ADMIN', { lookup: () => Response.json(chain) })
+  renderApp()
+  const user = await search('06 12 34 56 78')
+  expect(await screen.findByRole('columnheader', { name: fr.tickets.columns.transferredTo })).toBeTruthy()
+  expect(screen.getByRole('columnheader', { name: fr.tickets.columns.transferredFrom })).toBeTruthy()
+  expect(within(rowOf('يزيد ع.')).getByText('يزيد ع.').tagName).toBe('BDI') // names in a bidi isolate
+
+  await user.click(screen.getByRole('button', { name: i18n.t('tickets.searchTicket', { ticket: '7E7E 0A0B' }) }))
+  await waitFor(() => expect(lookups(calls).map((c) => c.body)).toEqual([{ q: '+212612345678' }, { q: '7E7E 0A0B' }]))
+  expect((screen.getByRole('searchbox', { name: fr.tickets.search.label }) as HTMLInputElement).value).toBe('7E7E 0A0B')
+  await user.click(screen.getByRole('button', { name: i18n.t('tickets.searchTicket', { ticket: '4D5C 6B7A' }) }))
+  await waitFor(() => expect(lookups(calls).at(-1)!.body).toEqual({ q: '4D5C 6B7A' }))
 })

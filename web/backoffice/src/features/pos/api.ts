@@ -3,6 +3,7 @@ import { useOrgMutation, useOrgQuery } from '@/features/auth/organizer'
 import { normalizePhone } from '@/features/auth/phone'
 import type { Price } from '@/features/events/api'
 import { path } from '@/lib/api'
+import { normalizeHolderName } from '@/lib/holderName'
 import { parseDh } from '@/lib/money'
 
 // docs/04-api.md §Point of sale and §Cash codes. Every `*_mad` is integer centimes.
@@ -177,9 +178,8 @@ export function saleSchema(t: Messages) {
       // With "même nom" only the first row is shown and sent for every place (saleItems): only it is checked.
       const rows = v.same_name ? v.holders.slice(0, 1) : v.holders
       rows.forEach((h, i) => {
-        // 04-api §Holder names: the server normalises and has the last word (Latin letters, 2-60); here, the length.
-        const name = h.name.trim()
-        if (name.length < 2 || name.length > 60) ctx.addIssue({ code: 'custom', path: ['holders', i, 'name'], message: t('pos.sale.nameInvalid') })
+        // 04-api §Holder names (Latin or Arabic, one script, 2-60): the same rule as the server, which has the last word.
+        if (normalizeHolderName(h.name) === null) ctx.addIssue({ code: 'custom', path: ['holders', i, 'name'], message: t('pos.sale.nameInvalid') })
         if (h.phone.trim() !== '' && normalizePhone(h.phone) === null) ctx.addIssue({ code: 'custom', path: ['holders', i, 'phone'], message: t('pos.sale.phoneInvalid') })
       })
     })
