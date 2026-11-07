@@ -11,6 +11,8 @@ import 'package:jomhor_fan/features/events/sale_copy.dart';
 import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
+import 'package:jomhor_fan/features/tickets/transfer.dart';
+import 'package:jomhor_fan/features/tickets/transfer_sheet.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -24,6 +26,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 /// Status copy for a ticket that shows no QR (no K_t: not VALID, or the event is closed).
 String ticketStatusText(AppLocalizations l, FanTicket t) => switch (t.status) {
+  _ when t.transferred != null => transferredText(l, t, t.transferred!),
   'VALID' => l.ticketClosed,
   'CANCELLED' => l.ticketCancelled,
   'REFUNDED' => l.ticketRefunded,
@@ -55,6 +58,9 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
 
   /// QR slot of the last tick: a change is a new code, felt as a haptic tick.
   int? _slot;
+
+  /// The ticket just given away, as it was: it slides out of the screen before the wallet shows its new row.
+  FanTicket? _gone;
 
   @override
   void initState() {
@@ -109,6 +115,23 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
 
   void _close() => context.canPop() ? context.pop() : context.go('/tickets');
 
+  /// Screen 8, then on a 201 the slide-out (the reverse of the purchase slide-in; none under reduced motion) and the
+  /// wallet, where the muted "Transféré à" row now stands.
+  Future<void> _transfer(FanTicket t) async {
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final done = await showTransferSheet(context, t);
+    if (done == null || !mounted) return;
+    final leave = motionOf(context, JomhorMotion.ticketFlip);
+    setState(() => _gone = t);
+    await Future<void>.delayed(leave);
+    if (!mounted) return;
+    context.go('/tickets');
+    if (done.to.toLabel case final name?) {
+      messenger.showSnackBar(SnackBar(content: Text(l.transferDone(l.isolate(name)))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -160,32 +183,45 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
               children: [
                 _Header(onClose: _close, matchday: matchday),
                 Expanded(
-                  child: PageView(
-                    controller: pages,
-                    onPageChanged: (i) => setState(() => _page = i),
-                    children: [
-                      for (final t in group)
-                        SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(
-                            JomhorSpace.xl,
-                            JomhorSpace.s,
-                            JomhorSpace.xl,
-                            JomhorSpace.l,
-                          ),
-                          child: switch (widget.origin) {
-                            final origin? when t.id == widget.id && !reduceMotion(context) => Hero(
-                              tag: passHeroTag(origin, t.id),
-                              flightShuttleBuilder: passFlight,
-                              child: _TicketCard(ticket: t, now: now, matchday: matchday),
+                  child: AnimatedSlide(
+                    key: const Key('ticket.leave'),
+                    offset: _gone == null ? Offset.zero : const Offset(0, -0.85),
+                    duration: motionOf(context, JomhorMotion.ticketFlip),
+                    curve: Curves.easeInCubic,
+                    child: AnimatedOpacity(
+                      opacity: _gone == null ? 1 : 0,
+                      duration: motionOf(context, JomhorMotion.ticketFlip),
+                      curve: Curves.easeIn,
+                      child: PageView(
+                        controller: pages,
+                        physics: _gone == null ? null : const NeverScrollableScrollPhysics(),
+                        onPageChanged: (i) => setState(() => _page = i),
+                        children: [
+                          // The leaving card keeps its face (QR included) while it slides out.
+                          for (final t in group.map((held) => held.id == _gone?.id ? _gone! : held))
+                            SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(
+                                JomhorSpace.xl,
+                                JomhorSpace.s,
+                                JomhorSpace.xl,
+                                JomhorSpace.l,
+                              ),
+                              child: switch (widget.origin) {
+                                final origin? when t.id == widget.id && !reduceMotion(context) => Hero(
+                                  tag: passHeroTag(origin, t.id),
+                                  flightShuttleBuilder: passFlight,
+                                  child: _TicketCard(ticket: t, now: now, matchday: matchday),
+                                ),
+                                _ => _TicketCard(ticket: t, now: now, matchday: matchday),
+                              },
                             ),
-                            _ => _TicketCard(ticket: t, now: now, matchday: matchday),
-                          },
-                        ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 if (group.length > 1) _Dots(count: group.length, current: _page),
-                _WhatsApp(ticket: shown),
+                _Actions(ticket: _gone ?? shown, now: now, onTransfer: _gone == null ? () => _transfer(shown) : null),
               ],
             ),
           ),
@@ -650,17 +686,25 @@ class _Dots extends StatelessWidget {
   );
 }
 
-/// Lot 1 action: WhatsApp re-send of the PDF, for a VALID ticket. The call runs only on a tap.
-class _WhatsApp extends ConsumerStatefulWidget {
-  const new({required this.ticket});
+/// Screen 5 actions (DESIGN.md Lot 4): Transférer (screen 8) and the WhatsApp re-send of the PDF, both for a VALID
+/// ticket. The re-send call runs only on a tap. Transférer is off after `transfer_until`, without a cutoff, or once
+/// the server said the ticket was admitted, with the reason under it.
+class _Actions extends ConsumerStatefulWidget {
+  const new({required this.ticket, required this.now, required this.onTransfer});
 
   final FanTicket ticket;
 
+  /// Server time of this frame: the action turns off the second `transfer_until` passes.
+  final DateTime now;
+
+  /// Null while the ticket slides out.
+  final VoidCallback? onTransfer;
+
   @override
-  ConsumerState<_WhatsApp> createState() => _WhatsAppState();
+  ConsumerState<_Actions> createState() => _ActionsState();
 }
 
-class _WhatsAppState extends ConsumerState<_WhatsApp> {
+class _ActionsState extends ConsumerState<_Actions> {
   var _sending = false;
 
   Future<void> _send() async {
@@ -685,25 +729,45 @@ class _WhatsAppState extends ConsumerState<_WhatsApp> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final valid = widget.ticket.status == 'VALID';
+    final t = widget.ticket;
+    final valid = t.status == 'VALID';
+    final refusals = ref.watch(transferRefusalsProvider);
+    final block = blockOf(t, widget.now, refusals);
+    final blocked = transferBlockText(l, t, block, refusals[t.id]);
+    Widget action(Widget button) => Expanded(
+      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 56), child: button),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.m, JomhorSpace.xl, JomhorSpace.l),
       child: Column(
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 56),
-            child: OutlinedButton.icon(
-              key: const Key('ticket.whatsapp'),
-              onPressed: valid && !_sending ? _send : null,
-              icon: _sending
-                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.send_rounded, size: 20),
-              label: Text(l.ticketWhatsApp),
-            ),
+          Row(
+            children: [
+              action(
+                OutlinedButton.icon(
+                  key: const Key('ticket.transfer'),
+                  onPressed: block == null ? widget.onTransfer : null,
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 20),
+                  label: Text(l.transferAction),
+                ),
+              ),
+              const SizedBox(width: JomhorSpace.m),
+              action(
+                OutlinedButton.icon(
+                  key: const Key('ticket.whatsapp'),
+                  onPressed: valid && !_sending ? _send : null,
+                  icon: _sending
+                      ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.send_rounded, size: 20),
+                  label: Text(l.ticketWhatsApp),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: JomhorSpace.s),
           Text(
-            l.ticketWhatsAppHint,
+            blocked ?? l.ticketWhatsAppHint,
+            key: blocked == null ? null : const Key('ticket.transferBlocked'),
             textAlign: TextAlign.center,
             style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, fontSize: 12),
           ),

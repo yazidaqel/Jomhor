@@ -727,4 +727,142 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get poweredBy => 'Powered by Jomhor';
+
+  @override
+  String get transferAction => 'Transfer';
+
+  @override
+  String get transferEyebrow => 'Transfer your ticket';
+
+  @override
+  String get transferTitle => 'Who are you giving it to?';
+
+  @override
+  String transferUntil(String when) {
+    return 'Possible until $when';
+  }
+
+  @override
+  String get transferPhone => 'WhatsApp number';
+
+  @override
+  String get transferPhoneHint => 'The new ticket goes to this number, in the app and on WhatsApp.';
+
+  @override
+  String get transferName => 'Full name';
+
+  @override
+  String get transferNameHint => 'The new ticket will be in this name.';
+
+  @override
+  String get transferNext => 'Continue';
+
+  @override
+  String get transferConfirmTitle => 'Confirm the transfer';
+
+  @override
+  String get transferTo => 'To';
+
+  @override
+  String get transferTicket => 'Ticket';
+
+  @override
+  String transferWarning(String name) {
+    return 'Your QR will stop working. $name gets a new ticket.';
+  }
+
+  @override
+  String get transferFinal => 'A transfer is final: you will not be able to undo it.';
+
+  @override
+  String get transferEdit => 'Edit';
+
+  @override
+  String get transferHold => 'Hold to transfer';
+
+  @override
+  String get transferHoldHint => 'Keep your finger down until the bar is full.';
+
+  @override
+  String get transferPending => 'Transferring…';
+
+  @override
+  String transferDone(String name) {
+    return '$name gets the ticket in the app and on WhatsApp. Your old QR no longer works.';
+  }
+
+  @override
+  String get transferSelf => 'That is your own number: this ticket is already yours.';
+
+  @override
+  String get transferNotValid => 'This ticket is no longer valid: it cannot be transferred.';
+
+  @override
+  String get transferAdmitted => 'This ticket has already been through a gate: it can no longer be transferred.';
+
+  @override
+  String get transferUnknown =>
+      'We could not confirm the transfer. Your tickets are reloading: check them before trying again.';
+
+  @override
+  String transferClosed(String lead) {
+    return 'Transfers close $lead before the start';
+  }
+
+  @override
+  String get transferUnavailable => 'This ticket cannot be transferred';
+
+  @override
+  String durationHours(int n) {
+    return '$n h';
+  }
+
+  @override
+  String durationMinutes(int n) {
+    return '$n min';
+  }
+
+  @override
+  String transferRow(String name, String date) {
+    return 'Transferred to $name · $date';
+  }
+
+  @override
+  String transferRowNoName(String date) {
+    return 'Transferred · $date';
+  }
+
+  @override
+  String get profileLostPhone => 'Lost your phone?';
+
+  @override
+  String get profileLostPhoneHint => 'A new QR for your upcoming tickets';
+
+  @override
+  String get lostPhoneBody =>
+      'Your upcoming tickets get a new QR on this phone. The ones on the lost phone will no longer get in.';
+
+  @override
+  String get lostPhoneSignedOut =>
+      'The lost phone will be signed out: it cannot receive your new tickets. This phone stays signed in.';
+
+  @override
+  String get lostPhoneNone => 'No upcoming ticket can get a new QR.';
+
+  @override
+  String get lostPhoneConfirm => 'New QRs';
+
+  @override
+  String lostPhoneDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'New QRs ready for $count tickets.',
+      one: 'New QR ready for 1 ticket.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lostPhoneFailed => 'Some tickets did not get a new QR. Check your tickets.';
 }

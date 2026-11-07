@@ -6,6 +6,9 @@ import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/features/auth/auth_repository.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
+import 'package:jomhor_fan/features/tickets/ticket.dart';
+import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
+import 'package:jomhor_fan/features/tickets/transfer.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -15,7 +18,7 @@ import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Profil tab: name (editable), phone (read-only), language (FR, AR, EN: saved on the phone and sent to the server),
-/// logout. Logout stays usable when `/fan/me` cannot be read (offline).
+/// "Téléphone perdu ?" (re-issue), logout. Logout stays usable when `/fan/me` cannot be read (offline).
 class ProfileScreen extends ConsumerWidget {
   const new({super.key});
 
@@ -68,7 +71,9 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: JomhorSpace.xxl),
-              const Entrance(index: 2, child: _Logout()),
+              const Entrance(index: 2, child: _LostPhone()),
+              const SizedBox(height: JomhorSpace.xxl),
+              const Entrance(index: 3, child: _Logout()),
               const SizedBox(height: JomhorSpace.xxl),
               const PoweredBy(),
             ],
@@ -358,6 +363,113 @@ class _LogoutState extends ConsumerState<_Logout> {
           key: const Key('profile.logoutAll'),
           onPressed: _leaving ? null : () => _logout(all: true),
           child: Text(l.profileLogoutAll, textAlign: TextAlign.center),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Téléphone perdu ?" (DESIGN.md Lot 4, Profil): a confirm listing the upcoming tickets that can be re-issued, then
+/// a new ticket id and K_t for each (`POST /fan/tickets/{id}/reissue`) and the list fetched again. The old QR stop
+/// passing from the next manifest. The server also revokes the fan's other sessions, so the lost phone is signed out
+/// and cannot fetch the new keys; this one stays signed in.
+class _LostPhone extends ConsumerStatefulWidget {
+  const new();
+
+  @override
+  ConsumerState<_LostPhone> createState() => _LostPhoneState();
+}
+
+class _LostPhoneState extends ConsumerState<_LostPhone> {
+  var _busy = false;
+
+  Future<void> _open() async {
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final snapshot = (await ref.read(ticketsProvider.future)).snapshot;
+    if (!mounted) return;
+    final list = snapshot == null ? <FanTicket>[] : reissuable(snapshot, ref.read(transferRefusalsProvider));
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.profileLostPhone),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l.lostPhoneBody),
+              if (list.isNotEmpty) ...[
+                const SizedBox(height: JomhorSpace.m),
+                Text(l.lostPhoneSignedOut, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textSecondary)),
+              ],
+              const SizedBox(height: JomhorSpace.l),
+              if (list.isEmpty)
+                Text(l.lostPhoneNone, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted))
+              else
+                for (final t in list)
+                  Padding(
+                    key: Key('lostPhone.ticket.${t.id}'),
+                    padding: const EdgeInsets.only(bottom: JomhorSpace.s),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.confirmation_number_outlined, size: 20, color: JomhorColors.accent),
+                        const SizedBox(width: JomhorSpace.m),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(t.event.title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                              Text(
+                                l.ticketRowFacts(t.zone.name, l.ltr(t.ticketNo)),
+                                style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(list.isEmpty ? l.close : l.cancel)),
+          if (list.isNotEmpty)
+            FilledButton(
+              key: const Key('lostPhone.confirm'),
+              style: FilledButton.styleFrom(minimumSize: const Size(JomhorSize.touchMin, 48)),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l.lostPhoneConfirm),
+            ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    final result = await ref.read(reissueTicketsProvider)(list);
+    if (mounted) setState(() => _busy = false);
+    messenger.showSnackBar(
+      SnackBar(content: Text(result.failed == 0 ? l.lostPhoneDone(result.done) : l.lostPhoneFailed)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return _Group(
+      children: [
+        ListTile(
+          key: const Key('profile.lostPhone'),
+          enabled: !_busy,
+          leading: const Icon(Icons.phonelink_erase_rounded, color: JomhorColors.accent),
+          title: Text(l.profileLostPhone),
+          subtitle: Text(l.profileLostPhoneHint),
+          trailing: _busy
+              ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.chevron_right_rounded),
+          onTap: _open,
         ),
       ],
     );

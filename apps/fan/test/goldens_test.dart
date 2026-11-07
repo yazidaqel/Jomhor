@@ -11,9 +11,11 @@ import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'cash_order_test.dart' show CashSale, orderId;
 import 'goldens.dart';
 import 'helpers.dart';
-import 'tickets_test.dart' show slotStart, ticketId, ticketJson;
+import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
+import 'transfer_test.dart' show openTicketJson, transferredJson;
 
-/// FL-17: FR and AR goldens of screens 1, 4, 5 and the cash order (DESIGN.md Lot 4, AR / RTL). Next to the
+/// FL-17: FR and AR goldens of screens 1, 4, 5 and the cash order; FL-18: screen 8, the transfer sheet, on its form
+/// and mid-hold on its confirm step, and the "Transféré à" row in Billets (DESIGN.md Lot 4, AR / RTL). Next to the
 /// pictures, the rules the pictures show are asserted: right to left, Western digits only, codes and prices in
 /// left-to-right isolates. Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
@@ -116,7 +118,7 @@ void main() {
         ('GET', '/v1/fan/tickets') => json({
           'server_time': clock.now.toIso8601String(),
           'tickets': [
-            {...ticketJson(), 'holder_label': holder},
+            {...openTicketJson(), 'holder_label': holder},
           ],
         }),
         _ => json({'orders': <Object?>[]}),
@@ -138,6 +140,90 @@ void main() {
         expect(tester.widget<Text>(find.text('EEEE EEEE')).textDirection, TextDirection.ltr);
       }
       await snap('$locale-5-billet');
+    });
+
+    testWidgets('$locale · screen 8 Transférer', (tester) async {
+      await phone(tester);
+      final clock = TestClock(slotStart.add(const Duration(seconds: 2)));
+      Future<http.Response> backend(http.Request r) async => switch ((r.method, r.url.path)) {
+        ('GET', '/v1/fan/tickets') => json({
+          'server_time': clock.now.toIso8601String(),
+          'tickets': [
+            {...openTicketJson(), 'holder_label': holder},
+          ],
+        }),
+        _ => json({'orders': <Object?>[]}),
+      };
+      final c = await pumpJomhor(
+        tester,
+        backend: backend,
+        tokens: MemoryTokenStore('jwt'),
+        clock: clock,
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+      );
+      unawaited(c.read(routerProvider).push('/tickets/$ticketId'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('ticket.transfer')));
+      await tester.pumpAndSettle();
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-8-transfert');
+
+      await tester.enterText(find.byKey(const Key('transfer.phone')), '06 61 23 45 67');
+      await tester.enterText(find.byKey(const Key('transfer.name')), locale == 'ar' ? 'كريم بنعلي' : 'Karim Benali');
+      await tester.ensureVisible(find.byKey(const Key('transfer.next')));
+      await tester.tap(find.byKey(const Key('transfer.next')));
+      await tester.pumpAndSettle();
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      // The phone stays left to right inside the mirrored sheet.
+      expect(tester.widget<Text>(find.byKey(const Key('transfer.confirmPhone'))).textDirection, TextDirection.ltr);
+      if (locale == 'ar') expectArabicRules(tester);
+      await tester.ensureVisible(find.byKey(const Key('transfer.hold')));
+      await tester.pumpAndSettle();
+      // Mid-hold: the fill has covered about half of the button, from the reading start.
+      final finger = await tester.startGesture(tester.getCenter(find.byKey(const Key('transfer.hold'))));
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      await snap('$locale-8-transfert-hold');
+      await finger.cancel();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('$locale · Billets with a transferred row', (tester) async {
+      await phone(tester);
+      final clock = TestClock(slotStart.add(const Duration(seconds: 2)));
+      Future<http.Response> backend(http.Request r) async => switch ((r.method, r.url.path)) {
+        ('GET', '/v1/fan/tickets') => json({
+          'server_time': clock.now.toIso8601String(),
+          'tickets': [
+            {...openTicketJson(), 'holder_label': holder},
+            transferredJson(id: otherId, toLabel: locale == 'ar' ? 'كريم ب.' : 'Karim B.'),
+          ],
+        }),
+        _ => json({'orders': <Object?>[]}),
+      };
+      final c = await pumpJomhor(
+        tester,
+        backend: backend,
+        tokens: MemoryTokenStore('jwt'),
+        clock: clock,
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+      );
+      c.read(routerProvider).go('/tickets');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('ticket.transferred.$otherId')), findsOneWidget);
+      expect(find.text('FFFF FFFF'), findsOneWidget); // The ticket number, LTR in every locale.
+      expect(tester.widget<Text>(find.text('FFFF FFFF')).textDirection, TextDirection.ltr);
+      if (locale == 'ar') {
+        expectArabicRules(tester);
+        expect(find.textContaining('تحولات ل كريم ب. · '), findsOneWidget); // An Arabic name needs no isolate in AR.
+      } else {
+        expect(find.textContaining('Transféré à Karim B. · '), findsOneWidget);
+      }
+      await snap('$locale-billets-transfere');
     });
 
     testWidgets('$locale · cash order', (tester) async {

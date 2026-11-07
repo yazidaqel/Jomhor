@@ -748,4 +748,143 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get poweredBy => 'بقوة جمهور';
+
+  @override
+  String get transferAction => 'حول';
+
+  @override
+  String get transferEyebrow => 'حول التذكرة ديالك';
+
+  @override
+  String get transferTitle => 'لمن غادي تعطيها؟';
+
+  @override
+  String transferUntil(String when) {
+    return 'ممكن حتى $when';
+  }
+
+  @override
+  String get transferPhone => 'نمرة الواتساب';
+
+  @override
+  String get transferPhoneHint => 'التذكرة الجديدة غادي توصل لهاد النمرة، فالتطبيق وفالواتساب.';
+
+  @override
+  String get transferName => 'السمية الكاملة';
+
+  @override
+  String get transferNameHint => 'التذكرة الجديدة غادي تكون بهاد السمية.';
+
+  @override
+  String get transferNext => 'كمل';
+
+  @override
+  String get transferConfirmTitle => 'أكد التحويل';
+
+  @override
+  String get transferTo => 'ل';
+
+  @override
+  String get transferTicket => 'التذكرة';
+
+  @override
+  String transferWarning(String name) {
+    return 'رمز QR ديالك ما غاديش يبقى يخدم. $name غادي ياخد تذكرة جديدة.';
+  }
+
+  @override
+  String get transferFinal => 'التحويل نهائي: ما غاديش تقدر ترجع فيه.';
+
+  @override
+  String get transferEdit => 'بدل';
+
+  @override
+  String get transferHold => 'ضغط وخلي باش تحول';
+
+  @override
+  String get transferHoldHint => 'خلي صبعك مضغوط حتى تعمر الخانة.';
+
+  @override
+  String get transferPending => 'كنحولو…';
+
+  @override
+  String transferDone(String name) {
+    return '$name غادي يلقى التذكرة فالتطبيق وفالواتساب. رمز QR القديم ديالك ما بقاش خدام.';
+  }
+
+  @override
+  String get transferSelf => 'هادي النمرة ديالك: التذكرة ديجا عندك.';
+
+  @override
+  String get transferNotValid => 'هاد التذكرة ما بقاتش صالحة: ما يمكنش تتحول.';
+
+  @override
+  String get transferAdmitted => 'هاد التذكرة ديجا دازت من الباب: ما بقاتش تقدر تتحول.';
+
+  @override
+  String get transferUnknown => 'ما قدرناش نتأكدو من التحويل. التذاكر ديالك كيتعاودو يتحملو، شوفهم قبل ما تعاود.';
+
+  @override
+  String transferClosed(String lead) {
+    return 'التحويل كيتسد $lead قبل البداية';
+  }
+
+  @override
+  String get transferUnavailable => 'هاد التذكرة ما كتقدرش تحولها';
+
+  @override
+  String durationHours(int n) {
+    return '$n س';
+  }
+
+  @override
+  String durationMinutes(int n) {
+    return '$n د';
+  }
+
+  @override
+  String transferRow(String name, String date) {
+    return 'تحولات ل $name · $date';
+  }
+
+  @override
+  String transferRowNoName(String date) {
+    return 'تحولات · $date';
+  }
+
+  @override
+  String get profileLostPhone => 'ضاع ليك التيليفون؟';
+
+  @override
+  String get profileLostPhoneHint => 'QR جديد للتذاكر الجاية ديالك';
+
+  @override
+  String get lostPhoneBody =>
+      'التذاكر الجاية ديالك غادي ياخدو QR جديد فهاد التيليفون. ديال التيليفون اللي ضاع ما غاديش يبقاو يدوزو.';
+
+  @override
+  String get lostPhoneSignedOut =>
+      'التيليفون اللي ضاع غادي يتخرج من الحساب: ما غاديش يوصلو التذاكر الجداد ديالك. هاد التيليفون غادي يبقى داخل.';
+
+  @override
+  String get lostPhoneNone => 'حتى تذكرة جاية ما تقدر تاخد QR جديد.';
+
+  @override
+  String get lostPhoneConfirm => 'QR جداد';
+
+  @override
+  String lostPhoneDone(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'QR جداد واجدين ل $count تذكرة.',
+      few: 'QR جداد واجدين ل $count تذاكر.',
+      two: 'QR جداد واجدين لجوج تذاكر.',
+      one: 'QR جديد واجد لتذكرة وحدة.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lostPhoneFailed => 'شي تذاكر ما خداوش QR جديد. شوف التذاكر ديالك.';
 }

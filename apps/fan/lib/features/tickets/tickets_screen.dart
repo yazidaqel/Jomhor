@@ -7,6 +7,7 @@ import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
+import 'package:jomhor_fan/features/tickets/transfer.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -59,10 +60,14 @@ class TicketsScreen extends ConsumerWidget {
             const SizedBox(height: JomhorSpace.s),
             Text(title, style: JomhorType.h2),
             const SizedBox(height: JomhorSpace.m),
-            for (final t in list)
+            // Held tickets first, then the muted rows of the ones given away (DESIGN.md Lot 4, screen 8).
+            for (final t in [...list.where((t) => t.transferred == null), ...list.where((t) => t.transferred != null)])
               Entrance(
                 index: i++,
-                child: _TicketRow(ticket: t, past: t.isPast(now)),
+                child: switch (t.transferred) {
+                  final to? => _TransferredRow(ticket: t, to: to),
+                  null => _TicketRow(ticket: t, past: t.isPast(now)),
+                },
               ),
             const SizedBox(height: JomhorSpace.m),
           ],
@@ -141,6 +146,65 @@ class _TicketRow extends StatelessWidget {
                   child: MiniPass(width: 36, dimmed: !t.hasQr),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Transféré à Karim B. · {date}": what stays of a ticket given away. Not a link: the ticket is no longer the fan's.
+class _TransferredRow extends StatelessWidget {
+  const new({required this.ticket, required this.to});
+
+  final FanTicket ticket;
+  final Transferred to;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        key: Key('ticket.transferred.${ticket.id}'),
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 14, JomhorSpace.l, 14),
+        decoration: BoxDecoration(
+          color: JomhorColors.surface.withValues(alpha: 0.6),
+          border: Border.all(color: JomhorColors.border),
+          borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.control)),
+        ),
+        child: Row(
+          children: [
+            const SizedBox.square(
+              dimension: 44,
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: JomhorColors.surface2, shape: BoxShape.circle),
+                child: Icon(Icons.swap_horiz_rounded, size: 20, color: JomhorColors.textSecondary),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ticket.event.title,
+                    style: JomhorType.body.copyWith(fontWeight: FontWeight.w600, color: JomhorColors.textSecondary),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    transferredText(l, ticket, to),
+                    style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: JomhorSpace.m),
+            Text(
+              ticket.ticketNo,
+              textDirection: TextDirection.ltr,
+              style: JomhorType.h2.copyWith(fontSize: 16, color: JomhorColors.textMuted, letterSpacing: 1.5),
             ),
           ],
         ),
