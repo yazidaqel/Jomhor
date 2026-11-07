@@ -35,7 +35,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Contract: /org/venues, /org/venues/{id}, /org/venues/{id}/zones[/{zone_id}], /org/venues/{id}/gates[/{gate_id}],
- * /org/gates/{id}/zones (docs/04-api.md §Organizer). Tenant scoping, CODE_TAKEN, ZONE_IN_USE, FINANCE read-only.
+ * /org/gates/{id}/zones (docs/04-api.md §Organizer). Tenant scoping, CODE_TAKEN, ZONE_IN_USE, GATE_IN_USE,
+ * FINANCE read-only.
  */
 class VenueApiTest extends OrgApiTest {
 
@@ -354,6 +355,30 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.code").value("ZONE_IN_USE"));
         assertThat(jdbc.sql("select count(*) from zones where id = ?").param(zoneId).query(Integer.class).single()).isOne();
         assertThat(gateZoneRows("zone_id", zoneId)).isOne(); // rolled back with the refused delete
+    }
+
+    @Test
+    void gateWithADeviceAssignmentIsInUse() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        int zoneId = zone(a, venueId, "NORD");
+        String gateId = gate(a, venueId, "P1");
+        putGateZones(a, gateId, zoneId).andExpect(status().isOk());
+        int eventId = event(a, venueId);
+        UUID deviceId = jdbc.sql("insert into devices (organizer_id, label, public_key) values (?, 'PDA', ?) returning id")
+                .params(a.org(), UUID.randomUUID().toString().getBytes()).query(UUID.class).single();
+        jdbc.sql("insert into device_assignments (organizer_id, device_id, event_id, gate_id) values (?, ?, ?, ?::uuid)")
+                .params(a.org(), deviceId, eventId, gateId).update();
+
+        call(a, delete("/org/venues/" + venueId + "/gates/" + gateId))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("GATE_IN_USE"));
+        assertThat(jdbc.sql("select count(*) from gates where id = ?::uuid").param(gateId).query(Integer.class).single())
+                .isOne();
+        assertThat(gateZoneRows("gate_id", UUID.fromString(gateId))).isOne(); // rolled back with the refused delete
+
+        jdbc.sql("delete from device_assignments where device_id = ?").param(deviceId).update();
+        call(a, delete("/org/venues/" + venueId + "/gates/" + gateId)).andExpect(status().isNoContent());
     }
 
     // ---------- gates ----------

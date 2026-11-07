@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -15,10 +16,20 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV10Apply() {
+    void v1ToV12Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12");
+    }
+
+    @Test
+    void scansRefuseUpdateDeleteAndTruncateEvenOnNoRow() {
+        for (String sql : new String[] {"update scans set result = result where false", "delete from scans where false",
+                "truncate scans"}) {
+            assertThatThrownBy(() -> jdbcTemplate.execute(sql)).as(sql)
+                    .isInstanceOf(DataAccessException.class)
+                    .hasMessageContaining("scans is append-only");
+        }
     }
 
     @Test

@@ -1,0 +1,52 @@
+### Lot 2 demo, organizer side: B4 live gates, close, B5 reconciliation and its CSV (IntelliJ HTTP client).
+#
+# Start the backend with the dev profile (dev seed: ATLAS FC, admin +212600000001):
+#   docker compose up -d && SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Gate calls (/gate/**) need an ECDSA P-256 device signature: run them from the scanner app, not from here.
+# Sell tickets with lot1-sale.http, enrol and assign the scanners in the back-office (B6, B2), scan, then run these.
+# OTP codes are printed by the dev log sender ([dev OTP] +2126... -> 123456): paste into @orgCode.
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@adminPhone = +212600000001
+@orgCode = 000000
+@eventId = 1
+
+### 1. Organizer: ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 2. Organizer: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{orgCode}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 3. B4: live gates (the back-office refetches this every 5 s)
+GET {{base}}/org/events/{{eventId}}/live
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 4. B5 before the close: provisional (final = false, every assigned device unsynced)
+GET {{base}}/org/events/{{eventId}}/reconciliation
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 5. Close (at or after starts_at). Devices drain, wipe and ack on their next sync.
+POST {{base}}/org/events/{{eventId}}/close
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 6. B5: final once every assigned device has acked
+GET {{base}}/org/events/{{eventId}}/reconciliation
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 7. B5: CSV export (; separated, UTF-8 with BOM)
+GET {{base}}/org/events/{{eventId}}/reconciliation.csv
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}

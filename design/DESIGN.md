@@ -207,7 +207,7 @@ Refusés with breakdown, Dérogations with per-device cap warning); amber alert 
 devices unsynced > 5 min (reassuring copy: offline validation still active); per-gate table
 (porte, zones, appareils online/total, entrés, refusés, cadence/min, charge bar
 green/amber/red, dernière sync) with the problem gate row tinted; footnote explaining
-"charge". Data: `GET /org/events/{id}/live` + SSE stream, refresh ≤ 5 s.
+"charge". Data: `GET /org/events/{id}/live`, refetched every 5 s.
 
 ## Lot 1 adjustments
 
@@ -224,6 +224,19 @@ These override the screen specs above for Lot 1 (see `docs/plans/lot-1.md`).
 | W5 / W6 | W6 is a route handler proxying `/fan/tickets/{id}/pdf`. |
 | B2 | Général: "Ouverture de la vente" (venue time zone). Règles: "Billets nominatifs · toujours" (read-only). |
 | B3 | Lot 1: Ventes (KPIs, per zone, per channel, "Remboursements à faire"). |
+
+## Lot 2 adjustments
+
+These override the screen specs above for Lot 2 (see `docs/plans/lot-2.md`).
+
+| Where | Change |
+| --- | --- |
+| Screen 6 | Mode label ENTRÉE only (Q33). WRONG_ZONE lists the gate codes from the manifest. Supervisor sheet: pick supervisor → PIN → action (Dérogation · Changer de porte · Recherche billet), override count "n / 20". Dérogation: reason → ticket (scan, or type 8 characters; several matches → rows with zone + initials) → OVERRIDE blue. Text on the amber (`scanWarn`) result is dark ink (`ground`), not white, for ≥ 4.5:1; the dismiss button stays pinned at the bottom with the content scrolling above it at any text size. |
+| Scanner screens (not mocked) | Same dark components: Enrôlement (scan QR, label, fingerprint at 28 px, "En attente d'approbation"), Événement (assignment, download progress, drift check result), Déverrouillage (name list + 44 px PIN pad), Recherche (ticket no → zone, status, initials only), Clôture (drain progress, "Données effacées"). |
+| B4 | Data from `/live` refetched every 5 s (no SSE). Amber row = `devices_stale` (no "scans en attente" figure: the server can't know it). "Clôturer l'événement" opens a confirm dialog with the stale-device count. "Exporter CSV" = reconciliation CSV. Charge = `rate_per_min` ÷ (`devices_total` × 24). |
+| B5 | "Provisoire" / "Définitive" badge (`final`), totals cards, zone table, gate table, unsynced devices, CSV. |
+| B6 | Tabs Appareils (list with status badge, fingerprint, last seen; "Ajouter des appareils" dialog with the QR + countdown; Approuver; Révoquer with confirm) and Équipe de porte (staff list, add → "PIN : 4821, affiché une seule fois" dialog, reset PIN, deactivate). |
+| B2 | Appareils tab (device → gate select, manifest version, last seen, wipe ack); Règles "Ré-entrée · aucune" read-only. |
 
 ## Theming per organizer
 

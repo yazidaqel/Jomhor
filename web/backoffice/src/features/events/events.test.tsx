@@ -697,17 +697,24 @@ it('gates & zones: the venue matrix, read-only, with a note that it comes from t
   expect(within(panel).queryAllByRole('button')).toEqual([])
 })
 
-it('rules: ré-entrée is saved with the event form; the refund freeze shows its instant in the venue zone once published', async () => {
+it('rules: ré-entrée is read-only "Aucune" (Q33), never in the PATCH; the refund freeze shows its instant in the venue zone', async () => {
   const user = userEvent.setup()
   const calls = stubB2('ADMIN', undefined, detail({ status: 'ON_SALE', refund_cutoff_at: '2026-11-14T18:00:00Z' }))
   renderApp('/events/1')
   const panel = await openTab(user, fr.events.tabs.rules)
   expect(within(panel).getByText(i18n.t('events.rules.refundFreezeAt', { date: display('2026-11-14T18:00:00Z', CASA), zone: CASA }))).toBeTruthy()
   expect((within(panel).getByLabelText(fr.events.rules.refundFreeze) as HTMLInputElement).readOnly).toBe(true)
-  await pick(user, fr.events.rules.reentry, fr.events.rules.reentryPolicies.ONE_EXIT)
+  const reentry = within(panel).getByLabelText(fr.events.rules.reentry) as HTMLInputElement
+  expect(reentry.readOnly).toBe(true)
+  expect(reentry.value).toBe(fr.events.rules.reentryPolicies.NONE)
+  expect(within(panel).queryByRole('combobox', { name: fr.events.rules.reentry })).toBeNull()
+  expect(screen.queryByText(fr.events.rules.reentryPolicies.ONE_EXIT)).toBeNull()
+
+  await user.clear(within(panel).getByLabelText(fr.events.form.perAccountLimit))
+  await user.type(within(panel).getByLabelText(fr.events.form.perAccountLimit), '6')
   await user.click(screen.getByRole('button', { name: fr.events.saveChanges }))
   await waitFor(() => expect(writes(calls)).toHaveLength(1))
-  expect(writes(calls)).toEqual([{ method: 'PATCH', path: '/org/events/1', org: 'org-a', body: { reentry_policy: 'ONE_EXIT' } }])
+  expect(writes(calls)).toEqual([{ method: 'PATCH', path: '/org/events/1', org: 'org-a', body: { per_account_limit: 6 } }])
 })
 
 it('rules: an invalid billets max is revealed by switching to the Règles tab', async () => {
@@ -781,7 +788,7 @@ it('FINANCE: read-only on every tab, no publish', async () => {
   boxes.forEach((b) => expect(b).toHaveProperty('disabled', true))
 
   const rules = await openTab(user, fr.events.tabs.rules)
-  expect(within(rules).getByRole('combobox', { name: fr.events.rules.reentry }).matches(':disabled')).toBe(true)
+  expect((within(rules).getByLabelText(fr.events.rules.reentry) as HTMLInputElement).readOnly).toBe(true)
   expect(within(rules).getByLabelText(fr.events.form.perAccountLimit).matches(':disabled')).toBe(true)
 })
 
@@ -840,22 +847,6 @@ it('event ids: /events/01 reads the same event and key as /events/1; a non-integ
   const { router } = renderApp('/events/1abc')
   expect(await screen.findByText(fr.events.notFound)).toBeTruthy()
   expect(router.state.location.pathname).toBe('/events')
-})
-
-it('rules: a server error on reentry_policy opens Règles and marks the select', async () => {
-  const user = userEvent.setup()
-  stubB2('ADMIN', (c) =>
-    c.method === 'PATCH'
-      ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { reentry_policy: 'bad' } } }, { status: 422 })
-      : undefined,
-  )
-  renderApp('/events/1')
-  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
-  await user.clear(field(fr.events.form.title))
-  await user.type(field(fr.events.form.title), 'Renommé')
-  await user.click(saveDraft())
-  await waitFor(() => expect(screen.getByRole('tab', { name: fr.events.tabs.rules }).getAttribute('aria-selected')).toBe('true'))
-  expect(screen.getByRole('combobox', { name: fr.events.rules.reentry }).getAttribute('aria-invalid')).toBe('true')
 })
 
 // ---- B2 sale opening, nominative row (BO-6) ----

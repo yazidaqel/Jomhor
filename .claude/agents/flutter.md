@@ -14,6 +14,8 @@ in widgets. Strings via l10n only (FR default, AR with RTL, EN), never hard-code
 both apps. Golden-tested against `docs/token-vectors.json` (produced by `backend`). If that file
 does not exist yet, test against the byte layout in `docs/04-api.md` §Token and say the golden
 test is pending.
+`apps/scanner` golden-tests the device signature string, the manifest Ed25519 check and PIN verifiers
+against `docs/gate-vectors.json` (produced by `backend`).
 
 Scanner (normative: `docs/02-gate-validation-and-data-model.md`, schema `docs/05-scanner-sqlite.sql`):
 - Validation is a straight run of checks in spec order; the first failure returns its result

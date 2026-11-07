@@ -1,0 +1,108 @@
+{
+  "signing": [
+    {
+      "method": "GET",
+      "path": "/v1/gate/events",
+      "time": 1793995200000,
+      "body": "",
+      "expected_string": "JMH-GATE-1\nGET\n/v1/gate/events\n1793995200000\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/gate/events/12/manifest?since=3",
+      "time": 1793995200123,
+      "body": "",
+      "expected_string": "JMH-GATE-1\nGET\n/v1/gate/events/12/manifest?since=3\n1793995200123\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/gate/devices/enrol",
+      "time": 1793995200000,
+      "body": "{\"public_key\":\"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEywbQayvKJf7EE3eixozLL2IL9ybXy-BliZa3mnRDoHYjTh3g40a5V_gOY8EltE25ZgPRkdas0YKviSgrDjPncg\",\"label\":\"Tablette B\u00e2b 3\",\"enrol_code\":\"eyJhbGciOiJIUzI1NiJ9.e30.c2lnbmF0dXJl\"}",
+      "expected_string": "JMH-GATE-1\nPOST\n/v1/gate/devices/enrol\n1793995200000\n2de56bbc981e41141777e54c374769382da26f07ec5d9ea25a0f9cad411e5791",
+      "expected_body_sha256": "2de56bbc981e41141777e54c374769382da26f07ec5d9ea25a0f9cad411e5791"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/gate/events/12/scans",
+      "time": 1793995260999,
+      "body": "{\n  \"cursor\": 0,\n  \"scans\": [\n    {\"scan_id\": \"0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a\", \"result\": \"OK\"}\n  ]\n}\n",
+      "expected_string": "JMH-GATE-1\nPOST\n/v1/gate/events/12/scans\n1793995260999\na606465d0455b90547c2d2d8bcd618e8f0431375985e16b8eceeec95d9814cb1",
+      "expected_body_sha256": "a606465d0455b90547c2d2d8bcd618e8f0431375985e16b8eceeec95d9814cb1"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/gate/events/4294967295/closed-ack",
+      "time": 9999999999999,
+      "body": "",
+      "expected_string": "JMH-GATE-1\nPOST\n/v1/gate/events/4294967295/closed-ack\n9999999999999\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "fingerprints": [
+    {
+      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEywbQayvKJf7EE3eixozLL2IL9ybXy-BliZa3mnRDoHYjTh3g40a5V_gOY8EltE25ZgPRkdas0YKviSgrDjPncg",
+      "fingerprint": "602F 0D53"
+    },
+    {
+      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmwzt5JOrpjgxUkhG5_CThvrvGwPznd-ZebY8UpTKGbxwKXMlFTpIMUdG9FxuGDX9aMceJxWYs5dT3tfLRL6CPg",
+      "fingerprint": "E5DE C776"
+    }
+  ],
+  "manifest": [
+    {
+      "public_key": "9657JB-9nYlMlNMM2AYY8UzKMLcbfTkI3UKd6SDuEDc",
+      "payload": "JMH-MANIFEST\u00091\nevent\u000912\nversion\u00091\nsince\u00090\nbuilt_at\u00092026-11-06T17:00:00Z\nreentry\u0009NONE\nrows\u00094\nZ\u00091\u0009TRIB\u0009Tribune Pr\u00e9sidentielle\nZ\u00092\u0009PEL\u0009Pelouse A\nZ\u00093\u0009VIR\u0009\u0627\u0644\u0634\u0645\u0627\u0644\nG\u0009a1a1a1a1-0000-4000-8000-000000000001\u0009G1\u0009Porte 1\u00092\nG\u0009a1a1a1a1-0000-4000-8000-000000000002\u0009G2\u0009Porte 2  B\u00091,3\nG\u0009a1a1a1a1-0000-4000-8000-000000000009\u0009G9\u0009Porte 9\u0009\nT\u000910000000-0000-4000-8000-000000000001\u00091\u0009VALID\u0009Y. A.\nT\u00093f2504e0-4f89-41d3-9a0c-0305e82c3301\u00093\u0009REFUNDED\u0009S. B.\nT\u000980000000-0000-4000-8000-000000000002\u00092\u0009VALID\u0009\nT\u0009c0000000-0000-4000-8000-000000000004\u00091\u0009BLOCKED\u0009M. E.\n",
+      "signature": "PJul4fPiJnInLIClGojlXqS9LgR60x5WSej8u3Hl41EjSWWLnmI6z9WtjZ37YPzW9A5sO3oN8VRITXYnsvFiAA"
+    },
+    {
+      "public_key": "9657JB-9nYlMlNMM2AYY8UzKMLcbfTkI3UKd6SDuEDc",
+      "payload": "JMH-MANIFEST\u00091\nevent\u000912\nversion\u00092\nsince\u00091\nbuilt_at\u00092026-11-06T17:05:00.250Z\nreentry\u0009NONE\nrows\u00095\nZ\u00091\u0009TRIB\u0009Tribune Pr\u00e9sidentielle\nZ\u00092\u0009PEL\u0009Pelouse A\nZ\u00093\u0009VIR\u0009\u0627\u0644\u0634\u0645\u0627\u0644\nG\u0009a1a1a1a1-0000-4000-8000-000000000001\u0009G1\u0009Porte 1\u00092\nG\u0009a1a1a1a1-0000-4000-8000-000000000002\u0009G2\u0009Porte 2  B\u00091,3\nG\u0009a1a1a1a1-0000-4000-8000-000000000009\u0009G9\u0009Porte 9\u0009\nT\u000920000000-0000-4000-8000-000000000005\u00093\u0009VALID\u0009K. O.\nT\u000980000000-0000-4000-8000-000000000002\u00092\u0009CANCELLED\u0009\n",
+      "signature": "Ov4iiTnLNHkcTNDUFx0gp_iXb581qKsU_Ej9glR2ueW3r_vPOujcnwUVDTqN6tjcO6XZ5PYSutMpNA_vRY3lBw"
+    }
+  ],
+  "pins": [
+    {
+      "pin": "4821",
+      "verifier": "pbkdf2-sha256$10000$AAECAwQFBgcICQoLDA0ODw$ai3UbCeDBT5nKdEHXGutZKoXwZELT3vm4xIneno6vN8",
+      "ok": true
+    },
+    {
+      "pin": "4822",
+      "verifier": "pbkdf2-sha256$10000$AAECAwQFBgcICQoLDA0ODw$ai3UbCeDBT5nKdEHXGutZKoXwZELT3vm4xIneno6vN8",
+      "ok": false
+    },
+    {
+      "pin": "0000",
+      "verifier": "pbkdf2-sha256$10000$am9taG9yLXBpbi1zYWx0IQ$Ovfiz4Ysoon92BXSLNgGbKdO0IZMkYM6cTMO1jhRAO8",
+      "ok": true
+    },
+    {
+      "pin": "0001",
+      "verifier": "pbkdf2-sha256$10000$am9taG9yLXBpbi1zYWx0IQ$Ovfiz4Ysoon92BXSLNgGbKdO0IZMkYM6cTMO1jhRAO8",
+      "ok": false
+    },
+    {
+      "pin": "000",
+      "verifier": "pbkdf2-sha256$10000$am9taG9yLXBpbi1zYWx0IQ$Ovfiz4Ysoon92BXSLNgGbKdO0IZMkYM6cTMO1jhRAO8",
+      "ok": false
+    },
+    {
+      "pin": "9999",
+      "verifier": "pbkdf2-sha256$10000$_____________________w$_ShV_xRB2zwz5Xp0_RpxXoPdojduU2gM1wj66ir_DoM",
+      "ok": true
+    },
+    {
+      "pin": "0042",
+      "verifier": "pbkdf2-sha256$10000$_____________________w$MlqVzB5NjnQ0It_Ne2kCkmHpxUlYHlcrJPM5EHPCyUU",
+      "ok": true
+    },
+    {
+      "pin": "4200",
+      "verifier": "pbkdf2-sha256$10000$_____________________w$MlqVzB5NjnQ0It_Ne2kCkmHpxUlYHlcrJPM5EHPCyUU",
+      "ok": false
+    }
+  ]
+}

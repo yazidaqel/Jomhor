@@ -37,6 +37,13 @@ jomhor:
   otp-secret: ${OTP_SECRET}
   # AES-256 master key for event keys (K_e) at rest: base64 of exactly 32 bytes, from env only.
   event-key-master: ${EVENT_KEY_MASTER}
+  gate:
+    # Ed25519 manifest signing key: standard base64 of a PKCS#8 private key, from env only (no default: startup
+    # fails without it). Scanners pin its public key at enrolment (docs/04-api.md §Gate), so rotating it means re-enrol.
+    manifest-signing-key: ${GATE_MANIFEST_SIGNING_KEY}
+    # Manifest v1 is built at T0 - lead (plan lot-2 Q43; the dry run may use 6h); GET /gate/events shows
+    # manifest_available_at = starts_at - lead.
+    manifest-lead: ${GATE_MANIFEST_LEAD:3h}
 
 payments:
   card:

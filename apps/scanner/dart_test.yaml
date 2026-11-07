@@ -1,0 +1,3 @@
+tags:
+  # test/scan_benchmark_test.dart: p95 timing gates (see the comment there).
+  benchmark: {}

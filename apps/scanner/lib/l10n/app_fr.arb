@@ -1,0 +1,435 @@
+{
+  "@@locale": "fr",
+  "appTitle": "Jomhor Porte",
+  "@appTitle": {
+    "description": "Scanner app name in the OS task switcher and top bar. Brand name, not translated."
+  },
+  "deviceNotEnrolled": "Appareil non enrôlé",
+  "@deviceNotEnrolled": {
+    "description": "Home status: no device key registered with the server yet."
+  },
+  "deviceNotEnrolledHint": "Scannez le QR d'enrôlement affiché dans le back-office, onglet Appareils.",
+  "devicePending": "En attente d'approbation",
+  "@devicePending": {
+    "description": "Home status: enrolled, the admin has not approved the device yet (DESIGN Lot 2 adjustments)."
+  },
+  "deviceActive": "Appareil actif",
+  "@deviceActive": {
+    "description": "Home status: the admin approved the device."
+  },
+  "scanInactive": "Mode événement inactif",
+  "@scanInactive": {
+    "description": "Scan screen when no event is loaded, the gate is unset, the device is locked or K_e is absent."
+  },
+  "scanInactiveHint": "Chargez le manifeste de l'événement et déverrouillez l'appareil avec votre PIN.",
+  "scanModeIn": "ENTRÉE",
+  "@scanModeIn": {
+    "description": "Scanner mode label. Lot 2 has entry only (plan lot-2 Q33)."
+  },
+  "scanTopLine": "PORTE {code} · {name} · {mode}",
+  "@scanTopLine": {
+    "description": "Screen 6 top line: gate code, gate name, mode.",
+    "placeholders": {
+      "code": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "scanSyncOnline": "EN LIGNE · {count} à synchroniser",
+  "@scanSyncOnline": {
+    "description": "Top line, right: the last sync round reached the server; scan rows not yet acked.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scanSyncOffline": "HORS LIGNE · {count} à synchroniser",
+  "@scanSyncOffline": {
+    "description": "Top line, right: no sync since start, or the last round failed; validation goes on offline.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scanHint": "Présentez le QR du billet",
+  "@scanHint": {
+    "description": "Under the camera viewfinder; PDA triggers type into the same screen."
+  },
+  "scanCameraError": "Caméra indisponible. Utilisez la gâchette du terminal.",
+  "@scanCameraError": {
+    "description": "Camera failed or permission refused; keyboard-wedge input still works."
+  },
+  "scanEntered": "ENTRÉS ICI",
+  "@scanEntered": {
+    "description": "Counter: admitted at this gate on this device."
+  },
+  "scanRefusedCount": "REFUSÉS",
+  "@scanRefusedCount": {
+    "description": "Counter: refused at this gate on this device."
+  },
+  "scanRate": "CADENCE",
+  "@scanRate": {
+    "description": "Counter: admitted per minute over the last 5 min."
+  },
+  "scanRateValue": "{count} / min",
+  "@scanRateValue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scanNext": "Scanner le suivant",
+  "@scanNext": {
+    "description": "Result screen primary button: back to the camera."
+  },
+  "scanFailed": "ERREUR",
+  "@scanFailed": {
+    "description": "The scan row could not be written: nothing was decided."
+  },
+  "scanFailedReason": "Scan non enregistré. Rescannez le billet.",
+  "scanCheckedOk": "Validé hors ligne en {ms} ms · {time}",
+  "@scanCheckedOk": {
+    "description": "Green result footer: local validation time and clock time.",
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scanCheckedRefused": "Contrôlé hors ligne en {ms} ms · {time}",
+  "@scanCheckedRefused": {
+    "description": "Red or amber result footer.",
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "factZone": "ZONE",
+  "factHolder": "TITULAIRE",
+  "@factHolder": {
+    "description": "Holder initials only (Y. A.)."
+  },
+  "factTicketNo": "N° BILLET",
+  "factType": "TYPE",
+  "tokenRotating": "App · QR tournant",
+  "@tokenRotating": {
+    "description": "Token v2."
+  },
+  "tokenStatic": "PDF · QR fixe",
+  "@tokenStatic": {
+    "description": "Token v1."
+  },
+  "resultOK": "VALIDE",
+  "@resultOK": {
+    "description": "docs/06 screen word."
+  },
+  "resultDUPLICATE": "DÉJÀ UTILISÉ",
+  "resultBAD_SIG": "NON VALIDE",
+  "resultBAD_FORMAT": "ILLISIBLE",
+  "resultUNKNOWN": "INCONNU",
+  "resultCANCELLED": "ANNULÉ",
+  "resultBLOCKED": "BLOQUÉ",
+  "resultWRONG_ZONE": "MAUVAISE PORTE",
+  "resultWRONG_EVENT": "AUTRE ÉVÉNEMENT",
+  "resultEXPIRED_SLOT": "CODE EXPIRÉ",
+  "resultOVERRIDE": "DÉROGATION",
+  "reasonDuplicate": "Entré à {time} · porte {gate}",
+  "@reasonDuplicate": {
+    "description": "DUPLICATE: time and gate of the first scan.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "gate": {
+        "type": "String"
+      }
+    }
+  },
+  "reasonBadSig": "Signature invalide : billet falsifié ou modifié.",
+  "reasonBadFormat": "Ce code n'est pas un billet Jomhor.",
+  "reasonUnknown": "Billet absent du manifeste de cet appareil.",
+  "reasonCancelled": "Billet annulé ou remboursé.",
+  "reasonBlocked": "Billet bloqué par l'organisateur.",
+  "reasonWrongZone": "Portes de cette zone : {gates}",
+  "@reasonWrongZone": {
+    "description": "WRONG_ZONE: the gate codes that serve the ticket's zone, comma-separated.",
+    "placeholders": {
+      "gates": {
+        "type": "String"
+      }
+    }
+  },
+  "reasonWrongZoneNone": "Aucune porte ne dessert cette zone.",
+  "reasonWrongEvent": "Billet d'un autre événement.",
+  "reasonExpiredSlot": "QR expiré : demandez au supporter de rouvrir son billet dans l'app.",
+  "reasonOverride": "Entrée accordée par un superviseur.",
+  "reasonDuplicateNoGate": "Entré à {time}",
+  "@reasonDuplicateNoGate": {
+    "description": "DUPLICATE when the first scan has no gate code (remote row without one).",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scanCountersStale": "Compteurs indisponibles",
+  "@scanCountersStale": {
+    "description": "Under the counters card when the counters could not be refreshed; they keep their last values."
+  },
+  "enrolTitle": "Enrôlement",
+  "@enrolTitle": {
+    "description": "Enrolment screen title (DESIGN Lot 2 adjustments)."
+  },
+  "enrolScan": "Scanner le QR d'enrôlement",
+  "@enrolScan": {
+    "description": "Opens the camera for the back-office enrol QR."
+  },
+  "enrolCodeRead": "QR d'enrôlement lu",
+  "enrolCodeInvalid": "Ce QR n'est pas un QR d'enrôlement Jomhor.",
+  "@enrolCodeInvalid": {
+    "description": "A scanned QR that is not an enrol code (a ticket, say)."
+  },
+  "enrolLabel": "Nom de l'appareil",
+  "@enrolLabel": {
+    "description": "Device label input, 1 to 40 characters, shown in the back-office."
+  },
+  "enrolLabelHint": "Ex. Tablette Bâb 3",
+  "enrolLabelInvalid": "Entre 1 et 40 caractères.",
+  "enrolSubmit": "Enrôler l'appareil",
+  "enrolFingerprint": "EMPREINTE",
+  "@enrolFingerprint": {
+    "description": "Label above the device key fingerprint (AB12 CD34)."
+  },
+  "enrolPendingHint": "Vérifiez que le back-office affiche la même empreinte, puis approuvez l'appareil.",
+  "errorNetwork": "Pas de connexion au serveur. Réessayez.",
+  "errorEnrolCode": "QR d'enrôlement invalide ou expiré. Affichez-en un nouveau dans le back-office.",
+  "errorGeneric": "Erreur du serveur. Réessayez.",
+  "eventTitle": "Événement",
+  "@eventTitle": {
+    "description": "Event mode screen title."
+  },
+  "eventNone": "Aucun événement assigné à cet appareil.",
+  "eventNoneHint": "Assignez l'appareil à une porte dans le back-office (événement, onglet Appareils).",
+  "eventGate": "Porte {code} · {name}",
+  "@eventGate": {
+    "description": "Assigned gate.",
+    "placeholders": {
+      "code": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "eventManifestAt": "Manifeste disponible à {time}",
+  "@eventManifestAt": {
+    "description": "When the server serves the manifest, in the event's zone.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "eventLoad": "Charger le manifeste",
+  "eventRetry": "Réessayer",
+  "eventStageDownloading": "Téléchargement du manifeste…",
+  "eventStageVerifying": "Vérification de la signature…",
+  "eventStageSaving": "Enregistrement…",
+  "eventLoaded": "Manifeste v{version} · {rows} billets",
+  "@eventLoaded": {
+    "description": "Last manifest applied.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      },
+      "rows": {
+        "type": "int"
+      }
+    }
+  },
+  "eventDriftOk": "Horloge vérifiée · écart {seconds} s",
+  "@eventDriftOk": {
+    "description": "Drift check passed (docs/02: at most 20 s).",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "eventDriftRefused": "Horloge décalée de {seconds} s (max 20 s). Réglez l'heure de l'appareil, puis réessayez.",
+  "@eventDriftRefused": {
+    "description": "Drift check failed: event mode refused.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "eventDriftUnknown": "Horloge non vérifiée : connectez l'appareil au réseau.",
+  "eventRejected": "Manifeste refusé : signature ou contenu invalide. Le dernier manifeste valide est conservé.",
+  "eventNotReady": "Manifeste pas encore disponible (à {time}).",
+  "@eventNotReady": {
+    "description": "MANIFEST_NOT_READY.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "eventNotReadyNoTime": "Manifeste pas encore disponible.",
+  "eventClosed": "Événement clôturé.",
+  "unlockTitle": "Déverrouillage",
+  "@unlockTitle": {
+    "description": "Staff unlock screen title."
+  },
+  "unlockPickName": "Qui êtes-vous ?",
+  "unlockNoStaff": "Aucun membre de l'équipe de porte. Connectez l'appareil pour charger la liste.",
+  "unlockPin": "PIN de {name}",
+  "@unlockPin": {
+    "description": "Above the PIN pad.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "unlockWrong": "{count, plural, =1{PIN incorrect · 1 essai restant} other{PIN incorrect · {count} essais restants}}",
+  "@unlockWrong": {
+    "description": "Wrong PIN; after 5 the device locks for 5 min.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "unlockLocked": "Trop d'essais. Réessayez à {time}.",
+  "@unlockLocked": {
+    "description": "PIN lockout.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "unlockChangeName": "Changer de nom",
+  "unlockDelete": "Effacer",
+  "@unlockDelete": {
+    "description": "PIN pad backspace (screen reader)."
+  },
+  "roleSupervisor": "Superviseur",
+  "roleGate": "Contrôleur",
+  "supervisorTitle": "Superviseur",
+  "@supervisorTitle": {
+    "description": "Supervisor sheet title and the button that opens it (scan and result screens)."
+  },
+  "supervisorPickName": "Quel superviseur ?",
+  "supervisorNone": "Aucun superviseur sur cet appareil. Connectez l'appareil pour charger l'équipe de porte.",
+  "@supervisorNone": {
+    "description": "The staff list has no SUPERVISOR."
+  },
+  "supervisorClose": "Fermer",
+  "@supervisorClose": {
+    "description": "Closes the supervisor sheet (screen reader)."
+  },
+  "supervisorBack": "Retour",
+  "supervisorOverrideCount": "Dérogations {count} / {cap}",
+  "@supervisorOverrideCount": {
+    "description": "Overrides on this device for this event, against the cap (docs/02: 20).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      }
+    }
+  },
+  "supervisorCapReached": "Plafond atteint : {cap} dérogations sur cet appareil pour cet événement.",
+  "@supervisorCapReached": {
+    "description": "Override refused: the per-device cap is reached.",
+    "placeholders": {
+      "cap": {
+        "type": "int"
+      }
+    }
+  },
+  "actionOverride": "Dérogation",
+  "@actionOverride": {
+    "description": "Supervisor action: admit a ticket with a reason (OVERRIDE)."
+  },
+  "actionGate": "Changer de porte",
+  "actionLookup": "Recherche billet",
+  "overrideReasonTitle": "Motif de la dérogation",
+  "reasonID_CHECKED": "Identité vérifiée",
+  "@reasonID_CHECKED": {
+    "description": "docs/06 override reason labels."
+  },
+  "reasonDEVICE_FAULT": "Panne d'appareil",
+  "reasonDAMAGED_TICKET": "Billet abîmé",
+  "reasonOTHER": "Autre motif",
+  "ticketNoLabel": "N° billet (8 caractères)",
+  "@ticketNoLabel": {
+    "description": "Typed ticket number, printed under every QR (4-4)."
+  },
+  "ticketSearch": "Chercher",
+  "ticketScan": "Scanner le billet",
+  "ticketNoMatch": "Aucun billet de ce numéro dans le manifeste.",
+  "@ticketNoMatch": {
+    "description": "Lookup or override: nothing in the manifest."
+  },
+  "ticketPick": "{count, plural, =1{1 billet : touchez-le pour l'admettre} other{{count} billets portent ce numéro : touchez le bon}}",
+  "@ticketPick": {
+    "description": "Override: the manifest tickets matching the number; typed numbers can collide (plan lot-2 Q40).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ticketNotInManifest": "Billet absent du manifeste : dérogation impossible.",
+  "ticketDetail": "{status} · {initials}",
+  "@ticketDetail": {
+    "description": "Lookup row: manifest status and holder initials (no other holder data).",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      },
+      "initials": {
+        "type": "String"
+      }
+    }
+  },
+  "statusVALID": "Valide",
+  "@statusVALID": {
+    "description": "Manifest ticket statuses."
+  },
+  "statusCANCELLED": "Annulé",
+  "statusREFUNDED": "Remboursé",
+  "statusBLOCKED": "Bloqué",
+  "gatePickTitle": "Porte de cet appareil",
+  "gateCurrent": "Actuelle",
+  "@gateCurrent": {
+    "description": "Marks the device's current gate."
+  },
+  "supervisorExpired": "Session superviseur terminée : saisissez à nouveau le PIN.",
+  "@supervisorExpired": {
+    "description": "Supervisor PIN older than 60 s, supervisor gone from the staff list: back to the supervisor list."
+  }
+}

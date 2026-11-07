@@ -24,6 +24,9 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
 
     public enum ReentryPolicy { NONE, ONE_EXIT }
 
+    /** An event and its organizer, for jobs that run across organizers. */
+    public record Ref(UUID organizerId, int id) {}
+
     /** Row of GET /org/events: quota and sold are sums over the event's price categories. */
     public record Summary(int id, String title, Type eventType, Instant startsAt, Status status, UUID venueId,
                           String venueName, String venueTimezone, long quota, long sold) {}

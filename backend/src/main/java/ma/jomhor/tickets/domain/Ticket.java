@@ -8,4 +8,7 @@ public record Ticket(UUID id, UUID organizerId, int eventId, int zoneId, Status 
                      String seatLabel, Instant issuedAt) {
 
     public enum Status { VALID, CANCELLED, REFUNDED, BLOCKED }
+
+    /** What a gate manifest carries of a ticket: never the holder's name, phone or id number. */
+    public record ManifestRow(UUID id, int zoneId, Status status, String holderInitials) {}
 }

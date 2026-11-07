@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 
 /** Sticky header inside a scrolling table card: the header row stays while a long list scrolls. */
 export const STICKY_TABLE =
-  '[&_[data-slot=table-container]]:max-h-[calc(100vh-15rem)] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-muted/80 [&_thead]:backdrop-blur [&_th]:h-10 [&_th]:text-xs [&_th]:font-medium [&_th]:text-muted-foreground [&_th:first-child]:pl-5 [&_td:first-child]:pl-5 [&_th:last-child]:pr-5 [&_td:last-child]:pr-5 [&_td]:py-3'
+  '[&_[data-slot=table-container]]:max-h-[calc(100vh-15rem)] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-muted/80 [&_thead]:backdrop-blur [&_thead_th]:h-10 [&_thead_th]:text-xs [&_thead_th]:font-medium [&_thead_th]:text-muted-foreground [&_th:first-child]:pl-5 [&_td:first-child]:pl-5 [&_th:last-child]:pr-5 [&_td:last-child]:pr-5 [&_td]:py-3 [&_tbody_th]:py-3 [&_tfoot_th]:py-3'
 
 export type Crumb = { label: string; to?: string }
 

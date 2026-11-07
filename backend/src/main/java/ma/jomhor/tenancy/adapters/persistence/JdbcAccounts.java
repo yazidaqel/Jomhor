@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.tenancy.application.Accounts;
 import ma.jomhor.tenancy.domain.Membership;
+import ma.jomhor.tenancy.domain.StaffMember;
 import ma.jomhor.tenancy.domain.StaffRole;
 import ma.jomhor.tenancy.domain.User;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -16,6 +17,8 @@ import org.springframework.stereotype.Repository;
 class JdbcAccounts implements Accounts {
 
     private static final String USER_COLUMNS = "id, phone_e164, display_name, locale";
+    private static final String STAFF_COLUMNS = "id, name, role::text as role, active, pin_hash";
+    private static final String SCANNER_ROLES = "role in ('GATE', 'SUPERVISOR')";
 
     private final JdbcClient jdbc;
 
@@ -83,6 +86,44 @@ class JdbcAccounts implements Accounts {
                 .params(organizerId, userId)
                 .query(String.class).optional()
                 .map(StaffRole::valueOf);
+    }
+
+    @Override
+    public List<StaffMember> staff(UUID organizerId) {
+        return jdbc.sql("select " + STAFF_COLUMNS + " from staff where organizer_id = ? order by name, id")
+                .param(organizerId).query(JdbcAccounts::staffMember).list();
+    }
+
+    @Override
+    public StaffMember insertScannerStaff(UUID organizerId, String name, StaffRole role, String pinVerifier) {
+        return jdbc.sql("insert into staff (organizer_id, name, role, pin_hash) values (?, ?, ?::staff_role, ?) "
+                        + "returning " + STAFF_COLUMNS)
+                .params(organizerId, name, role.name(), pinVerifier).query(JdbcAccounts::staffMember).single();
+    }
+
+    @Override
+    public Optional<StaffMember> updateScannerStaff(UUID organizerId, UUID staffId, String name, Boolean active) {
+        return jdbc.sql("update staff set name = coalesce(?, name), active = coalesce(?, active) "
+                        + "where organizer_id = ? and id = ? and " + SCANNER_ROLES + " returning " + STAFF_COLUMNS)
+                .params(name, active, organizerId, staffId).query(JdbcAccounts::staffMember).optional();
+    }
+
+    @Override
+    public boolean setScannerPin(UUID organizerId, UUID staffId, String pinVerifier) {
+        return jdbc.sql("update staff set pin_hash = ? where organizer_id = ? and id = ? and " + SCANNER_ROLES)
+                .params(pinVerifier, organizerId, staffId).update() == 1;
+    }
+
+    @Override
+    public List<StaffMember> activeScannerStaff(UUID organizerId) {
+        return jdbc.sql("select " + STAFF_COLUMNS + " from staff where organizer_id = ? and active and "
+                        + SCANNER_ROLES + " and pin_hash is not null order by name, id")
+                .param(organizerId).query(JdbcAccounts::staffMember).list();
+    }
+
+    private static StaffMember staffMember(ResultSet rs, int n) throws SQLException {
+        return new StaffMember(rs.getObject("id", UUID.class), rs.getString("name"),
+                StaffRole.valueOf(rs.getString("role")), rs.getBoolean("active"), rs.getString("pin_hash"));
     }
 
     private static User user(ResultSet rs, int n) throws SQLException {

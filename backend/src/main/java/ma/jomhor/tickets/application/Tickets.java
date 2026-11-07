@@ -1,8 +1,11 @@
 package ma.jomhor.tickets.application;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.tickets.domain.Ticket;
 
@@ -26,6 +29,15 @@ public interface Tickets {
 
     /** The holder of ticket {@code ticketId} of organizer {@code org}. */
     Optional<UUID> holder(UUID org, UUID ticketId);
+
+    /** Every ticket of the event (any status), by id: id, zone, status and initials only. */
+    List<Ticket.ManifestRow> manifestRows(UUID org, int eventId);
+
+    /** The ids among {@code ticketIds} of tickets of the event (any status). */
+    Set<UUID> ofEvent(UUID org, int eventId, Collection<UUID> ticketIds);
+
+    /** VALID tickets of the event per zone id (zones without one are absent). */
+    Map<Integer, Long> validByZone(UUID org, int eventId);
 
     /** The database clock (now()), so "past" agrees with every other time rule. */
     Instant now();

@@ -64,8 +64,8 @@ export function wallToUtc(wall: string, zone: string): string {
 /** RFC 3339 instant → wall time in `zone` as a `datetime-local` value (`YYYY-MM-DDTHH:mm`). */
 export const utcToWall = (iso: string, zone: string) => new Date(wallMs(Date.parse(iso), zone)).toISOString().slice(0, 16)
 
-/** RFC 3339 instant → date and time for display, in `zone`. */
-export const formatDateTime = (iso: string, locale: string, zone: string) =>
+/** RFC 3339 instant → date and time for display, in `zone` (none: the browser's, for times not tied to a venue). */
+export const formatDateTime = (iso: string, locale: string, zone?: string) =>
   new Intl.DateTimeFormat(locale, { timeZone: zone, dateStyle: 'medium', timeStyle: 'short' }).format(Date.parse(iso))
 
 /** `UTC+01:00` / `UTC-03:30` / `UTC+00:00`: the offset of `zone` at instant `ms`. */
@@ -87,4 +87,11 @@ export const formatTime = (iso: string, locale: string, zone: string) =>
 export function dateParts(iso: string, locale: string, zone: string) {
   const parts = new Intl.DateTimeFormat(locale, { timeZone: zone, day: 'numeric', month: 'short' }).formatToParts(Date.parse(iso))
   return { day: parts.find((p) => p.type === 'day')?.value ?? '', month: parts.find((p) => p.type === 'month')?.value ?? '' }
+}
+
+/** `ms` ago as `il y a 9 s` / `il y a 6 min` / `il y a 2 h` (a negative age, from clock drift, reads as 0 s). */
+export function formatAgo(ms: number, locale: string) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const f = new Intl.RelativeTimeFormat(locale, { style: 'short' })
+  return s < 60 ? f.format(-s, 'second') : s < 3600 ? f.format(-Math.floor(s / 60), 'minute') : f.format(-Math.floor(s / 3600), 'hour')
 }

@@ -39,7 +39,7 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
-    // TokenVectorsTest compares against (or, with -Djomhor.writeVectors=true, rewrites) docs/token-vectors.json.
-    inputs.files("../docs/token-vectors.json")
+    // TokenVectorsTest and GateVectorsTest compare against (or, with -Djomhor.writeVectors=true, rewrite) the docs vectors.
+    inputs.files("../docs/token-vectors.json", "../docs/gate-vectors.json")
     providers.systemProperty("jomhor.writeVectors").orNull?.let { systemProperty("jomhor.writeVectors", it) }
 }

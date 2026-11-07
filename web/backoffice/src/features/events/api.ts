@@ -40,7 +40,6 @@ export type EventDetail = {
   created_at: string
 }
 
-export const REENTRY_POLICIES = ['NONE', 'ONE_EXIT'] as const
 export type Price = { id: string; zone_id: number; name: string; price_mad: number; quota: number; sold: number }
 
 export const useEvents = () => useOrgQuery<EventSummary[]>(['events'], '/org/events')
@@ -88,7 +87,6 @@ export function eventSchema(t: TFunction, zone: string | undefined, doorsRequire
         .refine((s) => (s === '' ? !saleRequired : WALL.test(s)), t(saleRequired ? 'events.form.saleRequired' : 'events.form.dateInvalid')),
       venue_id: z.string().min(1, t('events.form.venueRequired')),
       per_account_limit: integerInput(t('events.form.limitInvalid'), 1, 20),
-      reentry_policy: z.enum(REENTRY_POLICIES),
       // Raw text for every type's fields; only the current type's are checked (below) and sent (toBody). The others
       // may hold a hidden value from a type picked before, or a stored key that is free for this type.
       metadata: z.object({ opponent: z.string(), competition: z.string(), headliner: z.string(), matchday: z.string() }),
@@ -134,7 +132,6 @@ export const emptyForm = (): EventForm => ({
   sale_starts_at: '',
   venue_id: '',
   per_account_limit: '4',
-  reentry_policy: 'NONE',
   metadata: { opponent: '', competition: '', headliner: '', matchday: '' },
 })
 
@@ -146,7 +143,6 @@ export const toForm = (e: EventDetail): EventForm => ({
   sale_starts_at: e.sale_starts_at ? utcToWall(e.sale_starts_at, e.timezone) : '',
   venue_id: e.venue_id,
   per_account_limit: String(e.per_account_limit),
-  reentry_policy: e.reentry_policy,
   metadata: { opponent: str(e.metadata.opponent), competition: str(e.metadata.competition), headliner: str(e.metadata.headliner), matchday: str(e.metadata.matchday) },
 })
 
@@ -169,14 +165,17 @@ function toBody(v: EventValues, existing: Record<string, unknown>, zone: string)
     ...(v.doors_open_at && { doors_open_at: wallToUtc(v.doors_open_at, zone) }),
     ...(v.sale_starts_at && { sale_starts_at: wallToUtc(v.sale_starts_at, zone) }),
     per_account_limit: v.per_account_limit,
-    reentry_policy: v.reentry_policy,
     metadata,
   }
 }
 
-/** POST /org/events body, times in the chosen venue's `zone`; no metadata when there is none. */
+/**
+ * POST /org/events body, times in the chosen venue's `zone`; no metadata when there is none. Re-entry is NONE only in
+ * Lot 2 (plan Q33: ONE_EXIT → 422): sent on create, never on PATCH.
+ */
 export function createBody(v: EventValues, zone: string) {
-  const { metadata, ...body } = toBody(v, {}, zone)
+  const { metadata, ...rest } = toBody(v, {}, zone)
+  const body = { ...rest, reentry_policy: 'NONE' as const }
   return Object.keys(metadata).length ? { ...body, metadata } : body
 }
 

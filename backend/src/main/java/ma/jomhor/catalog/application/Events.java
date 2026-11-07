@@ -1,5 +1,6 @@
 package ma.jomhor.catalog.application;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +30,9 @@ public interface Events {
     /** events.event_key_enc: the only read of it, for EventService.withEventKey. */
     Optional<byte[]> eventKeyEnc(UUID org, int eventId);
 
+    /** The database clock (now()), so time rules agree across instances. */
+    Instant now();
+
     /** Like find, and locks the event row until the end of the transaction. */
     Optional<Event> lock(UUID org, int eventId);
 
@@ -57,6 +61,12 @@ public interface Events {
      * back from the row and scopes every following call.
      */
     Optional<Inventory.SaleEvent> forSale(int eventId);
+
+    /**
+     * Gate (manifest build job): ON_SALE or GATES_OPEN events with starts_at - {@code lead} <= now() <=
+     * starts_at + {@code after} (database clock), across organizers; each row carries its organizer_id.
+     */
+    List<Event.Ref> inGateWindow(Duration lead, Duration after);
 
     /**
      * Public (GET /fan/events): ON_SALE or GATES_OPEN events with starts_at >= {@code from} (null = the database

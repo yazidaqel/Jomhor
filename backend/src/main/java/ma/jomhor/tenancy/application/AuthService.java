@@ -14,34 +14,44 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
 /**
  * Phone-OTP login for fans (aud=fan, 30 d, revocable through its {@code sid} session, plan Q13) and staff
  * (aud=org, 12 h; the per-request staff-row check cuts off removed staff). No refresh token.
+ * Scanner enrol codes (aud=enrol, sub = organizer, 30 min, reusable; plan lot-2 Q30) use the same key: the audience
+ * keeps an enrol code out of /org and /fan, and an org or fan token out of enrolment.
  */
 @Service
 public class AuthService {
 
     public static final String FAN = "fan";
     public static final String ORG = "org";
+    public static final String ENROL = "enrol";
     public static final String SID = "sid";
     static final Duration FAN_TTL = Duration.ofDays(30);
     static final Duration ORG_TTL = Duration.ofHours(12);
+    static final Duration ENROL_TTL = Duration.ofMinutes(30);
 
     private final OtpService otp;
     private final Accounts accounts;
     private final FanSessions sessions;
     private final JwtEncoder jwt;
+    private final JwtDecoder enrolCodes;
 
-    public AuthService(OtpService otp, Accounts accounts, FanSessions sessions, JwtEncoder jwt) {
+    public AuthService(OtpService otp, Accounts accounts, FanSessions sessions, JwtEncoder jwt, JwtDecoder enrolCodes) {
         this.otp = otp;
         this.accounts = accounts;
         this.sessions = sessions;
         this.jwt = jwt;
+        this.enrolCodes = enrolCodes;
     }
+
+    public record EnrolCode(String code, Instant expiresAt) {}
 
     /** token and expiresAt are null for /org/me. */
     public record Session(String token, Instant expiresAt, User user, List<Membership> memberships) {}
@@ -105,6 +115,29 @@ public class AuthService {
         return accounts.activeRole(organizerId, userId);
     }
 
+    public EnrolCode enrolCode(UUID organizerId) {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        var claims = JwtClaimsSet.builder().subject(organizerId.toString()).audience(List.of(ENROL))
+                .issuedAt(now).expiresAt(now.plus(ENROL_TTL)).build();
+        return new EnrolCode(encode(claims), now.plus(ENROL_TTL));
+    }
+
+    /** The organizer of a valid, unexpired aud=enrol code; empty for anything else (org or fan token included). */
+    public Optional<UUID> enrolOrganizer(String code) {
+        if (code == null || code.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(UUID.fromString(enrolCodes.decode(code).getSubject()));
+        } catch (JwtException | IllegalArgumentException | NullPointerException e) {
+            return Optional.empty();
+        }
+    }
+
+    private String encode(JwtClaimsSet claims) {
+        return jwt.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+    }
+
     private Session session(User user, List<Membership> memberships, String audience, Duration ttl) {
         Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         var claims = JwtClaimsSet.builder()
@@ -115,7 +148,6 @@ public class AuthService {
         if (FAN.equals(audience)) {
             claims.claim(SID, sessions.create(user.id(), now.plus(ttl)).toString());
         }
-        var token = jwt.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build()));
-        return new Session(token.getTokenValue(), now.plus(ttl), user, memberships);
+        return new Session(encode(claims.build()), now.plus(ttl), user, memberships);
     }
 }
