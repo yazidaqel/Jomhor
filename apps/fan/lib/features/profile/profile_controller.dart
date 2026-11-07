@@ -38,3 +38,15 @@ bool isBadName(ApiError e) =>
 final AsyncNotifierProvider<Profile, FanUser> profileProvider = AsyncNotifierProvider.autoDispose<Profile, FanUser>(
   Profile.new,
 );
+
+/// "Yazid" for "Yazid Aqel" (the Accueil greeting); null without a name.
+String? firstName(String? displayName) {
+  final name = displayName?.trim() ?? '';
+  return name.isEmpty ? null : name.split(RegExp(r'\s+')).first;
+}
+
+/// "YA" for "Yazid Aqel", "Y" for "Yazid": the avatar on Accueil and Profil; null without a name.
+String? initials(String? displayName) {
+  final words = (displayName?.trim() ?? '').split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(2);
+  return words.isEmpty ? null : words.map((w) => String.fromCharCode(w.runes.first).toUpperCase()).join();
+}

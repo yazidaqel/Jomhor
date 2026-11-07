@@ -68,7 +68,7 @@ it('renders the hero in the venue zone, the zone cards and the summary', async (
   expect(h).toContain('ATLAS FC vs Rapid Oued')
   expect(h).toContain('Championnat · Journée 11')
   expect(h).toContain('Sam. 7 févr. 2026 · 20:00')
-  expect(h).toContain('Stade de l&#x27;Atlas · Portes 18:30')
+  expect(h).toContain('Stade de l&#x27;Atlas, Rabat · Portes 18:30')
   expect(h).toContain('Vente ouverte · 4 billets max par compte')
   expect(h).toContain('120,50\u00a0DH') // price_mad 12050, integer formatter
   expect(h).toContain('2\u202f300 restants')
@@ -152,4 +152,13 @@ it('W1 lists the organizer events with state, from-price and canonical links', a
 it('W1 says so when nothing is on sale', async () => {
   fetchMock.mockResolvedValue(json(200, []))
   expect(renderToString(await HomePage())).toContain("Aucun événement en vente pour l&#x27;instant.")
+})
+
+it('W1 hero CTA follows the sale: "Réserver mes places" only while on sale', async () => {
+  fetchMock.mockResolvedValue(json(200, [rawListRow()]))
+  expect(renderToString(await HomePage())).toMatch(/data-sale="ON_SALE"[^>]*>Réserver mes places/)
+  fetchMock.mockResolvedValue(json(200, [rawListRow({ on_sale: false, sale_starts_at: '2026-02-03T09:00:00Z' })]))
+  const h = renderToString(await HomePage())
+  expect(h).toMatch(/data-sale="NOT_STARTED"[^>]*>Voir les places/)
+  expect(h).not.toContain('Réserver mes places')
 })

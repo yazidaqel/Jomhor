@@ -6,6 +6,7 @@ import { firstInvalid, hasFriendPhone, rowErrorsFrom422, shouldSaveName, validat
 import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
 import { errorCode, errorText, placeOrder, postJson, type Result } from '@/lib/order-client'
+import { CardIcon, TicketIcon } from '../../../icons'
 
 type Copy = Pick<Dict, 'checkout' | 'errors'>
 
@@ -105,10 +106,15 @@ export function CheckoutForm(props: {
   return (
     <form ref={form} noValidate onSubmit={submit} className="flex flex-col gap-4">
       {rows.map((row, i) => (
-        <fieldset key={i} className="flex flex-col gap-3 rounded-card border border-border bg-surface p-5">
-          <legend className="float-left mb-1 font-display text-h2">
+        <fieldset
+          key={i}
+          style={{ '--i': i } as React.CSSProperties}
+          className="flex flex-col gap-3 rounded-card border border-border bg-surface p-5 transition-colors duration-200 focus-within:border-border-muted motion-safe:animate-rise stagger"
+        >
+          <legend className="float-left mb-1 flex items-center gap-2.5 font-display text-h2 uppercase">
+            <TicketIcon className="size-5 text-accent" />
             {fmt(c.ticket, { n: i + 1 })}
-            {i === 0 && <span className="ms-2 text-body-small font-normal text-text-muted">{c.you}</span>}
+            {i === 0 && <span className="font-body text-body-small font-normal normal-case text-text-muted">{c.you}</span>}
           </legend>
           <div className="clear-left">
             <label htmlFor={`name-${i}`} className={label}>
@@ -204,8 +210,13 @@ export function CheckoutForm(props: {
         type="submit"
         disabled={pending}
         aria-busy={pending}
-        className="flex h-cta-height items-center justify-center rounded-control bg-accent text-cta text-on-accent hover:bg-accent-hover disabled:opacity-60"
+        className="flex h-cta-height items-center justify-center gap-2.5 rounded-control bg-accent text-cta text-on-accent transition-colors duration-200 hover:bg-accent-hover disabled:opacity-60"
       >
+        {pending ? (
+          <span aria-hidden="true" className="size-5 rounded-pill border-2 border-on-accent/30 border-t-on-accent motion-safe:animate-spin" />
+        ) : (
+          <CardIcon className="size-5" />
+        )}
         {pending && wait === null ? c.paying : fmt(c.pay, { amount: formatDh(props.totalMad) })}
       </button>
       {pending && (

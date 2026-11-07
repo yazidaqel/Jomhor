@@ -219,5 +219,15 @@
   "profileLogoutBody": "Tes billets seront retirés de ce téléphone. Reconnecte-toi pour les retrouver.",
   "profileLogoutAllBody": "Ton compte sera déconnecté sur ce téléphone et sur tous tes autres appareils. Tes billets seront retirés de ce téléphone.",
   "profileLogoutConfirm": "Me déconnecter",
-  "profileLogoutAllFailed": "Ce téléphone est déconnecté, mais tes autres appareils n'ont pas pu l'être (pas de réseau). Reconnecte-toi et réessaie."
+  "profileLogoutAllFailed": "Ce téléphone est déconnecté, mais tes autres appareils n'ont pas pu l'être (pas de réseau). Reconnecte-toi et réessaie.",
+  "loading": "Chargement",
+  "homeGreeting": "Salut {name}",
+  "@homeGreeting": {"description": "Accueil greeting with the fan first name (from display_name).", "placeholders": {"name": {"type": "String"}}},
+  "homeGreetingNoName": "Salut",
+  "homeGreetingGuest": "Bienvenue",
+  "homeEmptyTitle": "Rien au programme",
+  "homeOpenProfile": "Mon profil",
+  "ticketsEmptyTitle": "Pas encore de billet",
+  "ticketOpen": "Ouvrir le billet",
+  "poweredBy": "Propulsé par Jomhor"
 }

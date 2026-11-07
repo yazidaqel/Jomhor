@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { fmt, type Dict } from '@/lib/i18n'
 import { canRetryPay, errorText, FINAL, pageClock, pollOrder, postJson, type OrderStatus as Status, type Poll } from '@/lib/order-client'
 import { formatTime } from '@/lib/time'
+import { CheckIcon, ClockIcon, TicketIcon } from '../../../icons'
+import { Steps } from '../../steps'
 
-type Copy = Pick<Dict, 'orderPage' | 'errors' | 'meta'>
+type Copy = Pick<Dict, 'orderPage' | 'errors' | 'meta' | 'steps'>
 
 const cta = 'flex h-cta-height items-center justify-center rounded-control bg-accent px-6 text-cta text-on-accent hover:bg-accent-hover'
 
@@ -94,8 +96,10 @@ export function OrderStatus({
     )
   }
 
+  const paid = order.status === 'PAID'
   return (
     <div className="flex flex-col gap-5">
+      <Steps current={paid ? 5 : 3} copy={copy.steps} />
       {order.status === 'RESERVED' && order.reserved_until && timezone && (
         <p className="flex items-center gap-3 rounded-control border border-accent/50 bg-accent/10 px-4 py-3.5 text-sm text-accent-hover">
           <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -110,13 +114,32 @@ export function OrderStatus({
           </span>
         </p>
       )}
-      <div aria-live="polite" className="flex flex-col gap-3">
-        <h1 className="font-display text-hero uppercase">{title(c, order.status)}</h1>
+      <div aria-live="polite" className="mt-2 flex flex-col gap-3">
+        <span
+          key={order.status}
+          aria-hidden="true"
+          className={`flex size-16 items-center justify-center rounded-pill motion-safe:animate-pop ${
+            paid ? 'bg-success-bg text-success-text ring-4 ring-success' : final ? 'bg-surface2 text-text-muted' : 'relative text-accent'
+          }`}
+        >
+          {paid ? (
+            <CheckIcon className="size-8" />
+          ) : final ? (
+            <ClockIcon className="size-8" />
+          ) : (
+            <>
+              <span className="absolute inset-0 rounded-pill border-4 border-accent/20 border-t-accent motion-safe:animate-spin" />
+              <TicketIcon className="size-7" />
+            </>
+          )}
+        </span>
+        <h1 className="font-display text-hero uppercase sm:text-[56px]">{title(c, order.status)}</h1>
         <p className="text-body text-text-secondary">{body(c, order.status)}</p>
         {order.status === 'PAID' && order.ticket_count < places && <p className="text-body text-text-secondary">{c.paidOthers}</p>}
       </div>
-      {order.status === 'PAID' && (
-        <Link href="/me/tickets" className={`${cta} self-start`}>
+      {paid && (
+        <Link href="/me/tickets" className={`${cta} gap-2 self-start motion-safe:animate-rise`}>
+          <TicketIcon className="size-5" />
           {c.tickets}
         </Link>
       )}
@@ -144,7 +167,7 @@ export function OrderStatus({
           {c.back}
         </Link>
       )}
-      <p className="flex flex-wrap gap-x-1 rounded-chip bg-ground px-3.5 py-3 text-xs text-text-muted">
+      <p className="flex flex-wrap gap-x-1 rounded-chip border border-border bg-surface px-3.5 py-3 text-xs text-text-muted">
         <span>{c.statusLabel}</span>
         <strong className={order.status === 'PAID' ? 'text-success-text' : 'text-accent-hover'}>{statusName(c, order.status)}</strong>
         {!final && <span>{c.live}</span>}

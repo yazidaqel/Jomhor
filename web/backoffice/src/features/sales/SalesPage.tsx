@@ -1,32 +1,23 @@
 import type { ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { Banknote, Hourglass, Ticket, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useParams } from 'react-router'
-import { Button } from '@/components/ui/button'
+import { BrandEmpty, ErrorNotice, LoadingRows, PageHeader, STICKY_TABLE } from '@/components/page'
+import { FillBar } from '@/components/fill-bar'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useEvent, useEvents } from '@/features/events/api'
 import { StatusBadge } from '@/features/events/EventsPage'
 import { fr } from '@/i18n/fr'
 import { ApiError } from '@/lib/api'
-import { errorKey } from '@/lib/errors'
 import { formatDh } from '@/lib/money'
+import { percent } from '@/lib/percent'
 import { formatDateTime } from '@/lib/time'
+import { cn } from '@/lib/utils'
 import { useSales, type EventSales } from './api'
 
 type Reason = keyof typeof fr.sales.refunds.reasons
-
-function ErrorRow({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-center gap-3 p-4 text-sm">
-      <span className="text-destructive">{t(errorKey(error))}</span>
-      <Button variant="outline" size="sm" onClick={onRetry}>
-        {t('common.retry')}
-      </Button>
-    </div>
-  )
-}
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -37,17 +28,23 @@ function Section({ title, description, children }: { title: string; description?
         </CardTitle>
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className="[&_th]:text-xs [&_th]:font-medium [&_th]:text-muted-foreground">{children}</CardContent>
     </Card>
   )
 }
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint: string }) {
+function Kpi({ icon: Icon, label, value, hint, children }: { icon: LucideIcon; label: string; value: string; hint: string; children?: ReactNode }) {
   return (
-    <Card className="gap-1 py-4">
-      <CardContent className="px-4">
-        <div className="text-sm text-muted-foreground">{label}</div>
-        <div className="text-2xl font-bold tabular-nums">{value}</div>
+    <Card className="gap-2 py-5">
+      <CardContent className="flex flex-col gap-2 px-5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium text-muted-foreground">{label}</span>
+          <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
+            <Icon className="size-4 text-foreground/70" aria-hidden="true" />
+          </span>
+        </div>
+        <div className="text-2xl leading-tight font-semibold tracking-tight tabular-nums md:text-[1.75rem]">{value}</div>
+        {children}
         <div className="text-xs text-muted-foreground">{hint}</div>
       </CardContent>
     </Card>
@@ -60,47 +57,48 @@ export function SalesIndexPage() {
   const events = useEvents()
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-[22px] font-bold">{t('sales.title')}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('sales.indexDescription')}</p>
-      </div>
-      <Card className="py-2">
-        <CardContent className="px-2">
-          {events.isPending ? (
-            <p className="p-4 text-sm text-muted-foreground">{t('common.loading')}</p>
-          ) : events.isError ? (
-            <ErrorRow error={events.error} onRetry={() => void events.refetch()} />
-          ) : events.data.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">{t('sales.noEvents')}</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('events.columns.title')}</TableHead>
-                  <TableHead>{t('events.columns.startsAt')}</TableHead>
-                  <TableHead>{t('events.columns.status')}</TableHead>
-                  <TableHead className="text-right">{t('events.columns.sold')}</TableHead>
+      <PageHeader title={t('sales.title')} description={t('sales.indexDescription')} />
+      <Card className={cn('gap-0 overflow-hidden py-0', STICKY_TABLE)}>
+        {events.isPending ? (
+          <LoadingRows className="p-5" />
+        ) : events.isError ? (
+          <ErrorNotice error={events.error} onRetry={() => void events.refetch()} />
+        ) : events.data.length === 0 ? (
+          <BrandEmpty title={t('events.emptyTitle')} description={t('sales.noEvents')} />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>{t('events.columns.title')}</TableHead>
+                <TableHead>{t('events.columns.startsAt')}</TableHead>
+                <TableHead>{t('events.columns.status')}</TableHead>
+                <TableHead className="text-right">{t('events.columns.sold')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {events.data.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell className="font-medium">
+                    <Link
+                      to={`/events/${encodeURIComponent(e.id)}/sales`}
+                      className="rounded-sm outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    >
+                      {e.title}
+                    </Link>
+                  </TableCell>
+                  <TableCell className="tabular-nums">{formatDateTime(e.starts_at, i18n.language, e.venue.timezone)}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={e.status} />
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <div>{t('events.soldOfQuota', { sold: e.sold, quota: e.quota })}</div>
+                    <FillBar paid={e.sold} quota={e.quota} className="mt-1.5 ml-auto w-24" />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.data.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="font-medium">
-                      <Link to={`/events/${encodeURIComponent(e.id)}/sales`} className="hover:underline">
-                        {e.title}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="tabular-nums">{formatDateTime(e.starts_at, i18n.language, e.venue.timezone)}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={e.status} />
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{t('events.soldOfQuota', { sold: e.sold, quota: e.quota })}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </Card>
     </div>
   )
@@ -116,37 +114,46 @@ export function SalesPage() {
 
 const isNotFound = (e: unknown) => e instanceof ApiError && ['NOT_FOUND', 'BAD_REQUEST'].includes(e.code)
 
-function EventSalesPage({ id }: { id: string }) {
+/** Same rhythm as the loaded page (header, three KPI cards, a table), so nothing jumps when data lands. */
+function SalesSkeleton({ header = true }: { header?: boolean }) {
   const { t } = useTranslation()
+  return (
+    <div aria-busy="true" className="flex flex-col gap-6">
+      <span className="sr-only">{t('common.loading')}</span>
+      {header && <Skeleton className="h-16 w-80" />}
+      <div className="grid gap-4 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-36 rounded-xl" />
+        ))}
+      </div>
+      <Skeleton className="h-56 rounded-xl" />
+    </div>
+  )
+}
+
+function EventSalesPage({ id }: { id: string }) {
+  const { t, i18n } = useTranslation()
   const event = useEvent(id)
   const sales = useSales(id)
   if (isNotFound(event.error) || isNotFound(sales.error)) return <Navigate to="/events" replace state={{ notFound: true }} />
-  if (event.isPending) return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
-  if (!event.data) return <ErrorRow error={event.error} onRetry={() => void event.refetch()} />
+  if (event.isPending) return <SalesSkeleton />
+  if (!event.data) return <ErrorNotice error={event.error} onRetry={() => void event.refetch()} />
+  const eventPath = `/events/${encodeURIComponent(event.data.id)}`
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="min-w-0">
-        <nav aria-label={t('events.breadcrumb')} className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Link to="/events" className="hover:text-foreground hover:underline">
-            {t('events.title')}
-          </Link>
-          <ChevronRight className="size-4" aria-hidden="true" />
-          <Link to={`/events/${encodeURIComponent(event.data.id)}`} className="truncate hover:text-foreground hover:underline">
-            {event.data.title}
-          </Link>
-          <ChevronRight className="size-4" aria-hidden="true" />
-          <span aria-current="page">{t('sales.title')}</span>
-        </nav>
-        <div className="mt-1 flex flex-wrap items-center gap-2.5">
-          <h1 className="text-[22px] font-bold">{t('sales.title')}</h1>
-          <StatusBadge status={event.data.status} />
-        </div>
-      </div>
+      <PageHeader
+        crumbs={[{ label: t('events.title'), to: '/events' }, { label: event.data.title, to: eventPath }, { label: t('sales.title') }]}
+        title={t('sales.title')}
+        badge={<StatusBadge status={event.data.status} />}
+        description={t('sales.eventLine', { date: formatDateTime(event.data.starts_at, i18n.language, event.data.timezone), zone: event.data.timezone })}
+      />
       {sales.isPending ? (
-        <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+        <SalesSkeleton header={false} />
       ) : sales.isError ? (
-        <ErrorRow error={sales.error} onRetry={() => void sales.refetch()} />
+        <Card className="py-2">
+          <ErrorNotice error={sales.error} onRetry={() => void sales.refetch()} />
+        </Card>
       ) : (
         <SalesBody sales={sales.data} zone={event.data.timezone} />
       )}
@@ -163,9 +170,14 @@ function SalesBody({ sales, zone }: { sales: EventSales; zone: string }) {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Kpi label={t('sales.kpi.paid')} value={t('events.soldOfQuota', { sold: sales.paid, quota: sales.quota })} hint={t('sales.kpi.paidHint')} />
-        <Kpi label={t('sales.kpi.held')} value={n(sales.held)} hint={t('sales.kpi.heldHint')} />
-        <Kpi label={t('sales.kpi.revenue')} value={dh(sales.revenue_mad)} hint={t('sales.kpi.revenueHint')} />
+        <Kpi icon={Ticket} label={t('sales.kpi.paid')} value={t('events.soldOfQuota', { sold: sales.paid, quota: sales.quota })} hint={t('sales.kpi.paidHint')}>
+          <div className="flex items-center gap-3">
+            <FillBar paid={sales.paid} held={sales.held} quota={sales.quota} />
+            <span className="shrink-0 text-xs font-medium tabular-nums">{percent(sales.paid, sales.quota, i18n.language)}</span>
+          </div>
+        </Kpi>
+        <Kpi icon={Hourglass} label={t('sales.kpi.held')} value={n(sales.held)} hint={t('sales.kpi.heldHint')} />
+        <Kpi icon={Banknote} label={t('sales.kpi.revenue')} value={dh(sales.revenue_mad)} hint={t('sales.kpi.revenueHint')} />
       </div>
 
       <Section title={t('sales.zones.title')}>
@@ -185,8 +197,9 @@ function SalesBody({ sales, zone }: { sales: EventSales; zone: string }) {
             <TableBody>
               {sales.zones.map((z) => (
                 <TableRow key={z.zone_id}>
-                  <TableCell>
+                  <TableCell className="min-w-48">
                     <span className="font-medium">{z.code}</span> <span className="text-muted-foreground">{z.name}</span>
+                    <FillBar paid={z.paid} held={z.held} quota={z.quota} className="mt-2 max-w-56" />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{n(z.quota)}</TableCell>
                   <TableCell className="text-right tabular-nums">{n(z.paid)}</TableCell>

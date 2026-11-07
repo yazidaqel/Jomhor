@@ -4,6 +4,8 @@ import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/features/auth/login_controller.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/brand.dart';
+import 'package:jomhor_fan/ui/motion.dart';
 
 /// OTP login: phone step, then code step (state in [LoginController]).
 class LoginScreen extends ConsumerStatefulWidget {
@@ -33,63 +35,96 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final error = state.error;
 
     return Scaffold(
-      appBar: AppBar(backgroundColor: JomhorColors.ground),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(JomhorSpace.xl),
-          children: [
-            Text(l.loginTitle, style: JomhorType.h1),
-            const SizedBox(height: JomhorSpace.m),
-            Text(codeStep ? l.loginCodeIntro(state.phone!) : l.loginPhoneIntro),
-            const SizedBox(height: JomhorSpace.xxl),
-            if (!codeStep)
-              TextField(
-                key: const Key('login.phone'),
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                autofillHints: const [AutofillHints.telephoneNumber],
-                decoration: InputDecoration(labelText: l.loginPhoneLabel, hintText: l.loginPhoneHint),
-                onSubmitted: state.busy ? null : controller.submitPhone,
-              )
-            else
-              TextField(
-                key: const Key('login.code'),
-                controller: _code,
-                keyboardType: TextInputType.number,
-                autofillHints: const [AutofillHints.oneTimeCode],
-                decoration: InputDecoration(labelText: l.loginCodeLabel),
-                onSubmitted: state.busy ? null : controller.submitCode,
-              ),
-            if (error != null) ...[
-              const SizedBox(height: JomhorSpace.m),
-              Text(
-                errorText(l, error),
-                key: const Key('login.error'),
-                style: JomhorType.bodySmall.copyWith(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            const SizedBox(height: JomhorSpace.xxl),
-            FilledButton(
-              onPressed: state.busy
-                  ? null
-                  : () => codeStep ? controller.submitCode(_code.text) : controller.submitPhone(_phone.text),
-              child: Text(codeStep ? l.loginVerify : l.loginSendCode),
+      // Transparent: no hard edge over the glow.
+      appBar: AppBar(backgroundColor: Colors.transparent, scrolledUnderElevation: 0),
+      extendBodyBehindAppBar: true,
+      body: Stack(
+        children: [
+          const PositionedDirectional(top: -140, end: -120, child: AccentGlow(size: 420, opacity: 0.18)),
+          SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 64, JomhorSpace.xl, JomhorSpace.xl),
+              children: [
+                const Entrance(
+                  child: Row(
+                    children: [
+                      Crest(initial: JomhorClub.crestInitial, size: 44, glow: true),
+                      SizedBox(width: JomhorSpace.m),
+                      Text(JomhorClub.name, style: JomhorType.h2),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: JomhorSpace.xxl),
+                Entrance(index: 1, child: Text(l.loginTitle, style: JomhorType.h1.copyWith(fontSize: 34))),
+                const SizedBox(height: JomhorSpace.m),
+                Entrance(
+                  index: 2,
+                  child: Text(
+                    codeStep ? l.loginCodeIntro(state.phone!) : l.loginPhoneIntro,
+                    style: JomhorType.body.copyWith(color: JomhorColors.textSecondary, fontWeight: FontWeight.w400),
+                  ),
+                ),
+                const SizedBox(height: JomhorSpace.xxl),
+                if (!codeStep)
+                  TextField(
+                    key: const Key('login.phone'),
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    decoration: InputDecoration(
+                      labelText: l.loginPhoneLabel,
+                      hintText: l.loginPhoneHint,
+                      prefixIcon: const Icon(Icons.phone_iphone_rounded),
+                    ),
+                    onSubmitted: state.busy ? null : controller.submitPhone,
+                  )
+                else
+                  TextField(
+                    key: const Key('login.code'),
+                    controller: _code,
+                    keyboardType: TextInputType.number,
+                    autofillHints: const [AutofillHints.oneTimeCode],
+                    style: JomhorType.number.copyWith(letterSpacing: 8),
+                    decoration: InputDecoration(
+                      labelText: l.loginCodeLabel,
+                      prefixIcon: const Icon(Icons.sms_outlined),
+                    ),
+                    onSubmitted: state.busy ? null : controller.submitCode,
+                  ),
+                if (error != null) ...[
+                  const SizedBox(height: JomhorSpace.m),
+                  Text(
+                    errorText(l, error),
+                    key: const Key('login.error'),
+                    style: JomhorType.bodySmall.copyWith(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+                const SizedBox(height: JomhorSpace.xxl),
+                FilledButton(
+                  onPressed: state.busy
+                      ? null
+                      : () => codeStep ? controller.submitCode(_code.text) : controller.submitPhone(_phone.text),
+                  child: Text(codeStep ? l.loginVerify : l.loginSendCode),
+                ),
+                if (codeStep) ...[
+                  const SizedBox(height: JomhorSpace.m),
+                  TextButton(onPressed: state.busy ? null : controller.resend, child: Text(l.loginResend)),
+                  TextButton(
+                    onPressed: state.busy
+                        ? null
+                        : () {
+                            _code.clear();
+                            controller.changePhone();
+                          },
+                    child: Text(l.loginChangePhone),
+                  ),
+                ],
+                const SizedBox(height: JomhorSpace.xxl * 2),
+                const PoweredBy(),
+              ],
             ),
-            if (codeStep) ...[
-              const SizedBox(height: JomhorSpace.m),
-              TextButton(onPressed: state.busy ? null : controller.resend, child: Text(l.loginResend)),
-              TextButton(
-                onPressed: state.busy
-                    ? null
-                    : () {
-                        _code.clear();
-                        controller.changePhone();
-                      },
-                child: Text(l.loginChangePhone),
-              ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

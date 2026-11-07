@@ -18,5 +18,5 @@ export type EventSales = {
   refunds_required: RefundRequired[]
 }
 
-export const useSales = (eventId: string) =>
-  useOrgQuery<EventSales>(['events', eventId, 'sales'], path('org', 'events', eventId, 'sales'))
+export const useSales = (eventId: string, options?: { refetchInterval?: number }) =>
+  useOrgQuery<EventSales>(['events', eventId, 'sales'], path('org', 'events', eventId, 'sales'), options)

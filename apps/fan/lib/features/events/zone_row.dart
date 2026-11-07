@@ -3,6 +3,7 @@ import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/motion.dart';
 
 const List<Color> _zonePalette = [JomhorColors.zoneA, JomhorColors.zoneB, JomhorColors.zoneC];
 
@@ -30,59 +31,66 @@ class ZoneRow extends StatelessWidget {
     return Opacity(
       opacity: z.soldOut ? 0.55 : 1,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: JomhorSpace.s),
-        child: Material(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: TapCard(
           key: Key('zone.${z.id}'),
-          color: JomhorColors.surface,
-          shape: RoundedRectangleBorder(
-            side: BorderSide(color: selected ? JomhorColors.accent : JomhorColors.border, width: selected ? 2 : 1),
-            borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.control)),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: z.soldOut ? null : onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(JomhorSpace.m),
-              child: Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: z.soldOut ? JomhorColors.zoneDisabled : _zonePalette[index % _zonePalette.length],
-                      borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
-                    ),
-                  ),
-                  const SizedBox(width: JomhorSpace.m),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(z.name, style: JomhorType.body),
-                        Text(description, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
-                      ],
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (price != null)
-                        Text(open > 1 ? l.chipFrom(formatDh(price)) : formatDh(price), style: JomhorType.h2),
-                      Text(
-                        z.soldOut
-                            ? l.soldOut
-                            : z.lastSeats
-                            ? l.zoneLastSeats
-                            : l.zoneRemaining(z.remaining),
-                        style: JomhorType.caption.copyWith(
-                          color: z.lastSeats ? Theme.of(context).colorScheme.error : JomhorColors.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+          onTap: z.soldOut ? null : onTap,
+          borderColor: selected ? JomhorColors.accent : JomhorColors.border,
+          borderWidth: selected ? 2 : 1,
+          color: selected ? JomhorColors.surface2 : JomhorColors.surface,
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: z.soldOut ? JomhorColors.zoneDisabled : _zonePalette[index % _zonePalette.length],
+                  borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
+                ),
               ),
-            ),
+              const SizedBox(width: JomhorSpace.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(z.name, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(description, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: JomhorSpace.s),
+              // Bounded, not flexible: the name keeps the room; the price wraps only with very large text.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 130),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (price != null)
+                      Text(
+                        open > 1 ? l.chipFrom(formatDh(price)) : formatDh(price),
+                        style: JomhorType.h2,
+                        textAlign: TextAlign.end,
+                      ),
+                    Text(
+                      z.soldOut
+                          ? l.soldOut
+                          : z.lastSeats
+                          ? l.zoneLastSeats
+                          : l.zoneRemaining(z.remaining),
+                      style: JomhorType.caption.copyWith(
+                        fontSize: 12,
+                        color: z.lastSeats
+                            ? Theme.of(context).colorScheme.error
+                            : z.soldOut
+                            ? JomhorColors.textMuted
+                            : JomhorColors.successText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
