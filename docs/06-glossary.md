@@ -17,6 +17,11 @@
 | enrol QR | QR d'enrôlement | — | Back-office QR carrying the `enrol_code` that binds a scanner to the organizer (30 min) |
 | fingerprint | empreinte | — | First 8 hex chars of SHA-256 of the device public key (`AB12 CD34`), matched before approval |
 | canonical scan | entrée retenue | — | Per ticket, the admitted (OK/OVERRIDE) scan with the earliest device_time; counts as the entry |
+| pay code | code de paiement | رمز الأداء | `JMH 4F7K 29`, paid in cash at a guichet or agency |
+| till session | caisse | الصندوق | one cashier's shift; expected vs declared cash |
+| guichet | guichet | الشباك | club point of sale (back-office POS page) |
+| collector | encaisseur | — | who took the cash: POS or a network |
+| refund | remboursement | استرجاع | — |
 
 ## Scan result codes
 
@@ -39,5 +44,6 @@ Override reasons (`override_reason`, B5 and CSV labels): `ID_CHECKED` Identité 
 
 ## Order statuses
 
-RESERVED (8 min hold) → PAID · AWAITING_CASH (cash code issued, 24 h) → PAID · EXPIRED ·
-CANCELLED · REFUNDED.
+RESERVED (8 min hold) → PAID · RESERVED → AWAITING_CASH (cash code issued; held until least(24 h, sales close)) → PAID · EXPIRED · CANCELLED · REFUNDED (whole-order refund, Lot 5; ticket refunds keep the order PAID).
+
+Payment methods (FR UI): CARD Carte bancaire · WALLET Wallet mobile · CASH_AGENCY Cash en agence · POS_CASH Espèces au guichet · FREE Gratuit.

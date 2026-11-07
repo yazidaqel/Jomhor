@@ -238,6 +238,26 @@ These override the screen specs above for Lot 2 (see `docs/plans/lot-2.md`).
 | B6 | Tabs Appareils (list with status badge, fingerprint, last seen; "Ajouter des appareils" dialog with the QR + countdown; Approuver; Révoquer with confirm) and Équipe de porte (staff list, add → "PIN : 4821, affiché une seule fois" dialog, reset PIN, deactivate). |
 | B2 | Appareils tab (device → gate select, manifest version, last seen, wipe ack); Règles "Ré-entrée · aucune" read-only. |
 
+## Lot 3 adjustments
+
+These override the screen specs above for Lot 3 (see `docs/plans/lot-3.md`).
+
+| Where | Change |
+| --- | --- |
+| Screen 4 / W3 | Rows from `payment_methods` (Carte bancaire · Wallet mobile · Cash en agence; hints "Instantané" / "Instantané" / "Avant {deadline}"). A missing Cash row shows disabled "Trop tard pour le cash". CTA per method (DESIGN:104). `METHOD_NOT_AVAILABLE` copy per reason. Wallet = same webview / redirect as card. |
+| App cash order screen (not mocked; W4 layout in app components) | Code card (display 44 px, letter-spacing 3, white paper), exact amount, "Copier le code", countdown to `reserved_until`, "Où payer" (points + networks), 3 steps, "Payer maintenant ?" card / wallet (rule in 04 GET order), polls every 10 s → PAID → screen 5 slide-in. EXPIRED → "Code expiré · places libérées" + back to the event. |
+| Screen 1 | Amber "Commande en attente de paiement" strip from `GET /fan/orders` (AWAITING_CASH, upcoming event) → cash order screen. |
+| W4 | As mockup, except: order label = "Commande {last 8 hex of id, 4-4}"; step 1 copy from `cash.points` / `cash.networks` (no hard-coded Wafacash/Cash Plus); "Recevoir sur WhatsApp" hidden (Q53); holder rows show `label` only; EXPIRED state as the app. |
+| W5 | "Commandes en attente de paiement" section above the tickets. |
+| B11 Guichet `/pos` (Lot 3, new) | Session bar (label, opened at, encaissé, "Clôturer la caisse" → declared amount dialog → expected / declared / gap). Tabs **Vente** (event select of ON_SALE events, zone/price rows with remaining, stepper, holder names + "même nom pour toutes les places", optional phone, total, "Encaisser {total}", change calculator received − total on the client, then print) and **Code cash** (input masked `JMH ____ __`, lookup card with event, amount, places, holders, status; "Encaisser {amount}"; on 409 the copy is "Code déjà payé ou expiré · ne gardez pas l'argent"). Print view `/pos/print/:orderId`. CASHIER sees only this page. |
+| POS slip (80 mm) | One slip per ticket (page break): club name, title, date · time (venue time zone), venue, ZONE and PORTE(S), holder label, QR 38 mm + ticket no under it, price, short order no, "Une entrée · Propulsé par Jomhor". Black only, no logo raster. |
+| B12 Billets `/events/:id/tickets` (Lot 3, new) | Search (n° billet, téléphone, code cash), results table, actions Bloquer / Débloquer / Rembourser (confirm + reason), disabled after the cutoff with "Gel des remboursements". |
+| B3 | KPIs + "En attente cash"; table "Par moyen de paiement"; "Remboursés"; "Remboursements à faire" = the Lot 1 gateway flags + ticket refunds (`/org/refunds`, "Marquer remboursé" → reference dialog). |
+| B8 Finance `/finance/cash` (Lot 3: Encaissements tab only) | Date range, per day × encaisseur table, sessions table (gap in red when ≠ 0), totals, CSV. |
+| B6 Équipe | Add "Caissier" (name + phone, no PIN). |
+| B2 Règles | "Cash en agence · jusqu'à {sales_close_at − 2 h}" read-only. |
+| Sidebar | Jour J + "Guichet"; Fans & finance: "Finance" enabled. |
+
 ## Theming per organizer
 
 `accent`, `onAccent`, crest asset, display font (optional) come from

@@ -22,6 +22,8 @@ create table organizers (
 );
 -- organizers.settings shape: {"theme": {"accent": "#F5B700", "on_accent": "#0B0F1A",
 --   "crest_url": "...", "display_font": null}}
+--   "cash_points": [{"name": "Guichet Stade de l'Atlas", "address": "Porte 1", "hours": "Lun–Sam 10:00–19:00"}]
+--   where fans pay a cash code in person; shown on the cash order page. Set by ops until a back-office editor exists.
 
 create table users (
   id            uuid primary key default gen_random_uuid(),
@@ -31,7 +33,8 @@ create table users (
   created_at    timestamptz not null default now()
 );
 
-create type staff_role as enum ('ADMIN','OPS','GATE','SUPERVISOR','FINANCE');
+create type staff_role as enum ('ADMIN','OPS','GATE','SUPERVISOR','FINANCE','CASHIER');
+-- CASHIER: back-office OTP login (staff.user_id set), point of sale only (docs/04-api.md §Point of sale). No PIN.
 
 create table staff (
   id            uuid primary key default gen_random_uuid(),
@@ -151,7 +154,7 @@ create table price_categories (
   quota         integer not null check (quota >= 0),
   sold          integer not null default 0 check (sold >= 0 and sold <= quota),
                 -- held (RESERVED, AWAITING_CASH) + PAID; incremented atomically on reserve,
-                -- decremented when an order expires or is cancelled
+                -- decremented when an order expires or is cancelled, and when a ticket is refunded (one place)
   unique (event_id, zone_id, name)
 );
 
@@ -169,11 +172,14 @@ create table orders (
   status          order_status not null default 'RESERVED',
   total_mad       bigint not null check (total_mad >= 0),
   payment_method  payment_method,
-  payment_ref     text,                               -- provider_ref of the succeeding payment, cash code (Lot 3), wallet txn
+  payment_ref     text,   -- on PAID: the succeeding payment's provider_ref; for a cash code, the code
   reserved_until  timestamptz not null,
   paid_at         timestamptz,
   created_at      timestamptz not null default now()
 );
+-- AWAITING_CASH: a cash code was issued; reserved_until = least(issue + 24 h, events.refund_cutoff_at).
+-- POS sale: channel POS, user_id null, created PAID. Ticket refunds leave the order PAID
+-- (order REFUNDED = whole-order refund, Lot 5).
 create index on orders (event_id, status);
 create index on orders (user_id, created_at desc);
 
@@ -230,24 +236,69 @@ create table passes (
 );
 -- a pass materialises as one tickets row per event in the series (order channel APP, method FREE)
 
+-- ---------- point of sale ----------
+create table pos_sessions (
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  staff_id      uuid not null references staff(id),      -- the cashier (CASHIER, OPS or ADMIN)
+  label         text not null,                          -- 'Guichet Nord', 1-40 chars
+  opened_at     timestamptz not null default now(),
+  closed_at     timestamptz,
+  expected_mad  bigint,                                 -- Σ SUCCEEDED payments of the session, frozen at close (centimes)
+  declared_mad  bigint check (declared_mad >= 0),       -- cash counted by the cashier at close (centimes)
+  constraint pos_sessions_close check ((closed_at is null) = (expected_mad is null)
+                                       and (closed_at is null) = (declared_mad is null))
+);
+create unique index on pos_sessions (organizer_id, staff_id) where closed_at is null;   -- one open till per cashier
+
 -- ---------- payments ----------
 create type payment_status as enum ('PENDING','SUCCEEDED','FAILED');
 
 create table payments (
-  id            uuid primary key default gen_random_uuid(),   -- sent to the gateway as its order reference
-  organizer_id  uuid not null references organizers(id),
-  order_id      uuid not null references orders(id),
-  method        payment_method not null,
-  provider      text not null,                        -- 'FAKE' (simulated, non-prod), 'PAYZONE'
-  amount_mad    bigint not null check (amount_mad >= 0),
-  status        payment_status not null default 'PENDING',
-  provider_ref  text,                                 -- gateway transaction id from the callback
-  callback      jsonb,                                -- last verified callback, card fields stripped
-  created_at    timestamptz not null default now(),
-  completed_at  timestamptz
+  id              uuid primary key default gen_random_uuid(),   -- sent to the gateway as its order reference
+  organizer_id    uuid not null references organizers(id),
+  order_id        uuid not null references orders(id),
+  method          payment_method not null,
+  provider        text not null,        -- CARD/WALLET: 'FAKE' (simulated, non-prod), 'PAYZONE'. POS_CASH: 'POS'.
+                                        -- CASH_AGENCY: 'CASH' while PENDING, then the collector: 'POS' (club till),
+                                        -- 'FAKE_CASH' (simulated network) or the network's name.
+  amount_mad      bigint not null check (amount_mad >= 0),
+  status          payment_status not null default 'PENDING',
+  provider_ref    text,                 -- gateway or network transaction id from the callback; null for till payments
+  pay_code        text unique,          -- CASH_AGENCY: 6 Crockford base32 symbols (docs/04-api.md §Cash codes), never reused
+  pos_session_id  uuid references pos_sessions(id),   -- cash taken at a club till (POS sale or code collected there)
+  redirected_at   timestamptz,          -- CARD/WALLET: hosted page opened; the expiry waits only for these (20 min)
+  callback        jsonb,                -- last verified callback, card fields stripped
+  created_at      timestamptz not null default now(),
+  completed_at    timestamptz,
+  constraint payments_pay_code check ((method = 'CASH_AGENCY') = (pay_code is not null))
 );
 create index on payments (order_id);
 create unique index on payments (provider, provider_ref) where provider_ref is not null;
+create index on payments (organizer_id, completed_at) where status = 'SUCCEEDED';   -- cash report
+create index on payments (pos_session_id) where pos_session_id is not null;
+
+-- ---------- refunds ----------
+create type refund_status as enum ('REQUIRED','DONE');
+
+create table refunds (                                 -- money owed back for a refunded ticket; paid back by hand
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  event_id      integer not null references events(id),
+  ticket_id     uuid not null unique references tickets(id),
+  order_id      uuid not null references orders(id),
+  payment_id    uuid references payments(id),           -- the order's succeeding payment (its method says how to pay back)
+  amount_mad    bigint not null check (amount_mad >= 0),  -- the item's unit_price_mad snapshot
+  reason        text not null,                          -- 1-200 chars
+  status        refund_status not null default 'REQUIRED',
+  requested_by  uuid not null references staff(id),
+  requested_at  timestamptz not null default now(),
+  done_by       uuid references staff(id),
+  done_at       timestamptz,
+  reference     text,                                   -- how it was paid back: transfer, gateway refund id, receipt no
+  constraint refunds_done check ((status = 'DONE') = (done_at is not null and done_by is not null and reference is not null))
+);
+create index on refunds (organizer_id, status, requested_at);
 
 -- ---------- notifications ----------
 create type delivery_status as enum ('PENDING','SENT','FAILED');
