@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router'
 import { Shell } from '@/app/Shell'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { DevicesPage } from '@/features/devices/DevicesPage'
 import { EventPage } from '@/features/events/EventPage'
 import { EventsPage } from '@/features/events/EventsPage'
 import { OverviewPage } from '@/features/overview/OverviewPage'
@@ -19,6 +20,7 @@ export const routes: RouteObject[] = [
       { path: 'events/:id', element: <EventPage /> },
       { path: 'events/:id/sales', element: <SalesPage /> },
       { path: 'sales', element: <SalesIndexPage /> },
+      { path: 'devices', element: <DevicesPage /> },
       { path: 'settings/venues', element: <VenuesPage /> },
       { path: 'settings/venues/:id', element: <VenuePage /> },
       { path: '*', element: <Navigate to="/" replace /> },

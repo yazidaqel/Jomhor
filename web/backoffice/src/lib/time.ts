@@ -64,8 +64,8 @@ export function wallToUtc(wall: string, zone: string): string {
 /** RFC 3339 instant → wall time in `zone` as a `datetime-local` value (`YYYY-MM-DDTHH:mm`). */
 export const utcToWall = (iso: string, zone: string) => new Date(wallMs(Date.parse(iso), zone)).toISOString().slice(0, 16)
 
-/** RFC 3339 instant → date and time for display, in `zone`. */
-export const formatDateTime = (iso: string, locale: string, zone: string) =>
+/** RFC 3339 instant → date and time for display, in `zone` (none: the browser's, for times not tied to a venue). */
+export const formatDateTime = (iso: string, locale: string, zone?: string) =>
   new Intl.DateTimeFormat(locale, { timeZone: zone, dateStyle: 'medium', timeStyle: 'short' }).format(Date.parse(iso))
 
 /** `UTC+01:00` / `UTC-03:30` / `UTC+00:00`: the offset of `zone` at instant `ms`. */

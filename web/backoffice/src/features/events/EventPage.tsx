@@ -38,7 +38,6 @@ import {
   eventSchema,
   METADATA_KEYS,
   patchBody,
-  REENTRY_POLICIES,
   toForm,
   useEvent,
   useEventMutation,
@@ -47,14 +46,15 @@ import {
   type EventValues,
 } from './api'
 import { StatusBadge } from './EventsPage'
+import { DevicesTab } from './DevicesTab'
 import { PricesTab } from './PricesTab'
 
-type Tab = 'general' | 'prices' | 'gates' | 'rules'
+type Tab = 'general' | 'prices' | 'gates' | 'devices' | 'rules'
 // Règles fields; every other form field is on Général. Both tabs are one form (one save, one PATCH).
-const RULES_FIELDS: readonly string[] = ['reentry_policy', 'per_account_limit']
+const RULES_FIELDS: readonly string[] = ['per_account_limit']
 // These tabs need a saved event.
-const AFTER_SAVE: readonly Tab[] = ['prices', 'gates']
-const TABS: readonly Tab[] = ['general', 'prices', 'gates', 'rules']
+const AFTER_SAVE: readonly Tab[] = ['prices', 'gates', 'devices']
+const ALL_TABS: readonly Tab[] = ['general', 'prices', 'gates', 'devices', 'rules']
 const WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
 
 /** B2 Configuration événement: `/events/new` (create) and `/events/:id` (edit). */
@@ -87,6 +87,8 @@ function EventEditor({ event }: { event?: EventDetail }) {
   const venues = useVenues()
   // `?tab=prices` (Aperçu's "Tarifs & quotas" shortcut) opens on that tab once the event exists.
   const [search] = useSearchParams()
+  // Appareils is ADMIN/OPS (FINANCE gets 403 on assignments): not offered to read-only roles.
+  const TABS = canWrite ? ALL_TABS : ALL_TABS.filter((x) => x !== 'devices')
   const [tab, setTab] = useState<Tab>(() => {
     const asked = TABS.find((x) => x === search.get('tab'))
     return asked && (event || !AFTER_SAVE.includes(asked)) ? asked : 'general'
@@ -364,6 +366,13 @@ function EventEditor({ event }: { event?: EventDetail }) {
 
         <TabsContent value="gates">{event && <GatesTab venueId={event.venue_id} />}</TabsContent>
 
+        {/* Mounted too, so unsaved assignments survive a tab switch. */}
+        {canWrite && (
+          <TabsContent value="devices" forceMount className="data-[state=inactive]:hidden">
+            {event && <DevicesTab event={event} />}
+          </TabsContent>
+        )}
+
         <TabsContent value="rules" forceMount className="data-[state=inactive]:hidden">
           <Card className="max-w-3xl">
             <CardHeader>
@@ -376,35 +385,17 @@ function EventEditor({ event }: { event?: EventDetail }) {
               <form noValidate onSubmit={(e) => void submit(e)}>
                 <FieldSet disabled={!editable || save.isPending}>
                   <FieldGroup className="grid gap-6 md:grid-cols-2">
-                    <Controller
-                      control={form.control}
-                      name="reentry_policy"
-                      render={({ field, fieldState }) => (
-                        <Field data-invalid={!!fieldState.error}>
-                          <FieldLabel htmlFor="event-reentry">{t('events.rules.reentry')}</FieldLabel>
-                          <Select name={field.name} value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger
-                              id="event-reentry"
-                              ref={field.ref}
-                              onBlur={field.onBlur}
-                              className="w-full"
-                              aria-invalid={!!fieldState.error}
-                              aria-describedby={fieldState.error ? 'event-reentry-error' : undefined}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {REENTRY_POLICIES.map((r) => (
-                                <SelectItem key={r} value={r}>
-                                  {t(`events.rules.reentryPolicies.${r}`)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {fieldState.error && <FieldError id="event-reentry-error">{fieldState.error.message}</FieldError>}
-                        </Field>
-                      )}
-                    />
+                    {/* Lot 2: NONE only (plan Q33); shown, never edited or sent on PATCH. */}
+                    <Field>
+                      <FieldLabel htmlFor="event-reentry">{t('events.rules.reentry')}</FieldLabel>
+                      <Input
+                        id="event-reentry"
+                        readOnly
+                        value={t(`events.rules.reentryPolicies.${event?.reentry_policy ?? 'NONE'}`)}
+                        aria-describedby="event-reentry-hint"
+                      />
+                      <FieldDescription id="event-reentry-hint">{t('events.rules.reentryHint')}</FieldDescription>
+                    </Field>
                     <TextInput
                       id="event-limit"
                       inputMode="numeric"
