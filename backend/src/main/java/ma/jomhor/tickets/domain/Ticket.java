@@ -18,6 +18,9 @@ public record Ticket(UUID id, UUID organizerId, int eventId, int zoneId, Status 
         }
     }
 
+    /** A ticket locked for a status change: what block, unblock and refund need. */
+    public record Locked(UUID id, int eventId, UUID orderId, UUID priceCategoryId, Status status) {}
+
     /** What a gate manifest carries of a ticket: never the holder's name, phone or id number. */
     public record ManifestRow(UUID id, int zoneId, Status status, String holderInitials) {}
 }

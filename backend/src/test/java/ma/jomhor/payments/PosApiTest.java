@@ -122,7 +122,7 @@ class PosApiTest extends PaymentTest {
         for (var req : List.of(get("/org/venues"), get("/org/staff"), get("/org/devices"),
                 get("/org/events/" + s.eventId() + "/sales"), get("/org/events/" + s.eventId() + "/live"),
                 post("/org/events/" + s.eventId() + "/close"), patch("/org/events/" + s.eventId()),
-                get("/org/events/" + s.eventId() + "/tickets?q=JMH"), post("/org/tickets/" + UUID.randomUUID() + "/refund"),
+                post("/org/events/" + s.eventId() + "/tickets/search"), post("/org/tickets/" + UUID.randomUUID() + "/refund"),
                 post("/org/tickets/" + UUID.randomUUID() + "/block"),
                 get(URI.create("/org/%76enues")))) { // decided on the matched handler, not the raw URI
             call(cashier, req, "{}").andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));

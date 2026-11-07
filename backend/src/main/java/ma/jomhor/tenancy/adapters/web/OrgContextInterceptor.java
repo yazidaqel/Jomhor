@@ -17,7 +17,8 @@ import org.springframework.web.servlet.HandlerMapping;
  * Every /org/** call except /org/auth/** and /org/me: X-Organizer-Id → active staff row of the
  * token subject → {@link OrgContext} request attribute. Lot 0 roles: ADMIN, OPS read and write;
  * FINANCE read only; GATE, SUPERVISOR 403. Lot 3: /org/pos/** is ADMIN, OPS, CASHIER; CASHIER may call nothing else
- * but GET /org/events, /org/events/{id} and /org/events/{id}/prices.
+ * but GET /org/events, /org/events/{id} and /org/events/{id}/prices. FINANCE may also POST the ticket lookup and mark
+ * a refund done (its first write); the controllers narrow the roles further.
  */
 class OrgContextInterceptor implements HandlerInterceptor {
 
@@ -25,6 +26,10 @@ class OrgContextInterceptor implements HandlerInterceptor {
     /** Handler patterns (as mapped, not the raw URI) a CASHIER may GET besides /org/pos/**. */
     private static final Set<String> CASHIER_READS =
             Set.of("/org/events", "/org/events/{id}", "/org/events/{id}/prices");
+
+    /** Handler patterns FINANCE may POST: a lookup (a read with the phone in the body) and its first write. */
+    private static final Set<String> FINANCE_WRITES =
+            Set.of("/org/events/{id}/tickets/search", "/org/refunds/{id}/done");
 
     private final AuthService auth;
 
@@ -45,7 +50,7 @@ class OrgContextInterceptor implements HandlerInterceptor {
         boolean pos = pattern.startsWith("/org/pos/");
         boolean allowed = switch (role) {
             case ADMIN, OPS -> true;
-            case FINANCE -> read && !pos;
+            case FINANCE -> (read && !pos) || FINANCE_WRITES.contains(pattern);
             case CASHIER -> pos || (read && CASHIER_READS.contains(pattern));
             case GATE, SUPERVISOR -> false;
         };

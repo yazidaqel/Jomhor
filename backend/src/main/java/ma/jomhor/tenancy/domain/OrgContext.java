@@ -1,5 +1,6 @@
 package ma.jomhor.tenancy.domain;
 
+import java.util.Arrays;
 import java.util.UUID;
 import ma.jomhor.common.web.ApiException;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,14 @@ public record OrgContext(UUID organizerId, UUID userId, StaffRole role) {
      */
     public OrgContext adminOrOps() {
         if (role != StaffRole.ADMIN && role != StaffRole.OPS) {
+            throw new ApiException("FORBIDDEN", HttpStatus.FORBIDDEN, "Forbidden");
+        }
+        return this;
+    }
+
+    /** 403 unless the caller has one of {@code roles} (e.g. refund: ADMIN only, 04 §Organizer Lot 3). */
+    public OrgContext only(StaffRole... roles) {
+        if (!Arrays.asList(roles).contains(role)) {
             throw new ApiException("FORBIDDEN", HttpStatus.FORBIDDEN, "Forbidden");
         }
         return this;

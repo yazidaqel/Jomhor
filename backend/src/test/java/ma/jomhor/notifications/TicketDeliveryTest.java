@@ -219,6 +219,40 @@ class TicketDeliveryTest extends PaymentTest {
     }
 
     @Test
+    void aBlockedTicketBacksOffAndIsSentOnceUnblocked() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String orderId = paid(fanToken(phone), s, 1, holders(1));
+        UUID ticket = ticketHeldBy(orderId, phone);
+        call(s.org(), post("/org/tickets/" + ticket + "/block"), "{\"reason\": \"doute\"}").andExpect(status().isOk());
+        deliveries.deliverDue();
+        Map<String, Object> row = rows(orderId).getFirst();
+        assertThat(row).containsEntry("status", "PENDING").containsEntry("last_error", "TICKET_NOT_VALID");
+        assertThat(((Number) row.get("due_in_s")).longValue()).isBetween(55L, 60L); // the normal 1 min backoff
+        assertThat(sent(orderId)).isEmpty();
+
+        call(s.org(), post("/org/tickets/" + ticket + "/unblock"), "{\"reason\": \"leve\"}").andExpect(status().isOk());
+        dueNow(ticket);
+        deliveries.deliverDue();
+        assertThat(rows(orderId).getFirst()).containsEntry("status", "SENT").containsEntry("last_error", null);
+        assertThat(attempts(rows(orderId).getFirst())).isEqualTo(2);
+        assertThat(sent(orderId)).hasSize(1);
+    }
+
+    @Test
+    void aRefundedTicketFailsWithoutRetry() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String orderId = paid(fanToken(phone), s, 1, holders(1));
+        UUID ticket = ticketHeldBy(orderId, phone);
+        call(s.org(), post("/org/tickets/" + ticket + "/refund"), "{\"reason\": \"x\"}").andExpect(status().isOk());
+        deliveries.deliverDue();
+        assertThat(rows(orderId).getFirst()).containsEntry("status", "FAILED")
+                .containsEntry("last_error", "TICKET_NOT_VALID");
+        assertThat(sent(orderId)).isEmpty();
+    }
+
+    @Test
     void aTicketNoLongerValidFailsWithoutRetry() throws Exception {
         Sale s = onSale(10);
         String orderId = paid(fanToken(randomPhone()), s, 1, holders(1));

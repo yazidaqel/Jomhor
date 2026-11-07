@@ -201,6 +201,11 @@ public class TicketService {
         return t;
     }
 
+    /** The status of ticket {@code ticketId} of organizer {@code org} (notifications: a BLOCKED one is retried). */
+    public Optional<Ticket.Status> status(UUID org, UUID ticketId) {
+        return tickets.row(org, ticketId).map(Tickets.Row::status);
+    }
+
     /** Who holds ticket {@code ticketId} of organizer {@code org} (notifications: the recipient, read at send time). */
     public Optional<UUID> holder(UUID org, UUID ticketId) {
         return tickets.holder(org, ticketId);
