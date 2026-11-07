@@ -5,7 +5,22 @@ import { RISE, stagger } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 /** KPI card (Aperçu, Ventes, Portes en direct): label + icon, the figure, then muted detail lines. `index` staggers the entrance. */
-export function Kpi({ index = 0, icon: Icon, label, value, children }: { index?: number; icon: LucideIcon; label: string; value: string; children?: ReactNode }) {
+export function Kpi({
+  index = 0,
+  icon: Icon,
+  label,
+  value,
+  valueClassName,
+  children,
+}: {
+  index?: number
+  icon: LucideIcon
+  label: string
+  value: string
+  /** e.g. `text-destructive` for a till gap. */
+  valueClassName?: string
+  children?: ReactNode
+}) {
   return (
     <Card className={cn('gap-2 py-5', RISE)} style={stagger(index)}>
       <CardContent className="flex flex-col gap-2 px-5">
@@ -16,7 +31,7 @@ export function Kpi({ index = 0, icon: Icon, label, value, children }: { index?:
           </span>
         </div>
         {/* Wraps rather than overflows: a revenue in DH can be long. */}
-        <div className="text-2xl leading-tight font-semibold tracking-tight tabular-nums md:text-[1.75rem]">{value}</div>
+        <div className={cn('text-2xl leading-tight font-semibold tracking-tight tabular-nums md:text-[1.75rem]', valueClassName)}>{value}</div>
         {children && <div className="flex flex-col gap-2 text-xs text-muted-foreground">{children}</div>}
       </CardContent>
     </Card>

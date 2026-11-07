@@ -4,6 +4,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { DevicesPage } from '@/features/devices/DevicesPage'
 import { EventPage } from '@/features/events/EventPage'
 import { EventsPage } from '@/features/events/EventsPage'
+import { CashPage } from '@/features/finance/CashPage'
 import { LiveIndexPage, LivePage } from '@/features/live/LivePage'
 import { ReconciliationPage } from '@/features/reconciliation/ReconciliationPage'
 import { OverviewPage } from '@/features/overview/OverviewPage'
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: 'live', element: <LiveIndexPage /> },
       { path: 'devices', element: <DevicesPage /> },
       { path: 'pos', element: <PosPage /> },
+      { path: 'finance/cash', element: <CashPage /> },
       { path: 'settings/venues', element: <VenuesPage /> },
       { path: 'settings/venues/:id', element: <VenuePage /> },
       { path: '*', element: <Navigate to="/" replace /> },

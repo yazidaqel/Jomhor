@@ -63,12 +63,13 @@ const POS_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'CASHIER']
 const home = (role: Role) => (role === 'CASHIER' ? '/pos' : '/')
 const allowed = (role: Role, pathname: string) => (/^\/pos(\/|$)/.test(pathname) ? POS_ROLES.includes(role) : role !== 'CASHIER')
 
-type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices' | 'pos'
-type NavKey = Section | 'invitations' | 'finance' | 'crm'
+type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices' | 'pos' | 'finance'
+type NavKey = Section | 'invitations' | 'crm'
 // no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others); no `roles`:
 // every role but CASHIER.
 type NavItem = { key: NavKey; icon: LucideIcon; to?: string; roles?: readonly Role[] }
-// Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Portes en direct and Appareils in Lot 2.
+// Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Portes en direct and Appareils in Lot 2,
+// Guichet and Finance (its Encaissements page) in Lot 3.
 const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: NavItem[] }[] = [
   {
     group: 'manage',
@@ -91,7 +92,7 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
     group: 'relations',
     items: [
       { key: 'invitations', icon: IdCard },
-      { key: 'finance', icon: Landmark },
+      { key: 'finance', icon: Landmark, to: '/finance/cash', roles: ['ADMIN', 'OPS', 'FINANCE'] },
       { key: 'crm', icon: Users },
     ],
   },
@@ -114,7 +115,9 @@ const section = (pathname: string): Section | null =>
               ? 'devices'
               : pathname.startsWith('/pos')
                 ? 'pos'
-                : null
+                : pathname.startsWith('/finance')
+                  ? 'finance'
+                  : null
 
 const initials = (name: string) =>
   name

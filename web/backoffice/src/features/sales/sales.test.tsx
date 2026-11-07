@@ -57,12 +57,22 @@ const SALES: EventSales = {
   quota: 39600,
   paid: 1250,
   held: 12,
+  awaiting_cash: 7,
+  refunded: 3,
+  refunded_mad: 45_150,
   revenue_mad: 9_007_199_254_740_991, // 2^53 − 1 centimes: exact only if never divided as a float
-  zones: [{ zone_id: 3, code: 'NORD', name: 'Virage Nord', quota: 12000, paid: 1000, held: 12, revenue_mad: 5_000_000 }],
+  zones: [{ zone_id: 3, code: 'NORD', name: 'Virage Nord', quota: 12000, paid: 1000, held: 12, awaiting_cash: 5, refunded: 2, revenue_mad: 5_000_000 }],
   channels: [
     { channel: 'APP', paid: 900, revenue_mad: 4_500_050 },
     { channel: 'WEB', paid: 350, revenue_mad: 0 },
     { channel: 'POS', paid: 0, revenue_mad: 0 },
+  ],
+  methods: [
+    { method: 'CARD', paid: 800, revenue_mad: 4_000_050 },
+    { method: 'WALLET', paid: 0, revenue_mad: 0 },
+    { method: 'CASH_AGENCY', paid: 300, revenue_mad: 300_000 },
+    { method: 'POS_CASH', paid: 150, revenue_mad: 150_000 },
+    { method: 'FREE', paid: 0, revenue_mad: 0 },
   ],
   refunds_required: [
     { payment_id: 'pay-2', order_id: 'ord-2', amount_mad: 15_000, reason: 'SOLD_OUT', at: '2026-11-10T12:00:00Z' },
@@ -120,9 +130,24 @@ it('FINANCE opens B3: KPIs, per zone, per channel and refunds, amounts from cent
   expect(screen.getByRole('heading', { level: 1, name: fr.sales.title })).toBeTruthy()
   expect(screen.getByText(spaced(i18n.t('events.soldOfQuota', { sold: 1250, quota: 39600 })))).toBeTruthy()
   expect(screen.getByText(n(12), { selector: '.text-2xl' })).toBeTruthy()
+  // Lot 3: AWAITING_CASH places are their own KPI, not inside held; refunded tickets under the (gross) revenue.
+  const awaiting = screen.getByText(fr.sales.kpi.awaitingCash, { selector: 'span' }).closest('[data-slot="card"]') as HTMLElement
+  expect(within(awaiting).getByText(n(7), { selector: '.text-2xl' })).toBeTruthy()
+  expect(screen.getByText(spaced(i18n.t('sales.kpi.refunded', { count: 3, amount: formatDh(45_150, 'fr') })))).toBeTruthy()
+  expect(i18n.t('sales.kpi.refunded', { count: 3, amount: formatDh(45_150, 'fr') })).toBe('Dont 3 billets remboursés : 451,50 DH.')
 
   const [zone] = within(section(fr.sales.zones.title)).getAllByRole('row').slice(1)
-  expect(cells(zone!)).toEqual(['NORD Virage Nord', n(12000), n(1000), n(12), dh(5_000_000)])
+  expect(cells(zone!)).toEqual(['NORD Virage Nord', n(12000), n(1000), n(12), n(5), n(2), dh(5_000_000)])
+
+  // Every method, zeros included, in the API's order.
+  const methods = within(section(fr.sales.byMethod.title)).getAllByRole('row').slice(1).map(cells)
+  expect(methods).toEqual([
+    [fr.sales.methods.CARD, n(800), dh(4_000_050)],
+    [fr.sales.methods.WALLET, n(0), dh(0)],
+    [fr.sales.methods.CASH_AGENCY, n(300), dh(300_000)],
+    [fr.sales.methods.POS_CASH, n(150), dh(150_000)],
+    [fr.sales.methods.FREE, n(0), dh(0)],
+  ])
 
   const channels = within(section(fr.sales.channels.title)).getAllByRole('row').slice(1).map(cells)
   expect(channels).toEqual([
@@ -145,13 +170,30 @@ it('FINANCE opens B3: KPIs, per zone, per channel and refunds, amounts from cent
 })
 
 it('empty states: no refunds to make, no paid ticket yet, no zone', async () => {
-  stubApi('ADMIN', () => Response.json({ ...SALES, paid: 0, held: 0, revenue_mad: 0, zones: [], channels: (['APP', 'WEB', 'POS'] as const).map((channel) => ({ channel, paid: 0, revenue_mad: 0 })), refunds_required: [] }))
+  stubApi('ADMIN', () =>
+    Response.json({
+      ...SALES,
+      paid: 0,
+      held: 0,
+      awaiting_cash: 0,
+      refunded: 0,
+      refunded_mad: 0,
+      revenue_mad: 0,
+      zones: [],
+      channels: (['APP', 'WEB', 'POS'] as const).map((channel) => ({ channel, paid: 0, revenue_mad: 0 })),
+      methods: (['CARD', 'WALLET', 'CASH_AGENCY', 'POS_CASH', 'FREE'] as const).map((method) => ({ method, paid: 0, revenue_mad: 0 })),
+      refunds_required: [],
+    }),
+  )
   renderApp('/events/1/sales')
 
   expect(await screen.findByText(fr.sales.refunds.empty)).toBeTruthy()
   expect(await screen.findByText(fr.sales.refunds.tickets.empty)).toBeTruthy()
-  expect(screen.getByText(fr.sales.channels.empty)).toBeTruthy() // three zero rows: the notice, not a table
+  expect(within(section(fr.sales.channels.title)).getByText(fr.sales.channels.empty)).toBeTruthy() // three zero rows: the notice, not a table
   expect(within(section(fr.sales.channels.title)).queryByRole('table')).toBeNull()
+  expect(within(section(fr.sales.byMethod.title)).getByText(fr.sales.channels.empty)).toBeTruthy() // same rule per method
+  expect(within(section(fr.sales.byMethod.title)).queryByRole('table')).toBeNull()
+  expect(screen.getByText(i18n.t('sales.kpi.refunded', { count: 0, amount: formatDh(0, 'fr') }))).toBeTruthy()
   expect(screen.getByText(fr.sales.zones.empty)).toBeTruthy()
   expect(within(section(fr.sales.refunds.title)).queryByRole('table')).toBeNull()
 })

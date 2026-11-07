@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Banknote, Hourglass, Ticket } from 'lucide-react'
+import { Banknote, Hourglass, Store, Ticket } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useParams } from 'react-router'
 import { ErrorNotice, PageHeader } from '@/components/page'
@@ -51,15 +51,15 @@ export function SalesPage() {
 
 const isNotFound = (e: unknown) => e instanceof ApiError && ['NOT_FOUND', 'BAD_REQUEST'].includes(e.code)
 
-/** Same rhythm as the loaded page (header, three KPI cards, a table), so nothing jumps when data lands. */
+/** Same rhythm as the loaded page (header, four KPI cards, a table), so nothing jumps when data lands. */
 function SalesSkeleton({ header = true }: { header?: boolean }) {
   const { t } = useTranslation()
   return (
     <div aria-busy="true" className="flex flex-col gap-6">
       <span className="sr-only">{t('common.loading')}</span>
       {header && <Skeleton className="h-16 w-80" />}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[0, 1, 2].map((i) => (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-36 rounded-xl" />
         ))}
       </div>
@@ -106,10 +106,10 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi index={0} icon={Ticket} label={t('sales.kpi.paid')} value={t('events.soldOfQuota', { sold: sales.paid, quota: sales.quota })}>
           <div className="flex items-center gap-3">
-            <FillBar paid={sales.paid} held={sales.held} quota={sales.quota} />
+            <FillBar paid={sales.paid} held={sales.held + sales.awaiting_cash} quota={sales.quota} />
             <span className="shrink-0 font-medium text-foreground tabular-nums">{percent(sales.paid, sales.quota, i18n.language)}</span>
           </div>
           <span>{t('sales.kpi.paidHint')}</span>
@@ -117,8 +117,13 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
         <Kpi index={1} icon={Hourglass} label={t('sales.kpi.held')} value={n(sales.held)}>
           {t('sales.kpi.heldHint')}
         </Kpi>
-        <Kpi index={2} icon={Banknote} label={t('sales.kpi.revenue')} value={dh(sales.revenue_mad)}>
-          {t('sales.kpi.revenueHint')}
+        {/* Lot 3: a cash code not yet paid holds its places too, but apart from `held` (RESERVED only). */}
+        <Kpi index={2} icon={Store} label={t('sales.kpi.awaitingCash')} value={n(sales.awaiting_cash)}>
+          {t('sales.kpi.awaitingCashHint')}
+        </Kpi>
+        <Kpi index={3} icon={Banknote} label={t('sales.kpi.revenue')} value={dh(sales.revenue_mad)}>
+          <span>{t('sales.kpi.revenueHint')}</span>
+          <span>{t('sales.kpi.refunded', { count: sales.refunded, amount: formatDh(sales.refunded_mad, i18n.language) })}</span>
         </Kpi>
       </div>
 
@@ -133,6 +138,8 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
                 <TableHead className="text-right">{t('sales.columns.quota')}</TableHead>
                 <TableHead className="text-right">{t('sales.columns.paid')}</TableHead>
                 <TableHead className="text-right">{t('sales.columns.held')}</TableHead>
+                <TableHead className="text-right">{t('sales.columns.awaitingCash')}</TableHead>
+                <TableHead className="text-right">{t('sales.columns.refunded')}</TableHead>
                 <TableHead className="text-right">{t('sales.columns.revenue')}</TableHead>
               </TableRow>
             </TableHeader>
@@ -141,11 +148,14 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
                 <TableRow key={z.zone_id}>
                   <TableCell className="min-w-48">
                     <span className="font-medium">{z.code}</span> <span className="text-muted-foreground">{z.name}</span>
-                    <FillBar paid={z.paid} held={z.held} quota={z.quota} className="mt-2 max-w-56" />
+                    {/* The held share: places kept for a payment, by card (RESERVED) or by cash code. */}
+                    <FillBar paid={z.paid} held={z.held + z.awaiting_cash} quota={z.quota} className="mt-2 max-w-56" />
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{n(z.quota)}</TableCell>
                   <TableCell className="text-right tabular-nums">{n(z.paid)}</TableCell>
                   <TableCell className="text-right tabular-nums">{n(z.held)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{n(z.awaiting_cash)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{n(z.refunded)}</TableCell>
                   <TableCell className="text-right tabular-nums">{dh(z.revenue_mad)}</TableCell>
                 </TableRow>
               ))}
@@ -173,6 +183,32 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
                   <TableCell>{t(`sales.channels.names.${c.channel}`)}</TableCell>
                   <TableCell className="text-right tabular-nums">{n(c.paid)}</TableCell>
                   <TableCell className="text-right tabular-nums">{dh(c.revenue_mad)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Section>
+
+      <Section title={t('sales.byMethod.title')}>
+        {/* 04 (Lot 3): methods lists every payment_method, zeros included; same rule as the channels above. */}
+        {sales.paid === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('sales.channels.empty')}</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('sales.byMethod.method')}</TableHead>
+                <TableHead className="text-right">{t('sales.columns.paid')}</TableHead>
+                <TableHead className="text-right">{t('sales.columns.revenue')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sales.methods.map((m) => (
+                <TableRow key={m.method}>
+                  <TableCell>{Object.hasOwn(fr.sales.methods, m.method) ? t(`sales.methods.${m.method}`) : m.method}</TableCell>
+                  <TableCell className="text-right tabular-nums">{n(m.paid)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{dh(m.revenue_mad)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
