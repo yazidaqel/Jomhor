@@ -70,6 +70,18 @@ class JdbcTickets implements Tickets {
     }
 
     @Override
+    public List<Ticket.ManifestRow> manifestRows(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select id, zone_id, status, holder_initials from tickets
+                        where organizer_id = :org and event_id = :event order by id
+                        """)
+                .param("org", org).param("event", eventId)
+                .query((rs, n) -> new Ticket.ManifestRow(rs.getObject("id", UUID.class), rs.getInt("zone_id"),
+                        Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_initials")))
+                .list();
+    }
+
+    @Override
     public List<UUID> heldInOrder(UUID org, UUID orderId, UUID holderUserId) {
         return jdbc.sql("""
                         select id from tickets where organizer_id = :org and order_id = :order and holder_user_id = :holder

@@ -117,6 +117,11 @@ public class EventService {
         }
     }
 
+    /** ON_SALE/GATES_OPEN events, of every organizer, inside [starts_at - lead, starts_at + after] now. */
+    public List<Event.Ref> inGateWindow(Duration lead, Duration after) {
+        return events.inGateWindow(lead, after);
+    }
+
     @Transactional
     public Event update(UUID org, int eventId, EventInput in) {
         Event e = events.lock(org, eventId).orElseThrow(notFound("Event"));

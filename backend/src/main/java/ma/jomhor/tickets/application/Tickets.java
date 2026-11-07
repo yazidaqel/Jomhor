@@ -27,6 +27,9 @@ public interface Tickets {
     /** The holder of ticket {@code ticketId} of organizer {@code org}. */
     Optional<UUID> holder(UUID org, UUID ticketId);
 
+    /** Every ticket of the event (any status), by id: id, zone, status and initials only. */
+    List<Ticket.ManifestRow> manifestRows(UUID org, int eventId);
+
     /** The database clock (now()), so "past" agrees with every other time rule. */
     Instant now();
 }

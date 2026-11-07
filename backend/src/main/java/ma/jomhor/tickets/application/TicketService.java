@@ -70,6 +70,11 @@ public class TicketService {
                 .toList();
     }
 
+    /** Gate manifest build: every ticket of the event with id, zone, status and initials only (no name, no phone). */
+    public List<Ticket.ManifestRow> manifestRows(UUID org, int eventId) {
+        return tickets.manifestRows(org, eventId);
+    }
+
     /** The order's tickets this user holds (04: a friend's ticket is never listed to the buyer). */
     public List<UUID> heldInOrder(UUID org, UUID orderId, UUID holderUserId) {
         return tickets.heldInOrder(org, orderId, holderUserId);

@@ -62,7 +62,7 @@ Every scanner downloads a signed snapshot of the event's tickets before it loses
 
 1. Device enrolment (once per device): the scanner generates an ECDSA P-256 keypair in Android Keystore and scans an enrol QR from the back-office. The admin approves the device after matching its fingerprint. Every gate call is signed by the device key (docs/04-api.md §Gate auth). Staff PINs are checked on the device.
 2. Event assignment: an admin assigns devices to an event and a gate. Only assigned devices can pull that event's manifest and K\_e.
-3. Manifest build: the server builds manifest v1 at T0 − 3 h (config), then checks every 5 minutes until T0 + 30 min; a version is built only when rows changed. Each version is Ed25519-signed by the server over its text payload.
+3. Manifest build: the server builds manifest v1 at T0 − 3 h (config), then checks every minute until T0 + 30 min; a new version is built only when the payload changed (tickets, zones, gates or rules) and the previous one is at least 5 minutes old. Each version is Ed25519-signed by the server over its text payload.
 4. Download: the scanner pulls the full manifest once (45,000 rows × \~40 bytes ≈ 1.8 MB before compression, under 1 MB gzipped), then `GET /gate/events/{id}/manifest?since=vN` for deltas. K\_e travels in the same authenticated response and is stored with `flutter_secure_storage` (Keystore-wrapped).
 5. Verify: the scanner refuses any manifest whose signature fails and keeps the last good one.
 6. After event close: the server marks the event closed; on next sync the scanner wipes K\_e, the manifest and the synced scan log.

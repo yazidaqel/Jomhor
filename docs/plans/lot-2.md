@@ -78,7 +78,7 @@ Exit ("first pilot match end to end"):
 | Q40 | Override without a manifest match | Not allowed. The ticket must be found in the manifest by scan or typed number (any status, including a DUPLICATE). Typed numbers collide: with 8 hex digits and 45,000 tickets, about 1 event in 4 has a pair, so the lookup lists every match with zone and initials. |
 | Q41 | Lost device | Revoke in B6. Its next gate call gets 403 → the app wipes K_e, the manifest, staff and scans. Its unsynced scans are lost; accepted. Until it gets signal it keeps validating (02:174). |
 | Q42 | Fan app "Tu es dedans" flip after scan sync (DESIGN screen 5) | Lot 4 (matchday companion). |
-| Q43 | Manifest timing | v1 at T0 − `gate.manifest-lead` (config, default 3 h; the dry run may use 6 h), then the job checks every 5 min until T0 + 30 min and builds a version **only if the rows changed**. Sales close at T0 − 60, so deltas are mostly late sales. |
+| Q43 | Manifest timing | v1 at T0 − `gate.manifest-lead` (config, default 3 h; the dry run may use 6 h), then the job checks every minute until T0 + 30 min and builds a version **only if the payload changed** (tickets, zones, gates or rules) and the previous one is at least 5 min old. Sales close at T0 − 60, so deltas are mostly late sales. |
 
 ## 4. Contract changes
 

@@ -2,6 +2,7 @@ package ma.jomhor.catalog.adapters.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -215,6 +216,21 @@ class JdbcEvents implements Events {
                         Inventory.SaleWindow.valueOf(rs.getString("sale_window")), instant(rs, "sale_starts_at"),
                         rs.getInt("per_account_limit")))
                 .optional();
+    }
+
+    // Cross-organizer on purpose (a job, not a request): each row carries its organizer_id, which scopes the rest.
+    @Override
+    public List<Event.Ref> inGateWindow(Duration lead, Duration after) {
+        return jdbc.sql("""
+                        select organizer_id, id from events
+                        where status in ('ON_SALE', 'GATES_OPEN')
+                          and now() between starts_at - cast(:lead as bigint) * interval '1 second'
+                                        and starts_at + cast(:after as bigint) * interval '1 second'
+                        order by starts_at, id
+                        """)
+                .param("lead", lead.toSeconds()).param("after", after.toSeconds())
+                .query((rs, n) -> new Event.Ref(rs.getObject("organizer_id", UUID.class), rs.getInt("id")))
+                .list();
     }
 
     // Public reads. on_sale mirrors forSale's OPEN; remaining = quota - sold, never sold or quota themselves.

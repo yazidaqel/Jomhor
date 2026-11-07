@@ -5,20 +5,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyFactory;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
+import java.security.Signature;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.stream.Stream;
+import ma.jomhor.gate.adapters.crypto.TestManifestSigners;
+import ma.jomhor.gate.application.ManifestSigner;
 import ma.jomhor.gate.domain.DeviceSignature;
 import ma.jomhor.tenancy.domain.Pins;
 import org.junit.jupiter.api.Test;
 
 /**
  * docs/04-api.md §Gate vectors, the contract with {@code apps/scanner}: {@code signing} (the string a device signs and
- * its body hash), {@code fingerprints} and {@code pins} (verifiers with fixed salts, so PBKDF2 gives fixed bytes);
- * BE-19 adds {@code manifest}. Same rules as TokenVectorsTest: writes {@code docs/gate-vectors.json} when absent or with {@code -Djomhor.writeVectors=true},
+ * its body hash), {@code fingerprints}, {@code manifest} (ManifestPayloadTest's payloads signed with the fixed test
+ * key; Ed25519 is deterministic) and {@code pins} (verifiers with fixed salts, so PBKDF2 gives fixed bytes). Same rules as TokenVectorsTest: writes {@code docs/gate-vectors.json} when absent or with {@code -Djomhor.writeVectors=true},
  * otherwise fails when the committed file differs; on CI a missing file fails.
  *
  * <p>ECDSA signatures are randomized, so the file holds no device signature: {@link #fixedSignatureVerifies()} checks
@@ -59,6 +65,17 @@ class GateVectorsTest {
             new Signing("POST", "/v1/gate/events/4294967295/closed-ack", 9999999999999L, ""));
 
     static final List<String> FINGERPRINT_KEYS = List.of(KEY_A, KEY_B);
+
+    /**
+     * The Ed25519 test key of src/test/resources/application.properties (PKCS#8, OpenSSL) and its raw public key. The
+     * signed bytes of a {@code manifest} vector are the UTF-8 bytes of its {@code payload}, nothing else.
+     */
+    static final String MANIFEST_KEY = "MC4CAQAwBQYDK2VwBCIEIL+e1GK5oIgWytc6DivLU7RK4h6MpYvqcLDohcW8gl2Y";
+    static final String MANIFEST_PUBLIC_KEY = "9657JB-9nYlMlNMM2AYY8UzKMLcbfTkI3UKd6SDuEDc";
+    static final ManifestSigner MANIFEST_SIGNER = TestManifestSigners.ed25519(MANIFEST_KEY);
+
+    /** v1 full and the v2 delta since 1 (a cancel and a sale), with non-ASCII zone names and a cleaned TAB/CR/LF. */
+    static final List<String> MANIFESTS = List.of(ManifestPayloadTest.V1, ManifestPayloadTest.V2_DELTA);
 
     static final byte[] SALT_1 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
     static final byte[] SALT_2 = "jomhor-pin-salt!".getBytes(StandardCharsets.US_ASCII);
@@ -151,6 +168,27 @@ class GateVectorsTest {
     }
 
     @Test
+    void manifestSignaturesVerifyWithThePublicKeyOnly() throws Exception {
+        assertThat(ManifestPayloadTest.v1()).isEqualTo(MANIFESTS.get(0));
+        assertThat(ManifestPayloadTest.v2Delta()).isEqualTo(MANIFESTS.get(1));
+        assertThat(b64url(MANIFEST_SIGNER.publicKey())).isEqualTo(MANIFEST_PUBLIC_KEY);
+        var key = KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(HexFormat.of()
+                .parseHex("302a300506032b6570032100" + HexFormat.of().formatHex(der(MANIFEST_PUBLIC_KEY)))));
+        for (String payload : MANIFESTS) {
+            byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+            byte[] sig = Base64.getUrlDecoder().decode(manifestSignature(payload));
+            var v = Signature.getInstance("Ed25519");
+            v.initVerify(key);
+            v.update(bytes);
+            assertThat(v.verify(sig)).isTrue();
+            bytes[bytes.length - 2] ^= 1; // one flipped bit in the last T line
+            v.initVerify(key);
+            v.update(bytes);
+            assertThat(v.verify(sig)).isFalse();
+        }
+    }
+
+    @Test
     void committedFileMatches() throws Exception {
         Path docs = Stream.of(Path.of("docs"), Path.of("..", "docs"))
                 .filter(d -> Files.exists(d.resolve("04-api.md"))).findFirst()
@@ -195,6 +233,15 @@ class GateVectorsTest {
                     .append("      \"fingerprint\": ").append(str(DeviceSignature.fingerprint(der(key)))).append("\n")
                     .append(i == FINGERPRINT_KEYS.size() - 1 ? "    }\n" : "    },\n");
         }
+        s.append("  ],\n  \"manifest\": [\n");
+        for (int i = 0; i < MANIFESTS.size(); i++) {
+            String payload = MANIFESTS.get(i);
+            s.append("    {\n")
+                    .append("      \"public_key\": ").append(str(MANIFEST_PUBLIC_KEY)).append(",\n")
+                    .append("      \"payload\": ").append(str(payload)).append(",\n")
+                    .append("      \"signature\": ").append(str(manifestSignature(payload))).append("\n")
+                    .append(i == MANIFESTS.size() - 1 ? "    }\n" : "    },\n");
+        }
         s.append("  ],\n  \"pins\": [\n");
         for (int i = 0; i < PINS.size(); i++) {
             Pin p = PINS.get(i);
@@ -209,6 +256,14 @@ class GateVectorsTest {
 
     static String canonical(Signing v) {
         return DeviceSignature.canonical(v.method(), v.path(), v.time(), v.body().getBytes(StandardCharsets.UTF_8));
+    }
+
+    static String manifestSignature(String payload) {
+        return b64url(MANIFEST_SIGNER.sign(payload.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static String b64url(byte[] bytes) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private static byte[] der(String base64url) {

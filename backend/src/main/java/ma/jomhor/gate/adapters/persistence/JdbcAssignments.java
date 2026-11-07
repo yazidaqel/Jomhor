@@ -30,13 +30,20 @@ class JdbcAssignments implements Assignments {
      * Single-bigint advisory key (class << 32) | event_id, class 3 = gate event lock (1 and 2 are JdbcOtpChallenges'
      * phone and IP). Assignment PUTs, scan ingestion and close all take it, so they run one at a time per event: a
      * removed device can't slip a scan in between the DEVICE_IN_USE check and the delete, nor a close past the
-     * PUT's status check.
+     * PUT's status check. Manifest downloads take it shared, so a device can't record a download (and get K_e)
+     * between a PUT's DEVICE_IN_USE check and its delete.
      */
     private static final long EVENT_LOCK = 3;
 
     @Override
     public void lockEvent(UUID org, int eventId) {
         jdbc.sql("select 1 from pg_advisory_xact_lock(?)").param((EVENT_LOCK << 32) | (eventId & 0xFFFFFFFFL))
+                .query(Integer.class).single();
+    }
+
+    @Override
+    public void lockEventShared(UUID org, int eventId) {
+        jdbc.sql("select 1 from pg_advisory_xact_lock_shared(?)").param((EVENT_LOCK << 32) | (eventId & 0xFFFFFFFFL))
                 .query(Integer.class).single();
     }
 

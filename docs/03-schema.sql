@@ -304,7 +304,7 @@ create table manifests (
   body          bytea not null,                       -- gzip of the full payload text (docs/04-api.md §Manifest payload)
   unique (event_id, version)
 );
--- A version is built only when its T/G/Z lines differ from the previous one. A delta is the diff of two stored
+-- A version is built only when its payload (minus version/since/built_at) differs from the previous one. A delta is the diff of two stored
 -- versions, signed when served.
 
 create type scan_direction as enum ('IN','OUT');

@@ -140,7 +140,9 @@ class DeviceApiTest extends GateApiTest {
         String orgToken = orgToken(phone);
         String fanToken = fanToken(randomPhone());
         String valid = enrolCode(a);
-        String tampered = valid.substring(0, valid.length() - 2) + (valid.endsWith("A") ? "BB" : "AA");
+        // a middle character of the signature: all 6 bits count there (the last one has padding bits)
+        int at = valid.lastIndexOf('.') + 10;
+        String tampered = valid.substring(0, at) + (valid.charAt(at) == 'A' ? 'B' : 'A') + valid.substring(at + 1);
 
         for (String code : new String[] {expired, orgToken, fanToken, tampered, "garbage", ""}) {
             KeyPair key = newKey();

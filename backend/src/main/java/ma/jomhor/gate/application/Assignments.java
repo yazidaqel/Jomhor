@@ -13,6 +13,9 @@ public interface Assignments {
     /** Serializes assignment writes of one event until the transaction ends. */
     void lockEvent(UUID org, int eventId);
 
+    /** The same lock in shared mode (manifest downloads): they run together, never beside a PUT, ingestion or close. */
+    void lockEventShared(UUID org, int eventId);
+
     List<Assignment> list(UUID org, int eventId);
 
     /** The ids among {@code deviceIds} of this organizer's ACTIVE devices. */
