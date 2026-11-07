@@ -1,0 +1,12 @@
+{
+  "@@locale": "fr",
+  "appTitle": "Jomhor Porte",
+  "@appTitle": {"description": "Scanner app name in the OS task switcher and top bar. Brand name, not translated."},
+  "deviceNotEnrolled": "Appareil non enrôlé",
+  "@deviceNotEnrolled": {"description": "Home status: no device key registered with the server yet."},
+  "deviceNotEnrolledHint": "Scannez le QR d'enrôlement affiché dans le back-office, onglet Appareils.",
+  "devicePending": "En attente d'approbation",
+  "@devicePending": {"description": "Home status: enrolled, the admin has not approved the device yet (DESIGN Lot 2 adjustments)."},
+  "deviceActive": "Appareil actif",
+  "@deviceActive": {"description": "Home status: the admin approved the device."}
+}

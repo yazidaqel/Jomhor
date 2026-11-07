@@ -148,6 +148,9 @@ jobs:
           cache: true
       - if: steps.present.outputs.yes == 'true'
         run: flutter pub get
+      # The committed Drift code must match schema.drift (build_runner writes 80 columns; the repo formats at 120).
+      - if: steps.present.outputs.yes == 'true'
+        run: dart run build_runner build --delete-conflicting-outputs && dart format lib/data && git diff --exit-code lib/data
       - if: steps.present.outputs.yes == 'true'
         run: dart format --output=none --set-exit-if-changed lib test tool
       - if: steps.present.outputs.yes == 'true'

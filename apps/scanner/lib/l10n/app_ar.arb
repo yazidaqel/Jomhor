@@ -1,0 +1,6 @@
+{
+  "@@locale": "ar",
+  "deviceNotEnrolled": "الجهاز غير مسجل",
+  "devicePending": "في انتظار الموافقة",
+  "deviceActive": "الجهاز مفعل"
+}

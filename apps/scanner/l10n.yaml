@@ -1,0 +1,8 @@
+arb-dir: lib/l10n
+output-dir: lib/l10n
+template-arb-file: app_fr.arb
+output-localization-file: app_localizations.dart
+preferred-supported-locales: [fr]
+nullable-getter: false
+format: true
+# ar/en fall back to FR for any missing key, as in apps/fan (docs/plans/lot-1.md Q26).

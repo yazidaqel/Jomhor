@@ -1,0 +1,6 @@
+{
+  "@@locale": "en",
+  "deviceNotEnrolled": "Device not enrolled",
+  "devicePending": "Waiting for approval",
+  "deviceActive": "Device active"
+}
