@@ -2,6 +2,11 @@ package ma.jomhor.tickets.adapters.pdf;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.awt.geom.GeneralPath;
+import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.Normalizer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -10,11 +15,14 @@ import java.util.UUID;
 import ma.jomhor.common.HolderNames;
 import ma.jomhor.tickets.domain.TicketToken;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.Test;
 
 /** docs/04-api.md §Holder names, PDF row: Arabic title, venue and holder label shaped, with an embedded font. */
@@ -89,4 +97,88 @@ class TicketPdfTest {
         assertThat(drawn).startsWith("Titulaire .");
         assertThat(drawn.codePoints().noneMatch(cp -> cp >= 0x2066 && cp <= 0x2069)).isTrue();
     }
+
+    /** One filled path: its fill colour as 0xRRGGBB and its bounding box in page space. */
+    record Fill(int rgb, Rectangle2D box) {}
+
+    static List<Fill> fills(PDDocument doc) throws Exception {
+        List<Fill> fills = new ArrayList<>();
+        new PDFGraphicsStreamEngine(doc.getPage(0)) {
+            final GeneralPath path = new GeneralPath();
+
+            @Override public void appendRectangle(Point2D p0, Point2D p1, Point2D p2, Point2D p3) {
+                path.moveTo(p0.getX(), p0.getY());
+                path.lineTo(p1.getX(), p1.getY());
+                path.lineTo(p2.getX(), p2.getY());
+                path.lineTo(p3.getX(), p3.getY());
+                path.closePath();
+            }
+            @Override public void moveTo(float x, float y) { path.moveTo(x, y); }
+            @Override public void lineTo(float x, float y) { path.lineTo(x, y); }
+            @Override public void curveTo(float x1, float y1, float x2, float y2, float x3, float y3) {
+                path.curveTo(x1, y1, x2, y2, x3, y3);
+            }
+            @Override public Point2D getCurrentPoint() { return path.getCurrentPoint(); }
+            @Override public void closePath() { path.closePath(); }
+            @Override public void endPath() { path.reset(); }
+            @Override public void strokePath() { path.reset(); }
+            @Override public void fillPath(int windingRule) throws java.io.IOException {
+                fills.add(new Fill(getGraphicsState().getNonStrokingColor().toRGB(), path.getBounds2D()));
+                path.reset();
+            }
+            @Override public void fillAndStrokePath(int windingRule) throws java.io.IOException { fillPath(windingRule); }
+            @Override public void drawImage(PDImage image) {}
+            @Override public void clip(int windingRule) {}
+            @Override public void shadingFill(COSName shadingName) {}
+
+            void run() throws java.io.IOException { processPage(getPage()); }
+        }.run();
+        return fills;
+    }
+
+    /** design/BRAND.md, PDF ticket: the Jomhor lockup in the header, drawn as paths (ink J dots + wordmark, amber 12th). */
+    @Test
+    void theHeaderCarriesTheJomhorLockupAsPaths() throws Exception {
+        try (PDDocument doc = Loader.loadPDF(render("Atlas FC - Raja CA", "Grand Stade", "Yazid A."))) {
+            float pageH = doc.getPage(0).getMediaBox().getHeight();
+            float billetCapTop = pageH - 72 + 8; // "BILLET", 10 pt: everything above it is the header
+            List<Fill> header = fills(doc).stream().filter(f -> f.box().getMinY() > billetCapTop).toList();
+            List<Fill> amber = header.stream().filter(f -> f.rgb() == 0xF5B700).toList();
+            List<Fill> ink = header.stream().filter(f -> f.rgb() == 0x0B0F1A).toList();
+            assertThat(amber).hasSize(1);
+            assertThat(ink).hasSizeGreaterThanOrEqualTo(12); // eleven dots and the wordmark
+            Rectangle2D lockup = amber.getFirst().box();
+            ink.forEach(f -> lockup.add(f.box()));
+            assertThat(lockup.getWidth()).isGreaterThanOrEqualTo(120); // BRAND.md minimum lockup width
+            assertThat(lockup.getMinX()).isGreaterThanOrEqualTo(56 - 0.5);
+            // Retyped with a font it would be text: the first text on the page is still the "BILLET" label.
+            assertThat(new PDFTextStripper().getText(doc)).startsWith("BILLET");
+        }
+    }
+
+    /** The lockup drawn in the PDF is the design file, byte for byte: a logo change in design/ fails here until copied. */
+    @Test
+    void theLockupResourceIsTheDesignFile() throws Exception {
+        Path design = Path.of("..", "design", "logo", "jomhor-lockup-light.svg");
+        try (var in = TicketPdf.class.getResourceAsStream("/logo/jomhor-lockup-light.svg")) {
+            assertThat(in).isNotNull();
+            assertThat(in.readAllBytes()).isEqualTo(Files.readAllBytes(design));
+        }
+    }
+
+    /** The lockup took no room from the QR: its white square (quiet zone included) sits where it always did. */
+    @Test
+    void theQrDidNotMove() throws Exception {
+        try (PDDocument doc = Loader.loadPDF(render("Atlas FC - Raja CA", "Grand Stade", "Yazid A."))) {
+            Rectangle2D qr = fills(doc).stream().filter(f -> f.rgb() == 0xFFFFFF).findFirst().orElseThrow().box();
+            Offset<Double> tol = Offset.offset(0.01);
+            assertThat(qr.getX()).isCloseTo(QR_X, tol);
+            assertThat(qr.getY()).isCloseTo(QR_Y, tol);
+            assertThat(qr.getWidth()).isCloseTo(QR_SIDE, tol);
+            assertThat(qr.getHeight()).isCloseTo(QR_SIDE, tol);
+        }
+    }
+
+    /** Measured on the PDF before the lockup was added. */
+    static final double QR_X = 180.315, QR_Y = 408.819, QR_SIDE = 131.071;
 }

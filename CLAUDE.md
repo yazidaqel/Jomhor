@@ -117,6 +117,7 @@ another agent's folder.
 
 ## Placeholder identity
 
-The design uses a placeholder club identity (ATLAS FC, amber `#F5B700` on midnight
-blue `#0B0F1A`). Real club colours and crest replace the `accent` and `club` tokens;
-nothing else should need to change.
+Jomhor is **not white-label**: every app shows the Jomhor logo and stays ink + amber
+(`design/BRAND.md` §Where the logo appears). The design's club, ATLAS FC, is a placeholder:
+a real club's name and crest replace it as content (events, tickets, club pages), and its
+colours never re-skin the app.

@@ -42,8 +42,9 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
     // HolderNamesTest reads the shared holder-name cases. TokenVectorsTest and GateVectorsTest compare against (or,
-    // with -Djomhor.writeVectors=true, rewrite) the docs vectors.
-    inputs.files("../docs/token-vectors.json", "../docs/gate-vectors.json", "../docs/holder-name-vectors.json")
+    // with -Djomhor.writeVectors=true, rewrite) the docs vectors. TicketPdfTest checks the PDF lockup is the design file.
+    inputs.files("../docs/token-vectors.json", "../docs/gate-vectors.json", "../docs/holder-name-vectors.json",
+        "../design/logo/jomhor-lockup-light.svg")
     providers.systemProperty("jomhor.writeVectors").orNull?.let { systemProperty("jomhor.writeVectors", it) }
 }
 

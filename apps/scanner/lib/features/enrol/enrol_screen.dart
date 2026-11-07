@@ -5,6 +5,7 @@ import 'package:jomhor_scanner/features/enrol/enrol_controller.dart';
 import 'package:jomhor_scanner/features/scan/scan_screen.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
+import 'package:jomhor_scanner/ui/brand.dart';
 
 /// Copy for a gate call failure (codes of docs/04 and of the controllers).
 String gateErrorText(AppLocalizations l, String code) => switch (code) {
@@ -91,7 +92,7 @@ class _EnrolScreenState extends ConsumerState<EnrolScreen> {
       ];
     }
     return Scaffold(
-      appBar: AppBar(title: Text(l.enrolTitle)),
+      appBar: brandAppBar(l.enrolTitle),
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.all(JomhorSpace.xxl), children: body),
       ),

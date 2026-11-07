@@ -1,51 +1,118 @@
 import 'package:flutter/material.dart';
-import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 
-/// The Jomhor mark (design/logo/jomhor-mark-transparent.svg): eleven dots draw the J, the twelfth, bigger, ends the
-/// hook. Drawn, not an asset, so it stays crisp at any size; its viewBox already holds the clear space.
+/// The Jomhor mark (design/logo/jomhor-mark-transparent.svg): eleven white dots draw the J, the twelfth, amber and
+/// bigger, ends the hook. Always Jomhor's colours, never the club's; on an amber ground all twelve dots are ink
+/// ([onAmber], design/BRAND.md). Drawn, not an asset, so it stays crisp at any size; its viewBox holds the clear space.
 class JomhorMark extends StatelessWidget {
-  const new({this.size = 64, this.color = JomhorColors.text, this.twelfth = JomhorColors.accent, super.key});
+  const new({this.size = 64, this.onAmber = false, super.key});
 
+  /// The tile; 24 at least (design/BRAND.md).
   final double size;
-  final Color color;
-
-  /// The supporter dot. The club accent stands in for amber, as everywhere else in the club's app.
-  final Color twelfth;
+  final bool onAmber;
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
     child: SizedBox.square(
       dimension: size,
-      child: CustomPaint(painter: _MarkPainter(color, twelfth)),
+      child: CustomPaint(painter: _BrandPainter(onAmber: onAmber)),
     ),
   );
 }
 
-/// Centres in the 120 x 120 viewBox of the SVG, in drawing order; the last one is the twelfth.
-const List<(double, double)> _dots = [
-  (37, 28), (52, 28), (67, 28), (82, 28), (82, 43), (82, 58), //
-  (82, 73), (77.8, 85.9), (66.8, 93.9), (53.2, 93.9), (42.2, 85.9), (38, 73),
-];
+/// The horizontal lockup (design/logo/jomhor-lockup-dark.svg): mark + wordmark, built from the logo's paths, never
+/// retyped. It is a picture, so it is not mirrored in AR; a row puts it at the start (the right side in AR).
+class JomhorLockup extends StatelessWidget {
+  /// [height] 30 at least: below 120 px wide, the mark goes alone (design/BRAND.md).
+  const new({this.height = 32, super.key});
 
-class _MarkPainter extends CustomPainter {
-  const new(this.color, this.twelfth);
+  final double height;
 
-  final Color color;
-  final Color twelfth;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: JomhorBrand.name,
+    image: true,
+    child: SizedBox(
+      width: height * JomhorBrand.lockupWidth / 120,
+      height: height,
+      child: const CustomPaint(painter: _BrandPainter(lockup: true)),
+    ),
+  );
+}
+
+/// The Jomhor lockup at the start of the top bar of each main tab, [trailing] at the end.
+class BrandBar extends StatelessWidget {
+  const new({this.trailing, super.key});
+
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) =>
+      SizedBox(height: 48, child: Row(children: [const JomhorLockup(), const Spacer(), ?trailing]));
+}
+
+/// [JomhorBrand.wordmark] as a path; the logo uses absolute M, L, H, V, C and Z only.
+final Path jomhorWordmark = () {
+  final path = Path();
+  final tokens = [for (final m in RegExp('[MLHVCZ]|[0-9.]+').allMatches(JomhorBrand.wordmark)) m[0]!];
+  var (i, x, y, command) = (0, 0.0, 0.0, '');
+  double next() => double.parse(tokens[i++]);
+  while (i < tokens.length) {
+    if (double.tryParse(tokens[i]) == null) command = tokens[i++];
+    switch (command) {
+      case 'M':
+        path.moveTo(x = next(), y = next());
+        command = 'L'; // Further pairs after M are lines (SVG).
+      case 'L':
+        path.lineTo(x = next(), y = next());
+      case 'H':
+        path.lineTo(x = next(), y);
+      case 'V':
+        path.lineTo(x, y = next());
+      case 'C':
+        path.cubicTo(next(), next(), next(), next(), x = next(), y = next());
+      case 'Z':
+        path.close();
+      default:
+        throw FormatException('Unsupported path command', command);
+    }
+  }
+  return path;
+}();
+
+class _BrandPainter extends CustomPainter {
+  const new({this.onAmber = false, this.lockup = false});
+
+  final bool onAmber;
+  final bool lockup;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final k = size.width / 120;
-    final ink = Paint()..color = color;
-    for (final (i, (x, y)) in _dots.indexed) {
-      final last = i == _dots.length - 1;
-      canvas.drawCircle(Offset(x * k, y * k), (last ? 6.9 : 5.3) * k, last ? (Paint()..color = twelfth) : ink);
+    canvas
+      ..save()
+      ..scale(size.height / 120);
+    if (lockup) {
+      canvas
+        ..save()
+        ..translate(0, JomhorBrand.lockupMarkDy)
+        ..scale(JomhorBrand.lockupMarkScale);
     }
+    final dot = Paint()..color = onAmber ? JomhorBrand.ink : JomhorBrand.white;
+    final twelfth = Paint()..color = onAmber ? JomhorBrand.ink : JomhorBrand.amber;
+    for (final (i, (x, y, r)) in JomhorBrand.dots.indexed) {
+      canvas.drawCircle(Offset(x, y), r, i == JomhorBrand.dots.length - 1 ? twelfth : dot);
+    }
+    if (lockup) {
+      canvas
+        ..restore()
+        ..translate(JomhorBrand.lockupWordmarkX, 0)
+        ..drawPath(jomhorWordmark, Paint()..color = JomhorBrand.white);
+    }
+    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_MarkPainter old) => old.color != color || old.twelfth != twelfth;
+  bool shouldRepaint(_BrandPainter old) => old.onAmber != onAmber || old.lockup != lockup;
 }
 
 /// Club crest stand-in (tokens.json `club.crest` is null): a disc with the initial. Home = the club accent,
@@ -101,25 +168,5 @@ class AccentGlow extends StatelessWidget {
         ),
       ),
     ),
-  );
-}
-
-/// "Propulsé par Jomhor" with the mark, at the foot of Profil and the login.
-class PoweredBy extends StatelessWidget {
-  const new({super.key});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      const JomhorMark(size: 28),
-      const SizedBox(width: JomhorSpace.xs),
-      Flexible(
-        child: Text(
-          AppLocalizations.of(context).poweredBy,
-          style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, fontSize: 12),
-        ),
-      ),
-    ],
   );
 }

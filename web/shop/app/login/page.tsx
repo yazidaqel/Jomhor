@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { shopName } from '@/lib/club'
 import { getI18n } from '@/lib/i18n/server'
 import { safeNext } from '@/lib/next-path'
-import { Crest, JMark } from '../brand'
+import { Lockup } from '../brand'
 import { LanguageSwitcher } from '../(public)/LanguageSwitcher'
 import { BackIcon, CheckIcon } from '../icons'
 import { LoginForm } from './LoginForm'
@@ -30,10 +29,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           {d.login.back}
         </Link>
         <div className="mx-auto mt-6 flex w-full max-w-md flex-col gap-6 lg:mt-0">
-          <div className="flex items-center gap-3 lg:hidden">
-            <Crest size="md" />
-            <span className="font-display text-2xl font-bold tracking-[0.5px]">{shopName(d)}</span>
-          </div>
+          <Lockup height={44} label={d.app.name} className="lg:hidden" />
           <div className="rounded-card border border-border bg-surface p-6 shadow-2xl shadow-ground motion-safe:animate-rise sm:p-8">
             <h1 className="font-display text-[40px] font-extrabold uppercase leading-none">{d.login.title}</h1>
             <p className="mt-3 text-body-small text-text-secondary">{d.login.intro}</p>
@@ -41,13 +37,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </div>
         </div>
       </section>
-      {/* Brand side: the club, what signing in gets the fan. After the form in the DOM (and at phone width); left of it from lg. */}
+      {/* Brand side: the Jomhor lockup, large; what signing in gets the fan; the tagline. After the form in the DOM (and at phone width); left of it from lg. */}
       <section className="relative isolate flex flex-col justify-between gap-10 overflow-hidden border-border bg-surface px-6 py-10 max-lg:border-t lg:order-1 lg:border-e lg:px-14 lg:py-12">
         <div aria-hidden="true" className="bg-crowd absolute inset-0 -z-10" />
         <div aria-hidden="true" className="absolute -top-56 -start-40 -z-10 size-[620px] glow opacity-[0.16]" />
-        <Link href="/" className="flex min-h-touch-min items-center gap-3 max-lg:hidden">
-          <Crest size="sm" />
-          <span className="font-display text-xl font-bold tracking-[0.5px]">{shopName(d)}</span>
+        <Link href="/" className="self-start transition-opacity duration-200 hover:opacity-85 max-lg:hidden">
+          <Lockup height={64} label={d.app.name} />
         </Link>
         <div className="flex flex-col gap-8">
           <p className="max-w-lg font-display text-hero uppercase text-balance lg:text-[72px] lg:leading-[0.92]">{d.login.pitch}</p>
@@ -62,10 +57,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             ))}
           </ul>
         </div>
-        <p className="flex items-center gap-2.5 text-xs text-text-muted">
-          <JMark size={24} />
-          {d.footer.poweredBy}
-        </p>
+        <p className="font-display text-xl font-semibold tracking-[0.5px] text-text-secondary">{d.footer.tagline}</p>
       </section>
 
     </main>

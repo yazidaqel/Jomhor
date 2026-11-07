@@ -46,12 +46,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 64, JomhorSpace.xl, JomhorSpace.xl),
               children: [
-                const Entrance(
-                  child: Row(
+                // The Jomhor lockup and tagline (design/BRAND.md); the club appears in its own content only.
+                Entrance(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Crest(initial: JomhorClub.crestInitial, size: 44, glow: true),
-                      SizedBox(width: JomhorSpace.m),
-                      Text(JomhorClub.name, style: JomhorType.h2),
+                      const JomhorLockup(height: 56),
+                      const SizedBox(height: JomhorSpace.s),
+                      Text(l.brandTagline, style: JomhorType.body.copyWith(color: JomhorColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -122,8 +124,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: Text(l.loginChangePhone),
                   ),
                 ],
-                const SizedBox(height: JomhorSpace.xxl * 2),
-                const PoweredBy(),
               ],
             ),
           ),

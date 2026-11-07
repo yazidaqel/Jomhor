@@ -12,6 +12,7 @@ import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
@@ -84,6 +85,8 @@ class TicketsScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, JomhorSpace.xxl),
           children: [
+            const BrandBar(),
+            const SizedBox(height: JomhorSpace.s),
             Text(l.ticketsTitle, style: JomhorType.h1.copyWith(fontSize: 34)),
             const SizedBox(height: JomhorSpace.xl),
             ...body,

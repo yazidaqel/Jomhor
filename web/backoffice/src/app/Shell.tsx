@@ -144,7 +144,7 @@ function Notice({ title, body, logout, onRetry }: { title: string; body?: string
     <main className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <img src="/jomhor-mark.svg" alt="" className="mb-2 size-10 rounded-lg" />
+          <img src="/jomhor-mark-dark.svg" alt="" className="mb-2 size-10 rounded-lg" />
           <CardTitle>{title}</CardTitle>
           {body && <CardDescription>{body}</CardDescription>}
         </CardHeader>
@@ -164,7 +164,7 @@ function Splash() {
   const { t } = useTranslation()
   return (
     <main aria-busy="true" className="flex min-h-screen items-center justify-center">
-      <img src="/jomhor-mark.svg" alt="" className="size-12 animate-pulse rounded-xl motion-reduce:animate-none" />
+      <img src="/jomhor-mark-dark.svg" alt="" className="size-12 animate-pulse rounded-xl motion-reduce:animate-none" />
       <p className="sr-only">{t('shell.loading')}</p>
     </main>
   )
@@ -188,11 +188,9 @@ function AppSidebar({ active, role }: { active: Section | null; role: Role }) {
           onClick={closeSheet}
           className="flex items-center gap-2.5 rounded-md px-1 outline-none focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/50 group-data-[collapsible=icon]:px-0"
         >
-          <img src="/jomhor-mark.svg" alt="" className="size-7 shrink-0 rounded-lg" />
-          <span className="flex min-w-0 flex-col leading-none group-data-[collapsible=icon]:hidden">
-            <img src="/jomhor-wordmark-light.svg" alt={t('app.name')} className="h-[17px] w-auto self-start" />
-            <span className="mt-1 text-[11px] font-medium text-muted-foreground">{t('shell.organizerSpace')}</span>
-          </span>
+          {/* BRAND §Where the logo appears: the lockup (132 px, above the 120 px minimum), the mark alone in icon mode. */}
+          <img src="/jomhor-lockup-light.svg" alt={t('app.name')} className="h-8 w-auto group-data-[collapsible=icon]:hidden" />
+          <img src="/jomhor-mark-dark.svg" alt={t('app.name')} className="hidden size-7 shrink-0 rounded-lg group-data-[collapsible=icon]:block" />
         </Link>
       </SidebarHeader>
       <SidebarContent>
@@ -326,9 +324,14 @@ export function Shell({ bare = false }: { bare?: boolean }) {
     session.selectOrganizer(id)
   }
 
+  const active = section(location.pathname)
+  // Browser tab: "Jomhor · <section>" (BRAND §Where the logo appears); React hoists it into <head>.
+  const title = <title>{active ? t('app.pageTitle', { page: t(`nav.${active}`) }) : t('app.name')}</title>
+
   if (bare)
     return (
       <OrganizerContext value={current} key={current.organizer_id}>
+        {title}
         <Outlet />
       </OrganizerContext>
     )
@@ -337,13 +340,14 @@ export function Shell({ bare = false }: { bare?: boolean }) {
     // DESIGN §Back-office: 240 px grouped sidebar, icons only from 768 to 1023 px, a sheet below 768 px (closes on
     // navigation); sticky top bar with the toggle, the organizer switcher and the user menu.
     <SidebarProvider defaultOpen={sidebarOpen} style={{ '--sidebar-width': '15rem' } as CSSProperties}>
+      {title}
       <a
         href="#content"
         className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
       >
         {t('shell.skipToContent')}
       </a>
-      <AppSidebar active={section(location.pathname)} role={current.role} />
+      <AppSidebar active={active} role={current.role} />
       <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur-md md:px-5">
           <SidebarTrigger label={t('shell.toggleSidebar')} title={t('shell.toggleSidebar')} />

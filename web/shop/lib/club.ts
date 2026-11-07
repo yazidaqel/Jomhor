@@ -4,5 +4,5 @@ import tokens from './tokens'
 /** The club this shop sells for: design/tokens.json `club` (build-time identity, Q23). */
 export const club = tokens.club
 
-/** "ATLAS FC · Billetterie": header, title template, Open Graph site name. */
+/** "Billetterie ATLAS FC": the header's secondary line after the Jomhor lockup, home page title. */
 export const shopName = (d: Dict) => fmt(d.header.shop, { club: club.name })

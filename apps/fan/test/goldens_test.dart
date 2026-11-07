@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/app.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
+import 'package:jomhor_fan/theme/app_theme.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/brand.dart';
 
 import 'cash_order_test.dart' show CashSale, orderId;
 import 'goldens.dart';
@@ -15,7 +17,8 @@ import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
 import 'transfer_test.dart' show openTicketJson, transferredJson;
 
 /// FL-17: FR and AR goldens of screens 1, 4, 5 and the cash order; FL-18: screen 8, the transfer sheet, on its form
-/// and mid-hold on its confirm step, and the "Transféré à" row in Billets (DESIGN.md Lot 4, AR / RTL). Next to the
+/// and mid-hold on its confirm step, and the "Transféré à" row in Billets (DESIGN.md Lot 4, AR / RTL); the login and
+/// the top bar with the Jomhor lockup (design/BRAND.md). Next to the
 /// pictures, the rules the pictures show are asserted: right to left, Western digits only, codes and prices in
 /// left-to-right isolates. Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
@@ -41,6 +44,16 @@ void main() {
       ..physicalSize = const Size(JomhorSize.phoneWidth, JomhorSize.phoneHeight)
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+  }
+
+  /// The lockup sits at the start of [row]: the left in FR, the right in AR (a picture, never mirrored).
+  void expectLockupAtStart(WidgetTester tester, Finder row) {
+    final rtl = Directionality.of(tester.element(row)) == TextDirection.rtl;
+    final (box, lockup) = (
+      tester.getRect(row),
+      tester.getRect(find.descendant(of: row, matching: find.byType(JomhorLockup))),
+    );
+    expect(rtl ? box.right - lockup.right : lockup.left - box.left, lessThanOrEqualTo(JomhorSpace.xl));
   }
 
   Future<void> snap(String name) => expectLater(find.byType(JomhorApp), matchesGoldenFile('goldens/$name.png'));
@@ -86,6 +99,48 @@ void main() {
         expect(find.text('شري بلايصك · من \u206650\u00A0DH\u2069'), findsOneWidget);
       }
       await snap('$locale-1-accueil');
+      expectLockupAtStart(tester, find.byType(BrandBar));
+      // The same bar alone, on the ground colour it sits on in the app.
+      final bar = tester.widget<BrandBar>(find.byType(BrandBar));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(),
+          home: Directionality(
+            textDirection: locale == 'ar' ? TextDirection.rtl : TextDirection.ltr,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: RepaintBoundary(
+                key: const Key('topbar'),
+                child: ColoredBox(
+                  color: JomhorColors.ground,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.xl),
+                    child: bar,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await expectLater(find.byKey(const Key('topbar')), matchesGoldenFile('goldens/$locale-topbar.png'));
+    });
+
+    testWidgets('$locale · login', (tester) async {
+      await phone(tester);
+      final c = await pumpJomhor(
+        tester,
+        backend: (_) async => json(<Object?>[]),
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+      );
+      c.read(routerProvider).go('/login');
+      await tester.pumpAndSettle();
+      expect(find.text(locale == 'ar' ? 'جمهور. الرجل الثاني عشر.' : 'Jomhor. Le 12e homme.'), findsOneWidget);
+      expect(find.text(JomhorClub.name), findsNothing); // The club is content, not the app's identity.
+      if (locale == 'ar') expectArabicRules(tester);
+      expectLockupAtStart(tester, find.byType(ListView));
+      await snap('$locale-login');
     });
 
     testWidgets('$locale · screen 4 Paiement', (tester) async {

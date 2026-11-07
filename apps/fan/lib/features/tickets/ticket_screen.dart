@@ -360,11 +360,16 @@ class _TicketCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Accent band: competition, title, crest.
+              // Amber band: the Jomhor mark (all ink on amber, far from the QR), competition, title, crest.
               ColoredBox(
-                color: JomhorColors.accent,
+                color: JomhorBrand.amber,
                 child: Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(JomhorSpace.xl, 18, JomhorSpace.l, JomhorSpace.l),
+                  padding: const EdgeInsetsDirectional.fromSTEB(
+                    JomhorSpace.xl,
+                    JomhorSpace.m,
+                    JomhorSpace.l,
+                    JomhorSpace.l,
+                  ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -372,19 +377,25 @@ class _TicketCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (label != null) ...[
-                              Text(
-                                label.toUpperCase(),
-                                style: JomhorType.caption
-                                    .copyWith(
-                                      color: JomhorColors.onAccent.withValues(alpha: 0.72),
-                                      letterSpacing: 1.5,
-                                      fontWeight: FontWeight.w600,
-                                    )
-                                    .tracked(context),
-                              ),
-                              const SizedBox(height: 6),
-                            ],
+                            Row(
+                              children: [
+                                const JomhorMark(size: 28, onAmber: true),
+                                if (label != null)
+                                  Expanded(
+                                    child: Text(
+                                      label.toUpperCase(),
+                                      style: JomhorType.caption
+                                          .copyWith(
+                                            color: JomhorColors.onAccent.withValues(alpha: 0.72),
+                                            letterSpacing: 1.5,
+                                            fontWeight: FontWeight.w600,
+                                          )
+                                          .tracked(context),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
                             Text(
                               e.title.toUpperCase(),
                               style: JomhorType.hero.copyWith(fontSize: 29, color: JomhorColors.onAccent),

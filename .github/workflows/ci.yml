@@ -35,9 +35,13 @@ jobs:
               - 'backend/**'
               - 'docs/token-vectors.json'
               - 'docs/gate-vectors.json'
+              - 'docs/holder-name-vectors.json'
+              - 'design/logo/**'
               - '.github/workflows/ci.yml'
             backoffice:
               - 'web/backoffice/**'
+              - 'docs/holder-name-vectors.json'
+              - 'design/logo/**'
               - '.github/workflows/ci.yml'
             core:
               - 'packages/core/**'
@@ -47,6 +51,8 @@ jobs:
               - 'apps/fan/**'
               - 'packages/core/**'
               - 'design/tokens.json'
+              - 'design/logo/**'
+              - 'docs/holder-name-vectors.json'
               - '.github/workflows/ci.yml'
             scanner:
               - 'apps/scanner/**'
@@ -54,10 +60,13 @@ jobs:
               - 'docs/gate-vectors.json'
               - 'docs/token-vectors.json'
               - 'design/tokens.json'
+              - 'design/logo/**'
               - '.github/workflows/ci.yml'
             shop:
               - 'web/shop/**'
               - 'design/tokens.json'
+              - 'design/logo/**'
+              - 'docs/holder-name-vectors.json'
               - '.github/workflows/ci.yml'
 
   backend:

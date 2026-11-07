@@ -1,5 +1,5 @@
-// Generates lib/theme/tokens.g.dart from design/tokens.json, so a club's
-// colours change in tokens.json only. Run from apps/fan:
+// Generates lib/theme/tokens.g.dart from design/tokens.json, and the JomhorBrand class
+// from design/logo (the app is Jomhor's, ink + amber; a club never re-skins it). Run from apps/fan:
 //   dart run tool/gen_tokens.dart
 // test/theme_test.dart fails when the committed file is stale.
 import 'dart:convert';
@@ -7,6 +7,7 @@ import 'dart:io';
 
 const tokensPath = '../../design/tokens.json';
 const outputPath = 'lib/theme/tokens.g.dart';
+const logoPath = '../../design/logo';
 
 void main() {
   final tokens = jsonDecode(File(tokensPath).readAsStringSync());
@@ -78,7 +79,64 @@ String generateTokens(Map<String, Object?> tokens) {
       );
   }
   out.writeln('}');
+  _brand(out, tokens['brand']! as Map<String, Object?>);
   return out.toString();
+}
+
+/// The Jomhor brand, read from the logo files (design/BRAND.md): fixed, never themed by a club.
+void _brand(StringBuffer out, Map<String, Object?> brand) {
+  String svg(String name) => File('$logoPath/$name').readAsStringSync();
+  final mark = svg('jomhor-mark-transparent.svg');
+  final dots = [
+    for (final m in RegExp(r'<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)" fill="(#\w{6})"').allMatches(mark))
+      (cx: m[1]!, cy: m[2]!, r: m[3]!, fill: m[4]!),
+  ];
+  final ink = RegExp(r'<rect[^>]*fill="(#\w{6})"').firstMatch(svg('jomhor-mark-dark.svg'))![1]!;
+  final wordmark = svg('jomhor-wordmark-dark.svg');
+  final wordmarkWidth = RegExp(r'viewBox="0 0 ([\d.]+) 120"').firstMatch(wordmark)![1]!;
+  final d = RegExp(' d="([^"]+)"').firstMatch(wordmark)![1]!;
+  final lockup = svg('jomhor-lockup-dark.svg');
+  final lockupWidth = RegExp(r'viewBox="0 0 ([\d.]+) 120"').firstMatch(lockup)![1]!;
+  final markAt = RegExp(r'translate\(0,([\d.]+)\) scale\(([\d.]+)\)').firstMatch(lockup)!;
+  final wordmarkX = RegExp(r'translate\(([\d.]+),0\)').firstMatch(lockup)![1]!;
+  // Lines of about 100 characters, cut at spaces (each line but the last ends with one).
+  final chunks = <String>[];
+  for (final word in d.split(' ')) {
+    if (chunks.isEmpty || chunks.last.length + word.length > 100) {
+      chunks.add('$word ');
+    } else {
+      chunks.last += '$word ';
+    }
+  }
+  chunks.last = chunks.last.trimRight();
+  out
+    ..writeln()
+    ..writeln('/// The Jomhor brand, from design/logo (design/BRAND.md). Fixed: a club never re-skins it.')
+    ..writeln('abstract final class JomhorBrand {')
+    ..writeln("  static const String name = '${_escape(brand['name']! as String)}';")
+    ..writeln('  static const Color ink = ${_color(ink)};')
+    ..writeln('  static const Color white = ${_color(dots.first.fill)};')
+    ..writeln('  static const Color amber = ${_color(dots.last.fill)};')
+    ..writeln()
+    ..writeln(
+      '  /// The mark (120 x 120 viewBox, clear space included): (cx, cy, r) of each dot; the last is the twelfth.',
+    )
+    ..writeln('  static const List<(double, double, double)> dots = [')
+    ..writeln([for (final o in dots) '    (${o.cx}, ${o.cy}, ${o.r}),'].join('\n'))
+    ..writeln('  ];')
+    ..writeln()
+    ..writeln('  /// The wordmark outlines (absolute M, L, H, V, C, Z), in a $wordmarkWidth x 120 viewBox.')
+    ..writeln('  static const double wordmarkWidth = $wordmarkWidth;')
+    ..writeln('  static const String wordmark =')
+    ..writeln('${[for (final c in chunks) "      '$c'"].join('\n')};')
+    ..writeln()
+    ..writeln('  /// The lockup ($lockupWidth x 120): the mark scaled by [lockupMarkScale] and moved down by')
+    ..writeln('  /// [lockupMarkDy], the wordmark moved right by [lockupWordmarkX].')
+    ..writeln('  static const double lockupWidth = $lockupWidth;')
+    ..writeln('  static const double lockupMarkScale = ${markAt[2]};')
+    ..writeln('  static const double lockupMarkDy = ${markAt[1]};')
+    ..writeln('  static const double lockupWordmarkX = $wordmarkX;')
+    ..writeln('}');
 }
 
 String _color(String hex) {

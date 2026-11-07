@@ -41,12 +41,10 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      {/* Brand side (wide screens): ink ground, the 12-dot mark, what the back-office is for. */}
+      <title>{t('app.pageTitle', { page: t('login.title') })}</title>
+      {/* Brand side (wide screens): ink ground, the large Jomhor lockup, what the back-office is for. */}
       <aside className="relative hidden overflow-hidden bg-brand-ink p-12 text-white lg:flex lg:flex-col">
-        <div className="flex items-center gap-3">
-          <img src="/jomhor-mark-transparent.svg" alt="" className="size-10" />
-          <img src="/jomhor-wordmark-dark.svg" alt={t('app.name')} className="h-6 w-auto" />
-        </div>
+        <img src="/jomhor-lockup-dark.svg" alt={t('app.name')} className="relative h-14 w-auto self-start" />
         <img src="/jomhor-mark-transparent.svg" alt="" className="pointer-events-none absolute top-16 -right-20 size-[30rem] opacity-[0.09] select-none" />
         <div className="relative mt-auto max-w-md space-y-6">
           <p className="text-sm font-medium text-brand-amber">{t('login.brand.tagline')}</p>
@@ -63,7 +61,8 @@ export function LoginPage() {
       </aside>
       <main className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-500 motion-reduce:animate-none">
-          <img src="/jomhor-mark.svg" alt="" className="mb-8 size-11 rounded-xl shadow-sm lg:hidden" />
+          {/* Narrow screens: no brand side, so the large lockup heads the form. */}
+          <img src="/jomhor-lockup-light.svg" alt={t('app.name')} className="mb-8 h-12 w-auto lg:hidden" />
           <Card className="border-0 bg-transparent py-0 shadow-none">
             <CardHeader className="px-0">
               <CardTitle role="heading" aria-level={1} className="text-2xl font-semibold tracking-tight">

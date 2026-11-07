@@ -10,6 +10,8 @@ import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/features/auth/login_screen.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
+import 'package:jomhor_fan/ui/brand.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -87,6 +89,21 @@ void main() {
     expect(tester.widget<ListTile>(find.byKey(const Key('profile.lang.fr'))).selected, isTrue);
     expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'العربية')).selected, isFalse);
     expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'English')).selected, isFalse);
+  });
+
+  testWidgets('the foot of Profil is the Jomhor lockup and the app version, no "powered by"', (tester) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'Jomhor',
+      packageName: 'ma.jomhor.fan',
+      version: '1.2.0',
+      buildNumber: '7',
+      buildSignature: '',
+    );
+    await openProfile(tester, backend(), MemoryTokenStore('jwt'));
+    await tester.scrollUntilVisible(find.byKey(const Key('profile.version')), 200);
+    expect(find.text('Version 1.2.0 (7)'), findsOneWidget);
+    // One lockup in the top bar, one in the footer.
+    expect(find.byType(JomhorLockup), findsNWidgets(2));
   });
 
   testWidgets('the language switch applies at once, persists on the phone and PATCHes /fan/me', (tester) async {

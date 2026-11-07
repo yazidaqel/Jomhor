@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect } from 'next/navigation'
-import { shopName } from '@/lib/club'
 import { eventSlug, getEvent, parseEventId } from '@/lib/events'
 import { getI18n } from '@/lib/i18n/server'
 import { formatDateTime } from '@/lib/time'
@@ -28,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     alternates: { canonical: `/events/${eventSlug(e)}` },
     // Child openGraph replaces the root one (shallow merge): repeat site name and locale.
-    openGraph: { title: e.title, description, type: 'website', url: `/events/${eventSlug(e)}`, siteName: shopName(d), locale: d.meta.og },
+    openGraph: { title: e.title, description, type: 'website', url: `/events/${eventSlug(e)}`, siteName: d.app.name, locale: d.meta.og },
   }
 }
 
