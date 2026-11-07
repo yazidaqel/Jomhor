@@ -208,15 +208,15 @@ class _Hero extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: _Tile(value: left.days, label: l.countdownDays),
+                      child: CountdownTile(value: left.days, label: l.countdownDays),
                     ),
                     const SizedBox(width: JomhorSpace.s),
                     Expanded(
-                      child: _Tile(value: left.hours, label: l.countdownHours),
+                      child: CountdownTile(value: left.hours, label: l.countdownHours),
                     ),
                     const SizedBox(width: JomhorSpace.s),
                     Expanded(
-                      child: _Tile(value: left.minutes, label: l.countdownMinutes),
+                      child: CountdownTile(value: left.minutes, label: l.countdownMinutes),
                     ),
                   ],
                 ),
@@ -276,50 +276,6 @@ class _Team extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
     ],
-  );
-}
-
-/// Countdown tile: display number (rolls over when it changes) + caption.
-class _Tile extends StatelessWidget {
-  const new({required this.value, required this.label});
-
-  final int value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: JomhorSpace.xs),
-    decoration: BoxDecoration(
-      color: JomhorColors.ground.withValues(alpha: 0.85),
-      border: Border.all(color: JomhorColors.border.withValues(alpha: 0.6)),
-      borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.chip)),
-    ),
-    child: Column(
-      children: [
-        AnimatedSwitcher(
-          duration: motionOf(context, JomhorMotion.base),
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween(begin: const Offset(0, 0.4), end: Offset.zero).animate(animation),
-              child: child,
-            ),
-          ),
-          child: Text(
-            value.toString().padLeft(2, '0'),
-            key: ValueKey(value),
-            style: JomhorType.number.copyWith(fontSize: 30, fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label.toUpperCase(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, letterSpacing: 1),
-        ),
-      ],
-    ),
   );
 }
 

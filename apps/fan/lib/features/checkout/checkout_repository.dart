@@ -33,9 +33,11 @@ class CheckoutRepository {
     return (FanOrder.fromJson(res.body! as Map<String, Object?>), res.date);
   }
 
-  Future<PayStart> payByCard(String orderId) async => PayStart.fromJson(
-    (await _api.post('/fan/orders/${Uri.encodeComponent(orderId)}/pay', body: {'method': 'CARD'}))!
+  /// CARD and WALLET answer the hosted page; CASH_AGENCY moves the order to AWAITING_CASH with a pay code.
+  Future<PayStart> pay(String orderId, PayMethod method) async => PayStart.fromJson(
+    (await _api.post('/fan/orders/${Uri.encodeComponent(orderId)}/pay', body: {'method': method.wire}))!
         as Map<String, Object?>,
+    method,
   );
 
   /// The order and the server time of the answer (`Date`): the hold is judged on server time.

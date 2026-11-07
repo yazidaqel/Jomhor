@@ -80,22 +80,32 @@ class DateBadge extends StatelessWidget {
   );
 }
 
-/// Status banner (DESIGN.md components): success colours, or neutral; leading icon.
+/// Status banner (DESIGN.md components): success colours, the club accent (waiting on the fan: a cash code to
+/// pay), or neutral; leading icon.
 class InfoBanner extends StatelessWidget {
-  const new({required this.text, this.success = false, this.icon, super.key});
+  const new({required this.text, this.success = false, this.accent = false, this.icon, super.key});
 
   final String text;
   final bool success;
+  final bool accent;
   final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
-    final fg = success ? JomhorColors.successText : JomhorColors.textSecondary;
+    final (fg, bg, line) = switch ((success, accent)) {
+      (true, _) => (JomhorColors.successText, JomhorColors.successBg, JomhorColors.success),
+      (_, true) => (
+        JomhorColors.accentHover,
+        JomhorColors.accent.withValues(alpha: 0.12),
+        JomhorColors.accent.withValues(alpha: 0.5),
+      ),
+      _ => (JomhorColors.textSecondary, JomhorColors.surface2, JomhorColors.border),
+    };
     return Container(
       padding: const EdgeInsets.symmetric(vertical: JomhorSpace.m, horizontal: 14),
       decoration: BoxDecoration(
-        color: success ? JomhorColors.successBg : JomhorColors.surface2,
-        border: Border.all(color: success ? JomhorColors.success : JomhorColors.border),
+        color: bg,
+        border: Border.all(color: line),
         borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.control)),
       ),
       child: Row(
@@ -133,6 +143,50 @@ class InfoChip extends StatelessWidget {
         if (icon != null) ...[Icon(icon, size: 16, color: JomhorColors.textSecondary), const SizedBox(width: 6)],
         Flexible(
           child: Text(text, style: JomhorType.bodySmall.copyWith(fontWeight: FontWeight.w500)),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Countdown tile: display number (rolls over when it changes) + caption.
+class CountdownTile extends StatelessWidget {
+  const new({required this.value, required this.label, super.key});
+
+  final int value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: JomhorSpace.xs),
+    decoration: BoxDecoration(
+      color: JomhorColors.ground.withValues(alpha: 0.85),
+      border: Border.all(color: JomhorColors.border.withValues(alpha: 0.6)),
+      borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.chip)),
+    ),
+    child: Column(
+      children: [
+        AnimatedSwitcher(
+          duration: motionOf(context, JomhorMotion.base),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween(begin: const Offset(0, 0.4), end: Offset.zero).animate(animation),
+              child: child,
+            ),
+          ),
+          child: Text(
+            value.toString().padLeft(2, '0'),
+            key: ValueKey(value),
+            style: JomhorType.number.copyWith(fontSize: 30, fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, letterSpacing: 1),
         ),
       ],
     ),

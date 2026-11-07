@@ -13,6 +13,10 @@ String venueDate(DateTime instant, String zone, String locale) =>
 String venueClock(DateTime instant, String zone, String locale) =>
     DateFormat.Hm(locale).format(venueTime(instant, zone));
 
+/// "Sam. 21 févr. 12:00": a deadline.
+String venueWhen(DateTime instant, String zone, String locale) =>
+    '${venueDate(instant, zone, locale)} ${venueClock(instant, zone, locale)}';
+
 /// Day of month and short month ("22", "NOV") for calendar rows.
 (String, String) venueDayMonth(DateTime instant, String zone, String locale) {
   final t = venueTime(instant, zone);

@@ -6,17 +6,21 @@ import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/core/money.dart';
+import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
+import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
-/// Screen 4 · Paiement: named holders, summary, card. "Payer" holds the places (POST /fan/orders, with the
-/// holders the contract requires) and opens the card page; the 8-min countdown starts with the hold.
+/// Screen 4 · Paiement: named holders, summary, method (card, wallet, cash from `payment_methods`). "Payer"
+/// holds the places (POST /fan/orders, with the holders the contract requires), then opens the card or wallet
+/// page, or gets the cash code and goes to the cash order screen; the 8-min countdown starts with the hold.
 class CheckoutScreen extends ConsumerWidget {
   const new({required this.args, super.key});
 
@@ -40,7 +44,7 @@ class CheckoutScreen extends ConsumerWidget {
         data: (d) {
           for (final z in d.zones) {
             for (final p in z.prices) {
-              if (p.priceCategoryId == args.priceCategoryId) return _Form(args: args, zone: z, price: p);
+              if (p.priceCategoryId == args.priceCategoryId) return _Form(args: args, detail: d, zone: z, price: p);
             }
           }
           return Center(child: Text(l.errorNotFound));
@@ -51,9 +55,10 @@ class CheckoutScreen extends ConsumerWidget {
 }
 
 class _Form extends ConsumerStatefulWidget {
-  const new({required this.args, required this.zone, required this.price});
+  const new({required this.args, required this.detail, required this.zone, required this.price});
 
   final CheckoutArgs args;
+  final EventDetail detail;
   final Zone zone;
   final Price price;
 
@@ -101,16 +106,21 @@ class _FormState extends ConsumerState<_Form> {
       return;
     }
     final controller = ref.read(provider.notifier);
+    final method = current.selectedIn(widget.detail);
+    if (method == null) return;
     final start = await controller.submit(
       [for (final c in _names) c.text],
       [for (final c in _phones) c.text],
       friendsConsent: _consent,
+      method: method,
     );
-    if (start == null || !mounted) return; // Left the screen: no card page.
+    if (start == null || !mounted) return; // Left the screen: no payment page.
     final order = ref.read(provider).order!;
+    final url = start.redirectUrl;
+    if (url == null) return context.go('/orders/${order.id}'); // Cash: the code and where to pay.
     controller.cardOpened();
     _cardOpen = true;
-    final returned = await ref.read(cardPaymentLauncherProvider)(context, start.redirectUrl, order.id);
+    final returned = await ref.read(cardPaymentLauncherProvider)(context, url, order.id);
     _cardOpen = false;
     if (!mounted) return;
     // Back on our return URL, or the hold ran out meanwhile: the order screen polls the real status (a
@@ -133,13 +143,16 @@ class _FormState extends ConsumerState<_Form> {
     final l = AppLocalizations.of(context);
     final args = widget.args;
     final state = ref.watch(checkoutControllerProvider(args));
-    ref.listen(checkoutControllerProvider(args).select((s) => s.phase), (_, phase) {
-      if (phase == CheckoutPhase.expired) _onExpired(context, l);
+    // A cash /pay in flight when the hold ends decides first: a code issued goes to the order screen.
+    ref.listen(checkoutControllerProvider(args).select((s) => (s.phase, s.payingCash)), (_, now) {
+      if (now == (CheckoutPhase.expired, false)) _onExpired(context, l);
     });
     final locked = state.order != null; // The holders are on the order now.
-    final busy = state.phase == CheckoutPhase.working || state.phase == CheckoutPhase.busy;
+    final busy = state.busy;
     final total = state.order?.totalMad ?? widget.price.priceMad * args.qty;
     final error = state.error;
+    final selected = state.selectedIn(widget.detail);
+    final event = widget.detail.event;
 
     return Column(
       children: [
@@ -235,31 +248,22 @@ class _FormState extends ConsumerState<_Form> {
               ],
               SectionLabel(l.methodTitle),
               const SizedBox(height: JomhorSpace.xs),
-              // Lot 1: card only (cash and wallet in Lot 3).
-              Container(
-                padding: const EdgeInsets.all(JomhorSpace.l),
-                decoration: const BoxDecoration(
-                  color: JomhorColors.surface,
-                  border: Border.fromBorderSide(BorderSide(color: JomhorColors.accent, width: 2)),
-                  borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.radio_button_checked_rounded, color: JomhorColors.accent),
-                    const SizedBox(width: JomhorSpace.m),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(l.methodCard, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
-                          Text(l.methodCardHint, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
-                        ],
-                      ),
+              for (final (:method, :enabled, :tooLate) in state.methodRows(widget.detail)) ...[
+                _MethodRow(
+                  method: method,
+                  selected: method == selected,
+                  enabled: enabled,
+                  hint: switch (method) {
+                    _ when tooLate => l.methodCashTooLate,
+                    PayMethod.cashAgency => l.methodCashBefore(
+                      venueWhen(cashDeadline(event), event.timezone, l.localeName),
                     ),
-                    Text(l.instant, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
-                  ],
+                    _ => l.instant,
+                  },
+                  onTap: () => ref.read(checkoutControllerProvider(args).notifier).select(method),
                 ),
-              ),
+                const SizedBox(height: JomhorSpace.s),
+              ],
             ],
           ),
         ),
@@ -286,8 +290,15 @@ class _FormState extends ConsumerState<_Form> {
                   ],
                   FilledButton(
                     key: const Key('checkout.pay'),
-                    onPressed: busy || (state.phase == CheckoutPhase.expired && !state.cardOpened) ? null : _pay,
-                    child: Text(state.cardOpened ? l.checkPayment : l.payCta(formatDh(total))),
+                    onPressed: busy || selected == null || (state.phase == CheckoutPhase.expired && !state.cardOpened)
+                        ? null
+                        : _pay,
+                    child: Text(switch (selected) {
+                      _ when state.cardOpened => l.checkPayment,
+                      PayMethod.wallet => l.payWalletCta(formatDh(total)),
+                      PayMethod.cashAgency => l.payCashCta,
+                      _ => l.payCta(formatDh(total)),
+                    }),
                   ),
                   const SizedBox(height: JomhorSpace.xs),
                   Text(
@@ -320,6 +331,86 @@ class _FormState extends ConsumerState<_Form> {
                 context.go('/events/$eventId/zones');
               },
               child: Text(l.expiredCta),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One "MOYEN DE PAIEMENT" row (DESIGN.md screen 4): icon, name, detail, hint; 2 px accent border when picked.
+class _MethodRow extends StatelessWidget {
+  const new({
+    required this.method,
+    required this.selected,
+    required this.enabled,
+    required this.hint,
+    required this.onTap,
+  });
+
+  final PayMethod method;
+  final bool selected;
+  final bool enabled;
+  final String hint;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final on = selected && enabled;
+    final ink = enabled ? JomhorColors.text : JomhorColors.textDisabled;
+    final (icon, name, detail) = switch (method) {
+      PayMethod.card => (Icons.credit_card_rounded, l.methodCard, l.methodCardHint),
+      PayMethod.wallet => (Icons.smartphone_rounded, l.methodWallet, l.methodWalletHint),
+      PayMethod.cashAgency => (Icons.payments_outlined, l.methodCash, l.methodCashHint),
+    };
+    return Semantics(
+      selected: on,
+      button: true,
+      enabled: enabled,
+      child: TapCard(
+        inkKey: Key('method.${method.wire}'),
+        onTap: enabled ? onTap : null,
+        borderColor: on ? JomhorColors.accent : JomhorColors.border,
+        borderWidth: 2,
+        padding: const EdgeInsets.symmetric(vertical: JomhorSpace.m, horizontal: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: ink),
+            const SizedBox(width: JomhorSpace.m),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: JomhorType.body.copyWith(fontWeight: FontWeight.w600, color: ink),
+                  ),
+                  Text(detail, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+                ],
+              ),
+            ),
+            const SizedBox(width: JomhorSpace.s),
+            Flexible(
+              child: Text(
+                hint,
+                key: Key('method.${method.wire}.hint'),
+                textAlign: TextAlign.end,
+                style: JomhorType.caption.copyWith(
+                  color: enabled && method.hosted ? JomhorColors.successText : JomhorColors.textMuted,
+                ),
+              ),
+            ),
+            const SizedBox(width: JomhorSpace.s),
+            AnimatedSwitcher(
+              duration: motionOf(context, JomhorMotion.base),
+              child: Icon(
+                on ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                key: ValueKey(on),
+                size: 20,
+                color: on ? JomhorColors.accent : JomhorColors.borderMuted,
+              ),
             ),
           ],
         ),

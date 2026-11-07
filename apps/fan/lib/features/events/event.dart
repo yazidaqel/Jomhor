@@ -1,6 +1,8 @@
 // Read-only DTOs for `GET /fan/events` and `/fan/events/{id}` (docs/04-api.md §Fan, snake_case).
 // Hand-written: a few read-only shapes, no copyWith or unions needed, and nothing to keep in sync.
 
+import 'package:jomhor_fan/features/checkout/order.dart';
+
 /// The sale state shown on screens 1 and 2. [opening]: the opening time has passed on this device
 /// but the data was read before it, so we wait for a fresh read (same as the web shop's OPENING).
 enum SaleState { onSale, notStarted, opening, soldOut, closed }
@@ -108,15 +110,30 @@ class FanEvent {
 }
 
 class EventDetail {
-  new({required this.event, required this.zones});
+  new({required this.event, required this.zones, this.paymentMethods = const [PayMethod.card], this.cashUntil});
 
   factory fromJson(Map<String, Object?> j, {required DateTime fetchedAt}) => EventDetail(
     event: FanEvent.fromJson(j, fetchedAt: fetchedAt),
     zones: [for (final z in j['zones']! as List<Object?>) Zone.fromJson(z! as Map<String, Object?>)],
+    paymentMethods: switch (j['payment_methods']) {
+      final List<Object?> list => [...list.map(PayMethod.of).nonNulls],
+      _ => const [PayMethod.card], // Before Lot 3: card only.
+    },
+    cashUntil: switch (j['cash_until']) {
+      final String t => DateTime.parse(t).toUtc(),
+      _ => null,
+    },
   );
 
   final FanEvent event;
   final List<Zone> zones;
+
+  /// What `/pay` takes for this event now, in the API's order (CARD, WALLET, CASH_AGENCY).
+  final List<PayMethod> paymentMethods;
+
+  /// Last moment a cash code can be bought; null when the organizer has no cash at all (no row then). Past it,
+  /// CASH_AGENCY leaves [paymentMethods] and screen 4 shows the row off ("Trop tard pour le cash").
+  final DateTime? cashUntil;
 }
 
 class Zone {

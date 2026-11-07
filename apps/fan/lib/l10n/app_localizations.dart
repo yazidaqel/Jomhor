@@ -651,6 +651,204 @@ abstract class AppLocalizations {
   /// **'Paiement sécurisé'**
   String get cardPageTitle;
 
+  /// No description provided for @methodWallet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Wallet mobile'**
+  String get methodWallet;
+
+  /// No description provided for @methodWalletHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Paiement depuis ton wallet'**
+  String get methodWalletHint;
+
+  /// No description provided for @methodCash.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cash en agence'**
+  String get methodCash;
+
+  /// No description provided for @methodCashHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un code à payer au guichet du club ou en agence'**
+  String get methodCashHint;
+
+  /// Screen 4 cash row hint: the code's deadline, least(now + 24 h, sales close), venue time.
+  ///
+  /// In fr, this message translates to:
+  /// **'Avant {deadline}'**
+  String methodCashBefore(String deadline);
+
+  /// Screen 4: CASH_AGENCY missing from payment_methods; the row is off.
+  ///
+  /// In fr, this message translates to:
+  /// **'Trop tard pour le cash'**
+  String get methodCashTooLate;
+
+  /// No description provided for @payWalletCta.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer {total} par wallet'**
+  String payWalletCta(String total);
+
+  /// No description provided for @payCashCta.
+  ///
+  /// In fr, this message translates to:
+  /// **'Obtenir mon code cash'**
+  String get payCashCta;
+
+  /// 409 METHOD_NOT_AVAILABLE reason TOO_LATE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Trop tard pour payer en cash : la vente ferme bientôt. Choisis un autre moyen de paiement.'**
+  String get errorCashTooLate;
+
+  /// 409 METHOD_NOT_AVAILABLE reason CASH_CAP.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le paiement cash n\'est plus possible pour cet événement pour le moment. Choisis un autre moyen de paiement.'**
+  String get errorCashCap;
+
+  /// 409 METHOD_NOT_AVAILABLE reason NOT_CONFIGURED (or unknown).
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce moyen de paiement n\'est pas disponible. Choisis-en un autre.'**
+  String get errorMethodNotConfigured;
+
+  /// No description provided for @cashTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ton code de paiement cash'**
+  String get cashTitle;
+
+  /// No description provided for @cashHoldBanner.
+  ///
+  /// In fr, this message translates to:
+  /// **'Places réservées · paie avant {deadline}'**
+  String cashHoldBanner(String deadline);
+
+  /// No description provided for @cashCodeLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code à présenter'**
+  String get cashCodeLabel;
+
+  /// No description provided for @cashExactAmount.
+  ///
+  /// In fr, this message translates to:
+  /// **'Montant exact à régler : {amount}'**
+  String cashExactAmount(String amount);
+
+  /// No description provided for @cashCopy.
+  ///
+  /// In fr, this message translates to:
+  /// **'Copier le code'**
+  String get cashCopy;
+
+  /// No description provided for @cashCopied.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code copié'**
+  String get cashCopied;
+
+  /// No description provided for @cashTimeLeft.
+  ///
+  /// In fr, this message translates to:
+  /// **'Temps restant'**
+  String get cashTimeLeft;
+
+  /// No description provided for @cashWhereTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Où payer'**
+  String get cashWhereTitle;
+
+  /// No description provided for @cashNetworks.
+  ///
+  /// In fr, this message translates to:
+  /// **'En agence : {names}'**
+  String cashNetworks(String names);
+
+  /// No description provided for @cashStepsTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Comment ça marche'**
+  String get cashStepsTitle;
+
+  /// No description provided for @cashStep1Title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Va au guichet ou en agence'**
+  String get cashStep1Title;
+
+  /// No description provided for @cashStep2Title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Donne le code et le montant exact'**
+  String get cashStep2Title;
+
+  /// No description provided for @cashStep3Title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tes billets arrivent'**
+  String get cashStep3Title;
+
+  /// No description provided for @cashStep3Body.
+  ///
+  /// In fr, this message translates to:
+  /// **'Dans l\'app et sur WhatsApp, dès que le paiement est enregistré.'**
+  String get cashStep3Body;
+
+  /// No description provided for @cashPayNowTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tu préfères payer maintenant ?'**
+  String get cashPayNowTitle;
+
+  /// No description provided for @cashPayByCard.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer par carte'**
+  String get cashPayByCard;
+
+  /// No description provided for @cashPayByWallet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer par wallet'**
+  String get cashPayByWallet;
+
+  /// No description provided for @cashHostedPending.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un paiement par carte ou wallet est en cours de confirmation. Ton code reste valable en attendant.'**
+  String get cashHostedPending;
+
+  /// No description provided for @cashStatus.
+  ///
+  /// In fr, this message translates to:
+  /// **'En attente de paiement · cette page se met à jour toute seule.'**
+  String get cashStatus;
+
+  /// No description provided for @cashExpiredTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code expiré · places libérées'**
+  String get cashExpiredTitle;
+
+  /// No description provided for @cashExpiredBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le délai pour payer ce code est passé. Tu peux refaire une commande s\'il reste des places.'**
+  String get cashExpiredBody;
+
+  /// No description provided for @backToEvent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retour à l\'événement'**
+  String get backToEvent;
+
   /// No description provided for @orderPending.
   ///
   /// In fr, this message translates to:

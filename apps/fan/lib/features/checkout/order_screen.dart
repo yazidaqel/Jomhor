@@ -1,18 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
-import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/core/money.dart';
-import 'package:jomhor_fan/features/checkout/card_payment.dart';
+import 'package:jomhor_fan/features/checkout/cash_order.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
+import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
 /// After the card page (or the `jomhor-fan://orders/{id}` deep link): waits for PAID, then the
-/// success card slides in. The ticket itself is FL-7 (Billets).
+/// success card slides in. An AWAITING_CASH order shows its code ([CashOrder]). The ticket itself is FL-7 (Billets).
 class OrderScreen extends ConsumerWidget {
   const new({required this.orderId, super.key});
 
@@ -28,16 +30,20 @@ class OrderScreen extends ConsumerWidget {
         title: Text(l.payTitle),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(JomhorSpace.xl),
-          child: switch (status) {
-            AsyncValue(value: final view?) => _OrderState(view: view),
-            AsyncError(:final error) => Center(
-              child: ErrorPanel(error: error, onRetry: () => ref.invalidate(orderStatusProvider(orderId))),
-            ),
-            _ => const Center(child: CircularProgressIndicator()),
-          },
-        ),
+        child: switch (status) {
+          // A cash code still payable: its own scrolling screen.
+          AsyncValue(value: final view?) when view.order.awaitingCash && !view.holdOver => CashOrder(view: view),
+          _ => Padding(
+            padding: const EdgeInsets.all(JomhorSpace.xl),
+            child: switch (status) {
+              AsyncValue(value: final view?) => _OrderState(view: view),
+              AsyncError(:final error) => Center(
+                child: ErrorPanel(error: error, onRetry: () => ref.invalidate(orderStatusProvider(orderId))),
+              ),
+              _ => const Center(child: CircularProgressIndicator()),
+            },
+          ),
+        },
       ),
     );
   }
@@ -53,8 +59,14 @@ class _OrderState extends ConsumerWidget {
     final l = AppLocalizations.of(context);
     final order = view.order;
     if (order.paid) return const _Paid();
+    // A cash code past its deadline (the expiry job may not have swept it yet) or its order expired.
+    if (order.awaitingCash || (order.settled && order.paymentMethod == PayMethod.cashAgency)) {
+      return CashExpired(eventId: order.eventId);
+    }
     final rePay = ref.watch(rePayProvider(order.id));
-    final again = payAgain(order, waitedLong: rePay.waitedLong, holdOver: view.holdOver);
+    final again = view.freshFor(rePay)
+        ? payAgain(order, waitedLong: rePay.waitedLong, holdOver: view.holdOver)
+        : PayAgain.no; // Until a read sent after the newest attempt answers.
     if (order.settled || again == PayAgain.holdOver) return _Expired(eventId: order.eventId);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -84,25 +96,12 @@ class _OrderState extends ConsumerWidget {
           const SizedBox(height: JomhorSpace.xl),
           OutlinedButton(
             key: const Key('order.payAgain'),
-            onPressed: rePay.inFlight ? null : () => _payAgain(context, ref, l),
+            onPressed: rePay.inFlight ? null : () => startHostedPayment(context, ref, order.id, PayMethod.card),
             child: Text(again == PayAgain.notStarted ? l.payCta(formatDh(order.totalMad)) : l.payAgain),
           ),
         ],
       ],
     );
-  }
-
-  /// A new card attempt, only when [payAgain] allows it (a second payment while one may still succeed
-  /// could charge the fan twice). [RePay] keeps it to one at a time.
-  Future<void> _payAgain(BuildContext context, WidgetRef ref, AppLocalizations l) async {
-    final id = view.order.id;
-    final launch = ref.read(cardPaymentLauncherProvider);
-    final error = await ref.read(rePayProvider(id).notifier).start((url) async {
-      if (context.mounted) await launch(context, url, id);
-    });
-    if (error != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorText(l, error))));
-    }
   }
 }
 
@@ -132,11 +131,11 @@ class _Expired extends StatelessWidget {
 }
 
 /// "C'est validé !" slides up into place (DESIGN.md principle 6: motion that means something).
-class _Paid extends StatelessWidget {
+class _Paid extends ConsumerWidget {
   const new();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     return TweenAnimationBuilder<Offset>(
       tween: Tween(begin: const Offset(0, 0.4), end: Offset.zero),
@@ -174,7 +173,15 @@ class _Paid extends StatelessWidget {
               const SizedBox(height: JomhorSpace.s),
               Text(l.orderPaidBody, textAlign: TextAlign.center),
               const SizedBox(height: JomhorSpace.xl),
-              FilledButton(onPressed: () => context.go('/tickets'), child: Text(l.seeTickets)),
+              FilledButton(
+                key: const Key('order.seeTickets'),
+                onPressed: () {
+                  // The Billets list was read before this payment (a cash code may be paid hours later).
+                  unawaited(ref.read(ticketsProvider.notifier).refresh());
+                  context.go('/tickets');
+                },
+                child: Text(l.seeTickets),
+              ),
             ],
           ),
         ),

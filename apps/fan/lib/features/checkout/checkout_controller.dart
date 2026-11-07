@@ -13,6 +13,7 @@ import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
 import 'package:jomhor_fan/features/checkout/holder_name.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
+import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
 
@@ -47,16 +48,29 @@ class CheckoutState {
     this.left,
     this.consentMissing = false,
     this.cardOpened = false,
+    this.method,
+    this.refused = const {},
+    this.payingCash = false,
   });
 
   final CheckoutPhase phase;
 
+  /// A cash `/pay` is in flight: if the hold hits 0 meanwhile, its answer decides (a code issued means the
+  /// order now waits for cash), so the "Réservation expirée" modal waits for it.
+  final bool payingCash;
+
   /// A friend's phone is on a row and the Q21 confirmation is not ticked.
   final bool consentMissing;
 
-  /// The card page was opened once: screen 4 never starts a second payment (the first may still
-  /// succeed); the order screen decides when another attempt is safe.
+  /// The card (or wallet) page was opened once: screen 4 never starts a second payment (the first may
+  /// still succeed); the order screen decides when another attempt is safe.
   final bool cardOpened;
+
+  /// The method the fan picked; null = the first one the event offers.
+  final PayMethod? method;
+
+  /// Methods `/pay` answered `METHOD_NOT_AVAILABLE` for: their rows are off.
+  final Set<PayMethod> refused;
 
   /// Holder rows (0-based) whose name or phone is refused.
   final Set<int> badNames;
@@ -67,6 +81,27 @@ class CheckoutState {
 
   /// Hold time left, on server time.
   final Duration? left;
+
+  bool get busy => phase == CheckoutPhase.working || phase == CheckoutPhase.busy;
+
+  /// The "MOYEN DE PAIEMENT" rows for [d] (DESIGN.md Lot 3, screen 4): card and wallet as offered; cash when
+  /// offered, or off with "Trop tard pour le cash" when the organizer has cash (`cash_until`) but it is too late
+  /// now; no cash row at all without `cash_until`. A row `/pay` refused, or any row once the hosted page opened
+  /// or while a request runs, is off.
+  List<MethodRow> methodRows(EventDetail d) {
+    final offered = d.paymentMethods;
+    final cash = offered.contains(PayMethod.cashAgency);
+    return [
+      for (final m in offered.where((m) => m.hosted)) (method: m, enabled: _canPick(m), tooLate: false),
+      if (cash) (method: PayMethod.cashAgency, enabled: _canPick(PayMethod.cashAgency), tooLate: false),
+      if (!cash && d.cashUntil != null) (method: PayMethod.cashAgency, enabled: false, tooLate: true),
+    ];
+  }
+
+  /// The picked method, else the first one the event offers that `/pay` has not refused; null when none is left.
+  PayMethod? selectedIn(EventDetail d) => method ?? d.paymentMethods.where((m) => !refused.contains(m)).firstOrNull;
+
+  bool _canPick(PayMethod m) => !refused.contains(m) && !cardOpened && !busy;
 
   /// Hand-written copy: keeps the order and countdown, replaces the rest. A copyWith with "unset" for
   /// every nullable field is not worth a generator for this one state.
@@ -88,8 +123,13 @@ class CheckoutState {
     left: left ?? this.left,
     consentMissing: consentMissing,
     cardOpened: cardOpened,
+    method: method,
+    refused: refused,
   );
 }
+
+/// One payment method row of screen 4: `tooLate` = cash set up but past `cash_until`.
+typedef MethodRow = ({PayMethod method, bool enabled, bool tooLate});
 
 /// The signed-in fan (`GET /fan/me`): row 1 of the holders is prefilled with `display_name`.
 final FutureProvider<FanUser> meProvider = FutureProvider.autoDispose<FanUser>(
@@ -116,11 +156,24 @@ class CheckoutController extends Notifier<CheckoutState> {
 
   CheckoutRepository get _repo => ref.read(checkoutRepositoryProvider);
 
+  /// The fan picks a method row (any time before the hosted page opens).
+  void select(PayMethod method) {
+    if (state.cardOpened || state.refused.contains(method)) return;
+    state = _with(state, method: method);
+  }
+
   /// Validates the rows (row 0 is the fan: no phone), saves an edited name on `/fan/me`, holds the places
-  /// (retrying `SALE_BUSY` on its own) and starts the card payment. Returns where to send the fan to pay,
-  /// or null when something needs their attention (state says what).
-  Future<PayStart?> submit(List<String> names, List<String> phones, {required bool friendsConsent}) async {
+  /// (retrying `SALE_BUSY` on its own) and starts the payment with [method]. Returns where to send the fan
+  /// to pay (the hosted page, or the cash order screen), or null when something needs their attention
+  /// (state says what).
+  Future<PayStart?> submit(
+    List<String> names,
+    List<String> phones, {
+    required bool friendsConsent,
+    PayMethod method = PayMethod.card,
+  }) async {
     if (state.cardOpened || state.phase == CheckoutPhase.working || state.phase == CheckoutPhase.busy) return null;
+    state = _with(state, method: method);
     if (state.order != null) return await pay();
 
     final holders = <HolderInput>[];
@@ -165,16 +218,25 @@ class CheckoutController extends Notifier<CheckoutState> {
     return await pay();
   }
 
-  /// `POST /fan/orders/{id}/pay` for the held order, until the card page has been opened once. Returns null
-  /// (no card page) once the hold ran out, even if it ran out while `/pay` was in flight.
+  /// `POST /fan/orders/{id}/pay` for the held order with the picked method, until the hosted page has been
+  /// opened once. A hosted payment returns null (no payment page) once the hold ran out, even if it ran out
+  /// while `/pay` was in flight. A cash code ends screen 4 even then: the code exists and the order now waits
+  /// for cash until its own deadline.
   Future<PayStart?> pay() async {
     final order = state.order!;
+    final method = state.method ?? PayMethod.card;
     if (state.phase == CheckoutPhase.expired) return null;
-    state = state.next(CheckoutPhase.working);
+    state = _with(state.next(CheckoutPhase.working), payingCash: !method.hosted);
     try {
-      final start = await _repo.payByCard(order.id);
-      if (!ref.mounted || state.phase == CheckoutPhase.expired) return null;
-      if (!isPaymentPage(start.redirectUrl)) {
+      final start = await _repo.pay(order.id, method);
+      if (!ref.mounted) return null;
+      if (!start.method.hosted) {
+        _hold?.cancel();
+        state = state.next(CheckoutPhase.reserved);
+        return start;
+      }
+      if (state.phase == CheckoutPhase.expired) return null;
+      if (!isPaymentPage(start.redirectUrl!)) {
         state = state.next(CheckoutPhase.reserved, error: unexpectedAnswer);
         return null;
       }
@@ -182,9 +244,14 @@ class CheckoutController extends Notifier<CheckoutState> {
       return start;
     } on ApiError catch (e) {
       if (!ref.mounted) return null;
-      state = e.code == 'ORDER_EXPIRED' || state.phase == CheckoutPhase.expired
-          ? state.next(CheckoutPhase.expired)
-          : state.next(CheckoutPhase.reserved, error: e);
+      if (e.code == 'ORDER_EXPIRED' || state.phase == CheckoutPhase.expired) {
+        state = state.next(CheckoutPhase.expired);
+      } else if (e.code == 'METHOD_NOT_AVAILABLE') {
+        // TOO_LATE, CASH_CAP, NOT_CONFIGURED: that row goes off (and loses the selection), the fan picks another.
+        state = _with(state.next(CheckoutPhase.reserved, error: e), refused: {...state.refused, method});
+      } else {
+        state = state.next(CheckoutPhase.reserved, error: e);
+      }
       return null;
     } on Object {
       if (!ref.mounted) return null;
@@ -254,7 +321,13 @@ class CheckoutController extends Notifier<CheckoutState> {
       return d.isNegative ? Duration.zero : d;
     }
 
-    state = CheckoutState(phase: CheckoutPhase.reserved, order: order, left: left());
+    state = CheckoutState(
+      phase: CheckoutPhase.reserved,
+      order: order,
+      left: left(),
+      method: state.method,
+      refused: state.refused,
+    );
     _hold = Timer.periodic(const Duration(seconds: 1), (t) {
       final l = left();
       final phase = l == Duration.zero ? CheckoutPhase.expired : state.phase;
@@ -268,14 +341,41 @@ class CheckoutController extends Notifier<CheckoutState> {
         badPhones: state.badPhones,
         consentMissing: state.consentMissing,
         cardOpened: state.cardOpened,
+        method: state.method,
+        refused: state.refused,
+        payingCash: state.payingCash,
       );
       if (phase == CheckoutPhase.expired) t.cancel();
     });
   }
 
-  /// The card page is open: from now on the order screen handles any further attempt.
-  void cardOpened() =>
-      state = CheckoutState(phase: state.phase, order: state.order, left: state.left, cardOpened: true);
+  /// The card (or wallet) page is open: from now on the order screen handles any further attempt.
+  void cardOpened() => state = CheckoutState(
+    phase: state.phase,
+    order: state.order,
+    left: state.left,
+    cardOpened: true,
+    method: state.method,
+    refused: state.refused,
+  );
+
+  /// [s] with another method, refused set or cash flag; everything else kept. Giving [refused] also clears the
+  /// method unless one is given (the refused row loses the selection).
+  static CheckoutState _with(CheckoutState s, {PayMethod? method, Set<PayMethod>? refused, bool? payingCash}) =>
+      CheckoutState(
+        phase: s.phase,
+        badNames: s.badNames,
+        badPhones: s.badPhones,
+        error: s.error,
+        retryIn: s.retryIn,
+        order: s.order,
+        left: s.left,
+        consentMissing: s.consentMissing,
+        cardOpened: s.cardOpened,
+        method: refused != null ? method : method ?? s.method,
+        refused: refused ?? s.refused,
+        payingCash: payingCash ?? s.payingCash,
+      );
 
   CheckoutState _failed(ApiError e) {
     if (e.details['fields'] case final Map<String, Object?> fields when e.code == 'VALIDATION_FAILED') {
@@ -303,3 +403,10 @@ final NotifierProviderFamily<CheckoutController, CheckoutState, CheckoutArgs> ch
 
 /// Places a fan can pick in one order: the account limit, and what is left in the category.
 int maxPlaces({required int perAccountLimit, required int remaining}) => max(0, min(perAccountLimit, remaining));
+
+/// The cash code's deadline as screen 4 can guess it before `/pay`: `least(now + 24 h, sales close)` on the server
+/// time of the event read (docs/plans/lot-3.md Q45). `/pay` answers the real `reserved_until`.
+DateTime cashDeadline(FanEvent e) {
+  final day = e.fetchedAt.add(const Duration(hours: 24));
+  return day.isBefore(e.salesCloseAt) ? day : e.salesCloseAt;
+}
