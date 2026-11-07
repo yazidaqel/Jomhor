@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${DB_USER:-jomhor}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-jomhor}
     ports:
-      - "127.0.0.1:${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5435}:5432" # 5435: 5432 is often taken by another local Postgres
     healthcheck: # over TCP: the init-time server listens on the socket only, so it never looks ready too early
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 2s

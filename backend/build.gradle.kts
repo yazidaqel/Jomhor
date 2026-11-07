@@ -46,3 +46,11 @@ tasks.withType<Test> {
     inputs.files("../docs/token-vectors.json", "../docs/gate-vectors.json", "../docs/holder-name-vectors.json")
     providers.systemProperty("jomhor.writeVectors").orNull?.let { systemProperty("jomhor.writeVectors", it) }
 }
+
+// A local `gradlew bootRun` runs the dev profile (local DB, fake payments, demo data) unless SPRING_PROFILES_ACTIVE says
+// otherwise. Deployed builds run the jar, never bootRun.
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    if (System.getenv("SPRING_PROFILES_ACTIVE").isNullOrBlank()) {
+        systemProperty("spring.profiles.active", "dev")
+    }
+}

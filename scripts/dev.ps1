@@ -7,7 +7,7 @@
   powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 stop     # stop, keep the data
   powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 reset    # stop and wipe the database
 .NOTES
-  Ports default to 5432 / 8090 / 3000 / 5173; a busy one moves to the next free port (the summary prints them).
+  Ports default to 5435 / 8090 / 3000 / 5173; a busy one moves to the next free port (the summary prints them).
   Logs and state: scripts\.dev\. Dev-only values: nothing here is a real secret.
 #>
 param([ValidateSet('start', 'stop', 'reset')][string]$Command = 'start')
@@ -88,7 +88,7 @@ New-Item -ItemType Directory -Force $StateDir | Out-Null
 # Postgres: keep the port of a running container, else the first free one from 5432.
 $dbPort = $null
 $mapped = & { $ErrorActionPreference = 'Continue'; & docker @Compose port postgres 5432 2>$null }
-if ($LASTEXITCODE -eq 0 -and $mapped) { $dbPort = [int]($mapped -split ':')[-1] } else { $dbPort = Get-FreePort 5432 }
+if ($LASTEXITCODE -eq 0 -and $mapped) { $dbPort = [int]($mapped -split ':')[-1] } else { $dbPort = Get-FreePort 5435 }
 $apiPort = Get-FreePort 8090 # 8090, not 8080: the phone apps are built for http://<lan>:8090/v1 (docs/TESTING.md)
 $shopPort = Get-FreePort 3000
 $boPort = Get-FreePort 5173
