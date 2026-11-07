@@ -12,6 +12,7 @@ import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 3 · Choix de zone. Lot 1: zone list + stepper (Q22: no stadium map yet).
 class ZonesScreen extends ConsumerWidget {
@@ -26,12 +27,13 @@ class ZonesScreen extends ConsumerWidget {
     final now = ref.watch(clockProvider).value ?? ref.read(nowProvider)();
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: JomhorColors.ground,
-        title: Text(l.chooseZone, style: JomhorType.h2),
-      ),
+      appBar: AppBar(title: Text(l.chooseZone)),
       body: detail.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => ListView(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(JomhorSpace.xl),
+          children: const [SkeletonList(rows: 4)],
+        ),
         error: (e, _) => Center(
           child: ErrorPanel(error: e, onRetry: () => ref.invalidate(eventDetailProvider(eventId))),
         ),
@@ -83,6 +85,7 @@ class _Body extends ConsumerWidget {
         if (pick case (zone: final zone?, price: final price?, :final qty)) ...[
           const SizedBox(height: JomhorSpace.l),
           Card(
+            color: JomhorColors.surface2,
             child: Padding(
               padding: const EdgeInsets.all(JomhorSpace.xl),
               child: Column(
@@ -127,6 +130,7 @@ class _Body extends ConsumerWidget {
                           '$qty',
                           key: const Key('zones.qty'),
                           style: JomhorType.h1,
+                          textScaler: TextScaler.noScaling,
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -144,7 +148,16 @@ class _Body extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: JomhorSpace.m),
-          Text(l.groupHint, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.groups_outlined, size: 18, color: JomhorColors.textMuted),
+              const SizedBox(width: JomhorSpace.s),
+              Expanded(
+                child: Text(l.groupHint, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+              ),
+            ],
+          ),
         ],
       ],
     );
@@ -160,12 +173,7 @@ class _StepButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => IconButton.outlined(
-    constraints: const BoxConstraints.tightFor(width: JomhorSize.touchMin, height: JomhorSize.touchMin),
-    tooltip: tooltip,
-    onPressed: onPressed,
-    icon: Icon(icon),
-  );
+  Widget build(BuildContext context) => IconButton(tooltip: tooltip, onPressed: onPressed, icon: Icon(icon));
 }
 
 class _Footer extends ConsumerWidget {
@@ -201,7 +209,7 @@ class _Footer extends ConsumerWidget {
                   Text(
                     formatDh(price == null ? 0 : price.priceMad * pick.qty),
                     key: const Key('zones.total'),
-                    style: JomhorType.h2,
+                    style: JomhorType.h1,
                   ),
                 ],
               ),

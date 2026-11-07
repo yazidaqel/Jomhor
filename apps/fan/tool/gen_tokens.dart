@@ -48,8 +48,8 @@ String generateTokens(Map<String, Object?> tokens) {
 
   out
     ..writeln()
-    ..writeln('/// Sizes, weights, line heights and tracking. No font family yet: the')
-    ..writeln('/// fonts are not bundled, so apply `JomhorFonts` once they are.')
+    ..writeln('/// Family, size, weight, line height and tracking. The fonts are bundled')
+    ..writeln('/// (pubspec.yaml `fonts`); `transform` is applied by the widget.')
     ..writeln('abstract final class JomhorType {');
   var first = true;
   for (final MapEntry(:key, :value) in (tokens['type']! as Map<String, Object?>).entries) {
@@ -58,14 +58,21 @@ String generateTokens(Map<String, Object?> tokens) {
     final style = value! as Map<String, Object?>;
     final doc = ['${style['font']} face', if (style['transform'] case final String t) t].join(', ');
     final args = [
+      'fontFamily: JomhorFonts.${style['font']! as String}',
       'fontSize: ${style['size']! as num}',
       'fontWeight: FontWeight.w${style['weight']! as int}',
       if (style['lineHeight'] case final num h) 'height: $h',
       if (style['letterSpacing'] case final num l) 'letterSpacing: $l',
-    ].join(', ');
+    ];
+    final line = '  static const TextStyle $key = TextStyle(${args.join(', ')});';
     out
       ..writeln('  /// $doc.')
-      ..writeln('  static const TextStyle $key = TextStyle($args);');
+      // Already `dart format`ted (page width 120), so the format check passes on the generated file.
+      ..writeln(
+        line.length <= 120
+            ? line
+            : ['  static const TextStyle $key = TextStyle(', for (final a in args) '    $a,', '  );'].join('\n'),
+      );
   }
   out.writeln('}');
   return out.toString();

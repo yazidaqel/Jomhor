@@ -580,4 +580,33 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get profileLogoutAllFailed =>
       'Ce téléphone est déconnecté, mais tes autres appareils n\'ont pas pu l\'être (pas de réseau). Reconnecte-toi et réessaie.';
+
+  @override
+  String get loading => 'Chargement';
+
+  @override
+  String homeGreeting(String name) {
+    return 'Salut $name';
+  }
+
+  @override
+  String get homeGreetingNoName => 'Salut';
+
+  @override
+  String get homeGreetingGuest => 'Bienvenue';
+
+  @override
+  String get homeEmptyTitle => 'Rien au programme';
+
+  @override
+  String get homeOpenProfile => 'Mon profil';
+
+  @override
+  String get ticketsEmptyTitle => 'Pas encore de billet';
+
+  @override
+  String get ticketOpen => 'Ouvrir le billet';
+
+  @override
+  String get poweredBy => 'Propulsé par Jomhor';
 }

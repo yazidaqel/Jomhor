@@ -11,6 +11,7 @@ import 'package:jomhor_fan/features/checkout/zones_screen.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
 import 'package:jomhor_fan/features/profile/profile_screen.dart';
+import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_screen.dart';
@@ -102,7 +103,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tickets/:id',
         redirect: (context, state) => isTicketId(state.pathParameters['id']!) ? null : '/tickets',
-        builder: (context, state) => TicketScreen(id: state.pathParameters['id']!),
+        builder: (context, state) =>
+            TicketScreen(id: state.pathParameters['id']!, origin: PassOrigin.values.asNameMap()[state.extra]),
       ),
       GoRoute(
         path: '/orders/:id',

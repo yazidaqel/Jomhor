@@ -74,6 +74,7 @@ void main() {
     expect(find.text('RAPID OUED'), findsOneWidget);
     expect(find.text('CHAMPIONNAT · JOURNÉE 11'), findsNothing); // the hero shows it in sentence case
     expect(find.text('Championnat · Journée 11'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Union Tanger'), 200); // the calendar sits under the hero
     expect(find.text('Union Tanger'), findsOneWidget);
     expect(find.text('Bientôt'), findsOneWidget);
 

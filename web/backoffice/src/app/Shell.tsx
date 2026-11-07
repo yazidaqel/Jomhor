@@ -1,57 +1,116 @@
-import type { ReactNode } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { LogOut } from 'lucide-react'
+import {
+  Building2,
+  CalendarDays,
+  ChartNoAxesColumn,
+  IdCard,
+  Landmark,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  RadioTower,
+  Smartphone,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, Outlet, useLocation } from 'react-router'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { OrganizerContext, useMe, type Role } from '@/features/auth/organizer'
+import { Separator } from '@/components/ui/separator'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+  useSidebar,
+} from '@/components/ui/sidebar'
+import { Toaster } from '@/components/ui/sonner'
+import { OrganizerContext, useMe, type Me, type Membership, type Role } from '@/features/auth/organizer'
 import { errorKey } from '@/lib/errors'
 import { session, useSelectedOrganizerId, useSessionToken } from '@/lib/session'
 
 // GATE and SUPERVISOR staff get 403 on every /org call (04-api §Organizer): not offered here.
 const BACKOFFICE_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'FINANCE']
 
+type Section = 'overview' | 'events' | 'sales' | 'venues'
+type NavKey = Section | 'liveGates' | 'devices' | 'invitations' | 'finance' | 'crm'
+type NavItem = { key: NavKey; icon: LucideIcon; to?: string } // no `to`: lit up in a later lot
 // Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1.
-const DISABLED = ['liveGates', 'devices', 'invitations', 'finance', 'crm'] as const
-
-function Item({ to, current, children }: { to: string; current: boolean; children: ReactNode }) {
-  return (
-    <Button
-      asChild
-      variant="ghost"
-      className="justify-start aria-[current=page]:bg-accent aria-[current=page]:font-semibold"
-    >
-      <Link to={to} aria-current={current ? 'page' : undefined}>
-        {children}
-      </Link>
-    </Button>
-  )
-}
+const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: NavItem[] }[] = [
+  {
+    group: 'manage',
+    items: [
+      { key: 'overview', icon: LayoutDashboard, to: '/' },
+      { key: 'events', icon: CalendarDays, to: '/events' },
+      { key: 'sales', icon: ChartNoAxesColumn, to: '/sales' },
+    ],
+  },
+  {
+    group: 'matchday',
+    items: [
+      { key: 'liveGates', icon: RadioTower },
+      { key: 'devices', icon: Smartphone },
+    ],
+  },
+  {
+    group: 'relations',
+    items: [
+      { key: 'invitations', icon: IdCard },
+      { key: 'finance', icon: Landmark },
+      { key: 'crm', icon: Users },
+    ],
+  },
+  { group: 'settings', items: [{ key: 'venues', icon: MapPin, to: '/settings/venues' }] },
+]
 
 /** `/events/:id/sales` lives under Événements in the URL but under Ventes in the sidebar. */
-const section = (pathname: string) =>
-  /^\/(sales|events\/[^/]+\/sales)\/?$/.test(pathname)
-    ? 'sales'
-    : pathname.startsWith('/events')
-      ? 'events'
-      : pathname.startsWith('/settings/venues')
-        ? 'venues'
-        : null
+const section = (pathname: string): Section | null =>
+  pathname === '/'
+    ? 'overview'
+    : /^\/(sales|events\/[^/]+\/sales)\/?$/.test(pathname)
+      ? 'sales'
+      : pathname.startsWith('/events')
+        ? 'events'
+        : pathname.startsWith('/settings/venues')
+          ? 'venues'
+          : null
 
-function LogoutButton(props: { variant?: 'outline' | 'ghost'; iconOnly?: boolean }) {
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join('')
+
+function LogoutButton() {
   const { t } = useTranslation()
   return (
-    <Button
-      variant={props.variant ?? 'outline'}
-      size={props.iconOnly ? 'icon' : 'default'}
-      aria-label={t('shell.logout')}
-      title={t('shell.logout')}
-      onClick={() => session.clear()}
-    >
+    <Button variant="outline" onClick={() => session.clear()}>
       <LogOut />
-      {!props.iconOnly && t('shell.logout')}
+      {t('shell.logout')}
     </Button>
   )
 }
@@ -63,6 +122,7 @@ function Notice({ title, body, logout, onRetry }: { title: string; body?: string
     <main className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
+          <img src="/jomhor-mark.svg" alt="" className="mb-2 size-10 rounded-lg" />
           <CardTitle>{title}</CardTitle>
           {body && <CardDescription>{body}</CardDescription>}
         </CardHeader>
@@ -77,6 +137,139 @@ function Notice({ title, body, logout, onRetry }: { title: string; body?: string
   )
 }
 
+/** While /org/me loads: the mark, breathing (still under reduced motion), and the word for assistive tech. */
+function Splash() {
+  const { t } = useTranslation()
+  return (
+    <main aria-busy="true" className="flex min-h-screen items-center justify-center">
+      <img src="/jomhor-mark.svg" alt="" className="size-12 animate-pulse rounded-xl motion-reduce:animate-none" />
+      <p className="sr-only">{t('shell.loading')}</p>
+    </main>
+  )
+}
+
+function AppSidebar({ active }: { active: Section | null }) {
+  const { t } = useTranslation()
+  // Labels are hidden only in icon mode: tooltips there, none otherwise (one Radix tooltip per item is not free).
+  const { state, isMobile, setOpenMobile } = useSidebar()
+  const iconMode = state === 'collapsed' && !isMobile
+  // The phone sheet closes once a destination is picked (DESIGN §Back-office).
+  const closeSheet = () => setOpenMobile(false)
+  return (
+    <Sidebar collapsible="icon" label={t('nav.label')}>
+      <SidebarHeader className="h-14 justify-center border-b">
+        <Link
+          to="/"
+          onClick={closeSheet}
+          className="flex items-center gap-2.5 rounded-md px-1 outline-none focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/50 group-data-[collapsible=icon]:px-0"
+        >
+          <img src="/jomhor-mark.svg" alt="" className="size-7 shrink-0 rounded-lg" />
+          <span className="flex min-w-0 flex-col leading-none group-data-[collapsible=icon]:hidden">
+            <img src="/jomhor-wordmark-light.svg" alt={t('app.name')} className="h-[17px] w-auto self-start" />
+            <span className="mt-1 text-[11px] font-medium text-muted-foreground">{t('shell.organizerSpace')}</span>
+          </span>
+        </Link>
+      </SidebarHeader>
+      <SidebarContent>
+        <nav aria-label={t('nav.label')}>
+          {NAV.map(({ group, items }) => (
+            <SidebarGroup key={group}>
+              <SidebarGroupLabel>{t(`nav.groups.${group}`)}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {items.map(({ key, icon: Icon, to }) => (
+                    <SidebarMenuItem key={key}>
+                      {to ? (
+                        <SidebarMenuButton
+                          asChild
+                          isActive={active === key}
+                          tooltip={iconMode ? t(`nav.${key}`) : undefined}
+                          className="transition-[background-color,box-shadow,width,height,padding] duration-[220ms] data-[active=true]:font-semibold data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                        >
+                          <Link to={to} aria-current={active === key ? 'page' : undefined} onClick={closeSheet}>
+                            <Icon />
+                            <span>{t(`nav.${key}`)}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      ) : (
+                        <>
+                          {/* aria-disabled, not disabled: stays focusable, so icon mode can still say what it is and that it comes later. */}
+                          <SidebarMenuButton
+                            aria-disabled="true"
+                            tooltip={iconMode ? t('nav.soonLabel', { label: t(`nav.${key}`) }) : undefined}
+                            className="aria-disabled:pointer-events-auto aria-disabled:cursor-default aria-disabled:hover:bg-transparent"
+                          >
+                            <Icon />
+                            <span>{t(`nav.${key}`)}</span>
+                          </SidebarMenuButton>
+                          <SidebarMenuBadge className="text-[10px] font-medium text-muted-foreground">{t('nav.soon')}</SidebarMenuBadge>
+                        </>
+                      )}
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </nav>
+      </SidebarContent>
+      <SidebarRail label={t('shell.toggleSidebar')} />
+    </Sidebar>
+  )
+}
+
+function UserMenu({ user, role }: { user: Me['user']; role: Role }) {
+  const { t } = useTranslation()
+  const name = user.display_name ?? user.phone
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        {/* Its accessible name is the visible name + role (WCAG 2.5.3); below md they stay for screen readers only. */}
+        <Button variant="ghost" className="h-10 gap-2.5 px-2">
+          <Avatar className="size-7">
+            <AvatarFallback className="bg-primary text-[11px] font-semibold text-primary-foreground">{initials(user.display_name ?? '') || '·'}</AvatarFallback>
+          </Avatar>
+          <span className="sr-only min-w-0 flex-col items-start text-left leading-tight md:not-sr-only md:flex">
+            <span className="max-w-40 truncate text-sm font-medium">{name}</span>
+            <span className="text-xs font-normal text-muted-foreground">{t(`roles.${role}`)}</span>
+          </span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuLabel className="font-normal">
+          <div className="truncate text-sm font-medium">{name}</div>
+          <div className="truncate text-xs text-muted-foreground">{user.phone}</div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => session.clear()}>
+          <LogOut />
+          {t('shell.logout')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function OrganizerSwitcher({ memberships, current, onSwitch }: { memberships: Membership[]; current: Membership; onSwitch: (id: string) => void }) {
+  const { t } = useTranslation()
+  return (
+    <Select value={current.organizer_id} onValueChange={onSwitch}>
+      <SelectTrigger aria-label={t('shell.organizer')} className="h-9 max-w-72 gap-2 border-transparent bg-transparent font-medium shadow-none hover:bg-accent">
+        <Building2 className="text-muted-foreground" aria-hidden="true" />
+        {/* The trigger shows the organizer only; the list also gives each role. */}
+        <SelectValue>{current.organizer_name}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {memberships.map((m) => (
+          <SelectItem key={m.organizer_id} value={m.organizer_id}>
+            {m.organizer_name} · {t(`roles.${m.role}`)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 export function Shell() {
   const { t } = useTranslation()
   const token = useSessionToken()
@@ -84,11 +277,12 @@ export function Shell() {
   const location = useLocation()
   const queryClient = useQueryClient()
   const me = useMe(!!token)
-  const active = section(location.pathname)
+  // Wide screens start with the full sidebar, 768-1023 px with icons only (more room for tables); the user toggles.
+  const [sidebarOpen] = useState(() => window.innerWidth >= 1024)
 
   // No valid session (never signed in, expired, logout, or a 401 cleared it): back to login, then here.
   if (!token) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
-  if (me.isPending) return <Notice title={t('shell.loading')} />
+  if (me.isPending) return <Splash />
   if (me.isError) return <Notice title={t(errorKey(me.error))} logout onRetry={() => void me.refetch()} />
 
   const { user } = me.data
@@ -103,61 +297,36 @@ export function Shell() {
   }
 
   return (
-    // DESIGN §Back-office: sidebar 1 1 240px, content 999 1 560px; they wrap (stack) when content would go under
-    // 560px, i.e. below 240 + 560 = 800px. CSS cannot see the wrap, so the stacked look keys off that same width.
-    // Single row: stretch so the sidebar is full height. Stacked: content-start so rows don't stretch.
-    <div className="flex min-h-screen flex-wrap max-[800px]:content-start">
-      <nav
-        aria-label={t('nav.label')}
-        className="flex flex-[1_1_240px] flex-col gap-1 border-r bg-card px-3 py-4 max-[800px]:border-r-0 max-[800px]:border-b"
+    // DESIGN §Back-office: 240 px grouped sidebar, icons only from 768 to 1023 px, a sheet below 768 px (closes on
+    // navigation); sticky top bar with the toggle, the organizer switcher and the user menu.
+    <SidebarProvider defaultOpen={sidebarOpen} style={{ '--sidebar-width': '15rem' } as CSSProperties}>
+      <a
+        href="#content"
+        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
       >
-        <div className="flex items-center gap-2.5 px-2.5 pb-4">
-          <img src="/jomhor-mark.svg" alt="" className="size-7 rounded-lg" />
-          <span className="text-[15px] font-bold">{t('app.name')}</span>
-        </div>
-        <Select value={current.organizer_id} onValueChange={switchTo}>
-          <SelectTrigger aria-label={t('shell.organizer')} className="mb-2 w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {memberships.map((m) => (
-              <SelectItem key={m.organizer_id} value={m.organizer_id}>
-                {m.organizer_name} · {t(`roles.${m.role}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Item to="/events" current={active === 'events'}>
-          {t('nav.events')}
-        </Item>
-        <Item to="/sales" current={active === 'sales'}>
-          {t('nav.sales')}
-        </Item>
-        {DISABLED.map((key) => (
-          <Button key={key} variant="ghost" disabled className="justify-start">
-            {t(`nav.${key}`)}
-          </Button>
-        ))}
-        <div className="px-4 pt-2 pb-1 text-sm font-medium">{t('nav.settings')}</div>
-        <div className="flex flex-col pl-3">
-          <Item to="/settings/venues" current={active === 'venues'}>
-            {t('nav.venues')}
-          </Item>
-        </div>
-        <div className="mt-auto flex items-center gap-2 px-2.5 pt-4">
-          <div className="min-w-0 flex-1 text-xs">
-            <div className="truncate font-medium">{user.display_name ?? user.phone}</div>
-            <div className="text-muted-foreground">{t(`roles.${current.role}`)}</div>
+        {t('shell.skipToContent')}
+      </a>
+      <AppSidebar active={section(location.pathname)} />
+      <SidebarInset className="min-w-0">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b bg-background/80 px-3 backdrop-blur-md md:px-5">
+          <SidebarTrigger label={t('shell.toggleSidebar')} title={t('shell.toggleSidebar')} />
+          <Separator orientation="vertical" className="mx-1 data-[orientation=vertical]:h-5" />
+          <OrganizerSwitcher memberships={memberships} current={current} onSwitch={switchTo} />
+          <div className="ml-auto">
+            <UserMenu user={user} role={current.role} />
           </div>
-          <LogoutButton variant="ghost" iconOnly />
-        </div>
-      </nav>
-      <main className="min-w-0 flex-[999_1_560px] px-7 py-6">
-        {/* key: a page never carries state from one organizer into the next. */}
-        <OrganizerContext value={current} key={current.organizer_id}>
-          <Outlet />
-        </OrganizerContext>
-      </main>
-    </div>
+        </header>
+        <main id="content" tabIndex={-1} className="mx-auto w-full max-w-[1320px] px-4 py-6 outline-none md:px-6 lg:px-8 lg:py-8">
+          {/* key: a page never carries state from one organizer into the next. */}
+          <OrganizerContext value={current} key={current.organizer_id}>
+            {/* Page cross-fade (DESIGN §6): each page fades in on arrival; off under reduced motion. */}
+            <div key={location.pathname} className="animate-in duration-200 fade-in-0 motion-reduce:animate-none">
+              <Outlet />
+            </div>
+          </OrganizerContext>
+        </main>
+      </SidebarInset>
+      <Toaster position="bottom-right" containerAriaLabel={t('shell.notifications')} />
+    </SidebarProvider>
   )
 }

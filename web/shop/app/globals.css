@@ -2,11 +2,68 @@
 /* Theme from design/tokens.json (colours, radii, sizes, type scale, fonts). */
 @config "../tailwind.config.ts";
 
+/* Motion: design/tokens.json `motion` (ticketFlip 420 ms for arrivals, base 220 ms for state changes). Every animation
+   below is opt-in through `motion-safe:` or the media query, so `prefers-reduced-motion: reduce` gets none. */
+@theme {
+  --animate-rise: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-pop: pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  --animate-mark: pop 220ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both; /* selection mark: motion.base */
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+}
+
+/* Staggered entrance: `--i` (0, 1, 2…) on the element delays it by 70 ms per step, capped after 5 items. */
+@utility stagger {
+  animation-delay: calc(min(var(--i, 0), 5) * 70ms);
+}
+
+/* The crowd: a field of dots (the 12-dot mark at stadium scale), faded towards the bottom. */
+@utility bg-crowd {
+  background-image: radial-gradient(circle, color-mix(in srgb, theme(colors.text) 9%, transparent) 1.2px, transparent 1.7px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+/* A soft pool of club light (the accent), for hero backdrops; intensity via opacity. */
+@utility glow {
+  background-image: radial-gradient(closest-side, theme(colors.accent), transparent);
+}
+
 @layer base {
+  html {
+    scroll-padding-top: 88px; /* the sticky header */
+  }
   body {
     @apply bg-ground text-text font-body antialiased;
   }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-accent;
+  }
+  /* Figures in the display face line up (countdowns, prices). */
+  .font-display {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Route changes cross-fade; an event title morphs from its card into the event hero (React <ViewTransition>). */
+::view-transition-group(.morph) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

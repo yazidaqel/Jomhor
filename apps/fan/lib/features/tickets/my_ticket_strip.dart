@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
+import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/motion.dart';
 
 /// Screen 1 "Mon billet" strip: the next upcoming ticket from the saved tickets; nothing when there is none.
+/// The pass peeks out of the card and flies into screen 5 on tap.
 class MyTicketStrip extends ConsumerWidget {
   const new({super.key});
 
@@ -25,45 +28,69 @@ class MyTicketStrip extends ConsumerWidget {
         ? l.myTicketWhen(venueDaysUntil(now, e.startsAt, e.timezone), clock)
         : l.myTicketStarted(clock);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: JomhorSpace.s),
-      child: Material(
+      padding: const EdgeInsets.symmetric(vertical: JomhorSpace.m),
+      child: TapCard(
+        inkKey: const Key('home.myTicket'),
+        onTap: () => context.push('/tickets/${t.id}', extra: PassOrigin.home.name),
         color: JomhorColors.successBg,
-        shape: const RoundedRectangleBorder(
-          side: BorderSide(color: JomhorColors.success),
-          borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          key: const Key('home.myTicket'),
-          onTap: () => context.push('/tickets/${t.id}'),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: JomhorSpace.m, horizontal: JomhorSpace.l),
-            child: Row(
-              children: [
-                const Icon(Icons.confirmation_number_outlined, color: JomhorColors.successText),
-                const SizedBox(width: JomhorSpace.m),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l.myTicketTitle(
-                          factsLine(l, e.facts) ?? e.title,
-                          venueDate(e.startsAt, e.timezone, l.localeName),
-                        ),
-                        style: JomhorType.body.copyWith(color: JomhorColors.successText, fontWeight: FontWeight.w600),
+        borderColor: JomhorColors.success,
+        radius: JomhorRadius.card,
+        padding: EdgeInsets.zero,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(JomhorSpace.xl, 18, 0, 18),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l.myTicketTitle(
+                              factsLine(l, e.facts) ?? e.title,
+                              venueDate(e.startsAt, e.timezone, l.localeName),
+                            ),
+                            style: JomhorType.body.copyWith(color: JomhorColors.text, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            l.dotPair(
+                              l.dotPair(t.zone.name, l.ticketGatesList(t.gateCodes.length, gatesText(l, t))),
+                              when,
+                            ),
+                            style: JomhorType.bodySmall.copyWith(color: JomhorColors.successText),
+                          ),
+                        ],
                       ),
-                      Text(
-                        l.dotPair(l.dotPair(t.zone.name, l.ticketGatesList(t.gateCodes.length, gatesText(l, t))), when),
-                        style: JomhorType.bodySmall.copyWith(color: JomhorColors.successText),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const Icon(Icons.chevron_right, color: JomhorColors.successText),
-              ],
+              ),
             ),
-          ),
+            // The pass, peeking from the bottom edge (the card clips it).
+            SizedBox(
+              width: 84,
+              height: 74,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  PositionedDirectional(
+                    top: 14,
+                    end: 16,
+                    child: Hero(
+                      tag: passHeroTag(PassOrigin.home, t.id),
+                      flightShuttleBuilder: passFlight,
+                      child: const MiniPass(width: 50),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

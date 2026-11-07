@@ -74,3 +74,17 @@ export function offsetLabel(ms: number, zone: string) {
   const abs = Math.abs(minutes)
   return `UTC${minutes < 0 ? '-' : '+'}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`
 }
+
+/** RFC 3339 instant → long date and time for display (`samedi 19 décembre 2026 à 20:00`), in `zone`. */
+export const formatLongDateTime = (iso: string, locale: string, zone: string) =>
+  new Intl.DateTimeFormat(locale, { timeZone: zone, dateStyle: 'full', timeStyle: 'short' }).format(Date.parse(iso))
+
+/** RFC 3339 instant → time of day (`18:30`), in `zone`. */
+export const formatTime = (iso: string, locale: string, zone: string) =>
+  new Intl.DateTimeFormat(locale, { timeZone: zone, timeStyle: 'short' }).format(Date.parse(iso))
+
+/** RFC 3339 instant → `{ day: '19', month: 'déc.' }` in `zone`: the date block of an event row. */
+export function dateParts(iso: string, locale: string, zone: string) {
+  const parts = new Intl.DateTimeFormat(locale, { timeZone: zone, day: 'numeric', month: 'short' }).formatToParts(Date.parse(iso))
+  return { day: parts.find((p) => p.type === 'day')?.value ?? '', month: parts.find((p) => p.type === 'month')?.value ?? '' }
+}

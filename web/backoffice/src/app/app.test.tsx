@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter } from 'react-router'
@@ -198,7 +198,8 @@ it('logout clears the session and the cache', async () => {
   stubApi()
   const { router, queryClient } = renderApp('/events')
 
-  await user.click(await screen.findByRole('button', { name: fr.shell.logout }))
+  await user.click(await screen.findByRole('button', { name: /Samira/ })) // user menu (name + role), top bar
+  await user.click(await screen.findByRole('menuitem', { name: fr.shell.logout }))
 
   await waitFor(() => expect(router.state.location.pathname).toBe('/login'))
   expect(sessionStorage.length).toBe(0)
@@ -248,7 +249,7 @@ it('"Renvoyer le code" re-sends the OTP after a 30 s cooldown', async () => {
 
 it('after expiry, the next user on the tab never sees the previous session data', async () => {
   const user = userEvent.setup()
-  session.start('tok-A', new Date(Date.now() + 300).toISOString())
+  session.start('tok-A', new Date(Date.now() + 1500).toISOString())
   session.selectOrganizer('org-a')
   // B is also a member of org-a: a leftover organizer selection would land B there instead of on org-c.
   const meB: Me = {
@@ -277,7 +278,7 @@ it('after expiry, the next user on the tab never sees the previous session data'
   expect(screen.getByText('Samira')).toBeTruthy()
 
   // Idle until the token expires: no request is needed to end the session.
-  const phone = await screen.findByLabelText(fr.login.phoneLabel, {}, { timeout: 2000 })
+  const phone = await screen.findByLabelText(fr.login.phoneLabel, {}, { timeout: 6000 })
   expect(router.state.location.pathname).toBe('/login')
   expect(sessionStorage.length).toBe(0)
   expect(queryClient.getQueryCache().getAll().filter((q) => q.state.data !== undefined)).toEqual([])
@@ -373,4 +374,36 @@ it('a new session starts from an empty cache and no organizer, even without logo
   session.start('tok-B', FUTURE)
   expect(queryClient.getQueryCache().getAll()).toEqual([])
   expect(sessionStorage.getItem('jomhor.organizer')).toBeNull()
+})
+
+it('phone width: the menu is a sheet that closes once a destination is picked', async () => {
+  const user = userEvent.setup()
+  const width = window.innerWidth
+  Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true })
+  try {
+    session.start('tok-1', FUTURE)
+    stubApi((path) => (path === '/org/events' ? Response.json([]) : new Response(null, { status: 404 })))
+    const { router } = renderApp('/settings/venues')
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await user.click(await screen.findByRole('button', { name: fr.shell.toggleSidebar }))
+    const sheet = await screen.findByRole('dialog', { name: fr.nav.label })
+    await user.click(within(sheet).getByRole('link', { name: fr.nav.events }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/events'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  } finally {
+    Object.defineProperty(window, 'innerWidth', { value: width, configurable: true })
+  }
+})
+
+it('"Bientôt" items stay focusable but inert (aria-disabled), they are not links', async () => {
+  session.start('tok-1', FUTURE)
+  stubApi()
+  renderApp('/settings/venues')
+  const nav = within(await screen.findByRole('navigation', { name: fr.nav.label }))
+  const live = nav.getByRole('button', { name: new RegExp(fr.nav.liveGates) })
+  expect(live.getAttribute('aria-disabled')).toBe('true')
+  expect(live).toHaveProperty('disabled', false)
+  expect(nav.queryByRole('link', { name: new RegExp(fr.nav.liveGates) })).toBeNull()
 })

@@ -449,7 +449,7 @@ it('edit: sends only the changed fields, and the full metadata (unknown keys kep
   await user.clear(field(fr.events.form.title))
   await user.type(field(fr.events.form.title), 'Atlas FC vs Rapid Oued (J11)')
   await user.click(saveDraft())
-  expect((await screen.findByRole('status')).textContent).toBe(fr.events.saved)
+  expect(await screen.findByText(fr.events.saved)).toBeTruthy() // toast
   expect(writes(calls)).toEqual([{ method: 'PATCH', path: '/org/events/1', org: 'org-a', body: { title: 'Atlas FC vs Rapid Oued (J11)' } }])
 
   await user.clear(field(fr.events.metadata.competition))
@@ -736,7 +736,7 @@ it('publish: confirm, POST publish, then the badge says En vente', async () => {
   expect(await screen.findByText(fr.events.statuses.ON_SALE)).toBeTruthy()
   expect(writes(calls)).toEqual([{ method: 'POST', path: '/org/events/1/publish', org: 'org-a', body: undefined }])
   expect(screen.queryByRole('button', { name: fr.events.publish.action })).toBeNull()
-  expect(screen.getByRole('status').textContent).toBe(fr.events.publish.done)
+  expect(await screen.findByText(fr.events.publish.done)).toBeTruthy() // toast
 })
 
 it.each([
@@ -986,4 +986,17 @@ it('sale opening: across clock changes the T0 − 60 rule compares instants, as 
     doors_open_at: '2026-10-24T23:00:00.000Z',
     sale_starts_at: '2026-10-24T23:59:00.000Z',
   })
+})
+
+it('?tab=prices (Aperçu shortcut) opens a saved event on Tarifs & quotas; a new event ignores it', async () => {
+  stubB2()
+  renderApp('/events/1?tab=prices')
+  expect(await screen.findByRole('heading', { name: fr.events.prices.title })).toBeTruthy()
+  expect(screen.getByRole('tab', { name: fr.events.tabs.prices }).getAttribute('aria-selected')).toBe('true')
+  cleanup()
+
+  stubB2()
+  renderApp('/events/new?tab=prices')
+  await screen.findByRole('heading', { name: fr.events.new })
+  expect(screen.getByRole('tab', { name: fr.events.tabs.general }).getAttribute('aria-selected')).toBe('true')
 })
