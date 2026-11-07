@@ -185,6 +185,7 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | Cash confirmed without cash taken | Signed network callbacks, exact amount, unique network ref; club tills reconciled per session (expected vs declared) | A cashier's gap is found at close, not prevented |
 | Ticket cancelled after last delta | Refund/cancel freeze at T0 − 60 min | Cancellations in the last hour are not possible, by policy |
 | Ticket transferred after a scanner's last delta | Transfers and re-issues close at `refund_cutoff_at` − 30 min (T0 − 90), leaving deltas 30 min of signal | A scanner offline before T0 − 90 still admits the old QR and refuses the new one (INCONNU) |
+| Ticket transferred or re-issued after its holder entered | Refused when the server holds an admitted scan (`OK`/`OVERRIDE`) for the ticket (409 `TICKET_NOT_VALID`, reason `ADMITTED`) | An entry scan not yet synced when the transfer is asked (scanner offline): the new ticket can admit a second person; doors open after T0 − 90 for most events, and B12 shows the chain |
 | Fan phone clock tampered | Server time offset pushed to the app; ±1 slot tolerance | None practical |
 | Replay of an old static QR at the next event | event\_id in the token and a new K\_e per event | None |
 | Bots on on-sale day | Not a gate problem: on-sale queue, per-account limits, payment-first reservation. Separate spec | — |
