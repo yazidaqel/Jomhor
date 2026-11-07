@@ -34,13 +34,15 @@ class OrgTicketController {
 
     record RowDto(UUID id, String ticketNo, Ticket.Status status, ZoneDto zone, String holderName, String holderLabel,
                   long unitPriceMad, UUID orderId, String channel, String paymentMethod, Instant issuedAt,
-                  RefundDto refund) {
+                  RefundDto refund, String transferredTo, String transferredFrom) {
         static RowDto of(Tickets.Row r) {
             return new RowDto(r.id(), TicketToken.ticketNo(r.id()), r.status(),
                     new ZoneDto(r.zoneId(), r.zoneCode(), r.zoneName()), r.holderName(),
                     r.holderName() == null ? null : HolderNames.label(r.holderName()), r.unitPriceMad(), r.orderId(),
                     r.channel(), r.paymentMethod(), r.issuedAt(),
-                    r.refundId() == null ? null : new RefundDto(r.refundId(), r.refundStatus(), r.refundAmountMad()));
+                    r.refundId() == null ? null : new RefundDto(r.refundId(), r.refundStatus(), r.refundAmountMad()),
+                    r.transferredTo() == null ? null : TicketToken.ticketNo(r.transferredTo()),
+                    r.transferredFrom() == null ? null : TicketToken.ticketNo(r.transferredFrom()));
         }
 
         @Override

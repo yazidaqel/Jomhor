@@ -27,6 +27,10 @@ public final class HolderNames {
     /** Letter numbers (Roman numerals, U+2160 on): NFKC would turn them into ASCII letters, so they are refused before it. */
     private static final Pattern LETTER_NUMBER = Pattern.compile("\\p{Nl}");
 
+    /** The 422 field message of any name refused by {@link #normalize}. */
+    public static final String INVALID = "2 to 60 letters of one script: Latin with spaces, apostrophes, dots or hyphens,"
+            + " or Arabic with spaces or hyphens";
+
     private HolderNames() {}
 
     /**

@@ -75,6 +75,12 @@ payments:
     # under prod); unset = no WALLET in payment_methods and /pay WALLET → 409 NOT_CONFIGURED.
     provider: ${PAYMENTS_WALLET_PROVIDER:}
 
+tickets:
+  transfer:
+    # Transfers and re-issues close at refund_cutoff_at minus this (plan lot-4 Q59: T0 - 90 with the default cutoff),
+    # so the next manifest version still reaches every scanner before signal is assumed gone (T0 - 60).
+    close-before-cutoff: ${TICKETS_TRANSFER_CLOSE_BEFORE_CUTOFF:30m}
+
 sales:
   # Basic on-sale queue (04 §On-sale Busy): active holds of one event at or above this → 429 SALE_BUSY.
   max-active-holds-per-event: ${SALES_MAX_ACTIVE_HOLDS_PER_EVENT:2000}

@@ -116,6 +116,15 @@ class JdbcScans implements Scans {
     }
 
     @Override
+    public boolean admitted(UUID org, int eventId, UUID ticketId) {
+        return jdbc.sql("""
+                        select exists (select 1 from scans where organizer_id = ? and event_id = ? and ticket_id = ?
+                                                            and result in ('OK', 'OVERRIDE'))
+                        """)
+                .params(org, eventId, ticketId).query(Boolean.class).single();
+    }
+
+    @Override
     public Instant now() {
         return jdbc.sql("select now()").query(OffsetDateTime.class).single().toInstant();
     }

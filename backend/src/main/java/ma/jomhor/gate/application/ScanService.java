@@ -139,6 +139,11 @@ public class ScanService {
         return new Synced(acked, errors, used, next, more, manifestVersion, e.status());
     }
 
+    /** Whether the server holds an admitted (OK/OVERRIDE) scan of the ticket: tickets refuses its transfer then. */
+    public boolean admitted(UUID org, int eventId, UUID ticketId) {
+        return scans.admitted(org, eventId, ticketId);
+    }
+
     /** 404 not assigned (or another organizer's event) → 409 EVENT_NOT_CLOSED → closed_ack_at set once. */
     @Transactional
     public void closedAck(GateDevice device, int eventId) {
