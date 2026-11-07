@@ -484,6 +484,8 @@ export const fr = {
       final_zero: "L'événement est clôturé et aucun appareil n'y était affecté : ces chiffres ne bougeront plus.",
       final_one: "L'événement est clôturé et l'appareil affecté a confirmé : ces chiffres ne bougeront plus.",
       final_other: "L'événement est clôturé et les {{count}} appareils affectés ont confirmé : ces chiffres ne bougeront plus.",
+      finalRevoked_one: "Aucun appareil actif à confirmer : l'appareil affecté a été révoqué. Ces chiffres ne bougeront plus.",
+      finalRevoked_other: 'Aucun appareil actif à confirmer : les {{count}} appareils affectés ont été révoqués. Ces chiffres ne bougeront plus.',
       notClosed: "L'événement n'est pas encore clôturé : les chiffres évoluent à chaque synchronisation des appareils.",
       unacked_one: "{{count}} appareil n'a pas confirmé la fin de l'événement : ses derniers scans peuvent encore corriger ces chiffres.",
       unacked_other: "{{count}} appareils n'ont pas confirmé la fin de l'événement : leurs derniers scans peuvent encore corriger ces chiffres.",
@@ -545,6 +547,13 @@ export const fr = {
         "Rien n'est perdu : les entrées validées hors ligne restent sur l'appareil et complètent la réconciliation dès sa prochaine connexion.",
       lastSeen: '{{label}} ({{gate}}) · vu le {{date}}',
       never: '{{label}} ({{gate}}) · jamais connecté',
+      revokedBadge: 'Révoqué',
+      revokedTitle_one: 'Appareil révoqué : ses scans non synchronisés sont perdus',
+      revokedTitle_other: 'Appareils révoqués : leurs scans non synchronisés sont perdus',
+      revoked_one:
+        "Un appareil révoqué ne peut plus confirmer : ses scans non synchronisés sont perdus et ne bloquent pas la réconciliation définitive.",
+      revoked_other:
+        "Les {{count}} appareils révoqués ne peuvent plus confirmer : leurs scans non synchronisés sont perdus et ne bloquent pas la réconciliation définitive.",
     },
   },
   devices: {

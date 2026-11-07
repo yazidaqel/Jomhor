@@ -8,8 +8,9 @@ export type LiveGate = {
   gate_id: string
   code: string
   zone_codes: string[]
+  /** Assigned ACTIVE devices (revoked ones are not counted). */
   devices_total: number
-  /** Seen within 2 min. */
+  /** Assigned ACTIVE devices seen within 2 min. */
   devices_online: number
   entered: number
   refused: number
@@ -17,7 +18,7 @@ export type LiveGate = {
   rate_per_min: number
   last_sync_at: string | null
 }
-/** Assigned and silent for more than 5 min, or never seen. */
+/** Assigned, ACTIVE, not yet acked the close, and silent for more than 5 min (or never seen). */
 export type StaleDevice = { device_id: string; label: string; gate_id: string; gate_code: string; last_seen_at: string | null }
 export type Live = {
   event_id: number

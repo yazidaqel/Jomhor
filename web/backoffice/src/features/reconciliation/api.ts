@@ -21,14 +21,18 @@ export type ReconciliationGate = {
   duplicates_late: number
   overrides: number
 }
+export type UnsyncedDevice = { device_id: string; label: string; gate_code: string; status: 'ACTIVE' | 'REVOKED'; last_seen_at: string | null }
 export type Reconciliation = {
   event_id: number
   status: EventStatus
   generated_at: string
-  /** The event is CLOSED and every assigned device has acked its wipe. */
+  /** The event is CLOSED and every assigned ACTIVE device has acked its wipe (a revoked device never can, Q41). */
   final: boolean
-  /** `unsynced` = assigned devices that have not acked the close (every one of them before the close). */
-  devices: { assigned: number; acked: number; unsynced: { device_id: string; label: string; gate_code: string; last_seen_at: string | null }[] }
+  /**
+   * `unsynced` = assigned devices that have not acked the close (every one of them before the close), revoked ones
+   * included with `status: 'REVOKED'`: their unsynced scans are lost. `revoked` = assigned devices now REVOKED.
+   */
+  devices: { assigned: number; acked: number; revoked: number; unsynced: UnsyncedDevice[] }
   totals: {
     sold: number
     /** Tickets with a canonical scan. */

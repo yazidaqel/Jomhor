@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import { Copy, Download, Hand, LogIn, ShieldX, Ticket, TriangleAlert, UserX } from 'lucide-react'
+import { Copy, Download, Hand, Info, LogIn, ShieldX, Ticket, TriangleAlert, UserX } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useParams } from 'react-router'
 import { BrandEmpty, ErrorNotice, PageHeader, STICKY_TABLE } from '@/components/page'
@@ -17,7 +17,7 @@ import { percent } from '@/lib/percent'
 import { formatAgo, formatDateTime } from '@/lib/time'
 import { useNow } from '@/lib/useNow'
 import { cn } from '@/lib/utils'
-import { sum, useReconciliation, useReconciliationCsv, type Reconciliation } from './api'
+import { sum, useReconciliation, useReconciliationCsv, type Reconciliation, type UnsyncedDevice } from './api'
 
 type Result = keyof typeof fr.live.results
 type Reason = keyof typeof fr.reconciliation.reasons
@@ -96,11 +96,16 @@ function UpdateFailed({ updatedAt }: { updatedAt: number }) {
   )
 }
 
+/** A revoked device can never ack: it does not hold the reconciliation back (Q41). */
+const isActive = (d: UnsyncedDevice) => d.status !== 'REVOKED'
+
 /** Why the figures can still move (or that they will not). */
 function why(t: TFunction, r: Reconciliation) {
-  if (r.final) return t('reconciliation.why.final', { count: r.devices.assigned })
+  // Every assigned device revoked: none acked, yet some were assigned (not the "aucun appareil affecté" case).
+  if (r.final && r.devices.acked === 0 && r.devices.assigned > 0) return t('reconciliation.why.finalRevoked', { count: r.devices.assigned })
+  if (r.final) return t('reconciliation.why.final', { count: r.devices.acked })
   if (r.status !== 'CLOSED') return t('reconciliation.why.notClosed')
-  return t('reconciliation.why.unacked', { count: r.devices.unsynced.length })
+  return t('reconciliation.why.unacked', { count: r.devices.unsynced.filter(isActive).length })
 }
 
 function FinalBadge({ final }: { final: boolean }) {
@@ -146,6 +151,11 @@ function ReconciliationBody({ recon, zone }: { recon: Reconciliation; zone: stri
   const refused = sum(totals.refused_by_result)
   const overrides = sum(totals.overrides_by_reason)
   const unsynced = recon.devices.unsynced
+  const active = unsynced.filter(isActive)
+  const revoked = unsynced.length - active.length
+  // After the close, active devices still to ack are a warning; before it, only revoked devices get listed.
+  const warn = recon.status === 'CLOSED' && active.length > 0
+  const listed = warn ? unsynced : unsynced.filter((d) => !isActive(d))
 
   return (
     <>
@@ -171,34 +181,49 @@ function ReconciliationBody({ recon, zone }: { recon: Reconciliation; zone: stri
         </Kpi>
       </div>
 
-      {unsynced.length > 0 &&
-        (recon.status !== 'CLOSED' ? (
-          // Before the close, no device has acked yet: the normal state, said once, in neutral.
-          <p className="text-sm text-muted-foreground">{t('reconciliation.unsynced.open', { count: unsynced.length })}</p>
-        ) : (
-          // A warning, never an error: these devices validated offline and their entries are not lost.
-          <section
-            aria-labelledby="unsynced-title"
-            className="flex items-start gap-3 rounded-xl border border-warning-border bg-warning-muted px-4 py-3 text-sm text-warning-foreground"
-          >
+      {recon.status !== 'CLOSED' && active.length > 0 && (
+        // Before the close, no device has acked yet: the normal state, said once, in neutral.
+        <p className="text-sm text-muted-foreground">{t('reconciliation.unsynced.open', { count: active.length })}</p>
+      )}
+      {listed.length > 0 && (
+        // Amber while active devices still hold it back (a warning, never an error: their entries are not lost);
+        // revoked devices alone are information, they never block the final reconciliation.
+        <section
+          aria-labelledby="unsynced-title"
+          data-tone={warn ? 'warning' : 'info'}
+          className={cn(
+            'flex items-start gap-3 rounded-xl border px-4 py-3 text-sm',
+            warn ? 'border-warning-border bg-warning-muted text-warning-foreground' : 'border-info-border bg-info-muted text-info-foreground',
+          )}
+        >
+          {warn ? (
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
-            <div className="min-w-0 flex-1 space-y-1">
-              <h2 id="unsynced-title" className="font-semibold">
-                {t('reconciliation.unsynced.title', { count: unsynced.length })}
-              </h2>
-              <p>{t('reconciliation.unsynced.body')}</p>
-              <ul className="grid gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2 lg:grid-cols-3">
-                {unsynced.map((d) => (
-                  <li key={d.device_id}>
-                    {d.last_seen_at
-                      ? t('reconciliation.unsynced.lastSeen', { label: d.label, gate: d.gate_code, date: formatDateTime(d.last_seen_at, i18n.language, zone) })
-                      : t('reconciliation.unsynced.never', { label: d.label, gate: d.gate_code })}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-        ))}
+          ) : (
+            <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden="true" />
+          )}
+          <div className="min-w-0 flex-1 space-y-1">
+            <h2 id="unsynced-title" className="font-semibold">
+              {warn ? t('reconciliation.unsynced.title', { count: active.length }) : t('reconciliation.unsynced.revokedTitle', { count: revoked })}
+            </h2>
+            {warn && <p>{t('reconciliation.unsynced.body')}</p>}
+            {revoked > 0 && <p>{t('reconciliation.unsynced.revoked', { count: revoked })}</p>}
+            <ul className="grid gap-x-6 gap-y-0.5 text-xs sm:grid-cols-2 lg:grid-cols-3">
+              {listed.map((d) => (
+                <li key={d.device_id}>
+                  {d.last_seen_at
+                    ? t('reconciliation.unsynced.lastSeen', { label: d.label, gate: d.gate_code, date: formatDateTime(d.last_seen_at, i18n.language, zone) })
+                    : t('reconciliation.unsynced.never', { label: d.label, gate: d.gate_code })}
+                  {!isActive(d) && (
+                    <Badge variant="outline" className="ml-1.5 rounded-full px-1.5 py-0 text-[11px] font-medium">
+                      {t('reconciliation.unsynced.revokedBadge')}
+                    </Badge>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       <Card className={cn('gap-0 overflow-hidden pb-0', STICKY_TABLE)}>
         <CardHeader className="border-b pb-5">

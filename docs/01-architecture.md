@@ -48,7 +48,9 @@ Lot 1: `order.paid` → WhatsApp delivery goes through a DB outbox (`ticket_deli
 
 `tenancy` · `catalog` · `sales` · `payments` · `tickets` · `gate` · `finance` ·
 `notifications` · `crm`. Modules talk through application services or domain events,
-never through each other's repositories.
+never through each other's repositories. One exception: a read-only report query may join another
+module's tables (tenant-filtered, no writes) when one SQL statement is what keeps it fast, e.g. the gate
+reports joining `tickets` for zone and status.
 
 ## Key flows
 

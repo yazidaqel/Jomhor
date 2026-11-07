@@ -60,9 +60,10 @@ const PROVISIONAL: Reconciliation = {
   devices: {
     assigned: 3,
     acked: 1,
+    revoked: 0,
     unsynced: [
-      { device_id: 'd-4', label: 'PDA Porte 4-C', gate_code: 'P4', last_seen_at: '2026-11-14T20:47:00Z' },
-      { device_id: 'd-5', label: 'PDA Porte 4-D', gate_code: 'P4', last_seen_at: null },
+      { device_id: 'd-4', label: 'PDA Porte 4-C', gate_code: 'P4', status: 'ACTIVE', last_seen_at: '2026-11-14T20:47:00Z' },
+      { device_id: 'd-5', label: 'PDA Porte 4-D', gate_code: 'P4', status: 'ACTIVE', last_seen_at: null },
     ],
   },
   totals: {
@@ -84,7 +85,15 @@ const PROVISIONAL: Reconciliation = {
     { gate_id: 'g-P4', code: 'P4', name: 'Porte Nord', zone_codes: ['NORD'], entered: 14310, refused_by_result: { DUPLICATE: 15, WRONG_ZONE: 5, UNKNOWN: 5 }, duplicates_late: 0, overrides: 2 },
   ],
 }
-const FINAL: Reconciliation = { ...PROVISIONAL, final: true, devices: { assigned: 3, acked: 3, unsynced: [] } }
+const FINAL: Reconciliation = { ...PROVISIONAL, final: true, devices: { assigned: 3, acked: 3, revoked: 0, unsynced: [] } }
+const REVOKED_P1 = { device_id: 'd-1', label: 'PDA Porte 1-A', gate_code: 'P1', status: 'REVOKED', last_seen_at: '2026-11-14T19:40:00Z' } as const
+/** Q41: closed, the 2 active devices acked, the revoked one never will. Final all the same. */
+const FINAL_REVOKED: Reconciliation = { ...PROVISIONAL, final: true, devices: { assigned: 3, acked: 2, revoked: 1, unsynced: [REVOKED_P1] } }
+/** Closed, 4 assigned: 1 acked, 2 active still to ack, 1 revoked that never will. */
+const PROVISIONAL_REVOKED: Reconciliation = {
+  ...PROVISIONAL,
+  devices: { assigned: 4, acked: 1, revoked: 1, unsynced: [REVOKED_P1, ...PROVISIONAL.devices.unsynced] },
+}
 
 type Call = { path: string; org: string | null; auth: string | null }
 
@@ -218,6 +227,65 @@ it('final: Définitive badge, every device confirmed, no unsynced list', async (
   expect(badge().className).toContain('bg-success-muted')
   expect(screen.getByText(new RegExp(`^${i18n.t('reconciliation.why.final', { count: 3 })}`))).toBeTruthy()
   expect(screen.queryByText(fr.reconciliation.unsynced.body)).toBeNull()
+})
+
+it('final with a revoked device: Définitive, the device listed in a neutral info block with its Révoqué badge, never amber', async () => {
+  stubApi('FINANCE', FINAL_REVOKED)
+  renderApp('/events/1/reconciliation')
+
+  const section = (await screen.findByRole('heading', { name: i18n.t('reconciliation.unsynced.revokedTitle', { count: 1 }) })).closest('section')!
+  expect(badge().textContent).toBe(fr.reconciliation.badge.final)
+  expect(screen.getByText(new RegExp(`^${i18n.t('reconciliation.why.final', { count: 2 })}`))).toBeTruthy()
+  expect(section.dataset.tone).toBe('info')
+  expect(section.className).toContain('bg-info-muted')
+  expect(section.className).not.toMatch(/warning|destructive/)
+  expect(within(section).getByText(i18n.t('reconciliation.unsynced.revoked', { count: 1 }))).toBeTruthy()
+  const item = within(section).getByRole('listitem')
+  expect(spaced(item.textContent ?? '')).toBe(
+    spaced(i18n.t('reconciliation.unsynced.lastSeen', { label: 'PDA Porte 1-A', gate: 'P1', date: date(REVOKED_P1.last_seen_at) })) + fr.reconciliation.unsynced.revokedBadge,
+  )
+  expect(screen.queryByText(fr.reconciliation.unsynced.body)).toBeNull()
+  expect(screen.queryByRole('alert')).toBeNull()
+})
+
+it('final with every assigned device revoked: says they were revoked, never that none was assigned', async () => {
+  const REVOKED_P4 = { ...REVOKED_P1, device_id: 'd-4', label: 'PDA Porte 4-C', gate_code: 'P4' } as const
+  stubApi('FINANCE', { ...FINAL_REVOKED, devices: { assigned: 2, acked: 0, revoked: 2, unsynced: [REVOKED_P1, REVOKED_P4] } })
+  renderApp('/events/1/reconciliation')
+
+  await screen.findByRole('heading', { name: i18n.t('reconciliation.unsynced.revokedTitle', { count: 2 }) })
+  expect(badge().textContent).toBe(fr.reconciliation.badge.final)
+  const copy = i18n.t('reconciliation.why.finalRevoked', { count: 2 })
+  expect(copy).toBe('Aucun appareil actif à confirmer : les 2 appareils affectés ont été révoqués. Ces chiffres ne bougeront plus.')
+  expect(screen.getByText(new RegExp(`^${copy}`))).toBeTruthy()
+  expect(screen.queryByText(new RegExp(i18n.t('reconciliation.why.final', { count: 0 })))).toBeNull()
+})
+
+it('provisional with a revoked device: the counts leave it out, it is listed with its Révoqué badge and why it does not block', async () => {
+  stubApi('OPS', PROVISIONAL_REVOKED)
+  renderApp('/events/1/reconciliation')
+
+  const section = (await screen.findByRole('heading', { name: i18n.t('reconciliation.unsynced.title', { count: 2 }) })).closest('section')!
+  expect(screen.getByText(new RegExp(`^${i18n.t('reconciliation.why.unacked', { count: 2 })}`))).toBeTruthy()
+  expect(section.dataset.tone).toBe('warning')
+  expect(within(section).getAllByRole('listitem')).toHaveLength(3)
+  const badges = within(section).getAllByText(fr.reconciliation.unsynced.revokedBadge)
+  expect(badges).toHaveLength(1)
+  expect(badges[0]!.closest('li')!.textContent).toContain('PDA Porte 1-A')
+  expect(within(section).getByText(i18n.t('reconciliation.unsynced.revoked', { count: 1 }))).toBeTruthy()
+  expect(within(section).getByText(fr.reconciliation.unsynced.body)).toBeTruthy()
+})
+
+it('before the close with a revoked device: the neutral line counts active devices only, the revoked one in the info block', async () => {
+  stubApi('ADMIN', { ...PROVISIONAL_REVOKED, status: 'ON_SALE' }, { ...EVENT, status: 'ON_SALE' })
+  renderApp('/events/1/reconciliation')
+
+  expect(await screen.findByText(i18n.t('reconciliation.unsynced.open', { count: 2 }))).toBeTruthy()
+  const section = document.querySelector<HTMLElement>('section[aria-labelledby="unsynced-title"]')!
+  expect(section.dataset.tone).toBe('info')
+  expect(within(section).getAllByRole('listitem')).toHaveLength(1)
+  expect(within(section).getByText(fr.reconciliation.unsynced.revokedBadge)).toBeTruthy()
+  expect(screen.queryByText(/PDA Porte 4-C/)).toBeNull()
 })
 
 it.each([
