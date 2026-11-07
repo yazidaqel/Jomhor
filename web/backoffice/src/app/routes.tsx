@@ -15,7 +15,7 @@ import { VenuesPage } from '@/features/venues/VenuesPage'
 
 export const routes: RouteObject[] = [
   { path: 'login', element: <LoginPage /> },
-  // POS slips print without the shell chrome. Role gating and the CASHIER shell: BO-13b.
+  // POS slips print without the shell chrome. Both shells send a role to its landing page off its routes (CASHIER: /pos).
   { element: <Shell bare />, children: [{ path: 'pos/print/:orderId', element: <PrintPage /> }] },
   {
     element: <Shell />,

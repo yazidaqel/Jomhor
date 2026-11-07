@@ -13,7 +13,7 @@ import type { EventDetail, EventSummary, Price } from '@/features/events/api'
 import { createQueryClient } from '@/lib/queryClient'
 import { formatDh } from '@/lib/money'
 import { session } from '@/lib/session'
-import { changeDue, codeStatus, displayCode, normalizeCode, readCode, saleItems, saleSchema, type CodeLookup, type PosSession, type PrintData } from './api'
+import { changeDue, codeStatus, displayCode, holderField, normalizeCode, readCode, saleItems, saleSchema, type ClosedSession, type CodeLookup, type PosSession, type PrintData } from './api'
 
 beforeAll(() => {
   Element.prototype.hasPointerCapture = () => false
@@ -94,8 +94,8 @@ const PRINT = {
 } satisfies PrintData & { tickets: { holder_name: string }[] }
 const PRINT_PATH = `/org/pos/orders/${PRINT.order_id}/tickets`
 
-type Call = { path: string; org: string | null }
-type Overrides = Partial<Record<string, () => Response>>
+type Call = { path: string; org: string | null; method: string; body: unknown }
+type Overrides = Partial<Record<string, () => Response | Promise<Response>>>
 function stubApi(overrides: Overrides = {}) {
   const calls: Call[] = []
   const json: Record<string, unknown> = {
@@ -111,7 +111,8 @@ function stubApi(overrides: Overrides = {}) {
     'fetch',
     vi.fn<typeof fetch>(async (input, init) => {
       const path = String(input).replace(/^\/v1/, '')
-      calls.push({ path, org: new Headers(init?.headers).get('X-Organizer-Id') })
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+      calls.push({ path, org: new Headers(init?.headers).get('X-Organizer-Id'), method: init?.method ?? 'GET', body })
       const override = overrides[path]
       if (override) return override()
       if (path in json) return Response.json(json[path])
@@ -124,12 +125,13 @@ function stubApi(overrides: Overrides = {}) {
 function renderApp(path: string) {
   session.start('tok-1', '2999-01-01T00:00:00Z')
   const queryClient = createQueryClient()
+  const router = createMemoryRouter(routes, { initialEntries: [path] })
   render(
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   )
-  return queryClient
+  return { queryClient, router }
 }
 
 const spaced = (s: string) => s.replace(/\s+/gu, ' ')
@@ -287,7 +289,7 @@ it('B11 Code cash: typo-safe input, masked preview, lookup by the 6 symbols with
   expect(calls.some((c) => c.path.startsWith('/org/pos/codes'))).toBe(false)
   await user.type(input, '9')
 
-  expect(await screen.findByText(LOOKUP.event.title)).toBeTruthy()
+  expect(await within(screen.getByRole('tabpanel', { name: fr.pos.tabs.code })).findByText(LOOKUP.event.title)).toBeTruthy()
   expect(calls.find((c) => c.path === '/org/pos/codes/4F7K29')!.org).toBe('org-a')
   expect(screen.getByText(dh(LOOKUP.amount_mad))).toBeTruthy()
   expect(screen.getByText('Yazid A.')).toBeTruthy()
@@ -301,7 +303,7 @@ it('B11 Code cash: typo-safe input, masked preview, lookup by the 6 symbols with
 
 it('print view: one slip per ticket, one 80 mm page each, QR value = `qr` exactly, holder label only, no full name', async () => {
   const calls = stubApi()
-  const queryClient = renderApp(`/pos/print/${PRINT.order_id}`)
+  const { queryClient } = renderApp(`/pos/print/${PRINT.order_id}`)
 
   const slips = await screen.findAllByRole('article')
   expect(slips).toHaveLength(PRINT.tickets.length)
@@ -335,7 +337,7 @@ it('print view: one slip per ticket, one 80 mm page each, QR value = `qr` exactl
   vi.stubGlobal(
     'fetch',
     vi.fn<typeof fetch>(async (input) => {
-      calls.push({ path: String(input).replace(/^\/v1/, ''), org: null })
+      calls.push({ path: String(input).replace(/^\/v1/, ''), org: null, method: 'GET', body: undefined })
       return serverError()
     }),
   )
@@ -369,4 +371,394 @@ it('print view: a failed print GET is not retried by itself; "Réessayer" is the
   await user.click(retry)
   expect(await screen.findAllByRole('article')).toHaveLength(2)
   expect(calls.filter((c) => c.path === PRINT_PATH)).toHaveLength(2)
+})
+
+// ---- BO-13b: the writes and the CASHIER shell ----
+
+const SALE_ORDER = { id: PRINT.order_id, status: 'PAID', channel: 'POS', total_mad: 5_000, items: [], ticket_ids: ['t-1'] }
+const [, SUD] = PRICES as [Price, Price, Price]
+const submitSale = (cents: number) => screen.getByRole('button', { name: spaced(i18n.t('pos.sale.submit', { amount: formatDh(cents, 'fr') })) })
+const apiError = (status: number, code: string, details: Record<string, unknown> = {}) => Response.json({ code, message: 'x', details }, { status })
+const withRole = (role: Me['memberships'][number]['role']): Me => ({ ...ME, memberships: [{ ...ME.memberships[0]!, role }] })
+
+/** One Virage Sud place for "Yazid Aqel", ready to submit. */
+async function fillSale(user: ReturnType<typeof userEvent.setup>) {
+  const more = await screen.findByRole('button', { name: i18n.t('pos.sale.more', { name: priceName(SUD) }) })
+  await user.click(more)
+  await user.type(document.getElementById('pos-holder-0-name')!, 'Yazid Aqel')
+}
+
+it('a 422 holder field of the sale maps to its form row (places in item order; "même nom" → row 0)', () => {
+  const items = [{ qty: 2 }, { qty: 1 }]
+  expect(holderField('items[0].holders[1].name', items, false)).toBe('holders.1.name')
+  expect(holderField('items[1].holders[0].phone', items, false)).toBe('holders.2.phone')
+  expect(holderField('items[1].holders[0].name', items, true)).toBe('holders.0.name')
+  expect(holderField('items[1].holders', items, false)).toBeNull()
+  expect(holderField('sale_id', items, false)).toBeNull()
+})
+
+it('B11 Vente: a retried sale sends the same sale_id; success opens the print view; the next sale gets a new id', async () => {
+  const user = userEvent.setup()
+  let attempt = 0
+  const calls = stubApi({
+    '/org/pos/orders': () => {
+      attempt += 1
+      if (attempt === 1) throw new TypeError('Failed to fetch') // the answer is lost: the sale may exist
+      return Response.json(SALE_ORDER, { status: attempt === 2 ? 200 : 201 })
+    },
+  })
+  const { queryClient, router } = renderApp('/pos')
+
+  await fillSale(user)
+  await user.click(submitSale(5_000))
+  expect(await screen.findByText(fr.errors.NETWORK_ERROR)).toBeTruthy()
+  expect(router.state.location.pathname).toBe('/pos')
+  await user.click(submitSale(5_000))
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/pos/print/${PRINT.order_id}`))
+  expect(await screen.findAllByRole('article')).toHaveLength(PRINT.tickets.length)
+
+  const posts = calls.filter((c) => c.method === 'POST' && c.path === '/org/pos/orders')
+  expect(posts).toHaveLength(2)
+  const first = posts[0]!.body as { sale_id: string }
+  expect(first.sale_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  expect(posts[1]!.body).toEqual(first)
+  expect(first).toEqual({ sale_id: first.sale_id, event_id: 1, items: [{ price_category_id: SUD.id, qty: 1, holders: [{ name: 'Yazid Aqel' }] }] })
+  expect(posts.every((c) => c.org === 'org-a')).toBe(true)
+
+  // Back at the till: a fresh form, a new sale_id.
+  await user.click(screen.getByRole('link', { name: fr.pos.print.back }))
+  await fillSale(user)
+  await user.click(submitSale(5_000))
+  await waitFor(() => expect(calls.filter((c) => c.method === 'POST' && c.path === '/org/pos/orders')).toHaveLength(3))
+  const third = calls.filter((c) => c.path === '/org/pos/orders').at(-1)!.body as { sale_id: string }
+  expect(third.sale_id).not.toBe(first.sale_id)
+
+  // Every cached query is this organizer's (or /org/me, which has none).
+  const keys = queryClient.getQueryCache().getAll().map((q) => q.queryKey)
+  expect(keys.every((k) => (k[0] === 'org' && k[1] === 'org-a') || k[0] === 'me')).toBe(true)
+  expect(keys.some((k) => k[2] === 'pos')).toBe(true)
+})
+
+it('B11 Vente: server refusals have their copy; a 422 on a holder name lands on that row', async () => {
+  const user = userEvent.setup()
+  let answer = () => apiError(409, 'PER_ACCOUNT_LIMIT', { limit: 3, held: 0 })
+  stubApi({ '/org/pos/orders': () => answer() })
+  renderApp('/pos')
+  await fillSale(user)
+
+  await user.click(submitSale(5_000))
+  expect((await screen.findByRole('alert')).textContent).toBe(i18n.t('errors.PER_ACCOUNT_LIMIT', { limit: 3 }))
+
+  answer = () => apiError(409, 'POS_SESSION_REQUIRED')
+  await user.click(submitSale(5_000))
+  expect(await screen.findByText(fr.errors.POS_SESSION_REQUIRED)).toBeTruthy()
+
+  answer = () => apiError(422, 'VALIDATION_FAILED', { fields: { 'items[0].holders[0].name': 'pattern' } })
+  await user.click(submitSale(5_000))
+  await waitFor(() => expect(document.getElementById('pos-holder-0-name-error')?.textContent).toBe(fr.common.fieldInvalid))
+  expect(screen.queryByText(fr.errors.VALIDATION_FAILED)).toBeNull()
+})
+
+it('B11: without an open till, sale and collect are disabled; opening one posts its label', async () => {
+  const user = userEvent.setup()
+  let current: PosSession | null = null
+  const calls = stubApi({
+    '/org/pos/session': () => Response.json({ session: current }),
+    '/org/pos/sessions': () => {
+      current = { ...SESSION, label: 'Guichet Sud', orders: 0, tickets: 0, prints: 0, collected_mad: 0 }
+      return Response.json(current, { status: 201 })
+    },
+  })
+  renderApp('/pos')
+
+  expect(await screen.findByText(fr.pos.session.none)).toBeTruthy()
+  await fillSale(user)
+  expect(submitSale(5_000)).toHaveProperty('disabled', true)
+  expect(screen.getByText(fr.pos.sale.needSession)).toBeTruthy()
+
+  await user.click(screen.getByRole('button', { name: fr.pos.session.open }))
+  const dialog = within(await screen.findByRole('dialog'))
+  await user.click(dialog.getByRole('button', { name: fr.pos.open.submit }))
+  expect(await dialog.findByText(fr.pos.open.labelInvalid)).toBeTruthy()
+  await user.type(dialog.getByLabelText(fr.pos.open.label), '  Guichet Sud ')
+  await user.click(dialog.getByRole('button', { name: fr.pos.open.submit }))
+
+  expect(await screen.findByText('Guichet Sud')).toBeTruthy()
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(calls.find((c) => c.method === 'POST')).toMatchObject({ path: '/org/pos/sessions', org: 'org-a', body: { label: 'Guichet Sud' } })
+  await waitFor(() => expect(submitSale(5_000)).toHaveProperty('disabled', false))
+})
+
+it('B11 close: the counted DH become centimes, the gap shows before confirming, then the frozen variance', async () => {
+  const user = userEvent.setup()
+  let current: PosSession | null = SESSION
+  const closed: ClosedSession = {
+    ...SESSION,
+    staff: { id: 'st-1', name: 'Samira' },
+    closed_at: '2026-11-07T18:00:00Z',
+    expected_mad: 465_050,
+    declared_mad: 464_050,
+    variance_mad: -1_000,
+  }
+  const calls = stubApi({
+    '/org/pos/session': () => Response.json({ session: current }),
+    '/org/pos/sessions/s-1/close': () => {
+      current = null
+      return Response.json(closed)
+    },
+  })
+  renderApp('/pos')
+
+  await user.click(await screen.findByRole('button', { name: fr.pos.session.close }))
+  const dialog = within(await screen.findByRole('dialog'))
+  expect(dialog.getByText(spaced(i18n.t('pos.close.title', { label: SESSION.label })))).toBeTruthy()
+  expect(dialog.getByText(dh(SESSION.collected_mad))).toBeTruthy() // expected
+
+  const declared = dialog.getByLabelText(fr.pos.close.declared)
+  await user.type(declared, '4650,50')
+  expect(dialog.getByText(fr.pos.close.noGap)).toBeTruthy()
+  await user.clear(declared)
+  await user.type(declared, '4660,50')
+  expect(dialog.getByText(spaced(i18n.t('pos.amount', { amount: formatDh(1_000, 'fr', 'exceptZero') })))).toBeTruthy()
+  await user.clear(declared)
+  await user.type(declared, '4640,50')
+  const gap = spaced(i18n.t('pos.amount', { amount: formatDh(-1_000, 'fr') }))
+  expect(dialog.getByText(gap)).toBeTruthy()
+  expect(calls.some((c) => c.method === 'POST')).toBe(false) // nothing sent before confirming
+
+  await user.click(dialog.getByRole('button', { name: fr.pos.close.submit }))
+  expect(await dialog.findByText(spaced(i18n.t('pos.close.doneTitle', { label: SESSION.label })))).toBeTruthy()
+  expect(dialog.getByText(dh(closed.declared_mad))).toBeTruthy()
+  expect(dialog.getByText(gap)).toBeTruthy()
+  expect(calls.find((c) => c.method === 'POST')).toMatchObject({ path: '/org/pos/sessions/s-1/close', org: 'org-a', body: { declared_mad: 464_050 } })
+
+  // The bar behind has no till any more; the frozen result stays until closed.
+  expect(await screen.findByText(fr.pos.session.none)).toBeTruthy()
+  await user.click(dialog.getByRole('button', { name: fr.common.close }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+})
+
+it('B11 close: an amount that is not DH is refused, nothing sent', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi()
+  renderApp('/pos')
+  await user.click(await screen.findByRole('button', { name: fr.pos.session.close }))
+  const dialog = within(await screen.findByRole('dialog'))
+  await user.type(dialog.getByLabelText(fr.pos.close.declared), '4 640,505')
+  await user.click(dialog.getByRole('button', { name: fr.pos.close.submit }))
+  expect(await dialog.findByText(fr.pos.close.declaredInvalid)).toBeTruthy()
+  expect(calls.some((c) => c.method === 'POST')).toBe(false)
+})
+
+it('B11 Code cash: collect sends the exact amount and opens the print view', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi({ '/org/pos/codes/4F7K29/collect': () => Response.json({ order_id: PRINT.order_id, status: 'PAID', ticket_ids: ['t-1', 't-2'] }) })
+  const { router } = renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), 'jmh 4f7k 29')
+  await user.click(await screen.findByRole('button', { name: spaced(i18n.t('pos.code.submit', { amount: formatDh(LOOKUP.amount_mad, 'fr') })) }))
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/pos/print/${PRINT.order_id}`))
+  expect(calls.find((c) => c.method === 'POST')).toMatchObject({ path: '/org/pos/codes/4F7K29/collect', org: 'org-a', body: { amount_mad: 30_000 } })
+})
+
+it('B11 Code cash: a 409 CODE_NOT_PAYABLE tells the cashier not to keep the money, and collect stays off', async () => {
+  const user = userEvent.setup()
+  stubApi({ '/org/pos/codes/4F7K29/collect': () => apiError(409, 'CODE_NOT_PAYABLE', { status: 'EXPIRED' }) })
+  const { router } = renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  const collect = await screen.findByRole('button', { name: spaced(i18n.t('pos.code.submit', { amount: formatDh(LOOKUP.amount_mad, 'fr') })) })
+  await user.click(collect)
+  expect((await screen.findByRole('alert')).textContent).toBe(fr.pos.code.notPayable)
+  expect(fr.pos.code.notPayable).toContain("ne gardez pas l'argent")
+  expect(collect).toHaveProperty('disabled', true)
+  expect(router.state.location.pathname).toBe('/pos')
+})
+
+it('CASHIER: lands on the Guichet, the sidebar shows only "Guichet", every other page sends back to it', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi({ '/org/me': () => Response.json(withRole('CASHIER')) })
+  const { router } = renderApp('/')
+  expect(await screen.findByRole('heading', { level: 1, name: fr.pos.title })).toBeTruthy()
+  expect(router.state.location.pathname).toBe('/pos')
+  const nav = within(screen.getByRole('navigation', { name: fr.nav.label }))
+  expect(nav.getAllByRole('link').map((l) => l.textContent)).toEqual([fr.nav.pos])
+  expect(nav.queryByText(fr.nav.soon)).toBeNull()
+  expect(screen.getAllByText(fr.roles.CASHIER).length).toBeGreaterThan(0)
+
+  for (const path of ['/events', '/events/1/sales', '/settings/venues', '/devices', '/live', '/nowhere']) {
+    await act(() => router.navigate(path))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/pos'))
+  }
+  await act(() => router.navigate(`/pos/print/${PRINT.order_id}`))
+  expect(await screen.findAllByRole('article')).toHaveLength(PRINT.tickets.length)
+  await user.click(screen.getByRole('link', { name: fr.pos.print.back }))
+  expect(router.state.location.pathname).toBe('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  expect(await within(screen.getByRole('tabpanel', { name: fr.pos.tabs.code })).findByText(LOOKUP.event.title)).toBeTruthy()
+
+  // Only what the API lets a CASHIER call (04-api §Organizer, Lot 3).
+  const allowed = (c: Call) =>
+    c.path === '/org/me' || c.path.startsWith('/org/pos/') || (c.method === 'GET' && /^\/org\/events(\/\d+(\/prices)?)?$/.test(c.path))
+  expect(calls.length).toBeGreaterThan(0)
+  expect(calls.filter((c) => !allowed(c))).toEqual([])
+  expect(calls.some((c) => c.path === '/org/events/1/prices')).toBe(true)
+})
+
+it.each(['ADMIN', 'OPS'] as const)('%s keeps the whole back-office and the Guichet', async (role) => {
+  stubApi({ '/org/me': () => Response.json(withRole(role)) })
+  const { router } = renderApp('/events')
+  const nav = within(await screen.findByRole('navigation', { name: fr.nav.label }))
+  expect(router.state.location.pathname).toBe('/events')
+  expect(nav.getByRole('link', { name: fr.nav.pos })).toBeTruthy()
+  expect(nav.getByRole('link', { name: fr.nav.events })).toBeTruthy()
+  await act(() => router.navigate('/pos'))
+  expect(await screen.findByRole('heading', { level: 1, name: fr.pos.title })).toBeTruthy()
+})
+
+it('FINANCE (403 on /org/pos/**) has no Guichet: /pos and the print view send it home', async () => {
+  const calls = stubApi({ '/org/me': () => Response.json(withRole('FINANCE')) })
+  const { router } = renderApp('/pos')
+  const nav = within(await screen.findByRole('navigation', { name: fr.nav.label }))
+  expect(router.state.location.pathname).toBe('/')
+  expect(nav.queryByRole('link', { name: fr.nav.pos })).toBeNull()
+  await act(() => router.navigate(`/pos/print/${PRINT.order_id}`))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+  expect(calls.some((c) => c.path.startsWith('/org/pos'))).toBe(false)
+})
+
+// ---- BO-13b review: lost answers and stops ----
+
+const collectButton = () => screen.findByRole('button', { name: spaced(i18n.t('pos.code.submit', { amount: formatDh(LOOKUP.amount_mad, 'fr') })) })
+const salePosts = (calls: Call[]) => calls.filter((c) => c.method === 'POST' && c.path === '/org/pos/orders').map((c) => c.body as { sale_id: string })
+
+it('B11 Code cash: a lost collect answer, then a lookup that reads PAID, keeps Encaisser on; the retry (200) opens the print view', async () => {
+  const user = userEvent.setup()
+  let collected = false
+  let attempt = 0
+  const calls = stubApi({
+    '/org/pos/codes/4F7K29': () => Response.json(collected ? { ...LOOKUP, status: 'PAID', payable: false, reserved_until: null } : LOOKUP),
+    '/org/pos/codes/4F7K29/collect': () => {
+      attempt += 1
+      collected = true // the server took it the first time
+      if (attempt === 1) throw new TypeError('Failed to fetch')
+      return Response.json({ order_id: PRINT.order_id, status: 'PAID', ticket_ids: ['t-1', 't-2'] })
+    },
+  })
+  const { router } = renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  await user.click(await collectButton())
+
+  expect(await screen.findByText(fr.errors.NETWORK_ERROR)).toBeTruthy()
+  expect(await screen.findByText(fr.pos.code.paidHint)).toBeTruthy() // the lookup refetched: PAID
+  expect(screen.queryByText(fr.pos.code.notPayable)).toBeNull()
+  const collect = await collectButton()
+  expect(collect).toHaveProperty('disabled', false)
+
+  await user.click(collect)
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/pos/print/${PRINT.order_id}`))
+  expect(calls.filter((c) => c.method === 'POST').map((c) => c.body)).toEqual([{ amount_mad: 30_000 }, { amount_mad: 30_000 }])
+})
+
+it('B11 Code cash: an expired lookup says not to keep the money and offers no collect', async () => {
+  stubApi({ '/org/pos/codes/4F7K29': () => Response.json({ ...LOOKUP, status: 'EXPIRED', payable: false }) })
+  const user = userEvent.setup()
+  renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  expect(await screen.findByText(fr.pos.code.notPayable)).toBeTruthy()
+  expect(await collectButton()).toHaveProperty('disabled', true)
+})
+
+it('B11 Vente: 422 TAKEN on sale_id stops the form ("n\'encaissez pas une deuxième fois") until "Nouvelle vente"; then a new id', async () => {
+  const user = userEvent.setup()
+  let taken = true
+  const calls = stubApi({
+    '/org/pos/orders': () =>
+      taken ? apiError(422, 'VALIDATION_FAILED', { fields: { sale_id: 'already used' }, reason: 'TAKEN' }) : Response.json(SALE_ORDER, { status: 201 }),
+  })
+  const { router } = renderApp('/pos')
+  await fillSale(user)
+  await user.click(submitSale(5_000))
+
+  expect((await screen.findByRole('alert')).textContent).toContain(fr.pos.sale.taken)
+  expect(submitSale(5_000)).toHaveProperty('disabled', true)
+  expect(salePosts(calls)).toHaveLength(1)
+
+  await user.click(screen.getByRole('button', { name: fr.pos.sale.newSale }))
+  expect(screen.queryByText(fr.pos.sale.taken)).toBeNull()
+  expect(document.getElementById('pos-holder-0-name')).toBeNull() // the form is empty again
+  taken = false
+  await fillSale(user)
+  await user.click(submitSale(5_000))
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/pos/print/${PRINT.order_id}`))
+  const [first, second] = salePosts(calls)
+  expect(second!.sale_id).not.toBe(first!.sale_id)
+})
+
+it('B11 Vente: a replay whose total is not the one on screen warns before printing', async () => {
+  const user = userEvent.setup()
+  stubApi({ '/org/pos/orders': () => Response.json({ ...SALE_ORDER, total_mad: 10_050 }) })
+  const { router } = renderApp('/pos')
+  await fillSale(user)
+  await user.click(submitSale(5_000))
+
+  const alert = await screen.findByRole('alert')
+  expect(spaced(alert.textContent!)).toContain(spaced(i18n.t('pos.sale.replayed', { amount: formatDh(10_050, 'fr'), shown: formatDh(5_000, 'fr') })))
+  expect(router.state.location.pathname).toBe('/pos')
+  expect(submitSale(5_000)).toHaveProperty('disabled', true)
+  await user.click(screen.getByRole('button', { name: fr.pos.sale.printTickets }))
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/pos/print/${PRINT.order_id}`))
+})
+
+it('B11 Vente: the sale in progress and its sale_id survive a switch to Code cash and back', async () => {
+  const user = userEvent.setup()
+  let attempt = 0
+  const calls = stubApi({
+    '/org/pos/orders': () => {
+      attempt += 1
+      if (attempt === 1) throw new TypeError('Failed to fetch')
+      return Response.json(SALE_ORDER)
+    },
+  })
+  const { router } = renderApp('/pos')
+  await fillSale(user)
+  await user.click(submitSale(5_000))
+  expect(await screen.findByText(fr.errors.NETWORK_ERROR)).toBeTruthy()
+
+  await user.click(screen.getByRole('tab', { name: fr.pos.tabs.code }))
+  expect(screen.queryByRole('button', { name: spaced(i18n.t('pos.sale.submit', { amount: formatDh(5_000, 'fr') })) })).toBeNull() // hidden
+  await user.click(screen.getByRole('tab', { name: fr.pos.tabs.sale }))
+  expect((document.getElementById('pos-holder-0-name') as HTMLInputElement).value).toBe('Yazid Aqel')
+
+  await user.click(submitSale(5_000))
+  await waitFor(() => expect(router.state.location.pathname).toBe(`/pos/print/${PRINT.order_id}`))
+  const [first, second] = salePosts(calls)
+  expect(second).toEqual(first)
+})
+
+it('B11 close: a 409 POS_SESSION_CLOSED (an earlier answer lost) says the till is closed and where the result is', async () => {
+  const user = userEvent.setup()
+  stubApi({ '/org/pos/sessions/s-1/close': () => apiError(409, 'POS_SESSION_CLOSED') })
+  renderApp('/pos')
+  await user.click(await screen.findByRole('button', { name: fr.pos.session.close }))
+  const dialog = within(await screen.findByRole('dialog'))
+  await user.type(dialog.getByLabelText(fr.pos.close.declared), '4650,50')
+  await user.click(dialog.getByRole('button', { name: fr.pos.close.submit }))
+  expect(await dialog.findByText(fr.errors.POS_SESSION_CLOSED)).toBeTruthy()
+  expect(fr.errors.POS_SESSION_CLOSED).toContain('Opérations')
+})
+
+it('B11 close: only the gap value is a live region', async () => {
+  const user = userEvent.setup()
+  stubApi()
+  renderApp('/pos')
+  await user.click(await screen.findByRole('button', { name: fr.pos.session.close }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText(fr.pos.close.declared), '4650,50')
+  const live = [...dialog.querySelectorAll('[aria-live]')]
+  expect(live).toHaveLength(1)
+  expect(live[0]!.textContent).toBe(fr.pos.close.noGap)
 })

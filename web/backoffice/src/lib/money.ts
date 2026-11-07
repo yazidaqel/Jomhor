@@ -24,10 +24,12 @@ export function dhInput(cents: number) {
 
 /**
  * Centimes → `"1 234,50"` in `locale` (display only). Bigint maths and a decimal string handed to Intl, so a total of
- * Σ quota × price is exact past 2^53 too.
+ * Σ quota × price is exact past 2^53 too. Negative amounts keep their sign; `signDisplay: 'exceptZero'` adds a `+`
+ * (a till's gap).
  */
-export function formatDh(cents: number | bigint, locale: string) {
+export function formatDh(cents: number | bigint, locale: string, signDisplay: 'auto' | 'exceptZero' = 'auto') {
   const c = BigInt(cents)
-  const decimal = `${c / 100n}.${String(c % 100n).padStart(2, '0')}` as `${number}`
-  return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(decimal)
+  const a = c < 0n ? -c : c
+  const decimal = `${c < 0n ? '-' : ''}${a / 100n}.${String(a % 100n).padStart(2, '0')}` as `${number}`
+  return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay }).format(decimal)
 }

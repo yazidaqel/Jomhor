@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { useOrgQuery } from '@/features/auth/organizer'
+import { useOrgMutation, useOrgQuery } from '@/features/auth/organizer'
 import { normalizePhone } from '@/features/auth/phone'
 import type { Price } from '@/features/events/api'
 import { path } from '@/lib/api'
@@ -35,7 +35,42 @@ export type PrintData = {
   tickets: PrintTicket[]
 }
 
+/** The `/org/finance/cash` session shape, which the close answers with: `expected_mad` frozen, `variance_mad = declared − expected`. */
+export type ClosedSession = {
+  id: string
+  label: string
+  staff: { id: string; name: string }
+  opened_at: string
+  closed_at: string
+  orders: number
+  tickets: number
+  prints: number
+  expected_mad: number
+  declared_mad: number
+  variance_mad: number
+}
+export type SaleItem = ReturnType<typeof saleItems>[number]
+export type SaleBody = { sale_id: string; event_id: number; items: SaleItem[] }
+export type SaleOrder = { id: string; status: string; channel: string; total_mad: number; ticket_ids: string[] }
+
 export const usePosSession = () => useOrgQuery<{ session: PosSession | null }>(['pos', 'session'], '/org/pos/session')
+
+export const useOpenSession = () =>
+  useOrgMutation(['pos', 'session'], (label: string, send) => send<PosSession>({ method: 'POST', path: '/org/pos/sessions', body: { label } }))
+
+export const useCloseSession = () =>
+  useOrgMutation(['pos', 'session'], ({ id, declared_mad }: { id: string; declared_mad: number }, send) =>
+    send<ClosedSession>({ method: 'POST', path: path('org', 'pos', 'sessions', id, 'close'), body: { declared_mad } }),
+  )
+
+/** Scope: every query of this organizer, so the till's counters and the prices' `sold` both refresh. */
+export const useSale = () => useOrgMutation([], (body: SaleBody, send) => send<SaleOrder>({ method: 'POST', path: '/org/pos/orders', body }))
+
+/** `amount_mad`: the exact amount the lookup showed. Repeating it from the same session is a 200 (same order). */
+export const useCollect = (code: string) =>
+  useOrgMutation(['pos'], (amount_mad: number, send) =>
+    send<{ order_id: string; status: string; ticket_ids: string[] }>({ method: 'POST', path: path('org', 'pos', 'codes', code, 'collect'), body: { amount_mad } }),
+  )
 
 /** `code`: the 6 normalised symbols; no call before the code is complete. */
 export const useCodeLookup = (code: string | null) =>
@@ -112,6 +147,17 @@ export function saleItems(prices: Price[], qty: Record<string, number>, holders:
         return phone ? { name: h.name.trim(), phone } : { name: h.name.trim() }
       }),
     }))
+}
+
+/**
+ * A 422 field of POST /org/pos/orders (`items[1].holders[0].name`, as /fan/orders) → the form's holder row
+ * (`holders.2.name`): rows are the places in item order; with "même nom" every place is row 0. Null: not a holder field.
+ */
+export function holderField(key: string, items: readonly { qty: number }[], sameName: boolean) {
+  const m = /^items\[(\d+)\]\.holders\[(\d+)\]\.(name|phone)$/.exec(key)
+  if (!m) return null
+  const row = sameName ? 0 : items.slice(0, Number(m[1])).reduce((n, it) => n + it.qty, 0) + Number(m[2])
+  return `holders.${row}.${m[3] as 'name' | 'phone'}` as const
 }
 
 type Messages = (k: 'pos.sale.nameInvalid' | 'pos.sale.phoneInvalid') => string

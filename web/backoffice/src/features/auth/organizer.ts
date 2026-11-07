@@ -2,7 +2,7 @@ import { createContext, use } from 'react'
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
-export type Role = 'ADMIN' | 'OPS' | 'FINANCE' | 'GATE' | 'SUPERVISOR'
+export type Role = 'ADMIN' | 'OPS' | 'FINANCE' | 'GATE' | 'SUPERVISOR' | 'CASHIER'
 export type Membership = { organizer_id: string; organizer_name: string; role: Role }
 export type Me = {
   user: { id: string; phone: string; display_name: string | null; locale: string | null }

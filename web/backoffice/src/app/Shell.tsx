@@ -53,11 +53,20 @@ import { errorKey } from '@/lib/errors'
 import { session, useSelectedOrganizerId, useSessionToken } from '@/lib/session'
 
 // GATE and SUPERVISOR staff get 403 on every /org call (04-api §Organizer): not offered here.
-const BACKOFFICE_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'FINANCE']
+const BACKOFFICE_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'FINANCE', 'CASHIER']
+const POS_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'CASHIER']
+
+/**
+ * A CASHIER may call `/org/pos/**` and three event reads only (04-api §Organizer, Lot 3): the Guichet and its print
+ * view are its whole back-office, and it lands there. FINANCE gets 403 on `/org/pos/**`: no Guichet.
+ */
+const home = (role: Role) => (role === 'CASHIER' ? '/pos' : '/')
+const allowed = (role: Role, pathname: string) => (/^\/pos(\/|$)/.test(pathname) ? POS_ROLES.includes(role) : role !== 'CASHIER')
 
 type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices' | 'pos'
 type NavKey = Section | 'invitations' | 'finance' | 'crm'
-// no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others).
+// no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others); no `roles`:
+// every role but CASHIER.
 type NavItem = { key: NavKey; icon: LucideIcon; to?: string; roles?: readonly Role[] }
 // Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Portes en direct and Appareils in Lot 2.
 const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: NavItem[] }[] = [
@@ -74,8 +83,8 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
     items: [
       { key: 'liveGates', icon: RadioTower, to: '/live' },
       { key: 'devices', icon: Smartphone, to: '/devices', roles: ['ADMIN', 'OPS'] },
-      // Lot 3 (B11). The CASHIER shell, which shows only this entry, comes with BO-13b.
-      { key: 'pos', icon: Store, to: '/pos', roles: ['ADMIN', 'OPS'] },
+      // Lot 3 (B11): a CASHIER's only entry.
+      { key: 'pos', icon: Store, to: '/pos', roles: POS_ROLES },
     ],
   },
   {
@@ -158,6 +167,8 @@ function Splash() {
   )
 }
 
+const visible = (item: NavItem, role: Role) => (item.roles ? item.roles.includes(role) : role !== 'CASHIER')
+
 function AppSidebar({ active, role }: { active: Section | null; role: Role }) {
   const { t } = useTranslation()
   // Labels are hidden only in icon mode: tooltips there, none otherwise (one Radix tooltip per item is not free).
@@ -165,11 +176,12 @@ function AppSidebar({ active, role }: { active: Section | null; role: Role }) {
   const iconMode = state === 'collapsed' && !isMobile
   // The phone sheet closes once a destination is picked (DESIGN §Back-office).
   const closeSheet = () => setOpenMobile(false)
+  const groups = NAV.map(({ group, items }) => ({ group, items: items.filter((i) => visible(i, role)) })).filter((g) => g.items.length > 0)
   return (
     <Sidebar collapsible="icon" label={t('nav.label')}>
       <SidebarHeader className="h-14 justify-center border-b">
         <Link
-          to="/"
+          to={home(role)}
           onClick={closeSheet}
           className="flex items-center gap-2.5 rounded-md px-1 outline-none focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/50 group-data-[collapsible=icon]:px-0"
         >
@@ -182,12 +194,12 @@ function AppSidebar({ active, role }: { active: Section | null; role: Role }) {
       </SidebarHeader>
       <SidebarContent>
         <nav aria-label={t('nav.label')}>
-          {NAV.map(({ group, items }) => (
+          {groups.map(({ group, items }) => (
             <SidebarGroup key={group}>
               <SidebarGroupLabel>{t(`nav.groups.${group}`)}</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {items.filter((i) => !i.roles || i.roles.includes(role)).map(({ key, icon: Icon, to }) => (
+                  {items.map(({ key, icon: Icon, to }) => (
                     <SidebarMenuItem key={key}>
                       {to ? (
                         <SidebarMenuButton
@@ -301,6 +313,9 @@ export function Shell({ bare = false }: { bare?: boolean }) {
   const memberships = me.data.memberships.filter((m) => BACKOFFICE_ROLES.includes(m.role))
   const current = memberships.find((m) => m.organizer_id === selectedId) ?? memberships[0]
   if (!current) return <Notice title={t('shell.noAccessTitle')} body={t('shell.noAccessBody')} logout />
+
+  // A page this role can't use (a CASHIER outside the Guichet, FINANCE on it, or after a switch): its landing page.
+  if (!allowed(current.role, location.pathname)) return <Navigate to={home(current.role)} replace />
 
   const switchTo = (id: string) => {
     // The new organizer's queries live under another key; drop the old ones rather than keep them around.

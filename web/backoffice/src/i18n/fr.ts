@@ -42,6 +42,7 @@ export const fr = {
     FINANCE: 'Finance',
     GATE: "Contrôle d'accès",
     SUPERVISOR: 'Superviseur',
+    CASHIER: 'Caissier',
   },
   login: {
     title: 'Connexion',
@@ -87,6 +88,12 @@ export const fr = {
     QUOTA_BELOW_SOLD: 'Le quota ne peut pas être inférieur aux billets déjà vendus.',
     DEVICE_REVOKED: 'Cet appareil a été révoqué : il ne peut plus être approuvé. Enrôlez-le à nouveau.',
     DEVICE_IN_USE: 'Un appareil qui a déjà scanné ou téléchargé le manifeste ne peut pas être retiré de cet événement.',
+    POS_SESSION_REQUIRED: "Aucune caisse ouverte à votre nom. Ouvrez une caisse, puis recommencez.",
+    POS_SESSION_CLOSED:
+      "Cette caisse est déjà clôturée. Demandez le résultat (attendu, déclaré, écart) à l'équipe Opérations : il figure dans Finance › Encaissements.",
+    EVENT_NOT_ON_SALE: "Les ventes de cet événement sont fermées. Rien n'a été encaissé.",
+    PER_ACCOUNT_LIMIT: '{{limit}} places au plus par vente. Retirez des places.',
+    SOLD_OUT: "Il ne reste plus assez de places dans une catégorie. Les places restantes sont actualisées ; rien n'a été encaissé.",
     generic: 'Une erreur est survenue. Réessayez.',
   },
   common: {
@@ -728,6 +735,26 @@ export const fr = {
       open: 'Ouvrir une caisse',
       close: 'Clôturer la caisse',
     },
+    open: {
+      title: 'Ouvrir une caisse',
+      label: 'Nom de la caisse',
+      hint: 'Par exemple Guichet Nord. Il apparaît dans le rapport des encaissements.',
+      labelInvalid: 'Saisissez un nom de 1 à 40 caractères.',
+      submit: 'Ouvrir',
+    },
+    close: {
+      title: 'Clôturer {{label}}',
+      description: "Comptez les espèces de la caisse et saisissez le montant compté. L'écart est enregistré à la clôture.",
+      expected: 'Attendu',
+      declared: 'Montant compté (DH)',
+      declaredInvalid: 'Montant invalide.',
+      gap: 'Écart',
+      noGap: 'Aucun écart',
+      submit: 'Clôturer la caisse',
+      doneTitle: '{{label}} est clôturée',
+      doneDescription: 'Ces montants sont enregistrés et ne changent plus.',
+      declaredDone: 'Déclaré',
+    },
     tabs: { sale: 'Vente', code: 'Code cash' },
     sale: {
       event: 'Événement',
@@ -762,6 +789,11 @@ export const fr = {
       change: 'À rendre',
       missing: 'Il manque',
       submit: 'Encaisser {{amount}} DH',
+      needSession: 'Ouvrez une caisse pour encaisser.',
+      taken: "Cette vente est déjà enregistrée dans une caisse précédente · n'encaissez pas une deuxième fois.",
+      newSale: 'Nouvelle vente',
+      replayed: 'Cette vente était déjà enregistrée pour {{amount}} DH, et non {{shown}} DH : encaissez {{amount}} DH, puis imprimez ses billets.',
+      printTickets: 'Imprimer les billets',
     },
     code: {
       label: 'Code cash',
@@ -782,6 +814,9 @@ export const fr = {
         other: 'Non payable',
       },
       notPayable: "Code déjà payé ou expiré · ne gardez pas l'argent",
+      amountChanged: 'Le montant de cette commande a changé. Saisissez le code à nouveau.',
+      paidHint:
+        "Ce code est déjà payé. Si vous venez de l'encaisser à cette caisse sans voir les billets, cliquez sur Encaisser : les billets s'ouvrent sans nouvel encaissement.",
       submit: 'Encaisser {{amount}} DH',
     },
     print: {

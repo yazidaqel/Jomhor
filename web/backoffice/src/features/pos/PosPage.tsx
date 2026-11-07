@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { AlertCircle, Banknote, Minus, Plus, Store } from 'lucide-react'
 import { Controller, useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router'
 import { BrandEmpty, ErrorNotice, LoadingRows, PageHeader } from '@/components/page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -16,28 +17,59 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useEvent, useEvents, usePrices, type EventSummary, type Price } from '@/features/events/api'
 import { ApiError } from '@/lib/api'
+import { errorKey } from '@/lib/errors'
 import { formatDh } from '@/lib/money'
 import { formatDateTime } from '@/lib/time'
 import { useNow } from '@/lib/useNow'
 import { cn } from '@/lib/utils'
-import { changeDue, codeStatus, saleSchema, type SaleValues, displayCode, normalizeCode, readCode, useCodeLookup, usePosSession, type CodeLookup } from './api'
+import {
+  changeDue,
+  codeStatus,
+  displayCode,
+  holderField,
+  normalizeCode,
+  readCode,
+  saleItems,
+  saleSchema,
+  useCodeLookup,
+  useCollect,
+  usePosSession,
+  useSale,
+  type CodeLookup,
+  type PosSession,
+  type SaleOrder,
+  type SaleValues,
+} from './api'
+import { CloseSessionDialog, OpenSessionDialog } from './SessionDialogs'
 
-// B11 Guichet (DESIGN §Lot 3 adjustments). BO-13a: the layout and the reads; the writes (open/close the till, sale,
-// collect) and the CASHIER shell come with BO-13b, so their buttons are disabled here.
+// B11 Guichet (DESIGN §Lot 3 adjustments): the till session, a walk-up sale and a cash code's collect, each paid
+// order then opened in the print view. Sale and collect need the caller's open till (else 409 POS_SESSION_REQUIRED).
+
+/** Copy for a sale or collect error; PER_ACCOUNT_LIMIT says the cap. */
+function useErrorMessage() {
+  const { t } = useTranslation()
+  return (e: unknown) =>
+    e instanceof ApiError && e.code === 'PER_ACCOUNT_LIMIT' ? t('errors.PER_ACCOUNT_LIMIT', { limit: Number(e.details.limit) }) : t(errorKey(e))
+}
+
+/** Whether the caller has an open till: sale and collect are offered only then. */
+const useTillOpen = () => !!usePosSession().data?.session
 
 /** B11 Guichet: `/pos`. */
 export function PosPage() {
   const { t } = useTranslation()
+  const [tab, setTab] = useState('sale')
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title={t('pos.title')} description={t('pos.description')} />
       <SessionBar />
-      <Tabs defaultValue="sale" className="gap-4">
+      <Tabs value={tab} onValueChange={setTab} className="gap-4">
         <TabsList>
           <TabsTrigger value="sale">{t('pos.tabs.sale')}</TabsTrigger>
           <TabsTrigger value="code">{t('pos.tabs.code')}</TabsTrigger>
         </TabsList>
-        <TabsContent value="sale">
+        {/* Kept mounted while hidden: the sale in progress (and its `sale_id`) survives a look at a code. */}
+        <TabsContent value="sale" forceMount hidden={tab !== 'sale'}>
           <SaleTab />
         </TabsContent>
         <TabsContent value="code">
@@ -49,11 +81,17 @@ export function PosPage() {
 }
 
 function SessionBar() {
-  const { t, i18n } = useTranslation()
   const query = usePosSession()
   if (query.isPending) return <Skeleton className="h-[74px] w-full rounded-xl" />
   if (query.isError) return <Card className="py-0"><ErrorNotice error={query.error} onRetry={() => void query.refetch()} /></Card>
-  const s = query.data.session
+  return <SessionCard session={query.data.session} />
+}
+
+function SessionCard({ session: s }: { session: PosSession | null }) {
+  const { t, i18n } = useTranslation()
+  const [opening, setOpening] = useState(false)
+  // The session is kept for the close dialog: once closed, the bar shows "Aucune caisse" behind the frozen result.
+  const [closing, setClosing] = useState<{ open: boolean; session?: PosSession }>({ open: false })
   return (
     <Card className="py-4">
       <CardContent className="flex flex-wrap items-center gap-x-8 gap-y-3 px-5">
@@ -76,21 +114,21 @@ function SessionBar() {
               <div className="text-xs font-medium text-muted-foreground">{t('pos.session.collected')}</div>
               <div className="text-xl font-semibold tabular-nums">{t('pos.amount', { amount: formatDh(s.collected_mad, i18n.language) })}</div>
             </div>
-            {/* BO-13b: POST /org/pos/sessions/{id}/close with the declared amount. */}
-            <Button variant="outline" className="ml-auto" disabled>
+            <Button variant="outline" className="ml-auto" onClick={() => setClosing({ open: true, session: s })}>
               {t('pos.session.close')}
             </Button>
           </>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">{t('pos.session.noneHint')}</p>
-            {/* BO-13b: POST /org/pos/sessions. */}
-            <Button className="ml-auto" disabled>
+            <Button className="ml-auto" onClick={() => setOpening(true)}>
               {t('pos.session.open')}
             </Button>
           </>
         )}
       </CardContent>
+      <OpenSessionDialog open={opening} onOpenChange={setOpening} />
+      <CloseSessionDialog session={closing.session} open={closing.open} onOpenChange={(open) => setClosing((c) => ({ ...c, open }))} />
     </Card>
   )
 }
@@ -115,16 +153,56 @@ function SaleTab() {
 }
 
 
+/**
+ * `sale_id` (→ `orders.id`) is drawn once per sale and sent again on every retry of it, so a sale whose answer was
+ * lost is never made twice (the server answers 200 with that order); a new one only after a success or a reset
+ * ("Nouvelle vente", another event). Two outcomes stop the form until the cashier acts:
+ * - 422 TAKEN on `sale_id`: the sale was recorded in an earlier till (closed since): no second payment, "Nouvelle vente".
+ * - an answer whose total is not the one on screen (a replay of a sale edited after its answer was lost): collect
+ *   that total, then print.
+ */
 function SaleForm({ events }: { events: EventSummary[] }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const message = useErrorMessage()
+  const sale = useSale()
+  const saleId = useRef<string | null>(null)
   const form = useForm<SaleValues>({
     resolver: zodResolver(saleSchema(t)),
     mode: 'onTouched',
     defaultValues: { event_id: String(events[0]!.id), qty: {}, same_name: false, holders: [], received: '' },
   })
   const eventId = useWatch({ control: form.control, name: 'event_id' })
+  const prices = usePrices(eventId)
+  const [stop, setStop] = useState<Stop | null>(null)
+
+  const reset = (event_id: string) => {
+    form.reset({ event_id, qty: {}, same_name: false, holders: [], received: '' })
+    saleId.current = null
+    setStop(null)
+  }
+
+  const submit = async (v: SaleValues) => {
+    const list = prices.data ?? []
+    const items = saleItems(list, v.qty, v.holders, v.same_name)
+    const shown = list.reduce((sum, p) => sum + (v.qty[p.id] ?? 0) * p.price_mad, 0)
+    saleId.current ??= crypto.randomUUID()
+    try {
+      const order = await sale.mutateAsync({ sale_id: saleId.current, event_id: Number(v.event_id), items })
+      saleId.current = null
+      if (order.total_mad !== shown) setStop({ kind: 'replayed', order, shown })
+      else await navigate(`/pos/print/${order.id}`)
+    } catch (e) {
+      const fields = e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.fields && typeof e.details.fields === 'object' ? Object.keys(e.details.fields) : []
+      if (fields.includes('sale_id')) return setStop({ kind: 'taken' })
+      const rows = fields.map((f) => holderField(f, items, v.same_name)).filter((f) => f !== null)
+      if (rows.length) rows.forEach((f, i) => form.setError(f, { message: t('common.fieldInvalid') }, { shouldFocus: i === 0 }))
+      else form.setError('root', { message: message(e) })
+    }
+  }
+
   return (
-    <form className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]" onSubmit={(e) => e.preventDefault()}>
+    <form className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]" onSubmit={(e) => void form.handleSubmit(submit)(e)} noValidate>
       <Card>
         <CardContent className="flex flex-col gap-6 px-5">
           <Field>
@@ -136,11 +214,7 @@ function SaleForm({ events }: { events: EventSummary[] }) {
                 <Select
                   name={field.name}
                   value={field.value}
-                  onValueChange={(v) => {
-                    field.onChange(v)
-                    form.setValue('qty', {})
-                    form.setValue('holders', [])
-                  }}
+                  onValueChange={reset}
                 >
                   <SelectTrigger id="pos-event" className="w-full">
                     <SelectValue placeholder={t('pos.sale.eventPlaceholder')} />
@@ -159,7 +233,7 @@ function SaleForm({ events }: { events: EventSummary[] }) {
           <Places key={eventId} eventId={eventId} form={form} />
         </CardContent>
       </Card>
-      <SaleSummary eventId={eventId} form={form} />
+      <SaleSummary eventId={eventId} form={form} stop={stop && <SaleStop stop={stop} onNewSale={() => reset(eventId)} />} />
     </form>
   )
 }
@@ -330,8 +404,34 @@ function PriceRow(props: { price: Price; label: string; qty: number; full: boole
 // What a DH amount can still become while it is typed (parseDh: 8 digits, 2 decimals): `12,` is on its way, `1,234` is not.
 const DH_PREFIX = /^\d{0,8}(?:[.,]\d{0,2})?$/
 
+type Stop = { kind: 'taken' } | { kind: 'replayed'; order: SaleOrder; shown: number }
+
+function SaleStop({ stop, onNewSale }: { stop: Stop; onNewSale: () => void }) {
+  const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
+  return (
+    <div role="alert" className="flex flex-col gap-3 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+      <p className="flex items-start gap-2">
+        <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        {stop.kind === 'taken'
+          ? t('pos.sale.taken')
+          : t('pos.sale.replayed', { amount: formatDh(stop.order.total_mad, i18n.language), shown: formatDh(stop.shown, i18n.language) })}
+      </p>
+      {stop.kind === 'taken' ? (
+        <Button type="button" variant="outline" onClick={onNewSale}>
+          {t('pos.sale.newSale')}
+        </Button>
+      ) : (
+        <Button type="button" onClick={() => void navigate(`/pos/print/${stop.order.id}`)}>
+          {t('pos.sale.printTickets')}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 /** Total, cash received and the change to give back (received − total, integer centimes, on the client). */
-function SaleSummary({ eventId, form }: { eventId: string; form: UseFormReturn<SaleValues> }) {
+function SaleSummary({ eventId, form, stop }: { eventId: string; form: UseFormReturn<SaleValues>; stop: ReactNode }) {
   const { t, i18n } = useTranslation()
   const prices = usePrices(eventId)
   const qty = useWatch({ control: form.control, name: 'qty' })
@@ -342,6 +442,8 @@ function SaleSummary({ eventId, form }: { eventId: string; form: UseFormReturn<S
   // The error waits for the field to be left, unless what is typed can no longer become an amount.
   const invalid = change === null && (touched || !DH_PREFIX.test(received.trim()))
   const dh = (c: number) => t('pos.amount', { amount: formatDh(c, i18n.language) })
+  const tillOpen = useTillOpen()
+  const { isSubmitting, errors } = form.formState
   return (
     <Card className="lg:sticky lg:top-20">
       <CardHeader>
@@ -376,11 +478,27 @@ function SaleSummary({ eventId, form }: { eventId: string; form: UseFormReturn<S
             )}
           </div>
         )}
-        {/* BO-13b: POST /org/pos/orders (items from saleItems, `sale_id` kept across retries), then the print view. */}
-        <Button type="submit" size="lg" className="h-12 text-base" disabled>
+        {errors.root && (
+          <p role="alert" className="text-sm font-medium text-destructive">
+            {errors.root.message}
+          </p>
+        )}
+        {stop}
+        <Button
+          type="submit"
+          size="lg"
+          className="h-12 text-base"
+          disabled={!tillOpen || total === 0 || (change != null && change < 0) || isSubmitting || !!stop}
+          aria-describedby={tillOpen ? undefined : 'pos-sale-need-session'}
+        >
           <Banknote />
           {t('pos.sale.submit', { amount: formatDh(total, i18n.language) })}
         </Button>
+        {!tillOpen && (
+          <p id="pos-sale-need-session" className="text-center text-xs text-muted-foreground">
+            {t('pos.sale.needSession')}
+          </p>
+        )}
       </CardContent>
     </Card>
   )
@@ -442,8 +560,24 @@ function CodeResult({ code }: { code: string }) {
   return <CodeCard code={code} order={lookup.data} />
 }
 
+/**
+ * Collect sends the exact amount shown. A repeat from this till is a 200 (same order), so a lost answer is just
+ * clicked again: a lookup that now reads PAID may be this till's own collect, so "Encaisser" stays on and the server
+ * decides (200 replay, or 409). Only a 409 CODE_NOT_PAYABLE on the collect itself says "ne gardez pas l'argent".
+ * An expired or otherwise unpayable lookup can't be this till's (a collected order is PAID): nothing to collect.
+ */
 function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
+  const message = useErrorMessage()
+  const collect = useCollect(code)
+  const tillOpen = useTillOpen()
+  const error = collect.error
+  const refused = (error instanceof ApiError && error.code === 'CODE_NOT_PAYABLE') || (!order.payable && order.status !== 'PAID')
+  const paidHint = !refused && !order.payable
+  const errorText =
+    !error || refused ? null : error instanceof ApiError && error.code === 'VALIDATION_FAILED' ? t('pos.code.amountChanged') : message(error)
+  const onCollect = () => collect.mutate(order.amount_mad, { onSuccess: (r) => void navigate(`/pos/print/${r.order_id}`) })
   return (
     <Card>
       <CardHeader>
@@ -478,17 +612,33 @@ function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
             </dd>
           </div>
         </dl>
-        {!order.payable && (
+        {refused && (
           <p role="alert" className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
             <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
             {t('pos.code.notPayable')}
           </p>
         )}
-        {/* BO-13b: POST /org/pos/codes/{code}/collect with this amount, then the print view. */}
-        <Button size="lg" className="h-12 text-base" disabled>
+        {paidHint && <p className="rounded-lg bg-muted px-4 py-3 text-sm">{t('pos.code.paidHint')}</p>}
+        {errorText && (
+          <p role="alert" className="text-sm font-medium text-destructive">
+            {errorText}
+          </p>
+        )}
+        <Button
+          size="lg"
+          className="h-12 text-base"
+          disabled={!tillOpen || refused || collect.isPending}
+          aria-describedby={tillOpen ? undefined : 'pos-code-need-session'}
+          onClick={onCollect}
+        >
           <Banknote />
           {t('pos.code.submit', { amount: formatDh(order.amount_mad, i18n.language) })}
         </Button>
+        {!tillOpen && (
+          <p id="pos-code-need-session" className="text-center text-xs text-muted-foreground">
+            {t('pos.sale.needSession')}
+          </p>
+        )}
       </CardContent>
     </Card>
   )
