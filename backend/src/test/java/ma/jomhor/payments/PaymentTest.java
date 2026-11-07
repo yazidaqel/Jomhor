@@ -68,7 +68,7 @@ public abstract class PaymentTest extends OrgApiTest {
     }
 
     /** The callback fields the simulated gateway posts, signed with the test secret. */
-    protected static Map<String, String> signed(String paymentId, String outcome, long amountMad, String providerRef) throws Exception {
+    public static Map<String, String> signed(String paymentId, String outcome, long amountMad, String providerRef) throws Exception {
         Map<String, String> m = new LinkedHashMap<>();
         m.put("payment_id", paymentId);
         m.put("outcome", outcome);
@@ -78,7 +78,7 @@ public abstract class PaymentTest extends OrgApiTest {
         return m;
     }
 
-    protected static Map<String, String> approve(String paymentId, long amountMad) throws Exception {
+    public static Map<String, String> approve(String paymentId, long amountMad) throws Exception {
         return signed(paymentId, "APPROVED", amountMad, "FAKE-" + UUID.randomUUID());
     }
 

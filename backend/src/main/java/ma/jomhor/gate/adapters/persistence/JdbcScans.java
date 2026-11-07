@@ -1,5 +1,6 @@
 package ma.jomhor.gate.adapters.persistence;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -10,7 +11,11 @@ import ma.jomhor.gate.domain.Scan;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-/** Every statement filters on organizer_id. Insert and select only: scans are append-only. */
+/**
+ * Every statement filters on organizer_id. Insert and select only: scans are append-only. The report reads join
+ * tickets (zone and status) and usedSince joins gates, read-only, as one statement each, so 45,000 tickets and
+ * ~100k scans are aggregated in the database rather than shipped to the JVM.
+ */
 @Repository
 class JdbcScans implements Scans {
 
@@ -65,6 +70,54 @@ class JdbcScans implements Scans {
                         Scan.Direction.valueOf(rs.getString("direction")),
                         rs.getObject("device_time", OffsetDateTime.class).toInstant(), rs.getString("code")))
                 .list();
+    }
+
+    @Override
+    public List<Admitted> admitted(UUID org, int eventId) {
+        return jdbc.sql("""
+                        with adm as (
+                          select s.gate_id, s.ticket_id, s.device_time,
+                                 row_number() over (partition by s.ticket_id, s.direction
+                                                    order by s.device_time, s.scan_id) = 1 as canonical
+                          from scans s
+                          where s.organizer_id = ? and s.event_id = ? and s.result in ('OK', 'OVERRIDE')
+                        )
+                        select a.gate_id, t.zone_id, t.status = 'VALID' as valid, count(*) as admitted,
+                               count(*) filter (where a.canonical) as canonical,
+                               count(*) filter (where a.device_time > now() - interval '5 minutes'
+                                                  and a.device_time <= now()) as last5,
+                               count(*) filter (where a.device_time > now() - interval '10 minutes'
+                                                  and a.device_time <= now() - interval '5 minutes') as prev5
+                        from adm a join tickets t on t.id = a.ticket_id and t.organizer_id = ?
+                        group by a.gate_id, t.zone_id, t.status = 'VALID'
+                        """)
+                .params(org, eventId, org)
+                .query((rs, n) -> new Admitted(rs.getObject("gate_id", UUID.class), rs.getInt("zone_id"),
+                        rs.getBoolean("valid"), rs.getLong("admitted"), rs.getLong("canonical"), rs.getLong("last5"),
+                        rs.getLong("prev5")))
+                .list();
+    }
+
+    @Override
+    public List<Other> others(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select s.gate_id, s.device_id, t.zone_id, s.result, s.override_reason, count(*) as n
+                        from scans s left join tickets t on t.id = s.ticket_id and t.organizer_id = s.organizer_id
+                        where s.organizer_id = ? and s.event_id = ? and s.result <> 'OK'
+                        group by s.gate_id, s.device_id, t.zone_id, s.result, s.override_reason
+                        """)
+                .params(org, eventId)
+                .query((rs, n) -> new Other(rs.getObject("gate_id", UUID.class), rs.getObject("device_id", UUID.class),
+                        (Integer) rs.getObject("zone_id"), Scan.Result.valueOf(rs.getString("result")),
+                        rs.getString("override_reason") == null ? null
+                                : Scan.OverrideReason.valueOf(rs.getString("override_reason")),
+                        rs.getLong("n")))
+                .list();
+    }
+
+    @Override
+    public Instant now() {
+        return jdbc.sql("select now()").query(OffsetDateTime.class).single().toInstant();
     }
 
     private static <T> T[] column(List<Scan> rows, Function<Scan, T> f, IntFunction<T[]> array) {

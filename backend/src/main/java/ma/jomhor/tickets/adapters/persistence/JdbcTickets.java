@@ -5,9 +5,11 @@ import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import ma.jomhor.tickets.application.Tickets;
 import ma.jomhor.tickets.domain.Ticket;
 import org.springframework.jdbc.core.RowMapper;
@@ -82,6 +84,17 @@ class JdbcTickets implements Tickets {
                 .query((rs, n) -> new Ticket.ManifestRow(rs.getObject("id", UUID.class), rs.getInt("zone_id"),
                         Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_initials")))
                 .list();
+    }
+
+    @Override
+    public Map<Integer, Long> validByZone(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select zone_id, count(*) as n from tickets
+                        where organizer_id = :org and event_id = :event and status = 'VALID' group by zone_id
+                        """)
+                .param("org", org).param("event", eventId)
+                .query((rs, n) -> Map.entry(rs.getInt("zone_id"), rs.getLong("n"))).stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     @Override
