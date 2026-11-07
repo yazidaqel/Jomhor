@@ -29,6 +29,8 @@ dependencies {
     // Ticket PDF (GET /fan/tickets/{id}/pdf): PDFBox draws the page, ZXing core encodes the QR (tests decode with it too).
     implementation("org.apache.pdfbox:pdfbox:3.0.8")
     implementation("com.google.zxing:core:3.5.4")
+    // Arabic text on the ticket PDF: ArabicShaping (presentation forms) + Bidi (visual order); PDFBox does neither.
+    implementation("com.ibm.icu:icu4j:79.1")
 
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
@@ -39,7 +41,8 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
-    // TokenVectorsTest and GateVectorsTest compare against (or, with -Djomhor.writeVectors=true, rewrite) the docs vectors.
-    inputs.files("../docs/token-vectors.json", "../docs/gate-vectors.json")
+    // HolderNamesTest reads the shared holder-name cases. TokenVectorsTest and GateVectorsTest compare against (or,
+    // with -Djomhor.writeVectors=true, rewrite) the docs vectors.
+    inputs.files("../docs/token-vectors.json", "../docs/gate-vectors.json", "../docs/holder-name-vectors.json")
     providers.systemProperty("jomhor.writeVectors").orNull?.let { systemProperty("jomhor.writeVectors", it) }
 }
