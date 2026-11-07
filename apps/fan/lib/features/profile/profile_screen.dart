@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/error_text.dart';
+import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/features/auth/auth_repository.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
-/// Profil tab (Lot 1): name (editable), phone (read-only), language (FR only), logout. Logout stays usable when
-/// `/fan/me` cannot be read (offline).
+/// Profil tab: name (editable), phone (read-only), language (FR, AR, EN: saved on the phone and sent to the server),
+/// logout. Logout stays usable when `/fan/me` cannot be read (offline).
 class ProfileScreen extends ConsumerWidget {
   const new({super.key});
 
@@ -46,21 +48,19 @@ class ProfileScreen extends ConsumerWidget {
                     SectionLabel(l.profileLanguage),
                     _Group(
                       children: [
-                        ListTile(
-                          key: const Key('profile.lang.fr'),
-                          title: Text(l.languageFr),
-                          trailing: const Icon(Icons.check_rounded, color: JomhorColors.accent),
-                          selected: true,
-                        ),
-                        // Lot 4: AR (RTL) and EN copy.
-                        for (final name in [l.languageAr, l.languageEn])
+                        for (final code in appLocales)
                           ListTile(
-                            enabled: false,
-                            title: Text(name),
-                            trailing: Text(
-                              l.chipSoon,
-                              style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
-                            ),
+                            key: Key('profile.lang.$code'),
+                            title: Text(switch (code) {
+                              'ar' => l.languageAr,
+                              'en' => l.languageEn,
+                              _ => l.languageFr,
+                            }),
+                            trailing: code == l.localeName
+                                ? const Icon(Icons.check_rounded, color: JomhorColors.accent)
+                                : null,
+                            selected: code == l.localeName,
+                            onTap: () => ref.read(appLocaleProvider.notifier).select(code),
                           ),
                       ],
                     ),
@@ -196,7 +196,7 @@ class _IdentityState extends ConsumerState<_Identity> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name ?? l.profileNameEmpty,
+                      name == null ? l.profileNameEmpty : l.isolate(name),
                       key: const Key('profile.name'),
                       semanticsLabel: l.dotPair(l.profileName, name ?? l.profileNameEmpty),
                       style: name == null

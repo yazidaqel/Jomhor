@@ -1,12 +1,14 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { defaultLocale, getDictionary } from '@/lib/i18n'
+import { getI18n } from '@/lib/i18n/server'
 
-const d = getDictionary(defaultLocale)
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n()
+  return { title: d.notFound.metaTitle, robots: { index: false } }
+}
 
-export const metadata: Metadata = { title: d.notFound.metaTitle, robots: { index: false } }
-
-export default function NotFound() {
+export default async function NotFound() {
+  const { d } = await getI18n()
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center gap-4 px-5 py-12">
       <h1 className="font-display text-h1 uppercase">{d.notFound.title}</h1>

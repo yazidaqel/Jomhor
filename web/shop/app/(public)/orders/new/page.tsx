@@ -4,7 +4,8 @@ import { notFound, redirect } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
 import { eventSlug, getEvent, saleState } from '@/lib/events'
 import { currentSession } from '@/lib/http'
-import { defaultLocale, fmt, getDictionary } from '@/lib/i18n'
+import { fmt } from '@/lib/i18n'
+import { getI18n } from '@/lib/i18n/server'
 import { formatDh } from '@/lib/money'
 import { checkoutPath, loginUrl, parseCheckout } from '@/lib/orders'
 import { formatDateTime } from '@/lib/time'
@@ -12,9 +13,10 @@ import { Crest } from '../../../brand'
 import { Steps } from '../../steps'
 import { CheckoutForm } from './CheckoutForm'
 
-const d = getDictionary(defaultLocale)
-
-export const metadata: Metadata = { title: d.checkout.metaTitle, robots: { index: false } }
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n()
+  return { title: d.checkout.metaTitle, robots: { index: false } }
+}
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
 
@@ -31,6 +33,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
   const zone = e?.zones.find((z) => z.prices.some((p) => p.price_category_id === q.price))
   const price = zone?.prices.find((p) => p.price_category_id === q.price)
   if (!e || !zone || !price) notFound()
+  const { d } = await getI18n()
   // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
   const now = Date.now()
   if (saleState(e, now) !== 'ON_SALE' || price.remaining === 0) redirect(`/events/${eventSlug(e)}`)

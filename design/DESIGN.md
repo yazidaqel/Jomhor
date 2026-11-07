@@ -20,8 +20,13 @@ Live canvas: https://claude.ai/artifact/RZdBe8HCqJUDBhB61S55mt
    (web and Android; iOS keeps its native slide and swipe-back), a quick selection mark
    (`motion.base`). Fan app specifics: the pass flies from its card into screen 5, countdown
    digits roll when they change, the paid check settles in once, a haptic tick marks each QR
-   rotation (nothing moves over the QR itself). No decorative loops (progress indicators
-   excepted), no parallax. All of it off under reduced motion.
+   rotation (nothing moves over the QR itself). Lot 4 adds, each tied to a meaning: a
+   transferred ticket slides out of the wallet (the reverse of the purchase slide-in); the
+   ticket card flips to its gate side and back (`motion.ticketFlip`); figures roll when they
+   change (events attended, a group's paid count, the member number on its first reveal); a
+   member's paid check settles in once in the group view; a newly attended event's dot fills
+   once; the hold-to-confirm fill on a transfer counts as a progress indicator. No decorative
+   loops (progress indicators excepted), no parallax. All of it off under reduced motion.
 7. FR first, AR with true RTL mirroring (leading icons flip, numbers stay LTR), EN.
 
 ## Components
@@ -54,6 +59,10 @@ Icons: 1.8 px stroke, round caps, 20–22 px. No emoji anywhere.
 | 4 | Paiement | `Checkout` | `/orders/:id/pay` | CTA on zones (order reserved) |
 | 5 | Mon billet | `Ticket` | `/tickets/:id` | Wallet, "Mon billet" strip, or matchday mode auto-open |
 | 6 | Scanner · résultat | `Scanner` | scanner app `/scan` | After each scan |
+| 7 | Club | — | `/club` (tab) | Bottom nav |
+| 8 | Transférer | — | sheet on `/tickets/:id` | Screen 5 action |
+| 9 | Groupe | — | `/orders/:id` (split variant) | After a split order; push / link for members |
+| 10 | Notifications | — | `/inbox` | Bell on screen 1 |
 
 Not mocked yet (Lot 1/4): OTP login, wallet list, transfer flow, order status (cash
 code), membership, profile, gate map. Follow the same components.
@@ -257,6 +266,46 @@ These override the screen specs above for Lot 3 (see `docs/plans/lot-3.md`).
 | B6 Équipe | Add "Caissier" (name + phone, no PIN). |
 | B2 Règles | "Cash en agence · jusqu'à {sales_close_at − 2 h}" read-only. |
 | Sidebar | Jour J + "Guichet"; Fans & finance: "Finance" enabled. |
+
+## Lot 4 adjustments
+
+These override the screen specs above for Lot 4 (see `docs/plans/lot-4.md`).
+
+| Where | Change |
+| --- | --- |
+| Bottom nav | Accueil · Billets · Club · Profil |
+| Screen 1 | Bell → screen 10, with an 8 px accent dot when a campaign is newer than the last visit (stored on the device). The amber strip also covers member orders to pay ("Ta place t'attend · avant {time}"). Members get a slim strip under "Mon billet": "N° 000042 · Fidèle · 7 matchs" → screen 7. |
+| Screen 4 / W3 | Each friend row with a phone gets a switch "Paie sa place" (default off). The summary splits "Tu paies {n} place(s) · {total}" and "{m} place(s) payée(s) par tes amis". Caption: "Tes amis ont 2 h après ton paiement". 422 `TOO_LATE` → the switch is disabled with "Trop tard pour partager". |
+| Screen 5 front | Actions: Transférer · WhatsApp (Wallet hidden, Q67). Gate row: "Porte 4" + a load chip (Fluide · Modérée · Chargée; hidden when `UNKNOWN`) + an "Itinéraire" chip. When this gate is `HIGH` and another gate of the zone is `LOW`: "Porte 3 plus fluide en ce moment". No walking time and no wait minutes (Q68). |
+| Screen 5 gate side | Tapping the PORTE fact or "Itinéraire" flips the card (`motion.ticketFlip`, 420 ms). This side shows: the gate code in display 72, the gate name, `directions`, and "Ouvrir dans Plans" when coordinates exist (Android `geo:{lat},{lng}?q={lat},{lng}({gate name})`, iOS `https://maps.apple.com/?ll={lat},{lng}&q={gate name}`). It also lists the zone's other gates with their chips and "Retourner le billet". The QR is not on this side; flipping back restores it. Works offline from the cached ticket (chips hidden offline). |
+| Screen 5 entry | When `entries` lists this ticket, the card flips once to "Tu es dedans" / "راك داخل": band `success`, gate and time in the venue zone, heavy haptic. Re-opening shows the entered state without the animation. |
+| 8 Transférer | Bottom sheet: WhatsApp number + full name (§Holder names). Info: "Ton QR ne marchera plus. {name} reçoit un nouveau billet." Hold-to-confirm CTA (54 px, 800 ms fill, haptic at the end), then the ticket slides out of the wallet. Billets keeps a muted row "Transféré à Karim B. · {date}". After `transfer_until`: disabled, with "Transferts fermés 1 h 30 avant le début". Profil → "Téléphone perdu ?" → confirm listing the upcoming tickets → re-issue each, after "Se déconnecter partout". |
+| 9 Groupe, initiator | "Ta bande · {event}". Big figure "{paid}/{total} payées" (rolls). Member row cards: initials avatar (40 px circle, surface2, display 16), holder label, amount, chip (À payer · avant {time} / Payé / Expiré). The paid check settles in once per member. "Relancer sur WhatsApp" opens `https://wa.me/?text=` with the copy and `pay_url`; there is also "Copier le lien". Polls the order every 10 s while visible. |
+| 9 Groupe, member (app, and W4 on the shop) | Event header (as screen 2) + "{initiator_label} t'a gardé une place" + amount + countdown to `reserved_until` + the screen 4 method rows + CTA. Expired: "La place a été libérée". |
+| 7 Club | Member card (wow table below). Not a member: an outlined card + "Rejoindre le club · gratuit" → a sheet with two switches ("Notifications du club", "Messages WhatsApp du club"; default off, one line each on what they send) → join, then the card reveals. Below: "Ta saison" 12-dot row, "{n} matchs au stade" (or "événements" when `event_type` ≠ FOOTBALL_MATCH), tier progress "Encore 2 pour Pilier", "Derniers" row cards (attended marked). Settings: the two switches and "Quitter le club" (confirm). |
+| 10 Notifications | Campaign rows (title, body, relative time). Tapping a row with `event_id` → screen 2. Empty state: "Rien pour l'instant". |
+| Profil | Langue (Français · العربية · English → PATCH `/fan/me`), Notifications (opt-ins + system permission state), "Téléphone perdu ?". Push permission is asked after the first purchase or a join with push on, never at launch. |
+| AR / RTL (fan app and shop) | `ar` = Darija in Arabic script (Q64). Cairo 700/800 for display text in AR, IBM Plex Sans Arabic for body text. Barlow Condensed stays for digits, codes and ticket numbers. Western digits 0–9 in every locale (format with `ar-MA`). Layout mirrored: leading icons and back chevrons flip, and progress and rotation bars fill from the right. QR, `JMH 4F7K 29`, phone numbers, ticket numbers and prices stay LTR inside bidi isolates. **Arabic text gets letter-spacing 0 and no uppercase** (tracking breaks joining), so `label`-style AR text gets its emphasis from weight 700. |
+| W2 / all shop pages | Header language switch: a globe button opening a small menu with each language in its own name and script (Français · العربية · English), the current one checked; it sets the cookie (and `PATCH /fan/me` when signed in); `?lang=` also works. `<html lang dir>` per locale. Logical CSS only (`ms-`/`me-`/`ps-`/`pe-`/`start`/`end`). |
+| W4 | Member variant as screen 9 member. Initiator `PAID` view: a group progress block under the tickets. |
+| W5 | "Transférer" dialog (same fields; a confirm dialog instead of hold-to-confirm) and "Transféré à …" rows. No re-issue on the web (it holds no K_t). |
+| B9 Fans · CRM `/crm` (Lot 4: tabs Membres · Campagnes) | **Membres:** KPI cards (members, +7 days, push opt-ins with "joignables", WhatsApp opt-ins) and a tier table; counts only. **Campagnes:** table (title, channel, audience, status badge, planned/sent at in the venue zone, recipients, sent, failed) + "Nouvelle campagne" sheet: channel, audience (Membres opt-in · Détenteurs d'un billet → event select; for the latter the note "Infos pratiques uniquement"), title (60) and body (500) with counters and `dir="auto"`, a phone push preview, the audience estimate after save, "Envoyer maintenant" / "Programmer" (date and time in the venue zone), confirm "Envoyer à {n} fans ?", refetch every 10 s while `SENDING`, "Annuler" while `SCHEDULED`. FINANCE is read-only. |
+| B10 Lieux | Gate rows + "Accès" (directions), latitude, longitude, and a "Voir sur la carte" link (new tab). |
+| B12 Billets | Columns "Transféré vers" / "Transféré depuis" (ticket numbers, clickable search). |
+| Sidebar | Fans & finance: "Fans / CRM" enabled. |
+
+Screens that carry the founder's "wow" bar (inside principles 3, 6 and 7 and `BRAND.md`):
+
+| Screen | What makes it special |
+| --- | --- |
+| 5 · Mon billet, matchday | The ticket behaves like a physical object with two faces. A flip shows the gate side: the gate code in display 72, the directions, one tap to Maps, live load chips. A second flip, "Tu es dedans" / "راك داخل", turns the band `success` with a heavy haptic the moment the scan syncs: the stadium tells the fan they made it. Brightness max, nothing moves over the QR, everything works offline except the chips. |
+| 7 · Club, Carte membre | A dark `surface2` card, radius 28, with the club's accent band, crest and name (like the ticket band, so the ticket stays the only light surface). "MEMBRE N° 000042" in Barlow 44 rolls once on first reveal; "depuis nov. 2026" and the tier name sit in accent. Under it, **"Ta saison" in twelve dots**: the club's last 11 closed events as white dots (attended) or outlined dots (missed), and the 12th dot in amber for the next event. This is the brand's idea (the amber twelfth is the supporter who completes the team) applied to the fan's own season. It is a straight row, never the J mark, so the mark rules stay intact. A new attendance fills its dot once. Joining: the card rises from the CTA and settles (≤ 420 ms) with a success haptic. |
+| 8 · Transférer | Hold-to-confirm with a fill (an irreversible action deserves a deliberate gesture). Then the ticket slides out of the wallet, the reverse of the purchase slide-in. The recipient gets a push that opens screen 5 with the existing fly-in. Giving a ticket feels like handing it over. |
+| 9 · Groupe | "2/4 payées" in display type rolls up as friends pay. Each friend's check settles in once, and initials avatars make the group feel like people, not rows. "Relancer sur WhatsApp" is one tap with the copy prefilled. The member side opens on the event hero with one line: "Yazid A. t'a gardé une place". |
+| 1 · Accueil between matches | The countdown digits roll, the member strip shows tier and matchs at a glance, and the bell has a live inbox: reasons to open the app on a Tuesday. |
+| Arabic everywhere | True RTL done right is the differentiator against incumbents: Cairo display headings, Darija voice ("راك داخل"), mirrored layouts, codes and prices kept LTR in isolates, no broken letter-spacing. Every wow screen ships FR + AR goldens. |
+
+Under reduced motion, every Lot 4 motion is off (instant states). There are no decorative loops, no parallax, and no gradients or shadows on the brand mark.
 
 ## Theming per organizer
 

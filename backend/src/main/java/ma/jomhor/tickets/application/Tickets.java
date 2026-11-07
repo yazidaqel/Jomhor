@@ -10,23 +10,23 @@ import java.util.UUID;
 import ma.jomhor.tickets.domain.Ticket;
 
 /**
- * Persistence port for tickets. Scoped by organizer_id. Tickets are immutable after issue: only {@code status} moves
- * ({@link #setStatus}).
+ * Persistence port for tickets and their transfers. Scoped by organizer_id. Tickets are immutable after issue: only
+ * {@code status} moves ({@link #setStatus}).
  */
 public interface Tickets {
 
     UUID insert(UUID org, UUID orderId, int eventId, int zoneId, UUID priceCategoryId, UUID holderUserId,
                 String holderName, String holderInitials);
 
-    /** Every ticket of the order (any status, any holder), by id. */
+    /** Every ticket issued at the order's sale (any status, any holder), by id: not those a transfer issued. */
     List<Ticket.OfOrder> inOrder(UUID org, UUID orderId);
 
     /** Ids of the order's tickets held by {@code holderUserId}, ascending. */
     List<UUID> heldInOrder(UUID org, UUID orderId, UUID holderUserId);
 
     /**
-     * Every ticket held by {@code holderUserId}, by event then id. A fan read across organizers: the holder is the
-     * scope, and each row's organizer_id scopes whatever is read for it next.
+     * Every ticket held by {@code holderUserId}, by event then id, but those a re-issue cancelled. A fan read across
+     * organizers: the holder is the scope, and each row's organizer_id scopes whatever is read for it next.
      */
     List<Ticket> heldBy(UUID holderUserId);
 
@@ -48,7 +48,10 @@ public interface Tickets {
     /** The ticket, its row locked ({@code for no key update}: scans may still reference it) until the end of the transaction. */
     Optional<Ticket.Locked> lock(UUID org, UUID ticketId);
 
-    /** The only ticket write after issue: its status (block, unblock, refund). */
+    /** The ticket if {@code holderUserId} holds it, locked as {@link #lock} (same scope as {@link #heldBy(UUID)}). */
+    Optional<Ticket.Locked> lockHeld(UUID holderUserId, UUID ticketId);
+
+    /** The only ticket write after issue: its status (block, unblock, refund, transfer). */
     void setStatus(UUID org, UUID ticketId, Ticket.Status status);
 
     /** What a staff lookup matches on (docs/04-api.md POST /org/events/{id}/tickets/search). */
@@ -69,17 +72,23 @@ public interface Tickets {
 
     /**
      * A staff lookup row: the ticket, its zone, its order (channel, payment method, the item's unit price snapshot in
-     * centimes) and its refund, if any ({@code refundId} null = none). {@code holderName} is the full name: staff
+     * centimes), its refund, if any ({@code refundId} null = none), and its transfer chain: the ticket it was
+     * transferred or re-issued to, and the one it replaced (null = none). {@code holderName} is the full name: staff
      * only, never in a log.
      */
     record Row(UUID id, Ticket.Status status, int zoneId, String zoneCode, String zoneName, String holderName,
                long unitPriceMad, UUID orderId, String channel, String paymentMethod, Instant issuedAt,
-               UUID refundId, String refundStatus, Long refundAmountMad) {
+               UUID refundId, String refundStatus, Long refundAmountMad, UUID transferredTo, UUID transferredFrom) {
         @Override
         public String toString() {
             return "Row[" + id + ", " + status + "]";
         }
     }
+
+    /** A ticket_transfers row; the unique ticket_id and new_ticket_id make a second one fail. */
+    Transfer insertTransfer(UUID org, UUID ticketId, UUID newTicketId, UUID fromUserId, UUID toUserId);
+
+    record Transfer(UUID id, Instant transferredAt) {}
 
     /** The database clock (now()), so "past" agrees with every other time rule. */
     Instant now();

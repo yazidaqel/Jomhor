@@ -85,7 +85,7 @@ export function AccountMenu({ copy }: { copy: Copy }) {
         <span className="flex size-9 items-center justify-center rounded-pill bg-accent font-display text-base font-bold text-on-accent">
           {short ?? <PersonIcon />}
         </span>
-        {me.name && <span className="max-w-28 truncate text-sm font-semibold max-sm:hidden">{me.name.trim().split(/\s+/)[0]}</span>}
+        {me.name && <bdi className="max-w-28 truncate text-sm font-semibold max-sm:hidden">{me.name.trim().split(/\s+/)[0]}</bdi>}
       </button>
       <div
         ref={menu}
@@ -95,7 +95,7 @@ export function AccountMenu({ copy }: { copy: Copy }) {
       >
         <p className="flex flex-col px-3 pt-2 pb-3">
           <span className="text-caption uppercase tracking-[1px] text-text-muted">{copy.signedIn}</span>
-          {me.name && <span className="truncate font-semibold">{me.name}</span>}
+          {me.name && <bdi className="truncate font-semibold">{me.name}</bdi>}
         </p>
         <Link href="/me/tickets" onClick={close} className={item}>
           <TicketIcon className="size-5 text-text-muted" />

@@ -31,9 +31,11 @@ import ma.jomhor.common.HolderNames;
 import ma.jomhor.gate.application.Assignments;
 import ma.jomhor.gate.application.ManifestService;
 import ma.jomhor.gate.application.Manifests;
+import ma.jomhor.payments.PaymentTest;
 import ma.jomhor.tickets.domain.TicketToken;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -196,6 +198,33 @@ class ManifestApiTest extends GateApiTest {
                 .query((rs, n) -> gunzip(rs.getBytes(1))).single();
         assertThat(payload).doesNotContain("Zakaria").doesNotContain("Fixturename")
                 .contains(tLine(t2, f.zone2(), "VALID", "Z. F."));
+    }
+
+    /** 04 §Holder names, Arabic labels (lot-4 Q66): ordered and paid through the fan API, the T row has Arabic initials. */
+    @Test
+    void anArabicHolderGetsArabicInitials() throws Exception {
+        Fixture f = fixture(Instant.now().plus(Duration.ofHours(2)));
+        // The fixture sets ON_SALE without publishing: give it the publish default cutoff (T0 - 60 min).
+        jdbc.sql("update events set refund_cutoff_at = starts_at - interval '60 minutes' where id = ?").param(f.event())
+                .update();
+        String fan = fanToken(randomPhone());
+        String orderId = JsonPath.read(body(mvc.perform(post("/fan/orders").header("Authorization", "Bearer " + fan)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"event_id": %d, "channel": "APP", "items": [{"price_category_id": "%s", "qty": 1,
+                         "holders": [{"name": "يزيد عقل"}]}]}
+                        """.formatted(f.event(), f.price()))).andExpect(status().isCreated())), "$.id");
+        String paymentId = JsonPath.read(body(mvc.perform(post("/fan/orders/" + orderId + "/pay")
+                .header("Authorization", "Bearer " + fan).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"method\": \"CARD\"}")).andExpect(status().isOk())), "$.payment_id");
+        long total = jdbc.sql("select total_mad from orders where id = ?::uuid").param(orderId).query(Long.class).single();
+        var callback = post("/payments/fake/callback").contentType(MediaType.APPLICATION_FORM_URLENCODED);
+        PaymentTest.approve(paymentId, total).forEach(callback::param);
+        mvc.perform(callback).andExpect(status().isSeeOther());
+        UUID t = jdbc.sql("select id from tickets where order_id = ?::uuid and status = 'VALID'").param(orderId)
+                .query(UUID.class).single();
+
+        assertThat(manifests.build(f.c().org(), f.event())).contains(1);
+        assertThat(tLines(manifest(f.device(), f.event(), ""))).containsExactly(tLine(t, f.zone1(), "VALID", "ي. ع."));
     }
 
     // ---------- build rules ----------

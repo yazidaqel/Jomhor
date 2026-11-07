@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { ExternalLink, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ErrorNotice, LoadingRows, PageHeader } from '@/components/page'
 import { useCanWrite } from '@/features/auth/organizer'
 import { ApiError, path } from '@/lib/api'
-import { useVenue, type Gate, type VenueDetail, type Zone } from './api'
+import { mapUrl, useVenue, type Gate, type VenueDetail, type Zone } from './api'
 import { DeleteButton, DeleteDialog, EditButton, GateDialog, VenueDialog, ZoneDialog } from './dialogs'
 import { GateZoneMatrix } from './GateZoneMatrix'
 import { useDialog } from './useDialog'
@@ -165,6 +165,7 @@ function Gates({ venue, canWrite }: { venue: VenueDetail; canWrite: boolean }) {
               <TableRow>
                 <TableHead>{t('venues.gates.code')}</TableHead>
                 <TableHead>{t('venues.name')}</TableHead>
+                <TableHead>{t('venues.gates.directions')}</TableHead>
                 {canWrite && <TableHead />}
               </TableRow>
             </TableHeader>
@@ -173,6 +174,26 @@ function Gates({ venue, canWrite }: { venue: VenueDetail; canWrite: boolean }) {
                 <TableRow key={g.id}>
                   <TableCell className="font-semibold">{g.code}</TableCell>
                   <TableCell>{g.name}</TableCell>
+                  <TableCell className="max-w-64 whitespace-normal">
+                    {g.directions && (
+                      <p dir="auto" className="line-clamp-2 whitespace-pre-line text-muted-foreground" title={g.directions}>
+                        {g.directions}
+                      </p>
+                    )}
+                    {g.latitude != null && g.longitude != null && (
+                      <Button asChild variant="link" size="sm" className="h-auto px-0">
+                        <a
+                          href={mapUrl(g.latitude, g.longitude)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={t('venues.gates.mapLabel', { code: g.code })}
+                        >
+                          {t('venues.gates.map')}
+                          <ExternalLink />
+                        </a>
+                      </Button>
+                    )}
+                  </TableCell>
                   {canWrite && (
                     <TableCell className="text-right whitespace-nowrap">
                       <EditButton label={t('venues.gates.editLabel', { code: g.code })} onClick={() => dialog.edit(g)} />

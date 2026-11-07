@@ -1,3 +1,4 @@
+import sharedNames from '../../../../../docs/holder-name-vectors.json'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -181,6 +182,19 @@ it('change calculator: received DH text − total centimes, integer maths', () =
   expect(changeDue('9999999,99', 1)).toBe(999_999_998)
   expect(changeDue('abc', 100)).toBeNull()
   expect(changeDue('1,234', 100)).toBeNull()
+})
+
+// 04 §Holder names through the form: the shared vectors (docs/holder-name-vectors.json) decide what the zod rule passes.
+const nameVectors: { input: string; ok: boolean }[] = sharedNames
+const nameOk = (name: string) =>
+  saleSchema((k) => k).safeParse({ event_id: '1', qty: { 'p-nord': 1 }, same_name: false, holders: [{ name, phone: '' }], received: '' }).success
+
+it('holder names: Arabic base letters accepted; mixed scripts and extended letters refused; every shared vector', () => {
+  expect(nameOk('يزيد عقل')).toBe(true)
+  expect(nameOk('Yazid عقل')).toBe(false)
+  expect(nameOk('أمڭار')).toBe(false) // extended letter ڭ: not one of the 36 base letters
+  expect(nameVectors.length).toBeGreaterThan(0)
+  for (const v of nameVectors) expect([v.input, nameOk(v.input)]).toEqual([v.input, v.ok])
 })
 
 it('"même nom": only the first holder is checked, and every place is sent with it', () => {

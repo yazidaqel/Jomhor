@@ -99,7 +99,7 @@ class TestClock {
   }
 }
 
-/// Pumps the whole app (FR) with a fake backend and an empty in-memory secure storage (the ticket cache);
+/// Pumps the whole app (FR unless [locale] says otherwise: the device language) with a fake backend and an empty in-memory secure storage (the ticket cache);
 /// [keepSecureStorage] keeps what a test put there with `FlutterSecureStorage.setMockInitialValues`. Returns the container to drive the router and providers.
 Future<ProviderContainer> pumpJomhor(
   WidgetTester tester, {
@@ -109,11 +109,12 @@ Future<ProviderContainer> pumpJomhor(
   TestClock? clock,
   List<Override> overrides = const [],
   bool keepSecureStorage = false,
+  Locale locale = const Locale('fr', 'MA'),
 }) async {
   final time = clock ?? TestClock(DateTime.utc(2027, 2, 20, 12));
   tzdata.initializeTimeZones();
   if (!keepSecureStorage) FlutterSecureStorage.setMockInitialValues({});
-  tester.platformDispatcher.localesTestValue = [const Locale('fr', 'MA')];
+  tester.platformDispatcher.localesTestValue = [locale];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
   final store = tokens ?? MemoryTokenStore();
   final container = ProviderContainer(

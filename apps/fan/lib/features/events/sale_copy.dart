@@ -1,11 +1,11 @@
-import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 
 /// Hero CTA label per sale state (DESIGN.md screen 1 + Lot 1 adjustments). "Liste d'attente" is Lot 5.
 String ctaLabel(AppLocalizations l, FanEvent e, DateTime now) => switch (e.saleState(now)) {
-  SaleState.onSale => e.fromPriceMad == null ? l.ctaBuy : l.ctaBuyFrom(formatDh(e.fromPriceMad!)),
+  SaleState.onSale => e.fromPriceMad == null ? l.ctaBuy : l.ctaBuyFrom(l.dh(e.fromPriceMad!)),
   SaleState.notStarted => l.saleOpensOn(
     venueDate(e.saleStartsAt!, e.timezone, l.localeName),
     venueClock(e.saleStartsAt!, e.timezone, l.localeName),
@@ -17,7 +17,7 @@ String ctaLabel(AppLocalizations l, FanEvent e, DateTime now) => switch (e.saleS
 
 /// Calendar row chip.
 String chipLabel(AppLocalizations l, FanEvent e, DateTime now) => switch (e.saleState(now)) {
-  SaleState.onSale => e.fromPriceMad == null ? l.ctaBuy : l.chipFrom(formatDh(e.fromPriceMad!)),
+  SaleState.onSale => e.fromPriceMad == null ? l.ctaBuy : l.chipFrom(l.dh(e.fromPriceMad!)),
   SaleState.notStarted || SaleState.opening => l.chipSoon,
   SaleState.soldOut => l.soldOut,
   SaleState.closed => l.saleClosed,

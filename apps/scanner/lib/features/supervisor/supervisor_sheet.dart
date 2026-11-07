@@ -4,6 +4,7 @@ import 'package:jomhor_scanner/core/event_time.dart';
 import 'package:jomhor_scanner/core/server_clock.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
 import 'package:jomhor_scanner/features/home/device_status.dart';
+import 'package:jomhor_scanner/features/scan/result_view.dart';
 import 'package:jomhor_scanner/features/scan/scan_controller.dart';
 import 'package:jomhor_scanner/features/staff/pin_pad.dart';
 import 'package:jomhor_scanner/features/staff/staff_session.dart';
@@ -365,7 +366,7 @@ class _SupervisorSheetState extends ConsumerState<SupervisorSheet> {
             override && !_busy ? () => _override(m) : null,
             subtitle: m.initials == null || m.initials!.isEmpty
                 ? statusLabel(l, m.status)
-                : l.ticketDetail(statusLabel(l, m.status), m.initials!),
+                : l.ticketDetail(statusLabel(l, m.status), isolateName(m.initials!)),
           ),
       ],
       // Ending a lookup ends the supervisor's session: the device goes back to the gate agent.

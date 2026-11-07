@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -460,7 +461,8 @@ class ScanIngestionTest extends ScanApiTest {
             walked = files.filter(Files::isRegularFile).toList();
         }
         for (Path p : walked) {
-            if (write.matcher(Files.readString(p)).find()) {
+            // Latin-1 decodes any bytes (resources hold binary fonts); the pattern is ASCII.
+            if (write.matcher(Files.readString(p, StandardCharsets.ISO_8859_1)).find()) {
                 offenders.add(p.toString());
             }
         }

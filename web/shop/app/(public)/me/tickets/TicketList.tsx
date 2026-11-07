@@ -2,26 +2,60 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { fmt, type Dict } from '@/lib/i18n'
+import { fmt, isolate } from '@/lib/i18n'
 import type { TicketView } from '@/lib/tickets'
 import { countdown, formatDate, formatTime } from '@/lib/time'
 import { club } from '@/lib/club'
 import { JMark } from '../../../brand'
-import { ArrowIcon, DownloadIcon, QrIcon } from '../../../icons'
+import { ArrowIcon, ClockIcon, DownloadIcon, QrIcon, TransferIcon } from '../../../icons'
+import { closedCopy, TransferDialog, type Outcome, type TransferCopy } from './TransferDialog'
 
-type Copy = Pick<Dict, 'ticketsPage' | 'errors' | 'meta'>
+type Copy = TransferCopy
 type C = Copy['ticketsPage']
+type Patch = Partial<TicketView>
 
 const cta = 'flex min-h-touch-min items-center justify-center gap-2 rounded-control px-5 text-cta transition-colors duration-200'
 const primary = `${cta} bg-accent text-on-accent hover:bg-accent-hover`
 
 type State = { tickets: TicketView[]; at: number } | 'loading' | 'error' | 'UNAUTHORIZED'
 
-/** W5 wallet: `/api/tickets` once (and on "Réessayer"), upcoming then past, one paper ticket each, PDF when VALID. */
+/**
+ * W5 wallet: `/api/tickets` once (and on "Réessayer"), upcoming then past, one paper ticket each, PDF when VALID,
+ * "Transférer" while transfers are open. A transferred ticket leaves the wallet (`animate-leave`, none under reduced
+ * motion) and stays as a muted "Transféré à …" row, which then takes the focus.
+ */
 export function TicketList({ copy }: { copy: Copy }) {
   const c = copy.ticketsPage
   const [state, setState] = useState<State>('loading')
   const [attempt, setAttempt] = useState(0)
+  const [transferring, setTransferring] = useState<TicketView | null>(null)
+  const [leaving, setLeaving] = useState<{ id: string; patch: Patch } | null>(null)
+  const [focusRow, setFocusRow] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (focusRow) document.getElementById(`ticket-row-${focusRow}`)?.focus()
+  }, [focusRow])
+
+  const patch = (id: string, p: Patch) => setState((s) => (typeof s === 'string' ? s : { ...s, tickets: s.tickets.map((t) => (t.id === id ? { ...t, ...p } : t)) }))
+
+  function transferred(id: string, p: Patch) {
+    patch(id, p)
+    setLeaving(null)
+    setFocusRow(id)
+  }
+
+  function closed(t: TicketView, o: Outcome) {
+    setTransferring(null)
+    if (o.kind === 'closed') patch(t.id, { transfer_open: false, transfer_until: o.transfer_until })
+    if (o.kind === 'reload') {
+      setState('loading')
+      setAttempt((n) => n + 1)
+    }
+    if (o.kind !== 'transferred') return
+    const p: Patch = { status: 'CANCELLED', transfer_open: false, transferred: { to_label: o.to_label, at: o.at } }
+    if (window.matchMedia?.('(prefers-reduced-motion: no-preference)').matches) setLeaving({ id: t.id, patch: p })
+    else transferred(t.id, p)
+  }
 
   useEffect(() => {
     const abort = new AbortController()
@@ -66,31 +100,69 @@ export function TicketList({ copy }: { copy: Copy }) {
     )
   }
 
+  const group = { copy, now: state.at, leaving: leaving?.id ?? null, onTransfer: setTransferring, onLeft: () => leaving && transferred(leaving.id, leaving.patch) }
   return (
     <div className="flex flex-col gap-12">
-      <Group id="upcoming" title={c.upcoming} list={state.tickets.filter((t) => !t.past)} copy={copy} now={state.at} />
-      <Group id="past" title={c.past} list={state.tickets.filter((t) => t.past)} copy={copy} now={state.at} />
+      <Group id="upcoming" title={c.upcoming} list={state.tickets.filter((t) => !t.past)} {...group} />
+      <Group id="past" title={c.past} list={state.tickets.filter((t) => t.past)} {...group} />
+      {transferring && <TransferDialog key={transferring.id} ticket={transferring} copy={copy} onClose={(o) => closed(transferring, o)} />}
     </div>
   )
 }
 
-function Group({ id, title, list, copy, now }: { id: string; title: string; list: TicketView[]; copy: Copy; now: number }) {
+type CardProps = { copy: Copy; now: number; leaving: string | null; onTransfer: (t: TicketView) => void; onLeft: () => void }
+
+function Group({ id, title, list, ...card }: { id: string; title: string; list: TicketView[] } & CardProps) {
   if (list.length === 0) return null
-  const c = copy.ticketsPage
+  const c = card.copy.ticketsPage
+  const held = list.filter((t) => !t.transferred)
+  const gone = list.filter((t) => t.transferred)
   return (
     <section aria-labelledby={`tickets-${id}`} className="flex flex-col gap-5">
       <div className="flex items-baseline gap-3">
         <h2 id={`tickets-${id}`} className="font-display text-[32px] font-bold uppercase leading-none">
           {title}
         </h2>
-        <p className="text-sm text-text-muted">{list.length === 1 ? c.countOne : fmt(c.count, { n: list.length })}</p>
+        {held.length > 0 && <p className="text-sm text-text-muted">{held.length === 1 ? c.countOne : fmt(c.count, { n: held.length })}</p>}
       </div>
-      <ul className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-        {list.map((t, i) => (
-          <TicketCard key={t.id} t={t} copy={copy} now={now} i={i} />
-        ))}
-      </ul>
+      {held.length > 0 && (
+        <ul className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          {held.map((t, i) => (
+            <TicketCard key={t.id} t={t} i={i} {...card} />
+          ))}
+        </ul>
+      )}
+      {gone.length > 0 && (
+        <ul className="flex flex-col gap-3">
+          {gone.map((t) => (
+            <TransferredRow key={t.id} t={t} copy={card.copy} />
+          ))}
+        </ul>
+      )}
     </section>
+  )
+}
+
+/** DESIGN.md Lot 4: the muted "Transféré à Karim B. · {date}" row that stays after a transfer. */
+function TransferredRow({ t, copy }: { t: TicketView; copy: Copy }) {
+  const x = t.transferred!
+  return (
+    <li
+      id={`ticket-row-${t.id}`}
+      tabIndex={-1}
+      className="flex items-center gap-4 rounded-card border border-border bg-surface/60 px-5 py-4 text-text-muted motion-safe:animate-rise"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-pill bg-surface2 text-text-secondary">
+        <TransferIcon className="size-5" />
+      </span>
+      <div className="min-w-0 grow">
+        <p className="truncate text-body font-semibold text-text-secondary">{t.event.title}</p>
+        <p className="text-body-small">{fmt(copy.transfer.row, { name: isolate(x.to_label), date: formatDate(x.at, t.event.timezone, copy.meta.intl) })}</p>
+      </div>
+      <span dir="ltr" className="font-display text-[16px] font-bold tracking-[1.5px] max-sm:hidden">
+        {t.ticket_no}
+      </span>
+    </li>
   )
 }
 
@@ -107,7 +179,7 @@ function until(c: C, iso: string, now: number) {
  * and number, perforation, then the stub with status and the PDF. No QR here: the shop holds no key (the app and the PDF
  * carry it).
  */
-function TicketCard({ t, copy, now, i }: { t: TicketView; copy: Copy; now: number; i: number }) {
+function TicketCard({ t, copy, now, i, leaving, onTransfer, onLeft }: { t: TicketView; i: number } & CardProps) {
   const c = copy.ticketsPage
   const valid = t.status === 'VALID'
   const status = Object.hasOwn(c, t.status) ? (c as Record<string, string>)[t.status] : t.status
@@ -121,7 +193,11 @@ function TicketCard({ t, copy, now, i }: { t: TicketView; copy: Copy; now: numbe
     </div>
   )
   return (
-    <li className="motion-safe:animate-rise stagger" style={{ '--i': i } as React.CSSProperties}>
+    <li
+      className={leaving === t.id ? 'pointer-events-none animate-leave' : 'motion-safe:animate-rise stagger'}
+      style={{ '--i': i } as React.CSSProperties}
+      onAnimationEnd={(e) => e.animationName === 'leave' && onLeft()}
+    >
       <article
         aria-labelledby={`ticket-${t.id}`}
         className={`flex h-full flex-col overflow-hidden rounded-card-large bg-ticket-paper [&_:focus-visible]:outline-ticket-ink text-ticket-ink shadow-2xl shadow-ground transition duration-200 ${
@@ -152,7 +228,7 @@ function TicketCard({ t, copy, now, i }: { t: TicketView; copy: Copy; now: numbe
         <dl className="flex items-end justify-between gap-3 px-5 pt-4">
           <div className="flex min-w-0 flex-col gap-1">
             <dt className={label}>{t.seat_label ? c.seat : c.holder}</dt>
-            <dd className="truncate text-[15px] font-semibold">{t.seat_label ?? t.holder_label ?? '-'}</dd>
+            <dd className="truncate text-[15px] font-semibold"><bdi>{t.seat_label ?? t.holder_label ?? '-'}</bdi></dd>
           </div>
           <div className="flex flex-col items-end gap-1 text-end">
             <dt className={label}>{c.number}</dt>
@@ -163,7 +239,7 @@ function TicketCard({ t, copy, now, i }: { t: TicketView; copy: Copy; now: numbe
         </dl>
         {t.seat_label && t.holder_label && (
           <p className="px-5 pt-2 text-sm text-ticket-muted">
-            {c.holder} · <span className="font-semibold text-ticket-ink">{t.holder_label}</span>
+            {c.holder} · <bdi className="font-semibold text-ticket-ink">{t.holder_label}</bdi>
           </p>
         )}
 
@@ -183,15 +259,36 @@ function TicketCard({ t, copy, now, i }: { t: TicketView; copy: Copy; now: numbe
           {/* ponytail: a plain download link, so a 404/409 (ticket blocked or gone since the list loaded) saves the JSON
               error as a file. Fix: fetch the PDF, save the blob, and show the error copy on a non-2xx. */}
           {valid && (
-            <a
-              href={`/api/tickets/${encodeURIComponent(t.id)}/pdf`}
-              download
-              aria-label={fmt(c.pdfLabel, { no: t.ticket_no })}
-              className={`${cta} h-12 bg-ticket-ink text-ticket-paper hover:bg-surface2`}
-            >
-              <DownloadIcon className="size-5" />
-              {c.pdf}
-            </a>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={`/api/tickets/${encodeURIComponent(t.id)}/pdf`}
+                download
+                aria-label={fmt(c.pdfLabel, { no: t.ticket_no })}
+                className={`${cta} h-12 grow bg-ticket-ink text-ticket-paper hover:bg-surface2`}
+              >
+                <DownloadIcon className="size-5" />
+                {c.pdf}
+              </a>
+              {live && (
+                <button
+                  type="button"
+                  onClick={() => onTransfer(t)}
+                  disabled={!t.transfer_open}
+                  aria-label={fmt(copy.transfer.actionLabel, { no: t.ticket_no })}
+                  aria-describedby={t.transfer_open ? undefined : `transfer-closed-${t.id}`}
+                  className={`${cta} h-12 grow border-2 border-ticket-ink text-ticket-ink enabled:hover:bg-ticket-ink enabled:hover:text-ticket-paper disabled:cursor-not-allowed disabled:border-ticket-rule disabled:text-ticket-muted`}
+                >
+                  <TransferIcon className="size-5" />
+                  {copy.transfer.action}
+                </button>
+              )}
+            </div>
+          )}
+          {live && !t.transfer_open && (
+            <p id={`transfer-closed-${t.id}`} className="flex items-center justify-center gap-2 text-xs text-ticket-muted">
+              <ClockIcon className="size-4" />
+              {closedCopy(copy, t)}
+            </p>
           )}
           <p className="flex items-center justify-center gap-2 text-xs text-ticket-muted">
             <QrIcon className="size-4" />

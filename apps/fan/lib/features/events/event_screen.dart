@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/core/clock.dart';
-import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
@@ -11,6 +10,7 @@ import 'package:jomhor_fan/features/events/sale_copy.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
@@ -103,7 +103,12 @@ class _Body extends StatelessWidget {
                 SafeArea(
                   bottom: false,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(JomhorSpace.l, JomhorSpace.s, JomhorSpace.xl, JomhorSpace.xxl),
+                    padding: const EdgeInsetsDirectional.fromSTEB(
+                      JomhorSpace.l,
+                      JomhorSpace.s,
+                      JomhorSpace.xl,
+                      JomhorSpace.xxl,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -114,7 +119,10 @@ class _Body extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (facts != null) ...[
-                                Text(facts.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.accent)),
+                                Text(
+                                  facts.toUpperCase(),
+                                  style: JomhorType.label.copyWith(color: JomhorColors.accent).tracked(context),
+                                ),
                                 const SizedBox(height: JomhorSpace.s),
                               ],
                               Entrance(child: Text(e.title.toUpperCase(), style: JomhorType.hero)),
@@ -205,7 +213,7 @@ class _Footer extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(l.footerFrom, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
-                    Text(formatDh(price), style: JomhorType.h1),
+                    Text(l.dh(price), style: JomhorType.h1),
                   ],
                 ),
                 const SizedBox(width: JomhorSpace.l),

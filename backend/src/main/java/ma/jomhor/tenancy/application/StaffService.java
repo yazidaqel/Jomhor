@@ -93,8 +93,7 @@ public class StaffService {
     }
 
     private static String name(String raw) {
-        return HolderNames.normalize(raw).orElseThrow(() -> invalid("name",
-                "2 to 60 Latin letters, spaces, apostrophes, dots or hyphens"));
+        return HolderNames.normalize(raw).orElseThrow(() -> invalid("name", HolderNames.INVALID));
     }
 
     private static ApiException invalid(String field, String message) {

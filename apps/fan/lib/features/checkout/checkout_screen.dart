@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/error_text.dart';
-import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
@@ -14,6 +13,7 @@ import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
@@ -182,10 +182,10 @@ class _FormState extends ConsumerState<_Form> {
                   padding: const EdgeInsets.all(JomhorSpace.xl),
                   child: Column(
                     children: [
-                      _Line(l.summaryLine(args.qty, widget.zone.name), formatDh(widget.price.priceMad * args.qty)),
-                      _Line(l.serviceFee, formatDh(0)),
+                      _Line(l.summaryLine(args.qty, widget.zone.name), l.dh(widget.price.priceMad * args.qty)),
+                      _Line(l.serviceFee, l.dh(0)),
                       const Divider(color: JomhorColors.border),
-                      _Line(l.total, formatDh(total), strong: true),
+                      _Line(l.total, l.dh(total), strong: true),
                     ],
                   ),
                 ),
@@ -218,11 +218,12 @@ class _FormState extends ConsumerState<_Form> {
                     controller: _phones[i],
                     enabled: !locked,
                     keyboardType: TextInputType.phone,
+                    textDirection: TextDirection.ltr, // A phone number reads left to right in every locale.
                     decoration: InputDecoration(
                       labelText: l.holderPhoneLabel,
                       helperText: l.holderPhoneHelp,
                       helperMaxLines: 2,
-                      errorText: state.badPhones.contains(i) ? l.holderPhoneError : null,
+                      errorText: state.badPhones.contains(i) ? l.holderPhoneError(l.ltr(examplePhone)) : null,
                       prefixIcon: const Icon(Icons.chat_outlined),
                     ),
                   ),
@@ -295,9 +296,9 @@ class _FormState extends ConsumerState<_Form> {
                         : _pay,
                     child: Text(switch (selected) {
                       _ when state.cardOpened => l.checkPayment,
-                      PayMethod.wallet => l.payWalletCta(formatDh(total)),
+                      PayMethod.wallet => l.payWalletCta(l.dh(total)),
                       PayMethod.cashAgency => l.payCashCta,
-                      _ => l.payCta(formatDh(total)),
+                      _ => l.payCta(l.dh(total)),
                     }),
                   ),
                   const SizedBox(height: JomhorSpace.xs),

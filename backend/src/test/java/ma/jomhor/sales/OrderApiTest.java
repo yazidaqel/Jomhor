@@ -308,10 +308,11 @@ class OrderApiTest extends OrgApiTest {
     }
 
     @Test
-    void holderNamesAreLatinTwoToSixtyChars() throws Exception {
+    void holderNamesAreOneScriptTwoToSixtyChars() throws Exception {
         Sale s = onSale(10);
         String fan = fanToken(randomPhone());
-        for (String bad : List.of("يزيد عاقل", "Y", "  Y  ", "", "Yazid 3", "Yazid@Aqel", "-Yazid", "Язид",
+        for (String bad : List.of("Yazid عقل", "يزيد Aqel", "يزيد \u0663", "ي",
+                "Y", "  Y  ", "", "Yazid 3", "Yazid@Aqel", "-Yazid", "Язид",
                 "A" + "b".repeat(60))) {
             invalidField(order(fan, s.eventId(), item(s.priceId(), 2,
                     "[{\"name\": \"Yazid Aqel\"}, {\"name\": \"%s\"}]".formatted(bad))), "items[0].holders[1].name");
@@ -332,6 +333,13 @@ class OrderApiTest extends OrgApiTest {
                 .param(JsonPath.<String>read(json, "$.id")).query(String.class).single())
                 .contains("\"Félix N'Diaye-Léon jr.\"", "\"Ab\"", "\"Yazid Aqel\"");
         assertThat(sold(s.priceId())).isEqualTo(3);
+
+        // Arabic script (lot-4 Q66): harakat and tatweel stripped, label without case mapping.
+        String arabic = body(order(fan, s.eventId(), item(s.priceId(), 1,
+                "[{\"name\": \"ي\u064Eزي\u0640د عقل\"}]")).andExpect(status().isCreated()));
+        assertThat(JsonPath.<String>read(arabic, "$.items[0].holders[0].label")).isEqualTo("يزيد ع.");
+        assertThat(jdbc.sql("select holders::text from order_items where order_id = ?::uuid")
+                .param(JsonPath.<String>read(arabic, "$.id")).query(String.class).single()).contains("\"يزيد عقل\"");
     }
 
     @Test

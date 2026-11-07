@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
 const List<Color> _zonePalette = [JomhorColors.zoneA, JomhorColors.zoneB, JomhorColors.zoneC];
@@ -68,7 +68,7 @@ class ZoneRow extends StatelessWidget {
                   children: [
                     if (price != null)
                       Text(
-                        open > 1 ? l.chipFrom(formatDh(price)) : formatDh(price),
+                        open > 1 ? l.chipFrom(l.dh(price)) : l.dh(price),
                         style: JomhorType.h2,
                         textAlign: TextAlign.end,
                       ),

@@ -23,6 +23,7 @@ import ma.jomhor.common.web.ApiException;
 import ma.jomhor.tickets.adapters.pdf.TicketPdf;
 import ma.jomhor.tickets.domain.Ticket;
 import ma.jomhor.tickets.domain.TicketToken;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -43,9 +44,10 @@ public class TicketService {
 
     /**
      * A ticket held by the caller with its event and zone. {@code ticketKey} is K_t base64url, or null when not
-     * asked for or not allowed (see {@link #heldBy}). Not for logs.
+     * asked for or not allowed (see {@link #heldBy}). {@code transferUntil}: see {@link #transferUntil}. Not for logs.
      */
-    public record Held(Ticket ticket, Event.Listing event, Event.ZoneListing zone, String ticketKey) {
+    public record Held(Ticket ticket, Event.Listing event, Event.ZoneListing zone, String ticketKey,
+                       Instant transferUntil) {
         @Override
         public String toString() {
             return "Held[" + ticket.id() + "]";
@@ -59,10 +61,22 @@ public class TicketService {
 
     private final Tickets tickets;
     private final EventService events;
+    private final Duration closeBeforeCutoff;
 
-    public TicketService(Tickets tickets, EventService events) {
+    public TicketService(Tickets tickets, EventService events,
+                         @Value("${tickets.transfer.close-before-cutoff}") Duration closeBeforeCutoff) {
         this.tickets = tickets;
         this.events = events;
+        this.closeBeforeCutoff = closeBeforeCutoff;
+    }
+
+    /**
+     * Transfers and re-issues of an event's tickets are open while now (database clock) is before this:
+     * refund_cutoff_at − tickets.transfer.close-before-cutoff (plan lot-4 Q59). Null when the event has no cutoff
+     * (then closed).
+     */
+    public Instant transferUntil(Instant refundCutoffAt) {
+        return refundCutoffAt == null ? null : refundCutoffAt.minus(closeBeforeCutoff);
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -158,8 +172,9 @@ public class TicketService {
                     : List.of();
             Map<UUID, String> keys = keyed.isEmpty() ? Map.of()
                     : events.withEventKey(org, eventId, eventKey -> ticketKeys(eventKey, keyed));
+            Instant until = transferUntil(e.event().salesCloseAt());
             groups.add(held.stream()
-                    .map(t -> new Held(t, e.event(), zones.get(t.zoneId()), keys.get(t.id()))).toList());
+                    .map(t -> new Held(t, e.event(), zones.get(t.zoneId()), keys.get(t.id()), until)).toList());
         });
         Predicate<List<Held>> past = g -> g.getFirst().event().status() == Event.Status.CLOSED
                 || g.getFirst().event().startsAt().isBefore(pastBefore);

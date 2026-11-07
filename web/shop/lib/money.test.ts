@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest'
+import { ltr } from './i18n'
 import { formatDh } from './money'
 
 const n = '\u202f' // thousands
@@ -17,14 +18,18 @@ it.each<[number | bigint, string]>([
   [Number.MAX_SAFE_INTEGER, `90${n}071${n}992${n}547${n}409,91${s}DH`],
   [2n ** 64n + 1n, `184${n}467${n}440${n}737${n}095${n}516,17${s}DH`], // past 2^53, exact
 ])('formatDh(%s) → %j', (centimes, text) => {
-  expect(formatDh(centimes)).toBe(text)
+  expect(formatDh(centimes)).toBe(ltr(text))
 })
 
 it('matches Intl fr grouping and decimals', () => {
   const nf = new Intl.NumberFormat('fr', { minimumFractionDigits: 2 })
-  expect(formatDh(123456)).toBe(`${nf.format('1234.56' as `${number}`)}${s}DH`)
+  expect(formatDh(123456)).toBe(ltr(`${nf.format('1234.56' as `${number}`)}${s}DH`))
 })
 
 it.each([50.5, Number.NaN, Infinity, 2 ** 53])('rejects %s (not integer centimes)', (v) => {
   expect(() => formatDh(v)).toThrow(RangeError)
+})
+
+it('is an LTR isolate, so an RTL line keeps the amount whole', () => {
+  expect(formatDh(5050)).toBe('\u206650,50\u00a0DH\u2069')
 })

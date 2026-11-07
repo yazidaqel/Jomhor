@@ -258,6 +258,28 @@ it('PATCH /api/me sends display_name only, with the Bearer', async () => {
   expect(sent().headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
 })
 
+it('PATCH /api/me {locale} (language switch) forwards the locale with the session as Bearer', async () => {
+  fetchMock.mockResolvedValue(upstream(200, { id: 'u1', phone: '+212600000000', display_name: 'Yazid Aqel', locale: 'ar' }))
+  const res = await patchMe(req('/api/me', { method: 'PATCH', body: { locale: 'ar' } }))
+  expect(res.status).toBe(200)
+  expect(sent().url).toBe('http://backend.test/v1/fan/me')
+  expect(sent().init.method).toBe('PATCH')
+  expect(sent().body).toEqual({ locale: 'ar' })
+  expect(sent().headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
+})
+
+it('PATCH /api/me drops a locale outside fr, ar, en', async () => {
+  fetchMock.mockResolvedValue(upstream(200, { id: 'u1', display_name: null, locale: 'fr' }))
+  await patchMe(req('/api/me', { method: 'PATCH', body: { locale: 'de' } }))
+  expect(sent().body).toEqual({})
+})
+
+it('PATCH /api/me {locale} without a session (anonymous visitor) → 401, the backend is not called', async () => {
+  const res = await patchMe(req('/api/me', { method: 'PATCH', body: { locale: 'ar' }, headers: { cookie: 'locale=ar' } }))
+  expect(res.status).toBe(401)
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
 it('GET /api/me (header island): display_name only, never the phone or the token, not cached', async () => {
   fetchMock.mockResolvedValue(upstream(200, { id: 'u1', phone: '+212600000000', display_name: 'Yazid Aqel', locale: 'fr' }))
   const res = await getMe(req('/api/me', { method: 'GET' }))

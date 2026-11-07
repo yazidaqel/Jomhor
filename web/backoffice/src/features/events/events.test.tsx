@@ -523,8 +523,8 @@ const VENUE_DETAIL: VenueDetail = {
     { id: 2, code: 'NORD', name: 'Tribune Nord', capacity: 20000, seated: false },
   ],
   gates: [
-    { id: 'g-1', code: 'P1', name: 'Porte 1', zone_ids: [1] },
-    { id: 'g-2', code: 'P2', name: 'Porte 2', zone_ids: [2] },
+    { id: 'g-1', code: 'P1', name: 'Porte 1', zone_ids: [1], directions: null, latitude: null, longitude: null },
+    { id: 'g-2', code: 'P2', name: 'Porte 2', zone_ids: [2], directions: null, latitude: null, longitude: null },
   ],
 }
 // By zone_id then name, as the API lists them.

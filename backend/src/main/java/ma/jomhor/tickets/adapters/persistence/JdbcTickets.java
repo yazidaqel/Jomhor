@@ -19,10 +19,35 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcTickets implements Tickets {
 
-    private static final RowMapper<Ticket> TICKET = (rs, n) -> new Ticket(rs.getObject("id", UUID.class),
+    private static final RowMapper<Ticket> TICKET = (rs, n) -> {
+        OffsetDateTime transferredAt = rs.getObject("transferred_at", OffsetDateTime.class);
+        return new Ticket(rs.getObject("id", UUID.class),
+                rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"), rs.getInt("zone_id"),
+                Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getString("seat_label"),
+                rs.getObject("issued_at", OffsetDateTime.class).toInstant(),
+                transferredAt == null ? null
+                        : new Ticket.Transferred(rs.getString("to_name"), transferredAt.toInstant()));
+    };
+
+    // A holder's ticket and, when this holder transferred it away (not a re-issue: to = from), the new ticket's holder.
+    private static final String HELD = """
+            select t.id, t.organizer_id, t.event_id, t.zone_id, t.status, t.holder_name, t.seat_label, t.issued_at,
+                   case when tt.to_user_id <> tt.from_user_id then tt.transferred_at end as transferred_at,
+                   nt.holder_name as to_name
+            from tickets t
+            left join ticket_transfers tt on tt.ticket_id = t.id and tt.organizer_id = t.organizer_id
+            left join tickets nt on nt.id = tt.new_ticket_id and nt.organizer_id = tt.organizer_id
+            where t.holder_user_id = :holder
+            """;
+
+    private static final String LOCKED = """
+            select id, organizer_id, event_id, zone_id, order_id, price_category_id, status, holder_name from tickets
+            """;
+
+    private static final RowMapper<Ticket.Locked> LOCK = (rs, n) -> new Ticket.Locked(rs.getObject("id", UUID.class),
             rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"), rs.getInt("zone_id"),
-            Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getString("seat_label"),
-            rs.getObject("issued_at", OffsetDateTime.class).toInstant());
+            rs.getObject("order_id", UUID.class), rs.getObject("price_category_id", UUID.class),
+            Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"));
 
     private final JdbcClient jdbc;
 
@@ -47,19 +72,13 @@ class JdbcTickets implements Tickets {
 
     @Override
     public List<Ticket> heldBy(UUID holderUserId) {
-        return jdbc.sql("""
-                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label, issued_at from tickets
-                        where holder_user_id = :holder order by event_id, id
-                        """)
+        return jdbc.sql(HELD + " and coalesce(tt.to_user_id <> tt.from_user_id, true) order by t.event_id, t.id")
                 .param("holder", holderUserId).query(TICKET).list();
     }
 
     @Override
     public Optional<Ticket> heldBy(UUID holderUserId, UUID ticketId) {
-        return jdbc.sql("""
-                        select id, organizer_id, event_id, zone_id, status, holder_name, seat_label, issued_at from tickets
-                        where id = :id and holder_user_id = :holder
-                        """)
+        return jdbc.sql(HELD + " and t.id = :id")
                 .param("id", ticketId).param("holder", holderUserId).query(TICKET).optional();
     }
 
@@ -71,15 +90,28 @@ class JdbcTickets implements Tickets {
 
     @Override
     public Optional<Ticket.Locked> lock(UUID org, UUID ticketId) {
+        return jdbc.sql(LOCKED + " where organizer_id = :org and id = :id for no key update")
+                .param("org", org).param("id", ticketId).query(LOCK).optional();
+    }
+
+    @Override
+    public Optional<Ticket.Locked> lockHeld(UUID holderUserId, UUID ticketId) {
+        return jdbc.sql(LOCKED + " where id = :id and holder_user_id = :holder for no key update")
+                .param("id", ticketId).param("holder", holderUserId).query(LOCK).optional();
+    }
+
+    @Override
+    public Tickets.Transfer insertTransfer(UUID org, UUID ticketId, UUID newTicketId, UUID fromUserId, UUID toUserId) {
         return jdbc.sql("""
-                        select id, event_id, order_id, price_category_id, status from tickets
-                        where organizer_id = :org and id = :id for no key update
+                        insert into ticket_transfers (organizer_id, ticket_id, new_ticket_id, from_user_id, to_user_id)
+                        values (:org, :ticket, :new, :from, :to)
+                        returning id, transferred_at
                         """)
-                .param("org", org).param("id", ticketId)
-                .query((rs, n) -> new Ticket.Locked(rs.getObject("id", UUID.class), rs.getInt("event_id"),
-                        rs.getObject("order_id", UUID.class), rs.getObject("price_category_id", UUID.class),
-                        Ticket.Status.valueOf(rs.getString("status"))))
-                .optional();
+                .param("org", org).param("ticket", ticketId).param("new", newTicketId).param("from", fromUserId)
+                .param("to", toUserId)
+                .query((rs, n) -> new Tickets.Transfer(rs.getObject("id", UUID.class),
+                        rs.getObject("transferred_at", OffsetDateTime.class).toInstant()))
+                .single();
     }
 
     @Override
@@ -93,13 +125,16 @@ class JdbcTickets implements Tickets {
     private static final String ROWS = """
             select t.id, t.status, t.zone_id, z.code as zone_code, z.name as zone_name, t.holder_name, i.unit_price_mad,
                    t.order_id, o.channel, o.payment_method, t.issued_at,
-                   r.id as refund_id, r.status as refund_status, r.amount_mad as refund_amount_mad
+                   r.id as refund_id, r.status as refund_status, r.amount_mad as refund_amount_mad,
+                   tt_to.new_ticket_id as transferred_to, tt_from.ticket_id as transferred_from
             from tickets t
             join zones z on z.id = t.zone_id and z.organizer_id = t.organizer_id
             join orders o on o.id = t.order_id and o.organizer_id = t.organizer_id
             join order_items i on i.order_id = t.order_id and i.price_category_id = t.price_category_id
                               and i.organizer_id = t.organizer_id
             left join refunds r on r.ticket_id = t.id and r.organizer_id = t.organizer_id
+            left join ticket_transfers tt_to on tt_to.ticket_id = t.id and tt_to.organizer_id = t.organizer_id
+            left join ticket_transfers tt_from on tt_from.new_ticket_id = t.id and tt_from.organizer_id = t.organizer_id
             where t.organizer_id = :org
             """;
 
@@ -108,7 +143,8 @@ class JdbcTickets implements Tickets {
             rs.getString("zone_name"), rs.getString("holder_name"), rs.getLong("unit_price_mad"),
             rs.getObject("order_id", UUID.class), rs.getString("channel"), rs.getString("payment_method"),
             rs.getObject("issued_at", OffsetDateTime.class).toInstant(), rs.getObject("refund_id", UUID.class),
-            rs.getString("refund_status"), rs.getObject("refund_amount_mad", Long.class));
+            rs.getString("refund_status"), rs.getObject("refund_amount_mad", Long.class),
+            rs.getObject("transferred_to", UUID.class), rs.getObject("transferred_from", UUID.class));
 
     @Override
     public List<Tickets.Row> search(UUID org, int eventId, Match match, String value, int limit) {
@@ -170,8 +206,11 @@ class JdbcTickets implements Tickets {
     @Override
     public List<Ticket.OfOrder> inOrder(UUID org, UUID orderId) {
         return jdbc.sql("""
-                        select id, event_id, zone_id, price_category_id, status, holder_name from tickets
-                        where organizer_id = :org and order_id = :order order by id
+                        select t.id, t.event_id, t.zone_id, t.price_category_id, t.status, t.holder_name from tickets t
+                        where t.organizer_id = :org and t.order_id = :order
+                          and not exists (select 1 from ticket_transfers tt
+                                          where tt.organizer_id = t.organizer_id and tt.new_ticket_id = t.id)
+                        order by t.id
                         """)
                 .param("org", org).param("order", orderId)
                 .query((rs, n) -> new Ticket.OfOrder(rs.getObject("id", UUID.class), rs.getInt("event_id"),

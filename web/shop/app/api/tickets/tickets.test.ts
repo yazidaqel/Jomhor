@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BACKEND_TIMEOUT_MS } from '@/lib/api'
 import { GET as getPdf } from './[id]/pdf/route'
+import { POST as transfer } from './[id]/transfer/route'
 import { GET as getTickets } from './route'
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSIsImF1ZCI6ImZhbiJ9.c2lnbmF0dXJl'
@@ -70,6 +71,9 @@ it('/api/tickets: Bearer from the cookie, no with_keys; the answer has no k_t ev
     zone: { code: 'NORD', name: 'Tribune Nord' },
     gate_codes: ['P10', 'P4'],
     past: false,
+    transfer_until: null,
+    transfer_open: false,
+    transferred: null,
   })
 })
 
@@ -191,4 +195,99 @@ it('PDF: no headers within BACKEND_TIMEOUT_MS → 502; a slow body after the hea
   } finally {
     vi.useRealTimers()
   }
+})
+
+it('Lot 4 fields: transfer_until, transfer_open against server_time, transferred', async () => {
+  fetchMock.mockResolvedValue(
+    json(200, {
+      server_time: '2026-02-07T17:29:59Z',
+      tickets: [
+        ticket({ transfer_until: '2026-02-07T17:30:00Z', transferred: null }),
+        ticket({ transfer_until: '2026-02-07T17:29:59Z' }),
+        ticket({ transfer_until: null }),
+        ticket({ status: 'CANCELLED', transfer_until: '2026-02-07T17:30:00Z', transferred: { to_label: 'Karim B.', at: '2026-02-03T10:00:00Z', to_phone: '+212600000000' } }),
+      ],
+    }),
+  )
+  const res = await getTickets(req('/api/tickets'))
+  const text = await res.text()
+  expect(text).not.toContain('+212600000000')
+  const t = JSON.parse(text).tickets
+  expect(t.map((x: { transfer_open: boolean }) => x.transfer_open)).toEqual([true, false, false, true])
+  expect(t[0].transfer_until).toBe('2026-02-07T17:30:00Z')
+  expect(t[2].transfer_until).toBeNull()
+  expect(t[0].transferred).toBeNull()
+  expect(t[3].transferred).toEqual({ to_label: 'Karim B.', at: '2026-02-03T10:00:00Z' })
+})
+
+const transferReq = (body: unknown, headers: Record<string, string> = {}, cookie = `a=1; __Host-jomhor_session=${TOKEN}`) =>
+  new Request(`http://shop.test/api/tickets/${TICKET_ID}/transfer`, {
+    method: 'POST',
+    headers: { origin: 'http://shop.test', cookie, 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  })
+
+describe('POST /api/tickets/{id}/transfer', () => {
+  beforeEach(() => vi.stubEnv('SHOP_ORIGIN', 'http://shop.test'))
+
+  it('forwards {to_phone, name} (normalised) with the cookie as Bearer; answers the label only, no token or key', async () => {
+    fetchMock.mockResolvedValue(
+      json(201, { transfer_id: 'tr-1', to_label: 'Karim B.', transferred_at: '2026-02-05T17:00:00Z', ticket_id: 'NEW-TICKET-ID', k_t: K_T, token: 'SECRET-TOKEN' }),
+    )
+    const res = await transfer(transferReq({ to_phone: '06 12 34 56 78', name: ' Karim  Benali ', extra: 'x' }), params(TICKET_ID))
+
+    expect(res.status).toBe(201)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const text = await res.text()
+    expect(JSON.parse(text)).toEqual({ to_label: 'Karim B.', transferred_at: '2026-02-05T17:00:00Z' })
+    for (const s of [K_T, 'k_t', 'NEW-TICKET-ID', 'SECRET', TOKEN]) expect(text).not.toContain(s)
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe(`http://backend.test/v1/fan/tickets/${TICKET_ID}/transfer`)
+    expect(init!.method).toBe('POST')
+    expect(new Headers(init!.headers).get('authorization')).toBe(`Bearer ${TOKEN}`)
+    expect(JSON.parse(String(init!.body))).toEqual({ to_phone: '+212612345678', name: 'Karim Benali' })
+  })
+
+  it.each([{}, { to_label: 'Karim B.' }, { transferred_at: '2026-02-05T17:00:00Z' }, { to_label: 1, transferred_at: '2026-02-05T17:00:00Z' }])(
+    'a 2xx without a string to_label and transferred_at (%j) → 502',
+    async (body) => {
+      fetchMock.mockResolvedValue(json(201, body))
+      const res = await transfer(transferReq({ to_phone: '0612345678', name: 'Karim Benali' }), params(TICKET_ID))
+      expect(res.status).toBe(502)
+      expect(await res.json()).toMatchObject({ code: 'INTERNAL_ERROR' })
+    },
+  )
+
+  it.each<[string, unknown, string[]]>([
+    ['a bad phone', { to_phone: '12', name: 'Karim Benali' }, ['to_phone']],
+    ['a mixed-script name', { to_phone: '0612345678', name: 'Karim عقل' }, ['name']],
+    ['no body fields', {}, ['to_phone', 'name']],
+  ])('%s → 422 on that field, nothing sent', async (_, body, fields) => {
+    const res = await transfer(transferReq(body), params(TICKET_ID))
+    expect(res.status).toBe(422)
+    const b = await res.json()
+    expect(b.code).toBe('VALIDATION_FAILED')
+    expect(Object.keys(b.details.fields)).toEqual(fields)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [409, { code: 'TRANSFER_CLOSED', message: '', details: { transfer_until: '2026-02-07T17:30:00Z' } }],
+    [409, { code: 'TICKET_NOT_VALID', message: '', details: {} }],
+    [422, { code: 'VALIDATION_FAILED', message: '', details: { fields: { to_phone: 'self' }, reason: 'SELF' } }],
+    [404, { code: 'NOT_FOUND', message: '', details: {} }],
+  ])('a backend %i keeps its status and 04 body', async (status, body) => {
+    fetchMock.mockResolvedValue(json(status, body))
+    const res = await transfer(transferReq({ to_phone: '0612345678', name: 'Karim Benali' }), params(TICKET_ID))
+    expect(res.status).toBe(status)
+    expect(await res.json()).toEqual(body)
+  })
+
+  it('cross-origin → 403, no session → 401, a bad id → 404; none reaches the backend', async () => {
+    const body = { to_phone: '0612345678', name: 'Karim Benali' }
+    expect((await transfer(transferReq(body, { origin: 'https://evil.com' }), params(TICKET_ID))).status).toBe(403)
+    expect((await transfer(transferReq(body, {}, ''), params(TICKET_ID))).status).toBe(401)
+    expect((await transfer(transferReq(body), params('../me'))).status).toBe(404)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

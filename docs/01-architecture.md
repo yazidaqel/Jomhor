@@ -35,11 +35,11 @@ flowchart TB
 | Component | Responsibility | Holds |
 | --- | --- | --- |
 | Ticketing API | Tenancy, catalog (venues, zones, gates, events, pricing), sales (orders, tickets, passes), payments, manifests, scan ingestion and duplicate resolution, finance, notifications | Master key, per-event keys (encrypted at rest), all records |
-| Fan app | Discover, buy, hold tickets, rotating QR offline, transfer, membership | Per-ticket keys K_t for the user's own tickets |
+| Fan app | Discover, buy, hold tickets, rotating QR offline, transfer, split pay, membership, matchday companion, push | Per-ticket keys K_t for the user's own tickets |
 | Web shop | Same purchase flow, PDF with static QR | Nothing after issue |
 | Scanner app | Enrolment, manifest download, offline validation, local log, background sync, supervisor override | K_e in Keystore, manifest + scans in SQLite |
 | Back-office | Event setup, zone/gate mapping, devices, live dashboard, reconciliation, finance, CRM, campaigns | Nothing (API client) |
-| Kafka | Target: `scan.ingested` → dashboard projection; `order.paid` → ticket issue + WhatsApp delivery. Lot 2: the dashboard reads the scans table directly (polled every 5 s). Kafka arrives with its first real async consumer (Lot 4 fan push, or Lot 6 load results). | — |
+| Kafka | Target: `scan.ingested` → dashboard projection; `order.paid` → ticket issue + WhatsApp delivery. Lot 2: the dashboard reads the scans table directly (polled every 5 s). Lot 4: fan messages and campaigns use the `fan_messages` DB outbox; the fan entry state is polled through `/fan/gates/{id}/load`. Kafka arrives only if the Lot 6 load test shows an async boundary. | — |
 
 Lot 1: `order.paid` → WhatsApp delivery goes through a DB outbox (`ticket_deliveries`) polled by
 `notifications`.

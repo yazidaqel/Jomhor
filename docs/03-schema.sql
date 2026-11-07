@@ -24,6 +24,10 @@ create table organizers (
 --   "crest_url": "...", "display_font": null}}
 --   "cash_points": [{"name": "Guichet Stade de l'Atlas", "address": "Porte 1", "hours": "Lun–Sam 10:00–19:00"}]
 --   where fans pay a cash code in person; shown on the cash order page. Set by ops until a back-office editor exists.
+--   "loyalty": {"tiers": [{"code": "T1", "name": {"fr": "Membre", "ar": "منخرط", "en": "Member"}, "min_events": 0},
+--                         {"code": "T2", "name": {"fr": "Fidèle", "ar": "وفي", "en": "Regular"}, "min_events": 3},
+--                         {"code": "T3", "name": {"fr": "Pilier", "ar": "ركيزة", "en": "Stalwart"}, "min_events": 10}]}
+--   tiers by min_events ascending, the first at 0; absent = these defaults; a missing locale falls back to "fr".
 
 create table users (
   id            uuid primary key default gen_random_uuid(),
@@ -102,6 +106,10 @@ create table gates (
   venue_id      uuid not null references venues(id),
   code          text not null,                        -- 'P4'
   name          text not null,
+  directions    text,                                 -- 0-200 chars, how to reach the gate; fan app only, never in the manifest
+  latitude      numeric(8,6) check (latitude between -90 and 90),     -- WGS 84, for the "Ouvrir dans Plans" link
+  longitude     numeric(9,6) check (longitude between -180 and 180),
+  constraint gates_location check ((latitude is null) = (longitude is null)),
   unique (venue_id, code)
 );
 
@@ -175,13 +183,15 @@ create table orders (
   payment_ref     text,   -- on PAID: the succeeding payment's provider_ref; for a cash code, the code
   reserved_until  timestamptz not null,
   paid_at         timestamptz,
-  created_at      timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+  group_order_id  uuid references orders(id)   -- split pay: set on a member order, = the initiator's order (docs/04-api.md §Split pay)
 );
 -- AWAITING_CASH: a cash code was issued; reserved_until = least(issue + 24 h, events.refund_cutoff_at).
 -- POS sale: channel POS, user_id null, created PAID. Ticket refunds leave the order PAID
 -- (order REFUNDED = whole-order refund, Lot 5).
 create index on orders (event_id, status);
 create index on orders (user_id, created_at desc);
+create index on orders (group_order_id) where group_order_id is not null;
 
 create table order_items (
   id                uuid primary key default gen_random_uuid(),
@@ -214,14 +224,16 @@ create table tickets (
 create index on tickets (event_id, status);
 create index on tickets (holder_user_id);
 
-create table ticket_transfers (
-  id              uuid primary key default gen_random_uuid(),
+create table ticket_transfers (                       -- transfer or re-issue: the old ticket goes CANCELLED, a new one is issued
+  id              uuid primary key default gen_random_uuid(),   -- (new ticket_id, so a new K_t; the old QR dies with the next manifest)
   organizer_id    uuid not null references organizers(id),
-  ticket_id       uuid not null references tickets(id),
+  ticket_id       uuid not null unique references tickets(id),  -- the ticket cancelled
+  new_ticket_id   uuid not null unique references tickets(id),  -- same order, event, zone and price category
   from_user_id    uuid not null references users(id),
-  to_user_id      uuid not null references users(id),
+  to_user_id      uuid not null references users(id),           -- = from_user_id for a re-issue (lost phone)
   transferred_at  timestamptz not null default now()
 );
+create index on ticket_transfers (from_user_id, transferred_at desc);
 
 create type pass_status as enum ('ACTIVE','SUSPENDED','CANCELLED');
 
@@ -300,6 +312,20 @@ create table refunds (                                 -- money owed back for a 
 );
 create index on refunds (organizer_id, status, requested_at);
 
+-- ---------- fans ----------
+create table memberships (                            -- a fan who joined an organizer's club (free, Lot 4); loyalty is computed on read
+  id                  uuid primary key default gen_random_uuid(),
+  organizer_id        uuid not null references organizers(id),
+  user_id             uuid not null references users(id),
+  number              integer not null check (number > 0),   -- member number per organizer, from 1, never reused
+  joined_at           timestamptz not null default now(),
+  left_at             timestamptz,                           -- left the club; a rejoin clears it and keeps the number
+  marketing_push      boolean not null default false,        -- opt-ins for MEMBERS campaigns (changes audited: membership.consent)
+  marketing_whatsapp  boolean not null default false,
+  unique (organizer_id, user_id),
+  unique (organizer_id, number)
+);
+
 -- ---------- notifications ----------
 create type delivery_status as enum ('PENDING','SENT','FAILED');
 
@@ -316,6 +342,64 @@ create table ticket_deliveries (                       -- outbox: WhatsApp ticke
 );
 create index on ticket_deliveries (next_attempt_at) where status = 'PENDING';
 create index on ticket_deliveries (ticket_id, created_at desc);   -- re-send limit
+
+create type message_channel as enum ('PUSH','WHATSAPP');
+create type message_kind    as enum ('TICKET_RECEIVED','SPLIT_INVITE','PAY_CODE','ORDER_PAID','CAMPAIGN');
+
+create table push_tokens (                            -- FCM registration tokens of the organizer's fan app
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),   -- the club app that registered it (its ORGANIZER_ID)
+  user_id       uuid not null references users(id),
+  session_id    uuid not null references fan_sessions(id), -- used only while this session is live; deleted when it is revoked
+  token         text not null unique,
+  platform      text not null check (platform in ('android','ios')),
+  updated_at    timestamptz not null default now()
+);
+create index on push_tokens (user_id);
+
+create type campaign_status   as enum ('DRAFT','SCHEDULED','SENDING','SENT','CANCELLED');
+create type campaign_audience as enum ('MEMBERS','EVENT_HOLDERS');
+
+create table campaigns (
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  channel       message_channel not null,
+  audience      campaign_audience not null,     -- MEMBERS: opted-in members (marketing); EVENT_HOLDERS: VALID holders (service info)
+  event_id      integer references events(id),  -- required for EVENT_HOLDERS; the push deep link
+  title         text not null,                  -- 1-60 chars, any script
+  body          text not null,                  -- 1-500 chars, any script
+  status        campaign_status not null default 'DRAFT',
+  scheduled_at  timestamptz,
+  created_by    uuid not null references staff(id),
+  created_at    timestamptz not null default now(),
+  started_at    timestamptz,                    -- audience snapshot taken
+  finished_at   timestamptz,
+  constraint campaigns_event check (audience <> 'EVENT_HOLDERS' or event_id is not null)
+);
+create index on campaigns (organizer_id, created_at desc);
+create index on campaigns (scheduled_at) where status = 'SCHEDULED';
+
+create table fan_messages (                           -- outbox: push and WhatsApp messages other than ticket PDFs (ticket_deliveries)
+  id               uuid primary key default gen_random_uuid(),
+  organizer_id     uuid not null references organizers(id),
+  user_id          uuid not null references users(id),     -- recipient; phone, locale and push tokens read at send time
+  channel          message_channel not null,
+  kind             message_kind not null,
+  campaign_id      uuid references campaigns(id),
+  order_id         uuid references orders(id),             -- SPLIT_INVITE, PAY_CODE, ORDER_PAID
+  ticket_id        uuid references tickets(id),            -- TICKET_RECEIVED
+  status           delivery_status not null default 'PENDING',
+  attempts         smallint not null default 0,
+  next_attempt_at  timestamptz not null default now(),
+  last_error       text,                                   -- provider code or NO_DEVICE / OPTED_OUT / NOT_CONFIGURED; never a phone or body
+  created_at       timestamptz not null default now(),
+  sent_at          timestamptz,
+  constraint fan_messages_campaign check ((kind = 'CAMPAIGN') = (campaign_id is not null))
+);
+create index on fan_messages (next_attempt_at) where status = 'PENDING';
+create unique index on fan_messages (campaign_id, user_id) where campaign_id is not null;          -- one per recipient
+create unique index on fan_messages (order_id, kind, channel) where kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID');  -- once
+create index on fan_messages (user_id, created_at desc) where kind = 'CAMPAIGN' and channel = 'PUSH';  -- inbox
 
 -- ---------- gate ----------
 create type device_status as enum ('PENDING','ACTIVE','REVOKED');

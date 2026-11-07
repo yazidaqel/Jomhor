@@ -16,10 +16,23 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV15Apply() {
+    void v1ToV16Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16");
+    }
+
+    @Test
+    void ticketTransfersAreUniqueOnBothTicketsAndCarryOrganizerId() {
+        assertThat(jdbcTemplate.queryForList("""
+                select a.attname from pg_index i
+                join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any(i.indkey)
+                where i.indrelid = 'ticket_transfers'::regclass and i.indisunique and not i.indisprimary
+                """, String.class)).containsExactlyInAnyOrder("ticket_id", "new_ticket_id");
+        assertThat(jdbcTemplate.queryForObject("""
+                select is_nullable from information_schema.columns
+                where table_name = 'ticket_transfers' and column_name = 'organizer_id'
+                """, String.class)).isEqualTo("NO");
     }
 
     @Test

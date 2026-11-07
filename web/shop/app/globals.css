@@ -20,6 +20,14 @@
       transform: scale(0.6);
     }
   }
+  /* A transferred ticket leaves the wallet: the reverse of `rise` (DESIGN.md principle 6, Lot 4). */
+  --animate-leave: leave 420ms cubic-bezier(0.4, 0, 0.8, 0.4) both;
+  @keyframes leave {
+    to {
+      opacity: 0;
+      transform: translateY(-24px) scale(0.96);
+    }
+  }
 }
 
 /* Staggered entrance: `--i` (0, 1, 2…) on the element delays it by 70 ms per step, capped after 5 items. */
@@ -32,6 +40,11 @@
   background-image: radial-gradient(circle, color-mix(in srgb, theme(colors.text) 9%, transparent) 1.2px, transparent 1.7px);
   background-size: 18px 18px;
   mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+/* Arabic body face outside AR pages (the language switch's "العربية"). */
+@utility font-ar {
+  font-family: var(--font-ar-body), var(--font-body);
 }
 
 /* A soft pool of club light (the accent), for hero backdrops; intensity via opacity. */
@@ -49,6 +62,20 @@
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-accent;
   }
+  /* AR (DESIGN.md, Lot 4 AR/RTL): tracking breaks Arabic joining and Arabic has no case, so neither applies on AR pages;
+     label-style text (small, tracked, uppercase in FR) gets its emphasis from weight 700 instead. LTR islands (codes,
+     ticket numbers, phone inputs) keep their tracking.
+     ponytail: page-wide, so Latin data on AR pages ("ATLAS FC vs Rapid Oued", a Latin competition) also loses uppercase
+     and tracking. Scoping it per text needs `:dir()`, which Tailwind's Lightning CSS lowers to `:lang()` for its
+     browser targets, and `text-transform` is inherited, so inline islands can't restore it. Upgrade: tag Latin data
+     elements with `lang="fr"` server-side (first strong letter) and match `:lang(ar)` here, once the look is worth it. */
+  html:lang(ar) :not([dir='ltr'], [dir='ltr'] *) {
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+  }
+  html:lang(ar) :is(.text-label, .uppercase[class*='tracking-']):not([dir='ltr'], [dir='ltr'] *) {
+    font-weight: 700 !important;
+  }
   /* Figures in the display face line up (countdowns, prices). */
   .font-display {
     font-variant-numeric: tabular-nums;
@@ -65,5 +92,18 @@
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+}
+
+/* The language menu hangs under its own button (header or login page) where anchor positioning exists; elsewhere it
+   keeps the header-aligned position of its classes. */
+@supports (anchor-name: --a) {
+  [popovertarget='language-menu'] {
+    anchor-name: --language;
+  }
+  #language-menu {
+    position-anchor: --language;
+    top: calc(anchor(bottom) + 8px);
+    inset-inline-end: anchor(end);
   }
 }

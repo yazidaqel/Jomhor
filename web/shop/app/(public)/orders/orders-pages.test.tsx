@@ -2,6 +2,7 @@ import { renderToString } from 'react-dom/server'
 import { getAccessFallbackHTTPStatus } from 'next/dist/client/components/http-access-fallback/http-access-fallback'
 import { getURLFromRedirectError } from 'next/dist/client/components/redirect'
 import { isRedirectError } from 'next/dist/client/components/redirect-error'
+import { getDictionary, ltr } from '@/lib/i18n'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { json, NOW, ORG, rawEvent } from '@/lib/events.fixture'
 import { safeNext } from '@/lib/next-path'
@@ -12,8 +13,15 @@ const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSIsImF1ZCI6ImZhbiJ9.c2lnbmF0dXJ
 const ORDER_ID = '0190f3a2-7c1e-7b55-9a1e-3f1f6b2c9d10'
 
 let session: string | undefined
+let locale: string | undefined // the `locale` cookie (lib/i18n/server.ts)
 vi.mock('next/headers', () => ({
-  cookies: async () => ({ get: (name: string) => (name === '__Host-jomhor_session' && session ? { name, value: session } : undefined) }),
+  cookies: async () => ({
+    get: (name: string) => {
+      const value = name === '__Host-jomhor_session' ? session : name === 'locale' ? locale : undefined
+      return value ? { name, value } : undefined
+    },
+  }),
+  headers: async () => new Headers(),
 }))
 
 // The checkout form is a client component using the router; there is no mounted app router in a server render test.
@@ -30,6 +38,7 @@ function backend(routes: Record<string, () => Response>) {
 }
 beforeEach(() => {
   session = TOKEN
+  locale = undefined
   vi.stubEnv('API_BASE_URL', 'http://backend.test/v1')
   vi.stubEnv('ORGANIZER_ID', ORG)
   vi.stubGlobal('fetch', fetchMock)
@@ -114,7 +123,7 @@ it('W3 renders one row per place, ticket 1 prefilled from /fan/me, phone only fr
   expect(h).not.toContain('id="phone-0"')
   expect(h).toContain('id="phone-1"')
   expect(h).toContain('2 × Tribune Nord · Virage')
-  expect(h).toContain('Payer 100\u00a0DH')
+  expect(h).toContain(`Payer ${ltr('100\u00a0DH')}`)
   expect(h).not.toContain(TOKEN)
   const me = fetchMock.mock.calls.find(([u]) => String(u).endsWith('/fan/me'))!
   expect(new Headers(me[1]!.headers).get('authorization')).toBe(`Bearer ${TOKEN}`)
@@ -201,7 +210,7 @@ it('W3 lists the event payment_methods; cash says until when a code would be val
   expect(h).toContain('Cash en agence')
   expect(h).toContain('Avant Lun. 2 févr. 2026 · 13:00') // least(now + 24 h, sales close), 12:00Z in Africa/Casablanca
   expect(h).toMatch(/checked="" value="CARD"/)
-  expect(h).toContain('Payer 100\u00a0DH')
+  expect(h).toContain(`Payer ${ltr('100\u00a0DH')}`)
 })
 
 it('W3 caps the cash deadline at sales close', async () => {
@@ -252,8 +261,8 @@ it('W4 AWAITING_CASH: grouped code and exact amount server-rendered, countdown i
   const h = renderToString(await orderPage(ORDER_ID))
   expect(h).toContain('Ton code de paiement cash')
   expect(h).toMatch(/data-pay-code="true"[^>]*>JMH 4F7K 29</)
-  expect(h).toMatch(/data-amount="true"[^>]*>100\u00a0DH</)
-  expect(h).toContain('JMH 4F7K 29 · 100\u00a0DH. Montant exact')
+  expect(h).toMatch(/data-amount="true"[^>]*>\u2066100\u00a0DH\u2069</)
+  expect(h).toContain(`${ltr('JMH 4F7K 29')} · ${ltr('100\u00a0DH')}. Montant exact`)
   expect(h).toContain('Places réservées · paie avant Lun. 2 févr. 2026 · 13:00 (24 h 0 min restantes)')
   expect(h).toContain('Un guichet du club ou une agence Wafacash ou Cash Plus.')
   expect(h).toContain('Guichet du stade')
@@ -311,4 +320,17 @@ it('W4 cash order once EXPIRED: "Code expiré", places released, back to the eve
   expect(h).toContain('href="/events/12-atlas-fc-vs-rapid-oued"')
   expect(h).not.toContain('JMH')
   expect(buttons(h)).toEqual([])
+})
+
+it('W4 renders in AR (locale cookie): Darija copy, code and amount in LTR isolates, Western digits', async () => {
+  locale = 'ar'
+  const ar = getDictionary('ar').orderPage
+  backend({ [`/fan/orders/${ORDER_ID}`]: ORDER(CASH), '/fan/events/12': () => json(200, rawEvent()) })
+  const h = renderToString(await orderPage(ORDER_ID))
+  expect(h).toContain(ar.cashTitle)
+  expect(h).toMatch(/dir="ltr" data-pay-code="true"[^>]*>JMH 4F7K 29</)
+  expect(h).toContain(`${ltr('JMH 4F7K 29')} · ${ltr('100\u00a0DH')}. المبلغ نيشان`)
+  expect(buttons(h)).toEqual([ar.copy, ar.payCARD, ar.payWALLET])
+  expect(h).not.toContain('Ton code')
+  expect(h).not.toMatch(/[\u0660-\u0669]/)
 })

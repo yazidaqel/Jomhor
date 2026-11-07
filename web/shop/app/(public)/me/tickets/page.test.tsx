@@ -7,6 +7,7 @@ import TicketsPage from './page'
 let session: string | undefined
 vi.mock('next/headers', () => ({
   cookies: async () => ({ get: (name: string) => (name === '__Host-jomhor_session' && session ? { name, value: session } : undefined) }),
+  headers: async () => new Headers(),
 }))
 
 const fetchMock = vi.fn<typeof fetch>()

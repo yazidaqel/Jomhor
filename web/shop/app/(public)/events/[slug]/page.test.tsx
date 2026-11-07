@@ -2,15 +2,24 @@ import { renderToString } from 'react-dom/server'
 import { getAccessFallbackHTTPStatus, isHTTPAccessFallbackError } from 'next/dist/client/components/http-access-fallback/http-access-fallback'
 import { getRedirectStatusCodeFromError, getURLFromRedirectError } from 'next/dist/client/components/redirect'
 import { isRedirectError } from 'next/dist/client/components/redirect-error'
+import { getDictionary, ltr } from '@/lib/i18n'
+import { formatDateTime } from '@/lib/time'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { json, NOW, ORG, rawEvent, rawListRow, SECRETS } from '@/lib/events.fixture'
-import HomePage from '../../page'
+import HomePage, { generateMetadata as homeMetadata } from '../../page'
 import { EventView } from './event-view'
 import EventPage from './page'
 import { ZonePicker } from './ZonePicker'
 
+let locale: string | undefined // the `locale` cookie (lib/i18n/server.ts)
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: (name: string) => (name === 'locale' && locale ? { name, value: locale } : undefined) }),
+  headers: async () => new Headers(),
+}))
+
 const fetchMock = vi.fn<typeof fetch>()
 beforeEach(() => {
+  locale = undefined
   vi.stubEnv('API_BASE_URL', 'http://backend.test/v1')
   vi.stubEnv('ORGANIZER_ID', ORG)
   vi.stubGlobal('fetch', fetchMock)
@@ -144,8 +153,8 @@ it('W1 lists the organizer events with state, from-price and canonical links', a
   expect(h).toContain('Vente ouverte · 4 billets max par compte')
   expect(h).toContain('Vente le Mar. 3 févr. 2026 · 10:00')
   expect(h).toContain('data-sale="SOLD_OUT"')
-  expect(h).toContain('Dès 50\u00a0DH')
-  expect(h).toContain('Dès 150\u00a0DH')
+  expect(h).toContain(`Dès ${ltr('50\u00a0DH')}`)
+  expect(h).toContain(`Dès ${ltr('150\u00a0DH')}`)
   for (const s of SECRETS) expect(h).not.toContain(s)
 })
 
@@ -161,4 +170,21 @@ it('W1 hero CTA follows the sale: "Réserver mes places" only while on sale', as
   const h = renderToString(await HomePage())
   expect(h).toMatch(/data-sale="NOT_STARTED"[^>]*>Voir les places/)
   expect(h).not.toContain('Réserver mes places')
+})
+
+it('W2 renders in AR (locale cookie): Darija copy, ar-MA date with Western digits, prices and codes kept LTR', async () => {
+  locale = 'ar'
+  const ar = getDictionary('ar')
+  const h = await html('12-atlas-fc-vs-rapid-oued')
+  expect(h).toContain(ar.event.zonesTitle)
+  expect(h).toContain('الدورة 11')
+  expect(h).toContain(formatDateTime('2026-02-07T19:00:00Z', 'Africa/Casablanca', 'ar-MA'))
+  expect(h).toContain(ltr('120,50\u00a0DH'))
+  expect(h).toContain(ar.order.pick)
+  expect(h).not.toContain('Choisis')
+  expect(h).not.toMatch(/[\u0660-\u0669]/) // no Arabic-Indic digits
+})
+
+it('W1 is indexable with the bare canonical URL', async () => {
+  expect((await homeMetadata()).alternates).toEqual({ canonical: '/' })
 })

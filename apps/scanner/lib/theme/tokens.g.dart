@@ -90,6 +90,7 @@ abstract final class JomhorType {
   /// display face, uppercase.
   static const TextStyle hero = TextStyle(
     fontFamily: JomhorFonts.display,
+    fontFamilyFallback: [JomhorFonts.arabicDisplay],
     fontSize: 44,
     fontWeight: FontWeight.w800,
     height: 0.95,
@@ -98,6 +99,7 @@ abstract final class JomhorType {
   /// display face.
   static const TextStyle scanResult = TextStyle(
     fontFamily: JomhorFonts.display,
+    fontFamilyFallback: [JomhorFonts.arabicDisplay],
     fontSize: 72,
     fontWeight: FontWeight.w800,
     height: 1,
@@ -106,6 +108,7 @@ abstract final class JomhorType {
   /// display face.
   static const TextStyle h1 = TextStyle(
     fontFamily: JomhorFonts.display,
+    fontFamilyFallback: [JomhorFonts.arabicDisplay],
     fontSize: 28,
     fontWeight: FontWeight.w800,
     height: 1,
@@ -114,6 +117,7 @@ abstract final class JomhorType {
   /// display face.
   static const TextStyle h2 = TextStyle(
     fontFamily: JomhorFonts.display,
+    fontFamilyFallback: [JomhorFonts.arabicDisplay],
     fontSize: 22,
     fontWeight: FontWeight.w700,
     height: 1.1,
@@ -122,28 +126,50 @@ abstract final class JomhorType {
   /// display face.
   static const TextStyle number = TextStyle(
     fontFamily: JomhorFonts.display,
+    fontFamilyFallback: [JomhorFonts.arabicDisplay],
     fontSize: 26,
     fontWeight: FontWeight.w800,
     height: 1,
   );
 
   /// body face.
-  static const TextStyle body = TextStyle(fontFamily: JomhorFonts.body, fontSize: 15, fontWeight: FontWeight.w500);
+  static const TextStyle body = TextStyle(
+    fontFamily: JomhorFonts.body,
+    fontFamilyFallback: [JomhorFonts.arabicBody],
+    fontSize: 15,
+    fontWeight: FontWeight.w500,
+  );
 
   /// body face.
-  static const TextStyle bodySmall = TextStyle(fontFamily: JomhorFonts.body, fontSize: 13, fontWeight: FontWeight.w400);
+  static const TextStyle bodySmall = TextStyle(
+    fontFamily: JomhorFonts.body,
+    fontFamilyFallback: [JomhorFonts.arabicBody],
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+  );
 
   /// body face.
-  static const TextStyle cta = TextStyle(fontFamily: JomhorFonts.body, fontSize: 16, fontWeight: FontWeight.w600);
+  static const TextStyle cta = TextStyle(
+    fontFamily: JomhorFonts.body,
+    fontFamilyFallback: [JomhorFonts.arabicBody],
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+  );
 
   /// body face, uppercase.
   static const TextStyle label = TextStyle(
     fontFamily: JomhorFonts.body,
+    fontFamilyFallback: [JomhorFonts.arabicBody],
     fontSize: 12,
     fontWeight: FontWeight.w600,
     letterSpacing: 1.5,
   );
 
   /// body face.
-  static const TextStyle caption = TextStyle(fontFamily: JomhorFonts.body, fontSize: 11, fontWeight: FontWeight.w500);
+  static const TextStyle caption = TextStyle(
+    fontFamily: JomhorFonts.body,
+    fontFamilyFallback: [JomhorFonts.arabicBody],
+    fontSize: 11,
+    fontWeight: FontWeight.w500,
+  );
 }

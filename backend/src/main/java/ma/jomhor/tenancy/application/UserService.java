@@ -37,8 +37,7 @@ public class UserService {
     @Transactional
     public User update(UUID userId, String displayName, String locale) {
         String name = displayName == null || displayName.isEmpty() ? displayName
-                : HolderNames.normalize(displayName).orElseThrow(() -> invalid("display_name",
-                        "2 to 60 Latin letters, spaces, apostrophes, dots or hyphens"));
+                : HolderNames.normalize(displayName).orElseThrow(() -> invalid("display_name", HolderNames.INVALID));
         if (locale != null && !LOCALES.contains(locale)) {
             throw invalid("locale", "one of fr, ar, en");
         }
