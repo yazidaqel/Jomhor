@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
 import type { TFunction } from 'i18next'
-import { Activity, Download, Hand, LogIn, ShieldX, TriangleAlert } from 'lucide-react'
+import { Activity, ClipboardCheck, Download, Hand, LogIn, ShieldX, TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -23,17 +22,18 @@ import { Card, CardAction, CardDescription, CardHeader, CardTitle } from '@/comp
 import { FieldError } from '@/components/ui/field'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useCanWrite, useOrganizer } from '@/features/auth/organizer'
+import { useCanWrite } from '@/features/auth/organizer'
 import { useEvent, type EventDetail, type EventStatus } from '@/features/events/api'
 import { EventPicker } from '@/features/events/EventPicker'
 import { StatusBadge } from '@/features/events/EventsPage'
 import { fr } from '@/i18n/fr'
-import { ApiError, download, path } from '@/lib/api'
+import { ApiError } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { percent } from '@/lib/percent'
 import { formatAgo, formatDateTime, formatTime } from '@/lib/time'
 import { useNow } from '@/lib/useNow'
 import { cn } from '@/lib/utils'
+import { useReconciliationCsv } from '@/features/reconciliation/api'
 import { charge, chargeLevel, CLOSABLE, SCANS_PER_DEVICE_MIN, useCloseEvent, useLive, type Live, type LiveGate } from './api'
 
 const MINUTE = 60_000
@@ -110,16 +110,12 @@ function LiveSkeleton({ header = true }: { header?: boolean }) {
 
 function EventLivePage({ id }: { id: string }) {
   const { t, i18n } = useTranslation()
-  const { organizer_id: organizerId } = useOrganizer()
   const canWrite = useCanWrite()
   const event = useEvent(id)
   const live = useLive(id)
   const tick = useNow(1000)
   const [closing, setClosing] = useState(false)
-  const exportCsv = useMutation({
-    mutationFn: () => download(`${path('org', 'events', id)}/reconciliation.csv`, `reconciliation-${id}.csv`, { organizerId }),
-    onError: (e) => toast.error(t(errorKey(e))),
-  })
+  const exportCsv = useReconciliationCsv(id)
 
   if (isNotFound(event.error) || isNotFound(live.error)) return <Navigate to="/events" replace state={{ notFound: true }} />
   if (event.isPending) return <LiveSkeleton />
@@ -145,6 +141,12 @@ function EventLivePage({ id }: { id: string }) {
         description={canWrite && closable && beforeT0 ? t('live.closeHint', { time: formatTime(event.data.starts_at, i18n.language, zone) }) : undefined}
         actions={
           <>
+            <Button variant="outline" asChild>
+              <Link to={`/events/${encodeURIComponent(event.data.id)}/reconciliation`}>
+                <ClipboardCheck />
+                {t('reconciliation.title')}
+              </Link>
+            </Button>
             <Button variant="outline" disabled={exportCsv.isPending} onClick={() => exportCsv.mutate()}>
               <Download />
               {t('live.export')}
@@ -256,7 +258,11 @@ function LiveBody({ live, now, age, failed, eventId, canWrite }: { live: Live; n
           </CardTitle>
           <CardAction>
             <CardDescription className={cn('tabular-nums', failed && 'font-medium text-warning-foreground')}>
-              {t(failed ? 'live.updateFailed' : 'live.updated', { ago: formatAgo(age, i18n.language) })}
+              {failed ? (
+                <span role="status">{t('live.updateFailed', { ago: formatAgo(age, i18n.language) })}</span>
+              ) : (
+                t('live.updated', { ago: formatAgo(age, i18n.language) })
+              )}
             </CardDescription>
           </CardAction>
         </CardHeader>

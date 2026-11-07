@@ -1,5 +1,5 @@
 import { createContext, use } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
 export type Role = 'ADMIN' | 'OPS' | 'FINANCE' | 'GATE' | 'SUPERVISOR'
@@ -28,7 +28,7 @@ export function useOrganizer(): Membership {
  * organizer as X-Organizer-Id, so two organizers' data never share a cache entry.
  * Use this (and `useOrganizer().organizer_id` in mutations) for every /org/* call except /org/me.
  */
-export function useOrgQuery<T>(key: readonly unknown[], path: string, options?: { refetchInterval?: number }) {
+export function useOrgQuery<T>(key: readonly unknown[], path: string, options?: Pick<UseQueryOptions<T>, 'refetchInterval'>) {
   const { organizer_id: organizerId } = useOrganizer()
   return useQuery({
     queryKey: ['org', organizerId, ...key],

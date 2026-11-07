@@ -235,7 +235,8 @@ it('a failed refresh keeps the last figures and says so, with their age', async 
   })
   await act(() => vi.advanceTimersByTimeAsync(LIVE_REFETCH_MS))
   const warning = await screen.findByText(/^Mise à jour impossible, nouvel essai automatique\. Dernière réponse il y a \d+ s\.$/, {}, { timeout: 8000 })
-  expect(warning.className).toContain('text-warning-foreground')
+  expect(warning.getAttribute('role')).toBe('status')
+  expect(warning.parentElement!.className).toContain('text-warning-foreground')
   expect(screen.getByText(spaced((18432).toLocaleString('fr')))).toBeTruthy() // the figures stay
   expect(gateRow('P4')).toBeTruthy()
 })
