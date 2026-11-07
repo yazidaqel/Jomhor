@@ -1,5 +1,7 @@
 package ma.jomhor.payments.application;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.payments.domain.PosSession;
@@ -34,4 +36,7 @@ public interface PosSessions {
 
     /** The user id of the cashier who ran a session of the organizer (no lock). */
     Optional<UUID> staffUserOf(UUID org, UUID sessionId);
+
+    /** The organizer's sessions opened in [from, to), with their figures, by opened_at. */
+    List<PosSession> openedIn(UUID org, Instant from, Instant to);
 }

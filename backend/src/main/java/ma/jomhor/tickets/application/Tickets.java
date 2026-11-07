@@ -42,8 +42,8 @@ public interface Tickets {
     /** The ids among {@code ticketIds} of tickets of the event (any status). */
     Set<UUID> ofEvent(UUID org, int eventId, Collection<UUID> ticketIds);
 
-    /** VALID tickets of the event per zone id (zones without one are absent). */
-    Map<Integer, Long> validByZone(UUID org, int eventId);
+    /** Tickets of the event in {@code status} per zone id (zones without one are absent). */
+    Map<Integer, Long> countByZone(UUID org, int eventId, Ticket.Status status);
 
     /** The ticket, its row locked ({@code for no key update}: scans may still reference it) until the end of the transaction. */
     Optional<Ticket.Locked> lock(UUID org, UUID ticketId);

@@ -172,7 +172,7 @@ public class VenueService {
      * (UTC, GMT, EST), Etc/* and the JDK-only SystemV/* (not in IANA since 2020b, unknown to clients): only a
      * region carries DST and Ramadan changes. isFixedOffset is the safety net for anything else of that kind.
      */
-    static String checkTimezone(String timezone) {
+    public static String checkTimezone(String timezone) {
         if (!timezone.contains("/") || timezone.startsWith("Etc/") || timezone.startsWith("SystemV/")
                 || !ZoneId.getAvailableZoneIds().contains(timezone) || ZoneId.of(timezone).getRules().isFixedOffset()) {
             throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",

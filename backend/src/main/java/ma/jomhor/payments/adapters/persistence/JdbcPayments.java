@@ -3,8 +3,12 @@ package ma.jomhor.payments.adapters.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -231,6 +235,29 @@ class JdbcPayments implements Payments, PendingPayments {
                 .query((rs, n) -> Map.entry(rs.getObject("order_id", UUID.class), rs.getString("pay_code")))
                 .list().forEach(e -> codes.put(e.getKey(), e.getValue()));
         return codes;
+    }
+
+    // refunds is this module's table too (V15).
+    @Override
+    public long refundedMad(UUID org, int eventId) {
+        return jdbc.sql("select coalesce(sum(amount_mad), 0) from refunds where organizer_id = :org and event_id = :event")
+                .param("org", org).param("event", eventId).query(Long.class).single();
+    }
+
+    // Index payments (organizer_id, completed_at) where status = 'SUCCEEDED' (V13).
+    @Override
+    public List<CashPayment> cashPayments(UUID org, Instant from, Instant to) {
+        return jdbc.sql("""
+                        select completed_at, provider, method::text as method, amount_mad
+                        from payments
+                        where organizer_id = :org and status = 'SUCCEEDED' and method in ('POS_CASH', 'CASH_AGENCY')
+                          and completed_at >= :from and completed_at < :to
+                        """)
+                .param("org", org).param("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+                .param("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC))
+                .query((rs, n) -> new CashPayment(rs.getObject("completed_at", OffsetDateTime.class).toInstant(),
+                        rs.getString("provider"), PaymentMethod.valueOf(rs.getString("method")), rs.getLong("amount_mad")))
+                .list();
     }
 
     private static Payment payment(ResultSet rs, int n) throws SQLException {

@@ -388,6 +388,17 @@ class GateReportsTest extends ScanApiTest {
         assertThat(csv.lines().toList().get(1)).isEqualTo("zone;TRIB;\"Tribune \"\"A\"\"; Nord\";0;0;0;;;0");
     }
 
+    @Test
+    void aNameThatStartsLikeAFormulaIsEscapedInTheCsv() throws Exception {
+        Site s = site(Instant.now().plus(Duration.ofHours(1)));
+        jdbc.sql("update gates set name = '@SUM(1)' where id = ?").param(s.g1()).update();
+        jdbc.sql("update zones set name = '=1+1' where id = ?").param(s.f().zone1()).update();
+        String csv = body(call(s.f().c(), get("/org/events/" + s.f().event() + "/reconciliation.csv"))
+                .andExpect(status().isOk()));
+        assertThat(csv.lines()).anyMatch(l -> l.startsWith("gate;G1;'@SUM(1);"))
+                .anyMatch(l -> l.startsWith("zone;TRIB;'=1+1;"));
+    }
+
     // ---------- roles and tenancy ----------
 
     @Test

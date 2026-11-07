@@ -1,5 +1,7 @@
 package ma.jomhor.payments.application;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.payments.domain.Payment;
@@ -58,4 +60,14 @@ public interface Payments {
      */
     void complete(UUID org, UUID paymentId, Payment.Status status, String provider, String providerRef,
                   String callbackJson);
+
+    // ---------- cash report (04 GET /org/finance/cash) ----------
+
+    /**
+     * SUCCEEDED POS_CASH and CASH_AGENCY payments with completed_at in [from, to), one row each. The caller assigns
+     * the local day with its own ZoneId (one tzdata for bounds and days). Money in centimes.
+     */
+    List<CashPayment> cashPayments(UUID org, Instant from, Instant to);
+
+    record CashPayment(Instant completedAt, String collector, PaymentMethod method, long amountMad) {}
 }

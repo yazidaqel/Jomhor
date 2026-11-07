@@ -86,12 +86,14 @@ public interface Orders {
     record Expired(Hold hold, List<UUID> orderIds) {}
 
     /**
-     * Per price category and channel of the event: places in PAID orders, places in RESERVED orders still held
-     * (reserved_until > now(), swept or not), and Σ qty × unit_price_mad (the snapshot) of the PAID ones.
+     * Per price category, channel and payment_method (null before payment) of the event: places in PAID orders,
+     * places in RESERVED and in AWAITING_CASH orders still held (reserved_until > now(), swept or not), and
+     * Σ qty × unit_price_mad (the snapshot) of the PAID ones.
      */
     List<SalesLine> salesLines(UUID org, int eventId);
 
-    record SalesLine(UUID priceCategoryId, String channel, long paid, long held, long revenueMad) {}
+    record SalesLine(UUID priceCategoryId, String channel, String paymentMethod, long paid, long held,
+                     long awaitingCash, long revenueMad) {}
 
     /** The event's payment.refund_required audit rows (matched on the order they name), newest first. */
     List<RefundRequired> refundsRequired(UUID org, int eventId);

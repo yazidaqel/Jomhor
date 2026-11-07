@@ -277,17 +277,21 @@ class JdbcOrders implements Orders {
     @Override
     public List<SalesLine> salesLines(UUID org, int eventId) {
         return jdbc.sql("""
-                        select i.price_category_id, o.channel::text as channel,
+                        select i.price_category_id, o.channel::text as channel, o.payment_method::text as payment_method,
                                coalesce(sum(i.qty) filter (where o.status = 'PAID'), 0) as paid,
                                coalesce(sum(i.qty) filter (where o.status = 'RESERVED' and o.reserved_until > now()), 0) as held,
+                               coalesce(sum(i.qty) filter (where o.status = 'AWAITING_CASH' and o.reserved_until > now()), 0)
+                                   as awaiting_cash,
                                coalesce(sum(i.qty * i.unit_price_mad) filter (where o.status = 'PAID'), 0) as revenue_mad
                         from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
-                        where o.organizer_id = :org and o.event_id = :event and o.status in ('PAID', 'RESERVED')
-                        group by i.price_category_id, o.channel
+                        where o.organizer_id = :org and o.event_id = :event
+                          and o.status in ('PAID', 'RESERVED', 'AWAITING_CASH')
+                        group by i.price_category_id, o.channel, o.payment_method
                         """)
                 .param("org", org).param("event", eventId)
                 .query((rs, n) -> new SalesLine(rs.getObject("price_category_id", UUID.class), rs.getString("channel"),
-                        rs.getLong("paid"), rs.getLong("held"), rs.getLong("revenue_mad")))
+                        rs.getString("payment_method"), rs.getLong("paid"), rs.getLong("held"),
+                        rs.getLong("awaiting_cash"), rs.getLong("revenue_mad")))
                 .list();
     }
 

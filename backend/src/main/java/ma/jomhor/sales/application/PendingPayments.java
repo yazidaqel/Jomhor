@@ -35,4 +35,7 @@ public interface PendingPayments {
 
     /** The PENDING cash code (6 symbols) of each order that has one (order id → its organizer); others are absent. */
     Map<UUID, String> pendingCodes(Map<UUID, UUID> organizerByOrder);
+
+    /** Σ refunds.amount_mad of the event's refunded tickets, any refund status (04 /sales {@code refunded_mad}). */
+    long refundedMad(UUID org, int eventId);
 }

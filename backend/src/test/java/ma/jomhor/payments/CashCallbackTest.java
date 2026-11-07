@@ -56,7 +56,7 @@ class CashCallbackTest extends PaymentTest {
         return new Code(phone, orderId, JsonPath.read(json, "$.pay_code"), JsonPath.read(json, "$.payment_id"));
     }
 
-    private static Map<String, String> signed(String payCode, long amountMad, String ref) throws Exception {
+    static Map<String, String> signed(String payCode, long amountMad, String ref) throws Exception {
         Mac mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(FAKE_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
         String amount = Long.toString(amountMad);

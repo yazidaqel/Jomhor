@@ -149,12 +149,13 @@ class JdbcTickets implements Tickets {
     }
 
     @Override
-    public Map<Integer, Long> validByZone(UUID org, int eventId) {
+    public Map<Integer, Long> countByZone(UUID org, int eventId, Ticket.Status status) {
         return jdbc.sql("""
                         select zone_id, count(*) as n from tickets
-                        where organizer_id = :org and event_id = :event and status = 'VALID' group by zone_id
+                        where organizer_id = :org and event_id = :event and status = cast(:status as ticket_status)
+                        group by zone_id
                         """)
-                .param("org", org).param("event", eventId)
+                .param("org", org).param("event", eventId).param("status", status.name())
                 .query((rs, n) -> Map.entry(rs.getInt("zone_id"), rs.getLong("n"))).stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }

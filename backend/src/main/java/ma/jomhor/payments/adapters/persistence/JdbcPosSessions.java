@@ -4,6 +4,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.payments.application.PosSessions;
@@ -106,6 +108,14 @@ class JdbcPosSessions implements PosSessions {
                         where p.organizer_id = :org and p.id = :id
                         """)
                 .param("org", org).param("id", sessionId).query(UUID.class).optional();
+    }
+
+    @Override
+    public List<PosSession> openedIn(UUID org, Instant from, Instant to) {
+        return jdbc.sql(SELECT + " where p.organizer_id = :org and p.opened_at >= :from and p.opened_at < :to"
+                        + " order by p.opened_at, p.id")
+                .param("org", org).param("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+                .param("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC)).query(JdbcPosSessions::session).list();
     }
 
     private static PosSession session(ResultSet rs, int n) throws SQLException {

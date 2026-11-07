@@ -79,7 +79,12 @@ public class TicketService {
 
     /** Gate reports: VALID tickets of the event per zone id (docs/04-api.md §Gate reports {@code sold}). */
     public Map<Integer, Long> soldByZone(UUID org, int eventId) {
-        return tickets.validByZone(org, eventId);
+        return tickets.countByZone(org, eventId, Ticket.Status.VALID);
+    }
+
+    /** REFUNDED tickets of the event per zone id (04 /sales {@code refunded}). */
+    public Map<Integer, Long> refundedByZone(UUID org, int eventId) {
+        return tickets.countByZone(org, eventId, Ticket.Status.REFUNDED);
     }
 
     /** Gate scan ingestion: the ids among {@code ticketIds} of tickets of the event (any status). */

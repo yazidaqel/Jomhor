@@ -12,6 +12,11 @@ public record PosSession(UUID id, String label, UUID staffId, String staffName, 
                          long orders, long tickets, long prints, long collectedMad, Long expectedMad,
                          Long declaredMad) {
 
+    /** The frozen expected_mad once closed; while open, what the session collected so far. */
+    public long expectedSoFar() {
+        return expectedMad == null ? collectedMad : expectedMad;
+    }
+
     /** declared - expected once closed, else null. */
     public Long varianceMad() {
         return closedAt == null ? null : declaredMad - expectedMad;
