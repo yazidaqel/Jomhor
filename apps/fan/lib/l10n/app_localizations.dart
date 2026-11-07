@@ -189,11 +189,11 @@ abstract class AppLocalizations {
   /// **'Renvoyer le code'**
   String get loginResend;
 
-  /// No description provided for @errorPhoneInvalid.
+  /// The example number (06 12 34 56 78), filled by the app: a left-to-right isolate in AR.
   ///
   /// In fr, this message translates to:
-  /// **'Ce numéro ne semble pas marocain. Essaie par exemple 06 12 34 56 78.'**
-  String get errorPhoneInvalid;
+  /// **'Ce numéro ne semble pas marocain. Essaie par exemple {example}.'**
+  String errorPhoneInvalid(String example);
 
   /// No description provided for @errorOtpInvalid.
   ///
@@ -546,7 +546,7 @@ abstract class AppLocalizations {
   /// No description provided for @holderNameError.
   ///
   /// In fr, this message translates to:
-  /// **'Prénom et nom en lettres latines, de 2 à 60 caractères.'**
+  /// **'Prénom et nom en lettres latines ou arabes, sans mélanger les deux, de 2 à 60 caractères.'**
   String get holderNameError;
 
   /// No description provided for @holderPhoneLabel.
@@ -561,11 +561,11 @@ abstract class AppLocalizations {
   /// **'Il reçoit son billet sur WhatsApp et dans l\'app. Sans numéro, le billet reste chez toi.'**
   String get holderPhoneHelp;
 
-  /// No description provided for @holderPhoneError.
+  /// The example number (06 12 34 56 78), filled by the app: a left-to-right isolate in AR.
   ///
   /// In fr, this message translates to:
-  /// **'Numéro marocain invalide. Essaie 06 12 34 56 78.'**
-  String get holderPhoneError;
+  /// **'Numéro marocain invalide. Essaie {example}.'**
+  String holderPhoneError(String example);
 
   /// No description provided for @methodTitle.
   ///

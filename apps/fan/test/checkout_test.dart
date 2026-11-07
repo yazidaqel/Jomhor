@@ -250,7 +250,10 @@ void main() {
     await open(tester, checkout);
     await fillFriend(tester, name: 'Sara 2', phone: '+33 6 12 34 56 78');
     await pay(tester);
-    expect(find.text('Prénom et nom en lettres latines, de 2 à 60 caractères.'), findsOneWidget);
+    expect(
+      find.text('Prénom et nom en lettres latines ou arabes, sans mélanger les deux, de 2 à 60 caractères.'),
+      findsOneWidget,
+    );
     expect(find.text('Numéro marocain invalide. Essaie 06 12 34 56 78.'), findsOneWidget);
     expect(sale.calls('POST', '/fan/orders'), isEmpty);
   });
@@ -269,7 +272,10 @@ void main() {
     await fillFriend(tester);
     await pay(tester);
     await tester.pumpAndSettle();
-    expect(find.text('Prénom et nom en lettres latines, de 2 à 60 caractères.'), findsOneWidget);
+    expect(
+      find.text('Prénom et nom en lettres latines ou arabes, sans mélanger les deux, de 2 à 60 caractères.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('SALE_BUSY: shows the wait, retries the same request after retry_after_s (fake clock)', (tester) async {

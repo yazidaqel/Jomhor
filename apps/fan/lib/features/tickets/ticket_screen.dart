@@ -13,6 +13,7 @@ import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
@@ -227,7 +228,7 @@ class _Header extends StatelessWidget {
                           child: Text(
                             l.ticketMatchday.toUpperCase(),
                             textAlign: TextAlign.center,
-                            style: JomhorType.label.copyWith(color: JomhorColors.accent),
+                            style: JomhorType.label.copyWith(color: JomhorColors.accent).tracked(context),
                           ),
                         ),
                       ],
@@ -275,13 +276,13 @@ class _TicketCard extends StatelessWidget {
     final t = ticket;
     final e = t.event;
     final label = factsLine(l, e.facts);
-    const muted = TextStyle(
+    final muted = const TextStyle(
       fontFamily: JomhorFonts.body,
       fontSize: 11,
       fontWeight: FontWeight.w600,
       color: JomhorColors.ticketMuted,
       letterSpacing: 1.2,
-    );
+    ).tracked(context);
     final value = JomhorType.h2.copyWith(fontSize: 26, height: 1, color: JomhorColors.ticketInk);
     const strong = TextStyle(
       fontFamily: JomhorFonts.body,
@@ -338,11 +339,13 @@ class _TicketCard extends StatelessWidget {
                             if (label != null) ...[
                               Text(
                                 label.toUpperCase(),
-                                style: JomhorType.caption.copyWith(
-                                  color: JomhorColors.onAccent.withValues(alpha: 0.72),
-                                  letterSpacing: 1.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: JomhorType.caption
+                                    .copyWith(
+                                      color: JomhorColors.onAccent.withValues(alpha: 0.72),
+                                      letterSpacing: 1.5,
+                                      fontWeight: FontWeight.w600,
+                                    )
+                                    .tracked(context),
                               ),
                               const SizedBox(height: 6),
                             ],
@@ -401,7 +404,7 @@ class _TicketCard extends StatelessWidget {
                           if (t.holderLabel case final holder?) ...[
                             Text(l.ticketHolder.toUpperCase(), style: muted),
                             const SizedBox(height: 4),
-                            Text(holder, style: strong),
+                            Text(l.isolate(holder), style: strong),
                           ],
                           if (t.seatLabel case final seat?) ...[
                             const SizedBox(height: JomhorSpace.s),

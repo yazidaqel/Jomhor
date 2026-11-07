@@ -1,3 +1,6 @@
+import 'package:intl/date_symbol_data_custom.dart';
+import 'package:intl/date_symbols.dart';
+import 'package:intl/date_time_patterns.dart';
 import 'package:intl/intl.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -5,13 +8,51 @@ import 'package:timezone/timezone.dart' as tz;
 /// fixed offset: Africa/Casablanca changed offset around Ramadan and is +00 from 2026-09-20 (tzdata 2026e).
 tz.TZDateTime venueTime(DateTime instant, String zone) => tz.TZDateTime.from(instant, tz.getLocation(zone));
 
-/// "Sam. 14 nov." in FR.
+/// The month names of Morocco (CLDR `ar_MA`), which intl does not ship: its `ar` says مايو, أغسطس, نوفمبر.
+const _moroccanMonths = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'ماي',
+  'يونيو',
+  'يوليوز',
+  'غشت',
+  'شتنبر',
+  'أكتوبر',
+  'نونبر',
+  'دجنبر',
+];
+
+/// The intl locale for an app locale: `ar` formats as `ar_MA`, the `ar` data flutter_localizations loads with
+/// Western digits 0-9 (DESIGN.md: every locale) and the Moroccan months. Built once.
+String intlLocale(String locale) {
+  if (locale != 'ar') return locale;
+  const arMa = 'ar_MA';
+  if (!DateFormat.localeExists(arMa)) {
+    // Western digits: flutter_localizations' `ar` data writes Arabic-Indic ones (١٩:٠٠).
+    final symbols = DateFormat('d', 'ar').dateSymbols.serializeToMap()
+      ..['NAME'] = arMa
+      ..['ZERODIGIT'] = '0';
+    for (final key in ['MONTHS', 'STANDALONEMONTHS', 'SHORTMONTHS', 'STANDALONESHORTMONTHS']) {
+      symbols[key] = _moroccanMonths;
+    }
+    initializeDateFormattingCustom(
+      locale: arMa,
+      symbols: DateSymbols.deserializeFromMap(symbols),
+      patterns: dateTimePatternMap()['ar'],
+    );
+  }
+  return arMa;
+}
+
+/// "Sam. 14 nov." in FR, "السبت 14 نونبر" in AR.
 String venueDate(DateTime instant, String zone, String locale) =>
-    _capitalize(DateFormat('EEE d MMM', locale).format(venueTime(instant, zone)));
+    _capitalize(DateFormat('EEE d MMM', intlLocale(locale)).format(venueTime(instant, zone)));
 
 /// "20:00".
 String venueClock(DateTime instant, String zone, String locale) =>
-    DateFormat.Hm(locale).format(venueTime(instant, zone));
+    DateFormat.Hm(intlLocale(locale)).format(venueTime(instant, zone));
 
 /// "Sam. 21 févr. 12:00": a deadline.
 String venueWhen(DateTime instant, String zone, String locale) =>
@@ -20,7 +61,7 @@ String venueWhen(DateTime instant, String zone, String locale) =>
 /// Day of month and short month ("22", "NOV") for calendar rows.
 (String, String) venueDayMonth(DateTime instant, String zone, String locale) {
   final t = venueTime(instant, zone);
-  return ('${t.day}', DateFormat('MMM', locale).format(t).replaceAll('.', '').toUpperCase());
+  return ('${t.day}', DateFormat('MMM', intlLocale(locale)).format(t).replaceAll('.', '').toUpperCase());
 }
 
 String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);

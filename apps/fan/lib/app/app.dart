@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
@@ -70,7 +71,8 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
       debugShowCheckedModeBanner: false,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       theme: buildAppTheme(),
-      // FR first: an unsupported device locale resolves to FR.
+      // The Profil choice, else the device's; FR first, so an unsupported device locale resolves to FR.
+      locale: ref.watch(appLocaleProvider),
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       routerConfig: ref.watch(routerProvider),

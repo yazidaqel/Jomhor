@@ -55,6 +55,26 @@ flutter:
           weight: 500
         - asset: assets/fonts/Inter-SemiBold.ttf
           weight: 600
+    # Arabic (DESIGN.md Lot 4), from github.com/google/fonts (ofl/cairo, ofl/ibmplexsansarabic). Cairo ships as one
+    # variable font there; both weights point at it.
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Variable.ttf
+          weight: 700
+        - asset: assets/fonts/Cairo-Variable.ttf
+          weight: 800
+    - family: IBM Plex Sans Arabic
+      fonts:
+        - asset: assets/fonts/IBMPlexSansArabic-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexSansArabic-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexSansArabic-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/IBMPlexSansArabic-Bold.ttf
+          weight: 700
   assets:
     - assets/fonts/OFL-BarlowCondensed.txt
     - assets/fonts/OFL-Inter.txt
+    - assets/fonts/OFL-Cairo.txt
+    - assets/fonts/OFL-IBMPlexSansArabic.txt

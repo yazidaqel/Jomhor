@@ -22,82 +22,84 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navProfile => 'Profile';
 
   @override
-  String get back => 'Retour';
+  String get back => 'Back';
 
   @override
-  String get retry => 'Réessayer';
+  String get retry => 'Try again';
 
   @override
-  String get loginTitle => 'Connecte-toi';
+  String get loginTitle => 'Sign in';
 
   @override
-  String get loginPhoneIntro => 'Entre ton numéro de téléphone. On t\'envoie un code par SMS.';
+  String get loginPhoneIntro => 'Enter your phone number. We\'ll text you a code.';
 
   @override
-  String get loginPhoneLabel => 'Numéro de téléphone';
+  String get loginPhoneLabel => 'Phone number';
 
   @override
   String get loginPhoneHint => '06 12 34 56 78';
 
   @override
-  String get loginSendCode => 'Recevoir le code';
+  String get loginSendCode => 'Get the code';
 
   @override
   String loginCodeIntro(String phone) {
-    return 'Entre le code à 6 chiffres envoyé au $phone.';
+    return 'Enter the 6-digit code sent to $phone.';
   }
 
   @override
-  String get loginCodeLabel => 'Code à 6 chiffres';
+  String get loginCodeLabel => '6-digit code';
 
   @override
-  String get loginVerify => 'Valider';
+  String get loginVerify => 'Confirm';
 
   @override
-  String get loginChangePhone => 'Changer de numéro';
+  String get loginChangePhone => 'Change number';
 
   @override
-  String get loginResend => 'Renvoyer le code';
+  String get loginResend => 'Resend the code';
 
   @override
-  String get errorPhoneInvalid => 'Ce numéro ne semble pas marocain. Essaie par exemple 06 12 34 56 78.';
+  String errorPhoneInvalid(String example) {
+    return 'This doesn\'t look like a Moroccan number. Try $example, for example.';
+  }
 
   @override
-  String get errorOtpInvalid => 'Code incorrect. Vérifie-le et réessaie.';
+  String get errorOtpInvalid => 'Wrong code. Check it and try again.';
 
   @override
-  String get errorOtpExpired => 'Ce code a expiré. Demande un nouveau code.';
+  String get errorOtpExpired => 'This code has expired. Ask for a new one.';
 
   @override
-  String get errorOtpRateLimited => 'Trop de demandes pour ce numéro. Patiente un peu avant de réessayer.';
+  String get errorOtpRateLimited => 'Too many requests for this number. Wait a little before trying again.';
 
   @override
-  String get errorValidation => 'Vérifie les informations saisies.';
+  String get errorValidation => 'Check what you entered.';
 
   @override
-  String get errorNotFound => 'Introuvable. Il a peut-être été retiré.';
+  String get errorNotFound => 'Not found. It may have been removed.';
 
   @override
-  String get errorNetwork => 'Pas de connexion. Vérifie ton réseau et réessaie.';
+  String get errorNetwork => 'No connection. Check your network and try again.';
 
   @override
-  String get errorMissingOrganizer => 'Application mal configurée : aucun club défini (ORGANIZER_ID).';
+  String get errorMissingOrganizer => 'App misconfigured: no club set (ORGANIZER_ID).';
 
   @override
-  String get errorGeneric => 'Un problème est survenu. Réessaie dans un instant.';
+  String get errorGeneric => 'Something went wrong. Try again in a moment.';
 
   @override
-  String get heroLabelMatch => 'Prochain match · Domicile';
+  String get heroLabelMatch => 'Next match · Home';
 
   @override
-  String get heroLabelEvent => 'Prochain événement';
+  String get heroLabelEvent => 'Next event';
 
   @override
   String get versus => 'VS';
 
   @override
   String matchday(int n) {
-    return 'Journée $n';
+    return 'Matchday $n';
   }
 
   @override
@@ -111,80 +113,80 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get countdownDays => 'Jours';
+  String get countdownDays => 'Days';
 
   @override
-  String get countdownHours => 'Heures';
+  String get countdownHours => 'Hours';
 
   @override
   String get countdownMinutes => 'Min';
 
   @override
   String ctaBuyFrom(String price) {
-    return 'Prendre mes places · dès $price';
+    return 'Get my tickets · from $price';
   }
 
   @override
-  String get ctaBuy => 'Prendre mes places';
+  String get ctaBuy => 'Get my tickets';
 
   @override
   String saleOpensOn(String date, String time) {
-    return 'Vente le $date à $time';
+    return 'On sale $date at $time';
   }
 
   @override
-  String get saleOpening => 'Ouverture de la vente imminente';
+  String get saleOpening => 'Sale opening any moment';
 
   @override
-  String get soldOut => 'Complet';
+  String get soldOut => 'Sold out';
 
   @override
-  String get saleClosed => 'Vente terminée';
+  String get saleClosed => 'Sale over';
 
   @override
-  String get calendar => 'Calendrier';
+  String get calendar => 'Fixtures';
 
   @override
   String chipFrom(String price) {
-    return 'dès $price';
+    return 'from $price';
   }
 
   @override
-  String get chipSoon => 'Bientôt';
+  String get chipSoon => 'Soon';
 
   @override
-  String get homeEmpty => 'Pas de match à venir pour l\'instant. Reviens bientôt.';
+  String get homeEmpty => 'No upcoming match for now. Check back soon.';
 
   @override
   String rulesOpen(int limit) {
-    String _temp0 = intl.Intl.pluralLogic(limit, locale: localeName, other: '$limit billets', one: '1 billet');
-    return 'Vente ouverte · limite $_temp0 par compte · billets nominatifs';
+    String _temp0 = intl.Intl.pluralLogic(limit, locale: localeName, other: '$limit tickets', one: '1 ticket');
+    return 'On sale · $_temp0 per account · named tickets';
   }
 
   @override
   String rulesNotStarted(String date, String time, int limit) {
-    String _temp0 = intl.Intl.pluralLogic(limit, locale: localeName, other: '$limit billets', one: '1 billet');
-    return 'Vente le $date à $time · limite $_temp0 par compte · billets nominatifs';
+    String _temp0 = intl.Intl.pluralLogic(limit, locale: localeName, other: '$limit tickets', one: '1 ticket');
+    return 'On sale $date at $time · $_temp0 per account · named tickets';
   }
 
   @override
-  String get rulesSoldOut => 'Complet · toutes les places sont vendues';
+  String get rulesSoldOut => 'Sold out · every seat is gone';
 
   @override
-  String get rulesClosed => 'Vente terminée pour cet événement';
+  String get rulesClosed => 'Sale over for this event';
 
   @override
-  String get zonesTitle => 'Tarifs par zone';
+  String get zonesTitle => 'Prices by zone';
 
   @override
-  String get zoneSeated => 'Places assises';
+  String get zoneSeated => 'Seated';
 
   @override
-  String get zoneStanding => 'Debout';
+  String get zoneStanding => 'Standing';
 
   @override
   String zoneGates(int count, String codes) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes $codes', one: 'Porte $codes');
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Gates $codes', one: 'Gate $codes');
     return '$_temp0';
   }
 
@@ -193,21 +195,21 @@ class AppLocalizationsEn extends AppLocalizations {
     final intl.NumberFormat countNumberFormat = intl.NumberFormat.decimalPattern(localeName);
     final String countString = countNumberFormat.format(count);
 
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$countString restants', one: '1 restant');
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$countString left', one: '1 left');
     return '$_temp0';
   }
 
   @override
-  String get zoneLastSeats => 'Dernières places';
+  String get zoneLastSeats => 'Last seats';
 
   @override
-  String get paymentHint => 'Paiement par carte bancaire. Billet dans l\'app et sur WhatsApp.';
+  String get paymentHint => 'Pay by card. Ticket in the app and on WhatsApp.';
 
   @override
-  String get footerFrom => 'À partir de';
+  String get footerFrom => 'From';
 
   @override
-  String get chooseZone => 'Choisir ma zone';
+  String get chooseZone => 'Choose my zone';
 
   @override
   String zonesSubtitle(String event, String date) {
@@ -215,40 +217,40 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get pickZoneHint => 'Touche une zone pour choisir tes places.';
+  String get pickZoneHint => 'Tap a zone to pick your seats.';
 
   @override
-  String get pickedZone => 'Zone choisie';
+  String get pickedZone => 'Your zone';
 
   @override
   String placesMax(int max) {
-    return 'Billets · max $max';
+    return 'Tickets · max $max';
   }
 
   @override
-  String get fewerPlaces => 'Un billet de moins';
+  String get fewerPlaces => 'One ticket less';
 
   @override
-  String get morePlaces => 'Un billet de plus';
+  String get morePlaces => 'One more ticket';
 
   @override
-  String get groupHint => 'Les places d\'un même achat sont côte à côte. Chaque ami reçoit son propre QR.';
+  String get groupHint => 'Seats bought together are side by side. Each friend gets their own QR.';
 
   @override
   String get total => 'Total';
 
   @override
-  String get continueCta => 'Continuer';
+  String get continueCta => 'Continue';
 
   @override
-  String get allSoldOut => 'Complet · toutes les zones sont vendues';
+  String get allSoldOut => 'Sold out · every zone is gone';
 
   @override
-  String get payTitle => 'Paiement';
+  String get payTitle => 'Payment';
 
   @override
   String holdLeft(String time) {
-    return 'Places réservées · $time';
+    return 'Seats held · $time';
   }
 
   @override
@@ -257,301 +259,296 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get serviceFee => 'Frais de service';
+  String get serviceFee => 'Service fee';
 
   @override
-  String get holdersTitle => 'Billets nominatifs';
+  String get holdersTitle => 'Named tickets';
 
   @override
-  String get holderMe => 'Billet 1 · Moi';
+  String get holderMe => 'Ticket 1 · Me';
 
   @override
   String holderN(int n) {
-    return 'Billet $n';
+    return 'Ticket $n';
   }
 
   @override
-  String get holderNameLabel => 'Prénom et nom';
+  String get holderNameLabel => 'First and last name';
 
   @override
-  String get holderNameError => 'Prénom et nom en lettres latines, de 2 à 60 caractères.';
+  String get holderNameError => 'First and last name in Latin or Arabic letters, not both, 2 to 60 characters.';
 
   @override
-  String get holderPhoneLabel => 'WhatsApp de ton ami (facultatif)';
+  String get holderPhoneLabel => 'Your friend\'s WhatsApp (optional)';
 
   @override
   String get holderPhoneHelp =>
-      'Il reçoit son billet sur WhatsApp et dans l\'app. Sans numéro, le billet reste chez toi.';
+      'They get their ticket on WhatsApp and in the app. Without a number, the ticket stays with you.';
 
   @override
-  String get holderPhoneError => 'Numéro marocain invalide. Essaie 06 12 34 56 78.';
+  String holderPhoneError(String example) {
+    return 'Invalid Moroccan number. Try $example.';
+  }
 
   @override
-  String get methodTitle => 'Moyen de paiement';
+  String get methodTitle => 'Payment method';
 
   @override
-  String get methodCard => 'Carte bancaire';
+  String get methodCard => 'Bank card';
 
   @override
   String get methodCardHint => 'Visa, Mastercard · 3D Secure';
 
   @override
-  String get instant => 'Instantané';
+  String get instant => 'Instant';
 
   @override
   String payCta(String total) {
-    return 'Payer $total';
+    return 'Pay $total';
   }
 
   @override
-  String get payCaption => 'Billets envoyés dans l\'app et sur WhatsApp';
+  String get payCaption => 'Tickets sent in the app and on WhatsApp';
 
   @override
-  String get friendsConsent => 'Je confirme que ces personnes acceptent de recevoir leur billet sur WhatsApp';
+  String get friendsConsent => 'I confirm these people agree to get their ticket on WhatsApp';
 
   @override
-  String get friendsConsentMissing => 'Coche la case pour confirmer que tes amis sont d\'accord.';
+  String get friendsConsentMissing => 'Tick the box to confirm your friends agree.';
 
   @override
-  String get checkPayment => 'Voir l\'état du paiement';
+  String get checkPayment => 'Check the payment status';
 
   @override
   String busyRetry(int s) {
-    return 'Beaucoup de monde en ce moment · nouvel essai dans $s s';
+    return 'Lots of fans right now · trying again in $s s';
   }
 
   @override
-  String get expiredTitle => 'Réservation expirée';
+  String get expiredTitle => 'Reservation expired';
 
   @override
-  String get expiredBody => 'Tes places ont été libérées. Choisis-les à nouveau.';
+  String get expiredBody => 'Your seats were released. Pick them again.';
 
   @override
-  String get expiredCta => 'Choisir à nouveau';
+  String get expiredCta => 'Pick again';
 
   @override
-  String get cardPageTitle => 'Paiement sécurisé';
+  String get cardPageTitle => 'Secure payment';
 
   @override
-  String get methodWallet => 'Wallet mobile';
+  String get methodWallet => 'Mobile wallet';
 
   @override
-  String get methodWalletHint => 'Paiement depuis ton wallet';
+  String get methodWalletHint => 'Pay from your wallet';
 
   @override
-  String get methodCash => 'Cash en agence';
+  String get methodCash => 'Cash at an agency';
 
   @override
-  String get methodCashHint => 'Un code à payer au guichet du club ou en agence';
+  String get methodCashHint => 'A code to pay at the club\'s ticket office or at an agency';
 
   @override
   String methodCashBefore(String deadline) {
-    return 'Avant $deadline';
+    return 'Before $deadline';
   }
 
   @override
-  String get methodCashTooLate => 'Trop tard pour le cash';
+  String get methodCashTooLate => 'Too late for cash';
 
   @override
   String payWalletCta(String total) {
-    return 'Payer $total par wallet';
+    return 'Pay $total by wallet';
   }
 
   @override
-  String get payCashCta => 'Obtenir mon code cash';
+  String get payCashCta => 'Get my cash code';
 
   @override
-  String get errorCashTooLate =>
-      'Trop tard pour payer en cash : la vente ferme bientôt. Choisis un autre moyen de paiement.';
+  String get errorCashTooLate => 'Too late to pay cash: the sale closes soon. Choose another payment method.';
 
   @override
-  String get errorCashCap =>
-      'Le paiement cash n\'est plus possible pour cet événement pour le moment. Choisis un autre moyen de paiement.';
+  String get errorCashCap => 'Cash payment isn\'t available for this event right now. Choose another payment method.';
 
   @override
-  String get errorMethodNotConfigured => 'Ce moyen de paiement n\'est pas disponible. Choisis-en un autre.';
+  String get errorMethodNotConfigured => 'This payment method isn\'t available. Choose another one.';
 
   @override
-  String get cashTitle => 'Ton code de paiement cash';
+  String get cashTitle => 'Your cash payment code';
 
   @override
   String cashHoldBanner(String deadline) {
-    return 'Places réservées · paie avant $deadline';
+    return 'Seats held · pay before $deadline';
   }
 
   @override
-  String get cashCodeLabel => 'Code à présenter';
+  String get cashCodeLabel => 'Code to show';
 
   @override
   String cashExactAmount(String amount) {
-    return 'Montant exact à régler : $amount';
+    return 'Exact amount to pay: $amount';
   }
 
   @override
-  String get cashCopy => 'Copier le code';
+  String get cashCopy => 'Copy the code';
 
   @override
-  String get cashCopied => 'Code copié';
+  String get cashCopied => 'Code copied';
 
   @override
-  String get cashTimeLeft => 'Temps restant';
+  String get cashTimeLeft => 'Time left';
 
   @override
-  String get cashWhereTitle => 'Où payer';
+  String get cashWhereTitle => 'Where to pay';
 
   @override
   String cashNetworks(String names) {
-    return 'En agence : $names';
+    return 'At an agency: $names';
   }
 
   @override
-  String get cashStepsTitle => 'Comment ça marche';
+  String get cashStepsTitle => 'How it works';
 
   @override
-  String get cashStep1Title => 'Va au guichet ou en agence';
+  String get cashStep1Title => 'Go to the ticket office or an agency';
 
   @override
-  String get cashStep2Title => 'Donne le code et le montant exact';
+  String get cashStep2Title => 'Give the code and the exact amount';
 
   @override
-  String get cashStep3Title => 'Tes billets arrivent';
+  String get cashStep3Title => 'Your tickets arrive';
 
   @override
-  String get cashStep3Body => 'Dans l\'app et sur WhatsApp, dès que le paiement est enregistré.';
+  String get cashStep3Body => 'In the app and on WhatsApp, as soon as the payment is recorded.';
 
   @override
-  String get cashPayNowTitle => 'Tu préfères payer maintenant ?';
+  String get cashPayNowTitle => 'Rather pay now?';
 
   @override
-  String get cashPayByCard => 'Payer par carte';
+  String get cashPayByCard => 'Pay by card';
 
   @override
-  String get cashPayByWallet => 'Payer par wallet';
+  String get cashPayByWallet => 'Pay by wallet';
 
   @override
-  String get cashHostedPending =>
-      'Un paiement par carte ou wallet est en cours de confirmation. Ton code reste valable en attendant.';
+  String get cashHostedPending => 'A card or wallet payment is being confirmed. Your code stays valid meanwhile.';
 
   @override
-  String get cashStatus => 'En attente de paiement · cette page se met à jour toute seule.';
+  String get cashStatus => 'Waiting for payment · this page updates by itself.';
 
   @override
-  String get cashExpiredTitle => 'Code expiré · places libérées';
+  String get cashExpiredTitle => 'Code expired · seats released';
 
   @override
-  String get cashExpiredBody =>
-      'Le délai pour payer ce code est passé. Tu peux refaire une commande s\'il reste des places.';
+  String get cashExpiredBody => 'The time to pay this code has passed. You can order again if seats are left.';
 
   @override
-  String get backToEvent => 'Retour à l\'événement';
+  String get backToEvent => 'Back to the event';
 
   @override
-  String get orderPending => 'Paiement en cours de confirmation.';
+  String get orderPending => 'Payment being confirmed.';
 
   @override
-  String get orderPendingHint =>
-      'Ça prend quelques secondes. Ne paie pas une deuxième fois : la banque peut confirmer un peu plus tard.';
+  String get orderPendingHint => 'It takes a few seconds. Don\'t pay twice: the bank may confirm a little later.';
 
   @override
-  String get orderPaymentFailed =>
-      'Ton paiement n\'a pas abouti. Tu peux réessayer tant que tes places sont réservées.';
+  String get orderPaymentFailed => 'Your payment didn\'t go through. You can try again while your seats are held.';
 
   @override
-  String get orderAwaitingPayment => 'Commande en attente de paiement.';
+  String get orderAwaitingPayment => 'Order waiting for payment.';
 
   @override
-  String get orderNotPaidYet =>
-      'Aucun paiement n\'a encore été fait pour cette commande. Tu peux payer tant que tes places sont réservées.';
+  String get orderNotPaidYet => 'No payment has been made for this order yet. You can pay while your seats are held.';
 
   @override
   String get orderPayAgainCaution =>
-      'Toujours pas de confirmation. Réessaie seulement si ta carte a été refusée et que rien n\'a été débité.';
+      'Still no confirmation. Only try again if your card was declined and nothing was charged.';
 
   @override
-  String get payAgain => 'Payer à nouveau';
+  String get payAgain => 'Pay again';
 
   @override
-  String get orderPaidTitle => 'C\'est validé !';
+  String get orderPaidTitle => 'You\'re in!';
 
   @override
-  String get orderPaidBody => 'Tes billets sont dans l\'onglet Billets. Tes amis reçoivent les leurs sur WhatsApp.';
+  String get orderPaidBody => 'Your tickets are in the Tickets tab. Your friends get theirs on WhatsApp.';
 
   @override
-  String get seeTickets => 'Voir mes billets';
+  String get seeTickets => 'See my tickets';
 
   @override
-  String get orderExpired => 'Cette réservation a expiré.';
+  String get orderExpired => 'This reservation has expired.';
 
   @override
-  String get backHome => 'Retour à l\'accueil';
+  String get backHome => 'Back to home';
 
   @override
-  String get errorNotStarted => 'La vente n\'a pas encore commencé.';
+  String get errorNotStarted => 'The sale hasn\'t started yet.';
 
   @override
-  String get errorSaleClosed => 'La vente est terminée pour cet événement.';
+  String get errorSaleClosed => 'The sale is over for this event.';
 
   @override
-  String get errorNotOnSale => 'Cet événement n\'est pas en vente.';
+  String get errorNotOnSale => 'This event isn\'t on sale.';
 
   @override
-  String get errorSoldOut => 'Plus de places dans ce tarif. Choisis une autre zone.';
+  String get errorSoldOut => 'No seats left at this price. Choose another zone.';
 
   @override
   String errorPerAccountLimit(int limit, int held) {
-    return 'Limite atteinte : $limit billets par compte pour cet événement, tu en as déjà $held.';
+    return 'Limit reached: $limit tickets per account for this event, you already have $held.';
   }
 
   @override
-  String get errorOrderExpired => 'Ta réservation a expiré. Choisis à nouveau tes places.';
+  String get errorOrderExpired => 'Your reservation expired. Pick your seats again.';
 
   @override
-  String get errorOrderNotPayable => 'Cette commande ne peut plus être payée.';
+  String get errorOrderNotPayable => 'This order can no longer be paid.';
 
   @override
-  String get close => 'Fermer';
+  String get close => 'Close';
 
   @override
-  String get ticketsTitle => 'Mes billets';
+  String get ticketsTitle => 'My tickets';
 
   @override
-  String get ticketsUpcoming => 'À venir';
+  String get ticketsUpcoming => 'Upcoming';
 
   @override
-  String get ticketsPast => 'Passés';
+  String get ticketsPast => 'Past';
 
   @override
-  String get ticketsEmpty => 'Aucun billet pour l\'instant. Tes billets arrivent ici dès que le paiement est confirmé.';
+  String get ticketsEmpty => 'No tickets yet. Your tickets land here as soon as the payment is confirmed.';
 
   @override
-  String get ticketsBrowse => 'Voir les matchs';
+  String get ticketsBrowse => 'See the matches';
 
   @override
-  String get ticketsOffline => 'Hors ligne · billets enregistrés sur ton téléphone';
+  String get ticketsOffline => 'Offline · tickets saved on your phone';
 
   @override
   String ticketRowFacts(String zone, String ticketNo) {
-    return '$zone · N° $ticketNo';
+    return '$zone · No. $ticketNo';
   }
 
   @override
-  String get ticketMatchday => 'Mode jour de match';
+  String get ticketMatchday => 'Matchday mode';
 
   @override
-  String get ticketBrightness => 'Luminosité au maximum';
+  String get ticketBrightness => 'Brightness at maximum';
 
   @override
   String get ticketZone => 'Zone';
 
   @override
   String ticketGates(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes', one: 'Porte');
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Gates', one: 'Gate');
     return '$_temp0';
   }
 
   @override
   String ticketGatesList(int count, String codes) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes $codes', one: 'Porte $codes');
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Gates $codes', one: 'Gate $codes');
     return '$_temp0';
   }
 
@@ -559,85 +556,85 @@ class AppLocalizationsEn extends AppLocalizations {
   String get listSeparator => ', ';
 
   @override
-  String get ticketKickoff => 'Coup d\'envoi';
+  String get ticketKickoff => 'Kick-off';
 
   @override
-  String get ticketStart => 'Début';
+  String get ticketStart => 'Start';
 
   @override
-  String get ticketHolder => 'Titulaire';
+  String get ticketHolder => 'Holder';
 
   @override
-  String get ticketNumber => 'N° billet';
+  String get ticketNumber => 'Ticket no.';
 
   @override
-  String get ticketSeat => 'Place';
+  String get ticketSeat => 'Seat';
 
   @override
   String ticketNextCode(int s) {
-    return 'Nouveau code dans $s s';
+    return 'New code in $s s';
   }
 
   @override
-  String get ticketWorksOffline => 'Fonctionne sans réseau';
+  String get ticketWorksOffline => 'Works without network';
 
   @override
   String ticketQrLabel(String ticketNo) {
-    return 'Code QR du billet $ticketNo';
+    return 'QR code of ticket $ticketNo';
   }
 
   @override
-  String get ticketClosed => 'Événement terminé';
+  String get ticketClosed => 'Event over';
 
   @override
-  String get ticketCancelled => 'Billet annulé';
+  String get ticketCancelled => 'Ticket cancelled';
 
   @override
-  String get ticketRefunded => 'Billet remboursé';
+  String get ticketRefunded => 'Ticket refunded';
 
   @override
-  String get ticketBlocked => 'Billet bloqué. Contacte le club.';
+  String get ticketBlocked => 'Ticket blocked. Contact the club.';
 
   @override
-  String get ticketNotValid => 'Billet non valide';
+  String get ticketNotValid => 'Ticket not valid';
 
   @override
-  String get ticketNotFound => 'Ce billet n\'est pas sur ton téléphone.';
+  String get ticketNotFound => 'This ticket isn\'t on your phone.';
 
   @override
   String get ticketWhatsApp => 'WhatsApp';
 
   @override
-  String get ticketWhatsAppHint => 'Reçois à nouveau le PDF de ce billet sur WhatsApp';
+  String get ticketWhatsAppHint => 'Get this ticket\'s PDF again on WhatsApp';
 
   @override
-  String get ticketWhatsAppSent => 'Billet renvoyé sur WhatsApp';
+  String get ticketWhatsAppSent => 'Ticket sent again on WhatsApp';
 
   @override
-  String get ticketWhatsAppRateLimited => 'Ce billet a déjà été renvoyé 3 fois aujourd\'hui. Réessaie demain.';
+  String get ticketWhatsAppRateLimited => 'This ticket was already sent again 3 times today. Try again tomorrow.';
 
   @override
-  String get ticketWhatsAppNotValid => 'Ce billet n\'est plus valide : il ne peut pas être renvoyé.';
+  String get ticketWhatsAppNotValid => 'This ticket is no longer valid: it can\'t be sent again.';
 
   @override
-  String get ticketWhatsAppFailed => 'Ce billet ne peut pas être renvoyé pour le moment. Réessaie plus tard.';
+  String get ticketWhatsAppFailed => 'This ticket can\'t be sent again right now. Try again later.';
 
   @override
-  String get homeCashTitle => 'Commande en attente de paiement';
+  String get homeCashTitle => 'Order waiting for payment';
 
   @override
   String homeCashDeadline(String deadline) {
-    return 'Code cash à payer avant $deadline';
+    return 'Cash code to pay before $deadline';
   }
 
   @override
   String myTicketTitle(String what, String date) {
-    return 'Mon billet · $what, $date';
+    return 'My ticket · $what, $date';
   }
 
   @override
   String myTicketStarted(String time) {
-    return 'a commencé à $time';
+    return 'started at $time';
   }
 
   @override
@@ -645,33 +642,33 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'dans $days jours',
-      one: 'demain à $time',
-      zero: 'aujourd\'hui à $time',
+      other: 'in $days days',
+      one: 'tomorrow at $time',
+      zero: 'today at $time',
     );
     return '$_temp0';
   }
 
   @override
-  String get cancel => 'Annuler';
+  String get cancel => 'Cancel';
 
   @override
-  String get save => 'Enregistrer';
+  String get save => 'Save';
 
   @override
-  String get profileName => 'Nom';
+  String get profileName => 'Name';
 
   @override
-  String get profileNameEmpty => 'Ajoute ton prénom et ton nom';
+  String get profileNameEmpty => 'Add your first and last name';
 
   @override
-  String get profileEditName => 'Modifier le nom';
+  String get profileEditName => 'Edit the name';
 
   @override
-  String get profilePhone => 'Téléphone';
+  String get profilePhone => 'Phone';
 
   @override
-  String get profileLanguage => 'Langue';
+  String get profileLanguage => 'Language';
 
   @override
   String get languageFr => 'Français';
@@ -683,51 +680,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageEn => 'English';
 
   @override
-  String get profileLogout => 'Se déconnecter';
+  String get profileLogout => 'Sign out';
 
   @override
-  String get profileLogoutAll => 'Se déconnecter de tous mes appareils';
+  String get profileLogoutAll => 'Sign out of all my devices';
 
   @override
-  String get profileLogoutBody => 'Tes billets seront retirés de ce téléphone. Reconnecte-toi pour les retrouver.';
+  String get profileLogoutBody => 'Your tickets will be removed from this phone. Sign in again to get them back.';
 
   @override
   String get profileLogoutAllBody =>
-      'Ton compte sera déconnecté sur ce téléphone et sur tous tes autres appareils. Tes billets seront retirés de ce téléphone.';
+      'Your account will be signed out on this phone and on all your other devices. Your tickets will be removed from this phone.';
 
   @override
-  String get profileLogoutConfirm => 'Me déconnecter';
+  String get profileLogoutConfirm => 'Sign me out';
 
   @override
   String get profileLogoutAllFailed =>
-      'Ce téléphone est déconnecté, mais tes autres appareils n\'ont pas pu l\'être (pas de réseau). Reconnecte-toi et réessaie.';
+      'This phone is signed out, but your other devices couldn\'t be (no network). Sign in again and retry.';
 
   @override
-  String get loading => 'Chargement';
+  String get loading => 'Loading';
 
   @override
   String homeGreeting(String name) {
-    return 'Salut $name';
+    return 'Hi $name';
   }
 
   @override
-  String get homeGreetingNoName => 'Salut';
+  String get homeGreetingNoName => 'Hi';
 
   @override
-  String get homeGreetingGuest => 'Bienvenue';
+  String get homeGreetingGuest => 'Welcome';
 
   @override
-  String get homeEmptyTitle => 'Rien au programme';
+  String get homeEmptyTitle => 'Nothing scheduled';
 
   @override
-  String get homeOpenProfile => 'Mon profil';
+  String get homeOpenProfile => 'My profile';
 
   @override
-  String get ticketsEmptyTitle => 'Pas encore de billet';
+  String get ticketsEmptyTitle => 'No ticket yet';
 
   @override
-  String get ticketOpen => 'Ouvrir le billet';
+  String get ticketOpen => 'Open the ticket';
 
   @override
-  String get poweredBy => 'Propulsé par Jomhor';
+  String get poweredBy => 'Powered by Jomhor';
 }

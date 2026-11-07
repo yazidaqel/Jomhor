@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
@@ -46,7 +47,7 @@ class SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsetsDirectional.only(start: JomhorSpace.xs, bottom: JomhorSpace.s),
-    child: Text(text.toUpperCase(), style: JomhorType.label.copyWith(color: color)),
+    child: Text(text.toUpperCase(), style: JomhorType.label.copyWith(color: color).tracked(context)),
   );
 }
 
@@ -74,7 +75,10 @@ class DateBadge extends StatelessWidget {
     child: Column(
       children: [
         Text(day, style: JomhorType.number.copyWith(color: highlight ? JomhorColors.accent : JomhorColors.text)),
-        Text(month, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, letterSpacing: 1)),
+        Text(
+          month,
+          style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, letterSpacing: 1).tracked(context),
+        ),
       ],
     ),
   );
@@ -186,7 +190,7 @@ class CountdownTile extends StatelessWidget {
           label.toUpperCase(),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, letterSpacing: 1),
+          style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, letterSpacing: 1).tracked(context),
         ),
       ],
     ),

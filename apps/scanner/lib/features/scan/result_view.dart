@@ -69,6 +69,10 @@ String? resultReason(AppLocalizations l, ScanOutcome o) {
   };
 }
 
+/// Holder initials in a first-strong bidi isolate (docs/04-api.md §Holder names): Arabic initials ("ي. ع.") read
+/// right to left in an FR layout and Latin ones ("Y. A.") left to right in an AR one, dots included.
+String isolateName(String s) => '\u2068$s\u2069';
+
 /// DESIGN screen 6 result: full-bleed colour, 120 px circle icon, display 72 word, 2x2 facts at 14 % white,
 /// "Validé hors ligne en {ms} ms · {time}", and "Scanner le suivant" pinned at the bottom. White ink, dark on
 /// amber. [outcome] null = the scan could not be written.
@@ -103,7 +107,7 @@ class ResultView extends StatelessWidget {
     final v = o?.verdict;
     final facts = [
       if (o?.zoneName case final zone?) (l.factZone, zone),
-      if (v?.initials case final initials? when initials.isNotEmpty) (l.factHolder, initials),
+      if (v?.initials case final initials? when initials.isNotEmpty) (l.factHolder, isolateName(initials)),
       if (v?.ticketNo case final no?) (l.factTicketNo, '${no.substring(0, 4)} ${no.substring(4)}'),
       if (v?.tokenVersion case final version?)
         (l.factType, version == versionRotating ? l.tokenRotating : l.tokenStatic),

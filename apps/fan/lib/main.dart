@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/app/app.dart';
 import 'package:jomhor_fan/app/config.dart';
+import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,17 +16,28 @@ Future<void> main() async {
   tzdata.initializeTimeZones();
   // The bundled fonts' SIL OFL notices, in the OS licence page.
   LicenseRegistry.addLicense(() async* {
-    for (final (family, file) in [('Barlow Condensed', 'BarlowCondensed'), ('Inter', 'Inter')]) {
+    for (final (family, file) in [
+      ('Barlow Condensed', 'BarlowCondensed'),
+      ('Inter', 'Inter'),
+      ('Cairo', 'Cairo'),
+      ('IBM Plex Sans Arabic', 'IBMPlexSansArabic'),
+    ]) {
       yield LicenseEntryWithLineBreaks([family], await rootBundle.loadString('assets/fonts/OFL-$file.txt'));
     }
   });
   final tokens = SecureTokenStore();
-  final signedIn = await startSession(tokens, SharedPreferencesAsync());
+  final prefs = SharedPreferencesAsync();
+  final signedIn = await startSession(tokens, prefs);
+  final locale = await savedLocale(prefs);
   runApp(
     ProviderScope(
       // No automatic retry: screens show the error and a "Réessayer" button.
       retry: (_, _) => null,
-      overrides: [tokenStoreProvider.overrideWithValue(tokens), initialSignedInProvider.overrideWithValue(signedIn)],
+      overrides: [
+        tokenStoreProvider.overrideWithValue(tokens),
+        initialSignedInProvider.overrideWithValue(signedIn),
+        initialLocaleProvider.overrideWithValue(locale),
+      ],
       child: const JomhorApp(),
     ),
   );

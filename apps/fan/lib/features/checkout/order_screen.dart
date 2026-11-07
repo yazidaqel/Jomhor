@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
-import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/features/checkout/cash_order.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
 /// After the card page (or the `jomhor-fan://orders/{id}` deep link): waits for PAID, then the
@@ -97,7 +97,7 @@ class _OrderState extends ConsumerWidget {
           OutlinedButton(
             key: const Key('order.payAgain'),
             onPressed: rePay.inFlight ? null : () => startHostedPayment(context, ref, order.id, PayMethod.card),
-            child: Text(again == PayAgain.notStarted ? l.payCta(formatDh(order.totalMad)) : l.payAgain),
+            child: Text(again == PayAgain.notStarted ? l.payCta(l.dh(order.totalMad)) : l.payAgain),
           ),
         ],
       ],

@@ -13,6 +13,7 @@ import 'package:jomhor_fan/features/profile/profile_controller.dart';
 import 'package:jomhor_fan/features/tickets/my_ticket_strip.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
@@ -51,7 +52,7 @@ class HomeScreen extends ConsumerWidget {
               child: Text(
                 switch ((ref.watch(sessionProvider), firstName(name))) {
                   (false, _) => l.homeGreetingGuest,
-                  (true, final first?) => l.homeGreeting(first),
+                  (true, final first?) => l.homeGreeting(l.isolate(first)),
                   (true, null) => l.homeGreetingNoName,
                 },
                 key: const Key('home.greeting'),
@@ -215,7 +216,7 @@ class _Hero extends StatelessWidget {
               children: [
                 Text(
                   (football ? l.heroLabelMatch : l.heroLabelEvent).toUpperCase(),
-                  style: JomhorType.label.copyWith(color: JomhorColors.accent),
+                  style: JomhorType.label.copyWith(color: JomhorColors.accent).tracked(context),
                 ),
                 const SizedBox(height: JomhorSpace.l),
                 if (e.facts case FootballFacts(:final opponent?))

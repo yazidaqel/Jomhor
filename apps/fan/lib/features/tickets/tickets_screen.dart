@@ -9,6 +9,7 @@ import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
@@ -116,7 +117,7 @@ class _TicketRow extends StatelessWidget {
                   Text(e.title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
-                    l.ticketRowFacts(t.zone.name, t.ticketNo),
+                    l.ticketRowFacts(t.zone.name, l.ltr(t.ticketNo)),
                     style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
                   ),
                   if (!t.hasQr) ...[

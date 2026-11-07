@@ -10,94 +10,96 @@ class AppLocalizationsAr extends AppLocalizations {
   AppLocalizationsAr([String locale = 'ar']) : super(locale);
 
   @override
-  String get appTitle => 'Jomhor';
+  String get appTitle => 'جمهور';
 
   @override
   String get navHome => 'الرئيسية';
 
   @override
-  String get navTickets => 'التذاكر';
+  String get navTickets => 'تذاكري';
 
   @override
-  String get navProfile => 'الملف الشخصي';
+  String get navProfile => 'حسابي';
 
   @override
-  String get back => 'Retour';
+  String get back => 'رجوع';
 
   @override
-  String get retry => 'Réessayer';
+  String get retry => 'عاود جرب';
 
   @override
-  String get loginTitle => 'Connecte-toi';
+  String get loginTitle => 'دخل لحسابك';
 
   @override
-  String get loginPhoneIntro => 'Entre ton numéro de téléphone. On t\'envoie un code par SMS.';
+  String get loginPhoneIntro => 'دخل نمرة التيليفون ديالك. غادي نصيفطو ليك كود فـ SMS.';
 
   @override
-  String get loginPhoneLabel => 'Numéro de téléphone';
+  String get loginPhoneLabel => 'نمرة التيليفون';
 
   @override
   String get loginPhoneHint => '06 12 34 56 78';
 
   @override
-  String get loginSendCode => 'Recevoir le code';
+  String get loginSendCode => 'صيفط ليا الكود';
 
   @override
   String loginCodeIntro(String phone) {
-    return 'Entre le code à 6 chiffres envoyé au $phone.';
+    return 'دخل الكود ديال 6 أرقام اللي وصلك على $phone.';
   }
 
   @override
-  String get loginCodeLabel => 'Code à 6 chiffres';
+  String get loginCodeLabel => 'الكود ديال 6 أرقام';
 
   @override
-  String get loginVerify => 'Valider';
+  String get loginVerify => 'أكد';
 
   @override
-  String get loginChangePhone => 'Changer de numéro';
+  String get loginChangePhone => 'بدل النمرة';
 
   @override
-  String get loginResend => 'Renvoyer le code';
+  String get loginResend => 'عاود صيفط الكود';
 
   @override
-  String get errorPhoneInvalid => 'Ce numéro ne semble pas marocain. Essaie par exemple 06 12 34 56 78.';
+  String errorPhoneInvalid(String example) {
+    return 'هاد النمرة ما بايناش مغربية. جرب مثلا $example.';
+  }
 
   @override
-  String get errorOtpInvalid => 'Code incorrect. Vérifie-le et réessaie.';
+  String get errorOtpInvalid => 'الكود غالط. شوفو مزيان وعاود جرب.';
 
   @override
-  String get errorOtpExpired => 'Ce code a expiré. Demande un nouveau code.';
+  String get errorOtpExpired => 'هاد الكود سالا. طلب كود جديد.';
 
   @override
-  String get errorOtpRateLimited => 'Trop de demandes pour ce numéro. Patiente un peu avant de réessayer.';
+  String get errorOtpRateLimited => 'بزاف ديال الطلبات على هاد النمرة. تسنى شوية عاد عاود جرب.';
 
   @override
-  String get errorValidation => 'Vérifie les informations saisies.';
+  String get errorValidation => 'راجع المعلومات اللي دخلتي.';
 
   @override
-  String get errorNotFound => 'Introuvable. Il a peut-être été retiré.';
+  String get errorNotFound => 'ما لقيناهش. يمكن تحيد.';
 
   @override
-  String get errorNetwork => 'Pas de connexion. Vérifie ton réseau et réessaie.';
+  String get errorNetwork => 'ما كاينش الأنترنيت. شوف الريزو ديالك وعاود جرب.';
 
   @override
-  String get errorMissingOrganizer => 'Application mal configurée : aucun club défini (ORGANIZER_ID).';
+  String get errorMissingOrganizer => 'التطبيق ما مضبوطش: ما كاين حتى فريق (ORGANIZER_ID).';
 
   @override
-  String get errorGeneric => 'Un problème est survenu. Réessaie dans un instant.';
+  String get errorGeneric => 'وقع شي مشكل. عاود جرب من دابا شوية.';
 
   @override
-  String get heroLabelMatch => 'Prochain match · Domicile';
+  String get heroLabelMatch => 'الماتش الجاي · فدارنا';
 
   @override
-  String get heroLabelEvent => 'Prochain événement';
+  String get heroLabelEvent => 'الحدث الجاي';
 
   @override
-  String get versus => 'VS';
+  String get versus => 'ضد';
 
   @override
   String matchday(int n) {
-    return 'Journée $n';
+    return 'الدورة $n';
   }
 
   @override
@@ -111,80 +113,94 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get countdownDays => 'Jours';
+  String get countdownDays => 'أيام';
 
   @override
-  String get countdownHours => 'Heures';
+  String get countdownHours => 'ساعات';
 
   @override
-  String get countdownMinutes => 'Min';
+  String get countdownMinutes => 'دقايق';
 
   @override
   String ctaBuyFrom(String price) {
-    return 'Prendre mes places · dès $price';
+    return 'شري بلايصك · من $price';
   }
 
   @override
-  String get ctaBuy => 'Prendre mes places';
+  String get ctaBuy => 'شري بلايصك';
 
   @override
   String saleOpensOn(String date, String time) {
-    return 'Vente le $date à $time';
+    return 'البيع نهار $date مع $time';
   }
 
   @override
-  String get saleOpening => 'Ouverture de la vente imminente';
+  String get saleOpening => 'البيع غادي يتحل دابا';
 
   @override
-  String get soldOut => 'Complet';
+  String get soldOut => 'كومبلي';
 
   @override
-  String get saleClosed => 'Vente terminée';
+  String get saleClosed => 'سالا البيع';
 
   @override
-  String get calendar => 'Calendrier';
+  String get calendar => 'البرنامج';
 
   @override
   String chipFrom(String price) {
-    return 'dès $price';
+    return 'من $price';
   }
 
   @override
-  String get chipSoon => 'Bientôt';
+  String get chipSoon => 'قريبا';
 
   @override
-  String get homeEmpty => 'Pas de match à venir pour l\'instant. Reviens bientôt.';
+  String get homeEmpty => 'ما كاين حتى ماتش دابا. رجع من بعد.';
 
   @override
   String rulesOpen(int limit) {
-    String _temp0 = intl.Intl.pluralLogic(limit, locale: localeName, other: '$limit billets', one: '1 billet');
-    return 'Vente ouverte · limite $_temp0 par compte · billets nominatifs';
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: '$limit تذكرة',
+      few: '$limit تذاكر',
+      two: 'جوج تذاكر',
+      one: 'تذكرة وحدة',
+    );
+    return 'البيع محلول · $_temp0 لكل حساب · التذاكر بالسمية';
   }
 
   @override
   String rulesNotStarted(String date, String time, int limit) {
-    String _temp0 = intl.Intl.pluralLogic(limit, locale: localeName, other: '$limit billets', one: '1 billet');
-    return 'Vente le $date à $time · limite $_temp0 par compte · billets nominatifs';
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: '$limit تذكرة',
+      few: '$limit تذاكر',
+      two: 'جوج تذاكر',
+      one: 'تذكرة وحدة',
+    );
+    return 'البيع نهار $date مع $time · $_temp0 لكل حساب · التذاكر بالسمية';
   }
 
   @override
-  String get rulesSoldOut => 'Complet · toutes les places sont vendues';
+  String get rulesSoldOut => 'كومبلي · تباعو كاع البلايص';
 
   @override
-  String get rulesClosed => 'Vente terminée pour cet événement';
+  String get rulesClosed => 'سالا البيع ديال هاد الحدث';
 
   @override
-  String get zonesTitle => 'Tarifs par zone';
+  String get zonesTitle => 'الأثمنة حسب المنطقة';
 
   @override
-  String get zoneSeated => 'Places assises';
+  String get zoneSeated => 'بلايص بالكراسي';
 
   @override
-  String get zoneStanding => 'Debout';
+  String get zoneStanding => 'واقفين';
 
   @override
   String zoneGates(int count, String codes) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes $codes', one: 'Porte $codes');
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'البيبان $codes', one: 'الباب $codes');
     return '$_temp0';
   }
 
@@ -193,21 +209,28 @@ class AppLocalizationsAr extends AppLocalizations {
     final intl.NumberFormat countNumberFormat = intl.NumberFormat.decimalPattern(localeName);
     final String countString = countNumberFormat.format(count);
 
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$countString restants', one: '1 restant');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString بلاصة باقية',
+      few: '$countString بلايص باقيين',
+      two: 'جوج بلايص باقيين',
+      one: 'بلاصة وحدة باقية',
+    );
     return '$_temp0';
   }
 
   @override
-  String get zoneLastSeats => 'Dernières places';
+  String get zoneLastSeats => 'آخر البلايص';
 
   @override
-  String get paymentHint => 'Paiement par carte bancaire. Billet dans l\'app et sur WhatsApp.';
+  String get paymentHint => 'الخلاص بالكارط البنكية. التذكرة كتوصلك فالتطبيق وفواتساب.';
 
   @override
-  String get footerFrom => 'À partir de';
+  String get footerFrom => 'ابتداء من';
 
   @override
-  String get chooseZone => 'Choisir ma zone';
+  String get chooseZone => 'ختار المنطقة';
 
   @override
   String zonesSubtitle(String event, String date) {
@@ -215,40 +238,40 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get pickZoneHint => 'Touche une zone pour choisir tes places.';
+  String get pickZoneHint => 'ورك على شي منطقة باش تختار بلايصك.';
 
   @override
-  String get pickedZone => 'Zone choisie';
+  String get pickedZone => 'المنطقة اللي ختاريتي';
 
   @override
   String placesMax(int max) {
-    return 'Billets · max $max';
+    return 'التذاكر · $max على الأكثر';
   }
 
   @override
-  String get fewerPlaces => 'Un billet de moins';
+  String get fewerPlaces => 'نقص تذكرة';
 
   @override
-  String get morePlaces => 'Un billet de plus';
+  String get morePlaces => 'زيد تذكرة';
 
   @override
-  String get groupHint => 'Les places d\'un même achat sont côte à côte. Chaque ami reçoit son propre QR.';
+  String get groupHint => 'البلايص اللي كتشريهم مرة وحدة كيكونو حدا بعضياتهم. كل صاحب كيوصلو QR ديالو.';
 
   @override
-  String get total => 'Total';
+  String get total => 'المجموع';
 
   @override
-  String get continueCta => 'Continuer';
+  String get continueCta => 'كمل';
 
   @override
-  String get allSoldOut => 'Complet · toutes les zones sont vendues';
+  String get allSoldOut => 'كومبلي · تباعو كاع المناطق';
 
   @override
-  String get payTitle => 'Paiement';
+  String get payTitle => 'الخلاص';
 
   @override
   String holdLeft(String time) {
-    return 'Places réservées · $time';
+    return 'البلايص محجوزين ليك · $time';
   }
 
   @override
@@ -257,301 +280,294 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get serviceFee => 'Frais de service';
+  String get serviceFee => 'مصاريف الخدمة';
 
   @override
-  String get holdersTitle => 'Billets nominatifs';
+  String get holdersTitle => 'التذاكر بالسمية';
 
   @override
-  String get holderMe => 'Billet 1 · Moi';
+  String get holderMe => 'التذكرة 1 · أنا';
 
   @override
   String holderN(int n) {
-    return 'Billet $n';
+    return 'التذكرة $n';
   }
 
   @override
-  String get holderNameLabel => 'Prénom et nom';
+  String get holderNameLabel => 'السمية والكنية';
 
   @override
-  String get holderNameError => 'Prénom et nom en lettres latines, de 2 à 60 caractères.';
+  String get holderNameError => 'السمية والكنية بالحروف اللاتينية ولا العربية، ماشي بجوج، من 2 حتى 60 حرف.';
 
   @override
-  String get holderPhoneLabel => 'WhatsApp de ton ami (facultatif)';
+  String get holderPhoneLabel => 'الواتساب ديال صاحبك (إلا بغيتي)';
 
   @override
-  String get holderPhoneHelp =>
-      'Il reçoit son billet sur WhatsApp et dans l\'app. Sans numéro, le billet reste chez toi.';
+  String get holderPhoneHelp => 'كتوصلو التذكرة ديالو فواتساب وفالتطبيق. بلا نمرة، التذكرة كتبقى عندك.';
 
   @override
-  String get holderPhoneError => 'Numéro marocain invalide. Essaie 06 12 34 56 78.';
+  String holderPhoneError(String example) {
+    return 'النمرة المغربية ماشي صحيحة. جرب $example.';
+  }
 
   @override
-  String get methodTitle => 'Moyen de paiement';
+  String get methodTitle => 'طريقة الخلاص';
 
   @override
-  String get methodCard => 'Carte bancaire';
+  String get methodCard => 'كارط بنكية';
 
   @override
-  String get methodCardHint => 'Visa, Mastercard · 3D Secure';
+  String get methodCardHint => 'Visa، Mastercard · 3D Secure';
 
   @override
-  String get instant => 'Instantané';
+  String get instant => 'فالحين';
 
   @override
   String payCta(String total) {
-    return 'Payer $total';
+    return 'خلص $total';
   }
 
   @override
-  String get payCaption => 'Billets envoyés dans l\'app et sur WhatsApp';
+  String get payCaption => 'التذاكر كتوصلك فالتطبيق وفواتساب';
 
   @override
-  String get friendsConsent => 'Je confirme que ces personnes acceptent de recevoir leur billet sur WhatsApp';
+  String get friendsConsent => 'كنأكد بلي هاد الناس موافقين توصلهم التذكرة ديالهم فواتساب';
 
   @override
-  String get friendsConsentMissing => 'Coche la case pour confirmer que tes amis sont d\'accord.';
+  String get friendsConsentMissing => 'علم على الخانة باش تأكد بلي صحابك موافقين.';
 
   @override
-  String get checkPayment => 'Voir l\'état du paiement';
+  String get checkPayment => 'شوف فين وصل الخلاص';
 
   @override
   String busyRetry(int s) {
-    return 'Beaucoup de monde en ce moment · nouvel essai dans $s s';
+    return 'كاين الضغط دابا · غادي نعاودو نجربو من بعد $s ثانية';
   }
 
   @override
-  String get expiredTitle => 'Réservation expirée';
+  String get expiredTitle => 'سالا الحجز';
 
   @override
-  String get expiredBody => 'Tes places ont été libérées. Choisis-les à nouveau.';
+  String get expiredBody => 'البلايص ديالك تطلقو. ختارهم من جديد.';
 
   @override
-  String get expiredCta => 'Choisir à nouveau';
+  String get expiredCta => 'ختار من جديد';
 
   @override
-  String get cardPageTitle => 'Paiement sécurisé';
+  String get cardPageTitle => 'خلاص آمن';
 
   @override
-  String get methodWallet => 'Wallet mobile';
+  String get methodWallet => 'المحفظة الإلكترونية';
 
   @override
-  String get methodWalletHint => 'Paiement depuis ton wallet';
+  String get methodWalletHint => 'خلص من المحفظة ديالك';
 
   @override
-  String get methodCash => 'Cash en agence';
+  String get methodCash => 'كاش فالوكالة';
 
   @override
-  String get methodCashHint => 'Un code à payer au guichet du club ou en agence';
+  String get methodCashHint => 'كود تخلصو فالشباك ديال الفريق ولا فشي وكالة';
 
   @override
   String methodCashBefore(String deadline) {
-    return 'Avant $deadline';
+    return 'قبل $deadline';
   }
 
   @override
-  String get methodCashTooLate => 'Trop tard pour le cash';
+  String get methodCashTooLate => 'فات الوقت ديال الكاش';
 
   @override
   String payWalletCta(String total) {
-    return 'Payer $total par wallet';
+    return 'خلص $total بالمحفظة';
   }
 
   @override
-  String get payCashCta => 'Obtenir mon code cash';
+  String get payCashCta => 'عطيني كود الكاش';
 
   @override
-  String get errorCashTooLate =>
-      'Trop tard pour payer en cash : la vente ferme bientôt. Choisis un autre moyen de paiement.';
+  String get errorCashTooLate => 'فات الوقت باش تخلص كاش: البيع قريب يتسد. ختار طريقة خلاص أخرى.';
 
   @override
-  String get errorCashCap =>
-      'Le paiement cash n\'est plus possible pour cet événement pour le moment. Choisis un autre moyen de paiement.';
+  String get errorCashCap => 'الخلاص كاش ما بقاش ممكن لهاد الحدث دابا. ختار طريقة خلاص أخرى.';
 
   @override
-  String get errorMethodNotConfigured => 'Ce moyen de paiement n\'est pas disponible. Choisis-en un autre.';
+  String get errorMethodNotConfigured => 'طريقة الخلاص هادي ما متوفراش. ختار وحدة أخرى.';
 
   @override
-  String get cashTitle => 'Ton code de paiement cash';
+  String get cashTitle => 'الكود ديالك باش تخلص كاش';
 
   @override
   String cashHoldBanner(String deadline) {
-    return 'Places réservées · paie avant $deadline';
+    return 'البلايص محجوزين · خلص قبل $deadline';
   }
 
   @override
-  String get cashCodeLabel => 'Code à présenter';
+  String get cashCodeLabel => 'الكود اللي غادي توري';
 
   @override
   String cashExactAmount(String amount) {
-    return 'Montant exact à régler : $amount';
+    return 'المبلغ بالضبط: $amount';
   }
 
   @override
-  String get cashCopy => 'Copier le code';
+  String get cashCopy => 'كوبي الكود';
 
   @override
-  String get cashCopied => 'Code copié';
+  String get cashCopied => 'الكود تكوبا';
 
   @override
-  String get cashTimeLeft => 'Temps restant';
+  String get cashTimeLeft => 'الوقت اللي بقا';
 
   @override
-  String get cashWhereTitle => 'Où payer';
+  String get cashWhereTitle => 'فين تخلص';
 
   @override
   String cashNetworks(String names) {
-    return 'En agence : $names';
+    return 'فالوكالات: $names';
   }
 
   @override
-  String get cashStepsTitle => 'Comment ça marche';
+  String get cashStepsTitle => 'كيفاش كيدوز';
 
   @override
-  String get cashStep1Title => 'Va au guichet ou en agence';
+  String get cashStep1Title => 'سير للشباك ولا لشي وكالة';
 
   @override
-  String get cashStep2Title => 'Donne le code et le montant exact';
+  String get cashStep2Title => 'عطيهم الكود والمبلغ بالضبط';
 
   @override
-  String get cashStep3Title => 'Tes billets arrivent';
+  String get cashStep3Title => 'كيوصلوك التذاكر';
 
   @override
-  String get cashStep3Body => 'Dans l\'app et sur WhatsApp, dès que le paiement est enregistré.';
+  String get cashStep3Body => 'فالتطبيق وفواتساب، غير يتسجل الخلاص.';
 
   @override
-  String get cashPayNowTitle => 'Tu préfères payer maintenant ?';
+  String get cashPayNowTitle => 'بغيتي تخلص دابا؟';
 
   @override
-  String get cashPayByCard => 'Payer par carte';
+  String get cashPayByCard => 'خلص بالكارط';
 
   @override
-  String get cashPayByWallet => 'Payer par wallet';
+  String get cashPayByWallet => 'خلص بالمحفظة';
 
   @override
-  String get cashHostedPending =>
-      'Un paiement par carte ou wallet est en cours de confirmation. Ton code reste valable en attendant.';
+  String get cashHostedPending => 'كاين خلاص بالكارط ولا بالمحفظة كيتأكد دابا. الكود ديالك باقي صالح حتى يسالي.';
 
   @override
-  String get cashStatus => 'En attente de paiement · cette page se met à jour toute seule.';
+  String get cashStatus => 'كنتسناو الخلاص · هاد الصفحة كتتجدد بوحدها.';
 
   @override
-  String get cashExpiredTitle => 'Code expiré · places libérées';
+  String get cashExpiredTitle => 'سالا الكود · البلايص تطلقو';
 
   @override
-  String get cashExpiredBody =>
-      'Le délai pour payer ce code est passé. Tu peux refaire une commande s\'il reste des places.';
+  String get cashExpiredBody => 'فات الوقت باش تخلص هاد الكود. تقدر تعاود تطلب إلا بقاو البلايص.';
 
   @override
-  String get backToEvent => 'Retour à l\'événement';
+  String get backToEvent => 'رجع للحدث';
 
   @override
-  String get orderPending => 'Paiement en cours de confirmation.';
+  String get orderPending => 'الخلاص كيتأكد دابا.';
 
   @override
-  String get orderPendingHint =>
-      'Ça prend quelques secondes. Ne paie pas une deuxième fois : la banque peut confirmer un peu plus tard.';
+  String get orderPendingHint => 'كياخد شي ثواني. ما تخلصش جوج مرات: البنك يقدر يأكد من بعد شوية.';
 
   @override
-  String get orderPaymentFailed =>
-      'Ton paiement n\'a pas abouti. Tu peux réessayer tant que tes places sont réservées.';
+  String get orderPaymentFailed => 'الخلاص ديالك ما دازش. تقدر تعاود مادام البلايص محجوزين ليك.';
 
   @override
-  String get orderAwaitingPayment => 'Commande en attente de paiement.';
+  String get orderAwaitingPayment => 'الطلب كيتسنى الخلاص.';
 
   @override
-  String get orderNotPaidYet =>
-      'Aucun paiement n\'a encore été fait pour cette commande. Tu peux payer tant que tes places sont réservées.';
+  String get orderNotPaidYet => 'باقي ما تخلص والو على هاد الطلب. تقدر تخلص مادام البلايص محجوزين ليك.';
 
   @override
-  String get orderPayAgainCaution =>
-      'Toujours pas de confirmation. Réessaie seulement si ta carte a été refusée et que rien n\'a été débité.';
+  String get orderPayAgainCaution => 'باقي ما جا حتى تأكيد. عاود غير إلا الكارط ديالك ترفضات وما تقطع ليك والو.';
 
   @override
-  String get payAgain => 'Payer à nouveau';
+  String get payAgain => 'خلص مرة أخرى';
 
   @override
-  String get orderPaidTitle => 'C\'est validé !';
+  String get orderPaidTitle => 'صافي، التذاكر واجدين!';
 
   @override
-  String get orderPaidBody => 'Tes billets sont dans l\'onglet Billets. Tes amis reçoivent les leurs sur WhatsApp.';
+  String get orderPaidBody => 'تذاكرك كاينين فـ «تذاكري». صحابك كيوصلهم ديالهم فواتساب.';
 
   @override
-  String get seeTickets => 'Voir mes billets';
+  String get seeTickets => 'شوف تذاكري';
 
   @override
-  String get orderExpired => 'Cette réservation a expiré.';
+  String get orderExpired => 'هاد الحجز سالا.';
 
   @override
-  String get backHome => 'Retour à l\'accueil';
+  String get backHome => 'رجع للرئيسية';
 
   @override
-  String get errorNotStarted => 'La vente n\'a pas encore commencé.';
+  String get errorNotStarted => 'البيع باقي ما بدا.';
 
   @override
-  String get errorSaleClosed => 'La vente est terminée pour cet événement.';
+  String get errorSaleClosed => 'سالا البيع ديال هاد الحدث.';
 
   @override
-  String get errorNotOnSale => 'Cet événement n\'est pas en vente.';
+  String get errorNotOnSale => 'هاد الحدث ماشي للبيع.';
 
   @override
-  String get errorSoldOut => 'Plus de places dans ce tarif. Choisis une autre zone.';
+  String get errorSoldOut => 'ما بقاو بلايص فهاد الثمن. ختار منطقة أخرى.';
 
   @override
   String errorPerAccountLimit(int limit, int held) {
-    return 'Limite atteinte : $limit billets par compte pour cet événement, tu en as déjà $held.';
+    return 'وصلتي للحد: $limit تذاكر لكل حساب فهاد الحدث، وعندك ديجا $held.';
   }
 
   @override
-  String get errorOrderExpired => 'Ta réservation a expiré. Choisis à nouveau tes places.';
+  String get errorOrderExpired => 'الحجز ديالك سالا. ختار البلايص من جديد.';
 
   @override
-  String get errorOrderNotPayable => 'Cette commande ne peut plus être payée.';
+  String get errorOrderNotPayable => 'هاد الطلب ما بقاش ممكن يتخلص.';
 
   @override
-  String get close => 'Fermer';
+  String get close => 'سد';
 
   @override
-  String get ticketsTitle => 'Mes billets';
+  String get ticketsTitle => 'تذاكري';
 
   @override
-  String get ticketsUpcoming => 'À venir';
+  String get ticketsUpcoming => 'الجايين';
 
   @override
-  String get ticketsPast => 'Passés';
+  String get ticketsPast => 'اللي فاتو';
 
   @override
-  String get ticketsEmpty => 'Aucun billet pour l\'instant. Tes billets arrivent ici dès que le paiement est confirmé.';
+  String get ticketsEmpty => 'باقي ما عندك حتى تذكرة. تذاكرك كيوصلو هنا غير يتأكد الخلاص.';
 
   @override
-  String get ticketsBrowse => 'Voir les matchs';
+  String get ticketsBrowse => 'شوف الماتشات';
 
   @override
-  String get ticketsOffline => 'Hors ligne · billets enregistrés sur ton téléphone';
+  String get ticketsOffline => 'بلا أنترنيت · التذاكر محفوظين فالتيليفون ديالك';
 
   @override
   String ticketRowFacts(String zone, String ticketNo) {
-    return '$zone · N° $ticketNo';
+    return '$zone · رقم $ticketNo';
   }
 
   @override
-  String get ticketMatchday => 'Mode jour de match';
+  String get ticketMatchday => 'نهار الماتش';
 
   @override
-  String get ticketBrightness => 'Luminosité au maximum';
+  String get ticketBrightness => 'الضو على آخرو';
 
   @override
-  String get ticketZone => 'Zone';
+  String get ticketZone => 'المنطقة';
 
   @override
   String ticketGates(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes', one: 'Porte');
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'البيبان', one: 'الباب');
     return '$_temp0';
   }
 
   @override
   String ticketGatesList(int count, String codes) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Portes $codes', one: 'Porte $codes');
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'البيبان $codes', one: 'الباب $codes');
     return '$_temp0';
   }
 
@@ -559,85 +575,85 @@ class AppLocalizationsAr extends AppLocalizations {
   String get listSeparator => '، ';
 
   @override
-  String get ticketKickoff => 'Coup d\'envoi';
+  String get ticketKickoff => 'انطلاق الماتش';
 
   @override
-  String get ticketStart => 'Début';
+  String get ticketStart => 'البداية';
 
   @override
-  String get ticketHolder => 'Titulaire';
+  String get ticketHolder => 'مولا التذكرة';
 
   @override
-  String get ticketNumber => 'N° billet';
+  String get ticketNumber => 'رقم التذكرة';
 
   @override
-  String get ticketSeat => 'Place';
+  String get ticketSeat => 'البلاصة';
 
   @override
   String ticketNextCode(int s) {
-    return 'Nouveau code dans $s s';
+    return 'كود جديد من بعد $s ثانية';
   }
 
   @override
-  String get ticketWorksOffline => 'Fonctionne sans réseau';
+  String get ticketWorksOffline => 'خدام بلا أنترنيت';
 
   @override
   String ticketQrLabel(String ticketNo) {
-    return 'Code QR du billet $ticketNo';
+    return 'كود QR ديال التذكرة $ticketNo';
   }
 
   @override
-  String get ticketClosed => 'Événement terminé';
+  String get ticketClosed => 'سالا الحدث';
 
   @override
-  String get ticketCancelled => 'Billet annulé';
+  String get ticketCancelled => 'التذكرة تلغات';
 
   @override
-  String get ticketRefunded => 'Billet remboursé';
+  String get ticketRefunded => 'التذكرة ترجعو فلوسها';
 
   @override
-  String get ticketBlocked => 'Billet bloqué. Contacte le club.';
+  String get ticketBlocked => 'التذكرة مبلوكية. تواصل مع الفريق.';
 
   @override
-  String get ticketNotValid => 'Billet non valide';
+  String get ticketNotValid => 'التذكرة ماشي صالحة';
 
   @override
-  String get ticketNotFound => 'Ce billet n\'est pas sur ton téléphone.';
+  String get ticketNotFound => 'هاد التذكرة ماشي فالتيليفون ديالك.';
 
   @override
-  String get ticketWhatsApp => 'WhatsApp';
+  String get ticketWhatsApp => 'واتساب';
 
   @override
-  String get ticketWhatsAppHint => 'Reçois à nouveau le PDF de ce billet sur WhatsApp';
+  String get ticketWhatsAppHint => 'توصل من جديد بالـ PDF ديال هاد التذكرة فواتساب';
 
   @override
-  String get ticketWhatsAppSent => 'Billet renvoyé sur WhatsApp';
+  String get ticketWhatsAppSent => 'التذكرة تصيفطات من جديد فواتساب';
 
   @override
-  String get ticketWhatsAppRateLimited => 'Ce billet a déjà été renvoyé 3 fois aujourd\'hui. Réessaie demain.';
+  String get ticketWhatsAppRateLimited => 'هاد التذكرة تصيفطات ديجا 3 مرات اليوم. عاود غدا.';
 
   @override
-  String get ticketWhatsAppNotValid => 'Ce billet n\'est plus valide : il ne peut pas être renvoyé.';
+  String get ticketWhatsAppNotValid => 'هاد التذكرة ما بقاتش صالحة: ما يمكنش نعاودو نصيفطوها.';
 
   @override
-  String get ticketWhatsAppFailed => 'Ce billet ne peut pas être renvoyé pour le moment. Réessaie plus tard.';
+  String get ticketWhatsAppFailed => 'ما قدرناش نصيفطو هاد التذكرة دابا. عاود من بعد.';
 
   @override
-  String get homeCashTitle => 'Commande en attente de paiement';
+  String get homeCashTitle => 'طلب كيتسنى الخلاص';
 
   @override
   String homeCashDeadline(String deadline) {
-    return 'Code cash à payer avant $deadline';
+    return 'كود الكاش خصو يتخلص قبل $deadline';
   }
 
   @override
   String myTicketTitle(String what, String date) {
-    return 'Mon billet · $what, $date';
+    return 'تذكرتي · $what، $date';
   }
 
   @override
   String myTicketStarted(String time) {
-    return 'a commencé à $time';
+    return 'بدا مع $time';
   }
 
   @override
@@ -645,33 +661,35 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'dans $days jours',
-      one: 'demain à $time',
-      zero: 'aujourd\'hui à $time',
+      other: 'من بعد $days يوم',
+      few: 'من بعد $days أيام',
+      two: 'من بعد يومين',
+      one: 'غدا مع $time',
+      zero: 'اليوم مع $time',
     );
     return '$_temp0';
   }
 
   @override
-  String get cancel => 'Annuler';
+  String get cancel => 'إلغاء';
 
   @override
-  String get save => 'Enregistrer';
+  String get save => 'سجل';
 
   @override
-  String get profileName => 'Nom';
+  String get profileName => 'السمية';
 
   @override
-  String get profileNameEmpty => 'Ajoute ton prénom et ton nom';
+  String get profileNameEmpty => 'زيد السمية والكنية ديالك';
 
   @override
-  String get profileEditName => 'Modifier le nom';
+  String get profileEditName => 'بدل السمية';
 
   @override
-  String get profilePhone => 'Téléphone';
+  String get profilePhone => 'التيليفون';
 
   @override
-  String get profileLanguage => 'Langue';
+  String get profileLanguage => 'اللغة';
 
   @override
   String get languageFr => 'Français';
@@ -683,51 +701,51 @@ class AppLocalizationsAr extends AppLocalizations {
   String get languageEn => 'English';
 
   @override
-  String get profileLogout => 'Se déconnecter';
+  String get profileLogout => 'خرج من الحساب';
 
   @override
-  String get profileLogoutAll => 'Se déconnecter de tous mes appareils';
+  String get profileLogoutAll => 'خرج من كاع الأجهزة ديالي';
 
   @override
-  String get profileLogoutBody => 'Tes billets seront retirés de ce téléphone. Reconnecte-toi pour les retrouver.';
+  String get profileLogoutBody => 'التذاكر ديالك غادي يتحيدو من هاد التيليفون. دخل مرة أخرى باش تلقاهم.';
 
   @override
   String get profileLogoutAllBody =>
-      'Ton compte sera déconnecté sur ce téléphone et sur tous tes autres appareils. Tes billets seront retirés de ce téléphone.';
+      'الحساب ديالك غادي يخرج من هاد التيليفون ومن كاع الأجهزة الأخرين. التذاكر غادي يتحيدو من هاد التيليفون.';
 
   @override
-  String get profileLogoutConfirm => 'Me déconnecter';
+  String get profileLogoutConfirm => 'خرجني';
 
   @override
   String get profileLogoutAllFailed =>
-      'Ce téléphone est déconnecté, mais tes autres appareils n\'ont pas pu l\'être (pas de réseau). Reconnecte-toi et réessaie.';
+      'هاد التيليفون خرج، ولكن الأجهزة الأخرين ما قدروش (ما كاينش الأنترنيت). دخل من جديد وعاود جرب.';
 
   @override
-  String get loading => 'Chargement';
+  String get loading => 'كيتحمل';
 
   @override
   String homeGreeting(String name) {
-    return 'Salut $name';
+    return 'أهلا $name';
   }
 
   @override
-  String get homeGreetingNoName => 'Salut';
+  String get homeGreetingNoName => 'أهلا';
 
   @override
-  String get homeGreetingGuest => 'Bienvenue';
+  String get homeGreetingGuest => 'مرحبا بيك';
 
   @override
-  String get homeEmptyTitle => 'Rien au programme';
+  String get homeEmptyTitle => 'ما كاين والو دابا';
 
   @override
-  String get homeOpenProfile => 'Mon profil';
+  String get homeOpenProfile => 'حسابي';
 
   @override
-  String get ticketsEmptyTitle => 'Pas encore de billet';
+  String get ticketsEmptyTitle => 'باقي ما عندك تذكرة';
 
   @override
-  String get ticketOpen => 'Ouvrir le billet';
+  String get ticketOpen => 'حل التذكرة';
 
   @override
-  String get poweredBy => 'Propulsé par Jomhor';
+  String get poweredBy => 'بقوة جمهور';
 }

@@ -11,6 +11,7 @@ import 'package:jomhor_core/jomhor_core.dart';
 import 'package:jomhor_scanner/core/event_key.dart';
 import 'package:jomhor_scanner/core/gate/gate_client.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
+import 'package:jomhor_scanner/features/scan/result_view.dart';
 import 'package:jomhor_scanner/features/scan/scan_controller.dart';
 import 'package:jomhor_scanner/features/scan/scan_screen.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
@@ -411,9 +412,9 @@ void main() {
       await typeNumber(tester, '7777 7777');
       expect(find.text('2 billets portent ce numéro : touchez le bon'), findsOneWidget);
       expect(find.text('Tribune Nord'), findsOneWidget);
-      expect(find.text('Valide · K. O.'), findsOneWidget);
+      expect(find.text('Valide · ${isolateName('K. O.')}'), findsOneWidget);
       expect(find.text('Virage'), findsOneWidget);
-      expect(find.text('Remboursé · S. B.'), findsOneWidget);
+      expect(find.text('Remboursé · ${isolateName('S. B.')}'), findsOneWidget);
 
       await tester.tap(find.text('Virage'));
       await settle(tester);
@@ -513,7 +514,7 @@ void main() {
       await tester.pumpAndSettle();
       await typeNumber(tester, ticketId(nord).substring(28));
       expect(find.text('Tribune Nord'), findsOneWidget);
-      expect(find.text('Valide · Y. A.'), findsOneWidget);
+      expect(find.text('Valide · ${isolateName('Y. A.')}'), findsOneWidget);
       final shown = [for (final t in tester.widgetList<Text>(find.byType(Text))) ?t.data];
       expect(shown.where((s) => s.contains(ticketId(nord))), isEmpty, reason: 'never the ticket id');
       expect(shown.where((s) => s.contains('billets portent') || s.contains('touchez-le')), isEmpty);

@@ -60,7 +60,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get loginResend => 'Renvoyer le code';
 
   @override
-  String get errorPhoneInvalid => 'Ce numéro ne semble pas marocain. Essaie par exemple 06 12 34 56 78.';
+  String errorPhoneInvalid(String example) {
+    return 'Ce numéro ne semble pas marocain. Essaie par exemple $example.';
+  }
 
   @override
   String get errorOtpInvalid => 'Code incorrect. Vérifie-le et réessaie.';
@@ -274,7 +276,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get holderNameLabel => 'Prénom et nom';
 
   @override
-  String get holderNameError => 'Prénom et nom en lettres latines, de 2 à 60 caractères.';
+  String get holderNameError =>
+      'Prénom et nom en lettres latines ou arabes, sans mélanger les deux, de 2 à 60 caractères.';
 
   @override
   String get holderPhoneLabel => 'WhatsApp de ton ami (facultatif)';
@@ -284,7 +287,9 @@ class AppLocalizationsFr extends AppLocalizations {
       'Il reçoit son billet sur WhatsApp et dans l\'app. Sans numéro, le billet reste chez toi.';
 
   @override
-  String get holderPhoneError => 'Numéro marocain invalide. Essaie 06 12 34 56 78.';
+  String holderPhoneError(String example) {
+    return 'Numéro marocain invalide. Essaie $example.';
+  }
 
   @override
   String get methodTitle => 'Moyen de paiement';
