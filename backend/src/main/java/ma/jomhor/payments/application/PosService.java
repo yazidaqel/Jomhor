@@ -172,7 +172,11 @@ public class PosService {
         Orders.Locked locked = orders.lockInOrg(org, p.orderId()).orElseThrow();
         Order o = locked.order();
         if (p.status() != Payment.Status.PENDING || o.status() != Order.Status.AWAITING_CASH) {
-            throw notPayable(o.status().name());
+            // Collected in an earlier till session of this cashier: the cash is in that till, keep it (04 Collect order).
+            boolean byYou = p.posSessionId() != null
+                    && sessions.staffUserOf(org, p.posSessionId()).filter(user::equals).isPresent();
+            throw byYou ? new ApiException("CODE_NOT_PAYABLE", HttpStatus.CONFLICT, "This code can't be paid",
+                    Map.of("status", o.status().name(), "collected_by_you", true)) : notPayable(o.status().name());
         }
         if (!locked.holding()) {
             throw notPayable("EXPIRED");
@@ -193,16 +197,18 @@ public class PosService {
     // ---------- print ----------
 
     /**
-     * 04 GET /org/pos/orders/{id}/tickets. Needs the caller's open session; the order must have been paid in a till
-     * session of this organizer (else 404). Each call is a print: audited {@code pos.print} on the caller's session,
-     * which counts it.
+     * 04 GET /org/pos/orders/{id}/tickets. A CASHIER needs an open session (409) and prints only orders paid in it;
+     * ADMIN/OPS need no session and may reprint any order paid in a till session of this organizer; else 404. Each
+     * call is a print: audited {@code pos.print} on the session the order was paid in, which counts it (so a
+     * reprint by a manager shows on the till that sold it).
      */
     @Transactional
-    public Print print(UUID org, UUID user, UUID orderId) {
-        UUID session = sessions.openOf(org, user).map(PosSession::id).orElseThrow(PosService::sessionRequired);
-        if (payments.tillSession(org, orderId).isEmpty()) {
-            throw ApiException.notFound("Order not found");
-        }
+    public Print print(UUID org, UUID user, StaffRole role, UUID orderId) {
+        boolean manager = role == StaffRole.ADMIN || role == StaffRole.OPS;
+        Optional<UUID> open = manager ? Optional.empty()
+                : Optional.of(sessions.openOf(org, user).map(PosSession::id).orElseThrow(PosService::sessionRequired));
+        UUID session = payments.tillSession(org, orderId).filter(s -> manager || open.get().equals(s))
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
         Order o = orders.inOrg(org, orderId).orElseThrow().order();
         Map<UUID, Long> prices = new LinkedHashMap<>();
         o.items().forEach(i -> prices.put(i.priceCategoryId(), i.unitPriceMad()));

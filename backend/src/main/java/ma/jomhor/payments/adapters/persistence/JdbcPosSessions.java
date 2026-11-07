@@ -99,6 +99,15 @@ class JdbcPosSessions implements PosSessions {
                 .param("org", org).param("id", sessionId).query(JdbcPosSessions::session).optional();
     }
 
+    @Override
+    public Optional<UUID> staffUserOf(UUID org, UUID sessionId) {
+        return jdbc.sql("""
+                        select s.user_id from pos_sessions p join staff s on s.id = p.staff_id and s.organizer_id = p.organizer_id
+                        where p.organizer_id = :org and p.id = :id
+                        """)
+                .param("org", org).param("id", sessionId).query(UUID.class).optional();
+    }
+
     private static PosSession session(ResultSet rs, int n) throws SQLException {
         return new PosSession(rs.getObject("id", UUID.class), rs.getString("label"), rs.getObject("staff_id", UUID.class),
                 rs.getString("staff_name"), instant(rs, "opened_at"), instant(rs, "closed_at"), rs.getLong("orders"),

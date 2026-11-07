@@ -158,7 +158,7 @@ class PosController {
 
     @GetMapping("/org/pos/orders/{id}/tickets")
     ResponseEntity<PrintDto> print(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id) {
-        PosService.Print p = pos.print(org.organizerId(), org.userId(), id);
+        PosService.Print p = pos.print(org.organizerId(), org.userId(), org.role(), id);
         Event.Listing e = p.slips().event();
         List<SlipDto> slips = p.slips().slips().stream().map(s -> {
             Ticket.OfOrder t = s.ticket();

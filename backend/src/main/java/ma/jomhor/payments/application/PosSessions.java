@@ -31,4 +31,7 @@ public interface PosSessions {
     void close(UUID org, UUID sessionId, long declaredMad);
 
     Optional<PosSession> get(UUID org, UUID sessionId);
+
+    /** The user id of the cashier who ran a session of the organizer (no lock). */
+    Optional<UUID> staffUserOf(UUID org, UUID sessionId);
 }

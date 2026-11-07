@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,12 +18,17 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.notifications.application.TicketDeliveryService;
+import ma.jomhor.payments.application.PosService;
+import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.tickets.domain.TicketToken;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Contract (BE-23): docs/04-api.md §Point of sale (/org/pos/**), CASHIER confinement (§Organizer Lot 3), and the
@@ -37,6 +43,12 @@ class PosApiTest extends PaymentTest {
 
     @Autowired
     TicketDeliveryService deliveries;
+
+    @Autowired
+    PosService posService;
+
+    @Autowired
+    PlatformTransactionManager transactions;
 
     // ---------- fixtures ----------
 
@@ -109,7 +121,10 @@ class PosApiTest extends PaymentTest {
                 .andExpect(jsonPath("$[0].zone.code").value("NORD"));
         for (var req : List.of(get("/org/venues"), get("/org/staff"), get("/org/devices"),
                 get("/org/events/" + s.eventId() + "/sales"), get("/org/events/" + s.eventId() + "/live"),
-                post("/org/events/" + s.eventId() + "/close"), patch("/org/events/" + s.eventId()))) {
+                post("/org/events/" + s.eventId() + "/close"), patch("/org/events/" + s.eventId()),
+                get("/org/events/" + s.eventId() + "/tickets?q=JMH"), post("/org/tickets/" + UUID.randomUUID() + "/refund"),
+                post("/org/tickets/" + UUID.randomUUID() + "/block"),
+                get(URI.create("/org/%76enues")))) { // decided on the matched handler, not the raw URI
             call(cashier, req, "{}").andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));
         }
         call(cashier, post("/org/events/" + s.eventId() + "/prices"),
@@ -119,8 +134,14 @@ class PosApiTest extends PaymentTest {
         call(caller(s.org().org(), "OPS"), get("/org/pos/session")).andExpect(status().isOk());
         call(s.org(), get("/org/pos/session")).andExpect(status().isOk());
         for (String role : List.of("FINANCE", "GATE", "SUPERVISOR")) {
-            call(caller(s.org().org(), role), get("/org/pos/session")).andExpect(status().isForbidden());
+            Caller c = caller(s.org().org(), role);
+            call(c, get("/org/pos/session")).andExpect(status().isForbidden());
+            // an encoded path routes to the same handler, so it gets the same answer
+            call(c, get(URI.create("/org/%70os/session"))).andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("FORBIDDEN"));
         }
+        call(cashier, get(URI.create("/org/%70os/session"))).andExpect(status().isOk());
+        call(caller(s.org().org(), "FINANCE"), get(URI.create("/org/%76enues"))).andExpect(status().isOk());
     }
 
     // ---------- sessions ----------
@@ -401,9 +422,22 @@ class PosApiTest extends PaymentTest {
         openSession(other, "Guichet Sud");
         ResultActions r = collect(other, c.code(), 10000);
         conflict(r, "CODE_NOT_PAYABLE");
-        r.andExpect(jsonPath("$.details.status").value("PAID"));
-        // the code's slips can be printed (paid in a till session)
-        call(other, get("/org/pos/orders/" + c.orderId() + "/tickets")).andExpect(status().isOk());
+        r.andExpect(jsonPath("$.details.status").value("PAID"))
+                .andExpect(jsonPath("$.details.collected_by_you").doesNotExist()); // another cashier: no flag
+        // the slips: by the session that collected it, or a manager's reprint; not by another till
+        call(cashier, get("/org/pos/orders/" + c.orderId() + "/tickets")).andExpect(status().isOk());
+        call(other, get("/org/pos/orders/" + c.orderId() + "/tickets")).andExpect(status().isNotFound());
+        call(s.org(), get("/org/pos/orders/" + c.orderId() + "/tickets")).andExpect(status().isOk());
+
+        // the same cashier after closing and reopening the till: 409 PAID, collected_by_you (keep the cash)
+        call(cashier, post("/org/pos/sessions/" + session + "/close"), "{\"declared_mad\": 10000}")
+                .andExpect(status().isOk());
+        conflict(collect(cashier, c.code(), 10000), "POS_SESSION_REQUIRED");
+        openSession(cashier, "Guichet Nord");
+        r = collect(cashier, c.code(), 10000);
+        conflict(r, "CODE_NOT_PAYABLE");
+        r.andExpect(jsonPath("$.details.status").value("PAID")).andExpect(jsonPath("$.details.collected_by_you").value(true));
+        assertThat(audits("pos.collect", c.orderId())).isEqualTo(1);
     }
 
     @Test
@@ -505,12 +539,73 @@ class PosApiTest extends PaymentTest {
         assertThat(audits("pos.print", session)).isEqualTo(2);
         call(cashier, get("/org/pos/session")).andExpect(jsonPath("$.session.prints").value(2));
 
+        // a cashier prints only orders paid in their current session: not another till's
+        Caller other = caller(s.org().org(), "CASHIER");
+        openSession(other, "Guichet Sud");
+        call(other, get("/org/pos/orders/" + order + "/tickets")).andExpect(status().isNotFound());
+        // ADMIN/OPS reprint without a session; the print is counted on the till that sold it
+        call(s.org(), get("/org/pos/orders/" + order + "/tickets")).andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"));
+        call(caller(s.org().org(), "OPS"), get("/org/pos/orders/" + order + "/tickets")).andExpect(status().isOk());
+        assertThat(audits("pos.print", session)).isEqualTo(4);
+        call(s.org(), get("/org/pos/orders/" + fanOrder + "/tickets")).andExpect(status().isNotFound());
+
         // only orders paid at a till of this organizer
         call(cashier, get("/org/pos/orders/" + fanOrder + "/tickets")).andExpect(status().isNotFound());
         call(cashier, get("/org/pos/orders/" + UUID.randomUUID() + "/tickets")).andExpect(status().isNotFound());
         Caller b = caller(onSale(1).org().org(), "CASHIER");
         openSession(b, "Guichet");
         call(b, get("/org/pos/orders/" + order + "/tickets")).andExpect(status().isNotFound());
-        assertThat(audits("pos.print", session)).isEqualTo(2);
+        call(caller(b.org(), "ADMIN"), get("/org/pos/orders/" + order + "/tickets")).andExpect(status().isNotFound());
+        assertThat(audits("pos.print", session)).isEqualTo(4);
+        // after the cashier's next session opens, the old sale is a manager's reprint only
+        call(cashier, post("/org/pos/sessions/" + session + "/close"), "{\"declared_mad\": 0}")
+                .andExpect(status().isOk());
+        openSession(cashier, "Guichet Nord");
+        call(cashier, get("/org/pos/orders/" + order + "/tickets")).andExpect(status().isNotFound());
+    }
+
+    /** Close waits for a sale that holds the till's lock: the frozen expected_mad includes it. */
+    @Test
+    void closeWaitsForASaleInFlight() throws Exception {
+        Sale s = onSale(10);
+        Caller cashier = caller(s.org().org(), "CASHIER");
+        String session = openSession(cashier, "Guichet Nord");
+        UUID user = jdbc.sql("select user_id from staff where organizer_id = ? and role = 'CASHIER'")
+                .param(s.org().org()).query(UUID.class).single();
+        UUID saleId = UUID.randomUUID();
+        var items = List.of(new OrderService.ItemRequest(UUID.fromString(s.priceId()), 1,
+                List.of(new OrderService.HolderRequest("Yazid Aqel", null))));
+        CountDownLatch sold = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            Future<?> sale = pool.submit(() -> new TransactionTemplate(transactions).executeWithoutResult(t -> {
+                posService.sale(s.org().org(), user, saleId, s.eventId(), items);
+                sold.countDown();
+                try {
+                    commit.await();
+                } catch (InterruptedException e) {
+                    throw new IllegalStateException(e);
+                }
+            }));
+            assertThat(sold.await(10, TimeUnit.SECONDS)).isTrue();
+            Future<String> close = pool.submit(() -> body(call(cashier, post("/org/pos/sessions/" + session + "/close"),
+                    "{\"declared_mad\": 5000}")));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (jdbc.sql("""
+                    select count(*) from pg_stat_activity
+                    where wait_event_type = 'Lock' and query like '%pos_sessions%'""").query(Integer.class).single() == 0) {
+                assertThat(System.nanoTime()).as("close never waited for the sale").isLessThan(deadline);
+                Thread.sleep(20);
+            }
+            assertThat(close.isDone()).isFalse();
+            commit.countDown();
+            sale.get(10, TimeUnit.SECONDS);
+            String json = close.get(10, TimeUnit.SECONDS);
+            assertThat(JsonPath.<Integer>read(json, "$.expected_mad")).isEqualTo(5000);
+            assertThat(JsonPath.<Integer>read(json, "$.variance_mad")).isZero();
+            assertThat(JsonPath.<Integer>read(json, "$.orders")).isEqualTo(1);
+        }
+        assertThat(orderStatus(saleId.toString())).isEqualTo("PAID");
     }
 }
