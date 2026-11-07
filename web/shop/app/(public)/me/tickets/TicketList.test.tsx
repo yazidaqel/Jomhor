@@ -66,7 +66,7 @@ it('upcoming then past; a PDF link only for VALID tickets', async () => {
   expect(fetchMock).toHaveBeenCalledWith('/api/tickets', expect.objectContaining({ cache: 'no-store' }))
   const groups = [...el.querySelectorAll('section')].map((s) => ({
     title: s.querySelector('h2')!.textContent,
-    events: [...s.querySelectorAll('li p:first-child')].map((p) => p.textContent),
+    events: [...s.querySelectorAll('li h3')].map((h) => h.textContent),
   }))
   expect(groups).toEqual([
     { title: d.ticketsPage.upcoming, events: ['Match t-up-valid', 'Match t-up-blocked'] },
@@ -74,8 +74,24 @@ it('upcoming then past; a PDF link only for VALID tickets', async () => {
   ])
   expect(pdfLinks()).toEqual(['/api/tickets/t-up-valid/pdf', '/api/tickets/t-past-valid/pdf'])
   expect(el.textContent).toContain(d.ticketsPage.BLOCKED)
-  expect(el.textContent).toContain('Sam. 7 févr. 2026 · 20:00') // 19:00Z in Africa/Casablanca (UTC+1 outside Ramadan)
-  expect(el.querySelector('a[href="jomhor-fan://tickets"]')!.textContent).toBe(d.ticketsPage.openApp)
+  // 19:00Z in Africa/Casablanca (UTC+1 outside Ramadan): the date on the band, the time as kick-off.
+  const first = el.querySelector('article')!
+  expect(first.querySelector('header')!.textContent).toContain('Sam. 7 févr. 2026')
+  expect(first.querySelector('dl')!.textContent).toContain(`${d.ticketsPage.kickoff}20:00`)
+  expect(first.textContent).toContain('P10 · P4')
+  expect(first.textContent).toContain(ticket('t-up-valid').ticket_no)
+})
+
+it('an upcoming VALID ticket counts down to the start, measured when the list loaded', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-02-05T17:00:00Z'))
+  fetchMock.mockResolvedValue(json(200, { tickets: [ticket('t-1'), ticket('t-2', { event: { ...ticket('t-2').event, starts_at: '2026-02-05T19:30:00Z' } })] }))
+  await show()
+  vi.useRealTimers()
+  const [a, b] = [...el.querySelectorAll('article')]
+  expect(a!.textContent).toContain('Dans 2 j 2 h')
+  expect(b!.textContent).toContain('Dans 2 h 30 min')
+  expect(el.textContent).toContain('2 billets')
 })
 
 it('no ticket → the empty state, no group', async () => {
@@ -83,6 +99,7 @@ it('no ticket → the empty state, no group', async () => {
   await show()
   expect(el.textContent).toContain(d.ticketsPage.empty)
   expect(el.querySelectorAll('section')).toHaveLength(0)
+  expect(el.querySelector('a[href="/"]')!.textContent).toBe(d.ticketsPage.browse)
 })
 
 it('401 → the session copy and a login link back here', async () => {

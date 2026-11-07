@@ -7,6 +7,7 @@ import { defaultLocale, fmt, getDictionary } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
 import { getOrder, loginUrl, SAFE_ID, type OrderView } from '@/lib/orders'
 import { formatDateTime } from '@/lib/time'
+import { Crest } from '../../../brand'
 import { OrderStatus } from './OrderStatus'
 
 const d = getDictionary(defaultLocale)
@@ -36,7 +37,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const when = e && `${formatDateTime(e.starts_at, e.timezone, d.meta.intl)} · ${e.venue.name}`
 
   return (
-    <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-10 pb-14">
+    <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-16">
       <section className="flex min-w-0 flex-[999_1_560px] flex-col gap-5">
         <OrderStatus
           id={order.id}
@@ -51,21 +52,24 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           places={places}
           timezone={e?.timezone ?? null}
           eventHref={e && `/events/${eventSlug(e)}`}
-          copy={{ orderPage: d.orderPage, errors: d.errors, meta: d.meta }}
+          copy={{ orderPage: d.orderPage, errors: d.errors, meta: d.meta, steps: d.steps }}
         />
       </section>
       <aside
         aria-labelledby="order-summary"
-        className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-border bg-surface p-5 md:max-w-[380px]"
+        className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-border bg-surface p-5 shadow-2xl shadow-ground md:sticky md:top-24 md:max-w-[380px]"
       >
-        <h2 id="order-summary" className="font-display text-h2">
+        <h2 id="order-summary" className="font-display text-h2 uppercase">
           {d.orderPage.summary}
         </h2>
         {e && (
-          <>
-            <p className="font-semibold">{e.title}</p>
-            <p className="text-body-small text-text-muted">{when}</p>
-          </>
+          <div className="flex items-center gap-3 rounded-control bg-ground p-3">
+            <Crest size="md" />
+            <div className="flex min-w-0 flex-col">
+              <p className="font-display text-xl font-bold uppercase leading-tight">{e.title}</p>
+              <p className="text-body-small text-text-muted">{when}</p>
+            </div>
+          </div>
         )}
         <hr className="border-border" />
         {order.items.map((i) => (
@@ -77,7 +81,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <hr className="border-border" />
         <p className="flex items-baseline justify-between">
           <span className="font-semibold">{d.orderPage.total}</span>
-          <span className="font-display text-[30px] font-extrabold leading-none">{formatDh(order.total_mad)}</span>
+          <span className="font-display text-[34px] font-extrabold leading-none">{formatDh(order.total_mad)}</span>
         </p>
         <ul className="flex flex-col gap-2 text-body-small text-text-secondary">
           {labels.map((label, n) => (

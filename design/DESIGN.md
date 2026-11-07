@@ -14,7 +14,11 @@ Live canvas: https://claude.ai/artifact/RZdBe8HCqJUDBhB61S55mt
 4. One-thumb: primary CTA pinned to the bottom, 54 px tall, full width.
 5. Numbers and names in the condensed display face; everything else in the body face.
 6. Motion means something: ticket slides into the wallet after purchase; card flips to
-   gate directions; green "You're in" when the scan syncs. Never decorative motion.
+   gate directions; green "You're in" when the scan syncs. Beyond those, only quiet
+   affordances: a one-time entrance on first paint (fade/rise, at most 420 ms, short
+   stagger, capped after 5 items), a hover lift on clickable cards, a cross-fade between pages,
+   a quick selection mark (`motion.base`). No decorative loops (progress indicators excepted),
+   no parallax. All of it off under reduced motion.
 7. FR first, AR with true RTL mirroring (leading icons flip, numbers stay LTR), EN.
 
 ## Components
@@ -139,11 +143,11 @@ card moves under the zones, CTA becomes sticky bottom bar).
 | W6 | Billet PDF | — | `/api/tickets/[id]/pdf` (proxy, `no-store`) | Server-generated A4 + wallet-size, static QR |
 
 W2 details: header (crest + club name, nav Matchs / Abonnements / Mes billets / Aide,
-language switch, Se connecter); hero with competition label, 64 px uppercase title,
-chips (date · time, venue · doors, sale status + limit), countdown tiles; "Choisissez
+language switch, Se connecter); hero with competition label (fallback "À l'affiche"), 64–80 px uppercase title,
+chips (date · time, venue · doors, sale status + limit), countdown tiles (26–36 px figures); "Choisissez
 votre zone" 2-column grid of zone cards (colour bar, name, description, price 28 px,
-remaining / "Dernières places" / "Complet" disabled); info strip (payment, tickets,
-access); sticky summary aside (zone, quantity stepper, lines, 0 DH fee shown, total 30 px,
+remaining / "Dernières places" / "Complet" disabled; price may go to 32 px); info strip (payment, tickets,
+access); sticky summary aside (zone, quantity stepper, lines, 0 DH fee shown, total 30–34 px,
 CTA "Continuer", 8-minute note); footer "Propulsé par Jomhor".
 
 W4 details: amber reservation banner with deadline and countdown; 44 px title; white

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { PATCH as patchMe } from '../me/route'
+import { GET as getMe, PATCH as patchMe } from '../me/route'
 import { POST as pay } from './[id]/pay/route'
 import { GET as getOrder } from './[id]/route'
 import { POST as createOrder } from './route'
@@ -209,6 +209,33 @@ it('PATCH /api/me sends display_name only, with the Bearer', async () => {
   expect(sent().headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
 })
 
+it('GET /api/me (header island): display_name only, never the phone or the token, not cached', async () => {
+  fetchMock.mockResolvedValue(upstream(200, { id: 'u1', phone: '+212600000000', display_name: 'Yazid Aqel', locale: 'fr' }))
+  const res = await getMe(req('/api/me', { method: 'GET' }))
+  expect(res.status).toBe(200)
+  const text = await res.text()
+  expect(JSON.parse(text)).toEqual({ display_name: 'Yazid Aqel' })
+  expect(text).not.toContain('+212')
+  expect(text).not.toContain(TOKEN)
+  expect(res.headers.get('cache-control')).toBe('no-store')
+  expect(sent().url).toBe('http://backend.test/v1/fan/me')
+  expect(sent().headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
+})
+
+it('GET /api/me with a revoked session → 401 and the cookie is cleared', async () => {
+  fetchMock.mockResolvedValue(upstream(401, { code: 'UNAUTHORIZED', message: '', details: {} }))
+  const res = await getMe(req('/api/me', { method: 'GET' }))
+  expect(res.status).toBe(401)
+  expect(res.headers.get('set-cookie')).toBe('__Host-jomhor_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax')
+})
+
+it('GET /api/me with the backend down → 502, the cookie is kept', async () => {
+  fetchMock.mockRejectedValue(new TypeError('fetch failed'))
+  const res = await getMe(req('/api/me', { method: 'GET' }))
+  expect(res.status).toBe(502)
+  expect(res.headers.get('set-cookie')).toBeNull()
+})
+
 const mutating = [
   ['POST /api/orders', () => createOrder(req('/api/orders', { body: VALID, headers: { origin: 'https://evil.com' } }))],
   ['POST /api/orders/{id}/pay', () => pay(req(`/api/orders/${ORDER_ID}/pay`, { headers: { origin: 'https://evil.com' } }), params(ORDER_ID))],
@@ -225,6 +252,7 @@ it.each([
   ['POST /api/orders/{id}/pay', () => pay(req(`/api/orders/${ORDER_ID}/pay`, { headers: { cookie: '' } }), params(ORDER_ID))],
   ['GET /api/orders/{id}', () => getOrder(req(`/api/orders/${ORDER_ID}`, { method: 'GET', headers: { cookie: '' } }), params(ORDER_ID))],
   ['PATCH /api/me', () => patchMe(req('/api/me', { method: 'PATCH', body: {}, headers: { cookie: '' } }))],
+  ['GET /api/me', () => getMe(req('/api/me', { method: 'GET', headers: { cookie: '' } }))],
 ] as const)('%s without a session → 401 UNAUTHORIZED, backend not called', async (_, call) => {
   const res = await call()
   expect(res.status).toBe(401)

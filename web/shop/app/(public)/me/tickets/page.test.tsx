@@ -29,6 +29,7 @@ it('W5 signed in: the server HTML carries no ticket data (the list loads from /a
   const h = renderToString(await TicketsPage())
   expect(h).toContain('Mes billets')
   expect(h).toContain('Chargement de tes billets')
+  expect(h).toContain('href="jomhor-fan://tickets"')
   expect(h).not.toContain(session)
   expect(fetchMock).not.toHaveBeenCalled()
 })
