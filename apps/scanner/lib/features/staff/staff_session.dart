@@ -39,6 +39,24 @@ Future<bool> verifyPin(String pin, String verifier) async {
   return diff == 0;
 }
 
+/// Proof that a SUPERVISOR typed their PIN on this device: only [StaffSession.verifySupervisor] makes one, and
+/// every supervisor action (override, gate change, lookup) takes one. It is good for [ttl] after the PIN, so a
+/// device handed back to the gate agent cannot override under the supervisor's id.
+final class SupervisorGrant {
+  const new _(this.staffId, this.grantedAtMs);
+
+  static const ttl = Duration(seconds: 60);
+
+  /// The supervisor's `staff.staff_id` (the scan row's `supervisor_id`).
+  final String staffId;
+
+  /// Server-corrected epoch ms of the PIN check.
+  final int grantedAtMs;
+
+  /// Within [ttl] of the PIN at [nowMs]; a clock that went backwards past the PIN time also ends it.
+  bool validAt(int nowMs) => nowMs >= grantedAtMs && nowMs - grantedAtMs <= ttl.inMilliseconds;
+}
+
 /// The answer to an unlock attempt. `lockedUntilMs` set = locked out (server-corrected epoch ms).
 typedef UnlockOutcome = ({bool ok, int attemptsLeft, int? lockedUntilMs});
 
@@ -61,6 +79,24 @@ class StaffSession {
   Timer? _idle;
 
   Future<UnlockOutcome> unlock(String staffId, String pin) async {
+    final outcome = await _check(staffId, pin);
+    if (outcome.ok) {
+      await _db.update(_db.config).write(ConfigCompanion(staffId: Value(staffId)));
+      _restartIdle();
+    }
+    return outcome;
+  }
+
+  /// The supervisor sheet (docs/02 §Supervisor override): a SUPERVISOR's own PIN, checked like [unlock] and on
+  /// the same 5-try lockout, without touching the unlocked staff (`config.staff_id` stays the gate agent). A
+  /// GATE member, even with the right PIN, gets no grant.
+  Future<(UnlockOutcome, SupervisorGrant?)> verifySupervisor(String staffId, String pin) async {
+    final outcome = await _check(staffId, pin, role: 'SUPERVISOR');
+    return (outcome, outcome.ok ? SupervisorGrant._(staffId, _clock.nowMs()) : null);
+  }
+
+  /// [pin] against [staffId]'s verifier (of [role], when given), counting failures towards the lockout.
+  Future<UnlockOutcome> _check(String staffId, String pin, {String? role}) async {
     final now = _clock.nowMs();
     final stored = ((await _storage.read(key: lockKey)) ?? '').split(':');
     var failures = int.tryParse(stored.first) ?? 0;
@@ -69,12 +105,10 @@ class StaffSession {
     if (until != null) failures = 0;
 
     final row = await (_db.select(_db.staff)..where((s) => s.staffId.equals(staffId))).getSingleOrNull();
-    final verifier = row?.pinVerifier;
+    final verifier = role == null || row?.role == role ? row?.pinVerifier : null;
     // PBKDF2 (10,000 rounds) off the UI isolate so the PIN pad does not freeze.
     if (verifier != null && await Isolate.run(() => verifyPin(pin, verifier))) {
       await _storage.delete(key: lockKey);
-      await _db.update(_db.config).write(ConfigCompanion(staffId: Value(staffId)));
-      _restartIdle();
       return (ok: true, attemptsLeft: maxFailures, lockedUntilMs: null);
     }
     failures++;

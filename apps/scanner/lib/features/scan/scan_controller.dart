@@ -6,6 +6,7 @@ import 'package:jomhor_core/jomhor_core.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
 import 'package:jomhor_scanner/features/scan/validator.dart' show uuidString;
 import 'package:jomhor_scanner/features/staff/staff_session.dart';
+import 'package:jomhor_scanner/features/supervisor/supervisor_service.dart';
 import 'package:jomhor_scanner/features/sync/sync_controller.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
 
@@ -160,6 +161,19 @@ class ScanController extends Notifier<ScanState> {
     final next = _pending;
     _pending = null;
     if (next != null) await submit(next, wedge: true);
+  }
+
+  /// A supervisor override (lib/features/supervisor): written like a scan, then shown blue and auto-cleared like
+  /// a green. Throws what [SupervisorService.override] throws; the screen keeps its state then.
+  Future<void> admitOverride(SupervisorGrant grant, OverrideReason reason, String ticketId) async {
+    final outcome = await ref.read(supervisorServiceProvider).override(grant, reason, ticketId);
+    unawaited(ref.read(scanFeedbackProvider)(outcome.verdict.result));
+    if (!ref.mounted) return;
+    _clear?.cancel();
+    _lastAt = _now();
+    state = ScanState(loaded: true, desk: state.desk, outcome: outcome, countersStale: state.countersStale);
+    _clear = Timer(const Duration(milliseconds: JomhorMotion.greenAutoClearMs), dismiss);
+    await refresh();
   }
 
   /// The repeat window restarts here, so a code still held up after a red is dismissed is not rescanned.

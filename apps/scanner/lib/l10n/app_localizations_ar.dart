@@ -329,4 +329,105 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get roleGate => 'مراقب';
+
+  @override
+  String get supervisorTitle => 'المشرف';
+
+  @override
+  String get supervisorPickName => 'أي مشرف؟';
+
+  @override
+  String get supervisorNone => 'لا يوجد مشرف على هذا الجهاز. صِل الجهاز لتحميل طاقم البوابة.';
+
+  @override
+  String get supervisorClose => 'إغلاق';
+
+  @override
+  String get supervisorBack => 'رجوع';
+
+  @override
+  String supervisorOverrideCount(int count, int cap) {
+    return 'الاستثناءات $count / $cap';
+  }
+
+  @override
+  String supervisorCapReached(int cap) {
+    return 'تم بلوغ الحد: $cap استثناء على هذا الجهاز لهذا الحدث.';
+  }
+
+  @override
+  String get actionOverride => 'استثناء';
+
+  @override
+  String get actionGate => 'تغيير البوابة';
+
+  @override
+  String get actionLookup => 'البحث عن تذكرة';
+
+  @override
+  String get overrideReasonTitle => 'سبب الاستثناء';
+
+  @override
+  String get reasonID_CHECKED => 'تم التحقق من الهوية';
+
+  @override
+  String get reasonDEVICE_FAULT => 'عطل في الجهاز';
+
+  @override
+  String get reasonDAMAGED_TICKET => 'تذكرة تالفة';
+
+  @override
+  String get reasonOTHER => 'سبب آخر';
+
+  @override
+  String get ticketNoLabel => 'رقم التذكرة (8 رموز)';
+
+  @override
+  String get ticketSearch => 'بحث';
+
+  @override
+  String get ticketScan => 'مسح التذكرة';
+
+  @override
+  String get ticketNoMatch => 'لا توجد تذكرة بهذا الرقم في البيان.';
+
+  @override
+  String ticketPick(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تذاكر تحمل هذا الرقم: المس الصحيحة',
+      one: 'تذكرة واحدة: المسها للسماح بالدخول',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketNotInManifest => 'التذكرة غير موجودة في البيان: لا يمكن الاستثناء.';
+
+  @override
+  String ticketDetail(String status, String initials) {
+    return '$status · $initials';
+  }
+
+  @override
+  String get statusVALID => 'صالحة';
+
+  @override
+  String get statusCANCELLED => 'ملغاة';
+
+  @override
+  String get statusREFUNDED => 'مستردة';
+
+  @override
+  String get statusBLOCKED => 'محظورة';
+
+  @override
+  String get gatePickTitle => 'بوابة هذا الجهاز';
+
+  @override
+  String get gateCurrent => 'الحالية';
+
+  @override
+  String get supervisorExpired => 'انتهت جلسة المشرف: أدخل الرمز السري مجددًا.';
 }

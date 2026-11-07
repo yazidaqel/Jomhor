@@ -73,7 +73,14 @@ String? resultReason(AppLocalizations l, ScanOutcome o) {
 /// "Validé hors ligne en {ms} ms · {time}", and "Scanner le suivant" pinned at the bottom. White ink, dark on
 /// amber. [outcome] null = the scan could not be written.
 class ResultView extends StatelessWidget {
-  const new({required this.outcome, required this.topLine, required this.onNext, this.unsynced, super.key});
+  const new({
+    required this.outcome,
+    required this.topLine,
+    required this.onNext,
+    this.unsynced,
+    this.onSupervisor,
+    super.key,
+  });
 
   final ScanOutcome? outcome;
   final String topLine;
@@ -81,6 +88,9 @@ class ResultView extends StatelessWidget {
   /// Shown with online/offline at the right of the top line; null hides it.
   final int? unsynced;
   final VoidCallback onNext;
+
+  /// Opens the supervisor sheet on this ticket (override without a rescan); null hides the button.
+  final VoidCallback? onSupervisor;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +170,15 @@ class ResultView extends StatelessWidget {
                   child: Text(l.scanNext, textAlign: TextAlign.center),
                 ),
               ),
+              if (onSupervisor case final open?)
+                ExcludeFocus(
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: ink),
+                    onPressed: open,
+                    icon: const Icon(Icons.lock_outline_rounded),
+                    label: Text(l.supervisorTitle),
+                  ),
+                ),
             ],
           ),
         ),

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_scanner/features/scan/result_view.dart';
 import 'package:jomhor_scanner/features/scan/scan_controller.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
+import 'package:jomhor_scanner/features/supervisor/supervisor_sheet.dart';
 import 'package:jomhor_scanner/features/sync/sync_line.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
@@ -32,12 +33,17 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   final _wedge = StringBuffer();
   DateTime _lastKey = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// The supervisor sheet is open: it owns the camera and the keyboard (its ticket field takes wedge input).
+  bool _supervising = false;
+
+  void _supervise(bool open) => setState(() => _supervising = open);
+
   void _fromCamera(String raw) => unawaited(ref.read(scanControllerProvider.notifier).submit(raw));
 
   void _fromWedge(String raw) => unawaited(ref.read(scanControllerProvider.notifier).submit(raw, wedge: true));
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+    if (_supervising || (event is! KeyDownEvent && event is! KeyRepeatEvent)) return KeyEventResult.ignored;
     final now = DateTime.now();
     if (now.difference(_lastKey) > _wedgeGap) _wedge.clear();
     _lastKey = now;
@@ -58,12 +64,29 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final state = ref.watch(scanControllerProvider);
+    // Locked or out of event mode while the sheet is open: it goes, so a later unlock starts on the camera.
+    ref.listen(scanControllerProvider, (_, next) {
+      if (next.loaded && next.desk == null && _supervising) _supervise(false);
+    });
     final desk = state.desk;
     final showing = state.outcome != null || state.failed;
     final topLine = desk == null ? '' : l.scanTopLine(desk.gateCode, desk.gateName, l.scanModeIn);
     final Widget body;
     if (!state.loaded) {
       body = const SizedBox.shrink();
+    } else if (_supervising && desk != null) {
+      // Android back closes the sheet instead of leaving the app.
+      body = PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _supervise(false);
+        },
+        child: SupervisorSheet(
+          camera: widget.camera ?? _camera,
+          ticketNo: state.outcome?.verdict.ticketNo,
+          onClose: () => _supervise(false),
+        ),
+      );
     } else if (desk == null && !showing) {
       body = const _Inactive();
     } else {
@@ -77,6 +100,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
               stale: state.countersStale,
               topLine: topLine,
               camera: (widget.camera ?? _camera)(_fromCamera),
+              onSupervisor: () => _supervise(true),
             ),
           if (showing)
             Positioned.fill(
@@ -85,6 +109,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
                 topLine: topLine,
                 unsynced: desk?.unsynced,
                 onNext: ref.read(scanControllerProvider.notifier).dismiss,
+                onSupervisor: desk == null ? null : () => _supervise(true),
               ),
             ),
         ],
@@ -101,7 +126,13 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 Widget _camera(ValueChanged<String> onCode) => QrCamera(onCode: onCode);
 
 class _Scanning extends StatelessWidget {
-  const new({required this.desk, required this.stale, required this.topLine, required this.camera});
+  const new({
+    required this.desk,
+    required this.stale,
+    required this.topLine,
+    required this.camera,
+    required this.onSupervisor,
+  });
 
   final GateDesk desk;
 
@@ -109,6 +140,7 @@ class _Scanning extends StatelessWidget {
   final bool stale;
   final String topLine;
   final Widget camera;
+  final VoidCallback onSupervisor;
 
   @override
   Widget build(BuildContext context) {
@@ -160,6 +192,16 @@ class _Scanning extends StatelessWidget {
               const SizedBox(height: JomhorSpace.s),
               Text(l.scanCountersStale, textAlign: TextAlign.center, style: muted),
             ],
+            const SizedBox(height: JomhorSpace.m),
+            // Not focusable: a PDA trigger's Enter must reach the keyboard-wedge handler.
+            ExcludeFocus(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(JomhorSize.touchMin)),
+                onPressed: onSupervisor,
+                icon: const Icon(Icons.lock_outline_rounded),
+                label: Text(l.supervisorTitle),
+              ),
+            ),
           ],
         ),
       ),

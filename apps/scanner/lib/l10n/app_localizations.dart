@@ -650,6 +650,180 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Contrôleur'**
   String get roleGate;
+
+  /// Supervisor sheet title and the button that opens it (scan and result screens).
+  ///
+  /// In fr, this message translates to:
+  /// **'Superviseur'**
+  String get supervisorTitle;
+
+  /// No description provided for @supervisorPickName.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quel superviseur ?'**
+  String get supervisorPickName;
+
+  /// The staff list has no SUPERVISOR.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun superviseur sur cet appareil. Connectez l\'appareil pour charger l\'équipe de porte.'**
+  String get supervisorNone;
+
+  /// Closes the supervisor sheet (screen reader).
+  ///
+  /// In fr, this message translates to:
+  /// **'Fermer'**
+  String get supervisorClose;
+
+  /// No description provided for @supervisorBack.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retour'**
+  String get supervisorBack;
+
+  /// Overrides on this device for this event, against the cap (docs/02: 20).
+  ///
+  /// In fr, this message translates to:
+  /// **'Dérogations {count} / {cap}'**
+  String supervisorOverrideCount(int count, int cap);
+
+  /// Override refused: the per-device cap is reached.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plafond atteint : {cap} dérogations sur cet appareil pour cet événement.'**
+  String supervisorCapReached(int cap);
+
+  /// Supervisor action: admit a ticket with a reason (OVERRIDE).
+  ///
+  /// In fr, this message translates to:
+  /// **'Dérogation'**
+  String get actionOverride;
+
+  /// No description provided for @actionGate.
+  ///
+  /// In fr, this message translates to:
+  /// **'Changer de porte'**
+  String get actionGate;
+
+  /// No description provided for @actionLookup.
+  ///
+  /// In fr, this message translates to:
+  /// **'Recherche billet'**
+  String get actionLookup;
+
+  /// No description provided for @overrideReasonTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Motif de la dérogation'**
+  String get overrideReasonTitle;
+
+  /// docs/06 override reason labels.
+  ///
+  /// In fr, this message translates to:
+  /// **'Identité vérifiée'**
+  String get reasonID_CHECKED;
+
+  /// No description provided for @reasonDEVICE_FAULT.
+  ///
+  /// In fr, this message translates to:
+  /// **'Panne d\'appareil'**
+  String get reasonDEVICE_FAULT;
+
+  /// No description provided for @reasonDAMAGED_TICKET.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet abîmé'**
+  String get reasonDAMAGED_TICKET;
+
+  /// No description provided for @reasonOTHER.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autre motif'**
+  String get reasonOTHER;
+
+  /// Typed ticket number, printed under every QR (4-4).
+  ///
+  /// In fr, this message translates to:
+  /// **'N° billet (8 caractères)'**
+  String get ticketNoLabel;
+
+  /// No description provided for @ticketSearch.
+  ///
+  /// In fr, this message translates to:
+  /// **'Chercher'**
+  String get ticketSearch;
+
+  /// No description provided for @ticketScan.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scanner le billet'**
+  String get ticketScan;
+
+  /// Lookup or override: nothing in the manifest.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun billet de ce numéro dans le manifeste.'**
+  String get ticketNoMatch;
+
+  /// Override: the manifest tickets matching the number; typed numbers can collide (plan lot-2 Q40).
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 billet : touchez-le pour l\'admettre} other{{count} billets portent ce numéro : touchez le bon}}'**
+  String ticketPick(int count);
+
+  /// No description provided for @ticketNotInManifest.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet absent du manifeste : dérogation impossible.'**
+  String get ticketNotInManifest;
+
+  /// Lookup row: manifest status and holder initials (no other holder data).
+  ///
+  /// In fr, this message translates to:
+  /// **'{status} · {initials}'**
+  String ticketDetail(String status, String initials);
+
+  /// Manifest ticket statuses.
+  ///
+  /// In fr, this message translates to:
+  /// **'Valide'**
+  String get statusVALID;
+
+  /// No description provided for @statusCANCELLED.
+  ///
+  /// In fr, this message translates to:
+  /// **'Annulé'**
+  String get statusCANCELLED;
+
+  /// No description provided for @statusREFUNDED.
+  ///
+  /// In fr, this message translates to:
+  /// **'Remboursé'**
+  String get statusREFUNDED;
+
+  /// No description provided for @statusBLOCKED.
+  ///
+  /// In fr, this message translates to:
+  /// **'Bloqué'**
+  String get statusBLOCKED;
+
+  /// No description provided for @gatePickTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Porte de cet appareil'**
+  String get gatePickTitle;
+
+  /// Marks the device's current gate.
+  ///
+  /// In fr, this message translates to:
+  /// **'Actuelle'**
+  String get gateCurrent;
+
+  /// Supervisor PIN older than 60 s, supervisor gone from the staff list: back to the supervisor list.
+  ///
+  /// In fr, this message translates to:
+  /// **'Session superviseur terminée : saisissez à nouveau le PIN.'**
+  String get supervisorExpired;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

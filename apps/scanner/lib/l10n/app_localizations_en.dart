@@ -329,4 +329,105 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get roleGate => 'Gate staff';
+
+  @override
+  String get supervisorTitle => 'Supervisor';
+
+  @override
+  String get supervisorPickName => 'Which supervisor?';
+
+  @override
+  String get supervisorNone => 'No supervisor on this device. Connect the device to load the gate team.';
+
+  @override
+  String get supervisorClose => 'Close';
+
+  @override
+  String get supervisorBack => 'Back';
+
+  @override
+  String supervisorOverrideCount(int count, int cap) {
+    return 'Overrides $count / $cap';
+  }
+
+  @override
+  String supervisorCapReached(int cap) {
+    return 'Cap reached: $cap overrides on this device for this event.';
+  }
+
+  @override
+  String get actionOverride => 'Override';
+
+  @override
+  String get actionGate => 'Change gate';
+
+  @override
+  String get actionLookup => 'Ticket lookup';
+
+  @override
+  String get overrideReasonTitle => 'Override reason';
+
+  @override
+  String get reasonID_CHECKED => 'ID checked';
+
+  @override
+  String get reasonDEVICE_FAULT => 'Device fault';
+
+  @override
+  String get reasonDAMAGED_TICKET => 'Damaged ticket';
+
+  @override
+  String get reasonOTHER => 'Other reason';
+
+  @override
+  String get ticketNoLabel => 'Ticket no. (8 characters)';
+
+  @override
+  String get ticketSearch => 'Search';
+
+  @override
+  String get ticketScan => 'Scan the ticket';
+
+  @override
+  String get ticketNoMatch => 'No ticket with this number in the manifest.';
+
+  @override
+  String ticketPick(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tickets share this number: tap the right one',
+      one: '1 ticket: tap it to admit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketNotInManifest => 'Ticket not in the manifest: no override.';
+
+  @override
+  String ticketDetail(String status, String initials) {
+    return '$status · $initials';
+  }
+
+  @override
+  String get statusVALID => 'Valid';
+
+  @override
+  String get statusCANCELLED => 'Cancelled';
+
+  @override
+  String get statusREFUNDED => 'Refunded';
+
+  @override
+  String get statusBLOCKED => 'Blocked';
+
+  @override
+  String get gatePickTitle => 'This device\'s gate';
+
+  @override
+  String get gateCurrent => 'Current';
+
+  @override
+  String get supervisorExpired => 'Supervisor session ended: enter the PIN again.';
 }

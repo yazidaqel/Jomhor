@@ -330,4 +330,106 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get roleGate => 'Contrôleur';
+
+  @override
+  String get supervisorTitle => 'Superviseur';
+
+  @override
+  String get supervisorPickName => 'Quel superviseur ?';
+
+  @override
+  String get supervisorNone =>
+      'Aucun superviseur sur cet appareil. Connectez l\'appareil pour charger l\'équipe de porte.';
+
+  @override
+  String get supervisorClose => 'Fermer';
+
+  @override
+  String get supervisorBack => 'Retour';
+
+  @override
+  String supervisorOverrideCount(int count, int cap) {
+    return 'Dérogations $count / $cap';
+  }
+
+  @override
+  String supervisorCapReached(int cap) {
+    return 'Plafond atteint : $cap dérogations sur cet appareil pour cet événement.';
+  }
+
+  @override
+  String get actionOverride => 'Dérogation';
+
+  @override
+  String get actionGate => 'Changer de porte';
+
+  @override
+  String get actionLookup => 'Recherche billet';
+
+  @override
+  String get overrideReasonTitle => 'Motif de la dérogation';
+
+  @override
+  String get reasonID_CHECKED => 'Identité vérifiée';
+
+  @override
+  String get reasonDEVICE_FAULT => 'Panne d\'appareil';
+
+  @override
+  String get reasonDAMAGED_TICKET => 'Billet abîmé';
+
+  @override
+  String get reasonOTHER => 'Autre motif';
+
+  @override
+  String get ticketNoLabel => 'N° billet (8 caractères)';
+
+  @override
+  String get ticketSearch => 'Chercher';
+
+  @override
+  String get ticketScan => 'Scanner le billet';
+
+  @override
+  String get ticketNoMatch => 'Aucun billet de ce numéro dans le manifeste.';
+
+  @override
+  String ticketPick(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count billets portent ce numéro : touchez le bon',
+      one: '1 billet : touchez-le pour l\'admettre',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get ticketNotInManifest => 'Billet absent du manifeste : dérogation impossible.';
+
+  @override
+  String ticketDetail(String status, String initials) {
+    return '$status · $initials';
+  }
+
+  @override
+  String get statusVALID => 'Valide';
+
+  @override
+  String get statusCANCELLED => 'Annulé';
+
+  @override
+  String get statusREFUNDED => 'Remboursé';
+
+  @override
+  String get statusBLOCKED => 'Bloqué';
+
+  @override
+  String get gatePickTitle => 'Porte de cet appareil';
+
+  @override
+  String get gateCurrent => 'Actuelle';
+
+  @override
+  String get supervisorExpired => 'Session superviseur terminée : saisissez à nouveau le PIN.';
 }
