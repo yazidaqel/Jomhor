@@ -118,17 +118,18 @@ Server (PostgreSQL):
 | organizers | Tenant (club, promoter, venue operator) | id, name, kind (SPORTS\_CLUB, PROMOTER, VENUE, OTHER), settings jsonb |
 | venues | Stadium, hall, open-air site | id, organizer\_id, name, capacity |
 | zones | Tribune / sector / standing area | id, organizer\_id, venue\_id, code, name, capacity |
-| gates | Physical entrance | id, organizer\_id, venue\_id, code, name |
+| gates | Physical entrance | id, organizer\_id, venue\_id, code, name, directions, latitude, longitude (fan app only, never in the manifest) |
 | gate\_zones | Which zones a gate serves | organizer\_id, gate\_id, zone\_id |
 | event\_series | Season, festival edition, tour | id, organizer\_id, name, starts\_on, ends\_on |
 | events | One ticketed occurrence | id, organizer\_id, venue\_id, series\_id (nullable), event\_type (FOOTBALL\_MATCH, CONCERT, FESTIVAL\_DAY, CONFERENCE, OTHER), title, starts\_at, doors\_open\_at, status (DRAFT, ON\_SALE, GATES\_OPEN, CLOSED), event\_key\_enc, refund\_cutoff\_at, sale\_starts\_at, reentry\_policy, metadata jsonb (opponent, competition, headliner…) |
 | price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold |
-| orders | Purchase | id, organizer\_id, event\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status |
+| orders | Purchase | id, organizer\_id, event\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status, group\_order\_id (split pay: a member order → the initiator's order) |
 | order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, qty, unit\_price\_mad, holders jsonb (name, user\_id per place) |
 | payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref, pay\_code (cash code), pos\_session\_id, redirected\_at |
 | pos\_sessions | Club till sessions (one cashier's shift) | id, organizer\_id, staff\_id, label, opened\_at, closed\_at, expected\_mad, declared\_mad |
 | refunds | Money owed back for a refunded ticket, paid back by hand | id, organizer\_id, event\_id, ticket\_id, order\_id, payment\_id, amount\_mad, reason, status (REQUIRED, DONE), requested\_by, done\_by, reference |
 | tickets | One seat / admission | id (UUID), order\_id, event\_id, zone\_id, seat\_label, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_user\_id, holder\_name (never in a manifest), holder\_initials, issued\_at |
+| ticket\_transfers | Transfer or re-issue: the old ticket goes CANCELLED, a new one (new K\_t) is issued | id, organizer\_id, ticket\_id (unique), new\_ticket\_id (unique), from\_user\_id, to\_user\_id (= from\_user\_id for a re-issue), transferred\_at |
 | passes | Season ticket / multi-event bundle | id, series\_id, user\_id, zone\_id, status; materialised as one ticket per event |
 | devices | Enrolled scanners | id, organizer\_id, label, public\_key (ECDSA P-256 SPKI DER), status (PENDING, ACTIVE, REVOKED), enrolled\_at, approved\_at, revoked\_at, last\_seen\_at |
 | device\_assignments | Device ↔ event ↔ gate | organizer\_id, device\_id, event\_id, gate\_id, manifest\_version, closed\_ack\_at |
@@ -139,6 +140,10 @@ Server (PostgreSQL):
 | otp\_challenges | Phone OTP (platform-wide) | id, phone\_e164, audience (fan, org), ip, code\_hash, attempts, expires\_at |
 | fan\_sessions | Revocable fan login sessions (platform-wide) | id (JWT sid), user\_id, expires\_at, revoked\_at |
 | ticket\_deliveries | WhatsApp delivery outbox | id, organizer\_id, ticket\_id, status (PENDING, SENT, FAILED), attempts, next\_attempt\_at |
+| memberships | A fan who joined an organizer's club (free); loyalty computed on read | id, organizer\_id, user\_id, number (per organizer, never reused), joined\_at, left\_at, marketing\_push, marketing\_whatsapp |
+| push\_tokens | FCM tokens of the organizer's fan app | id, organizer\_id, user\_id, session\_id, token, platform (android, ios), updated\_at |
+| campaigns | Push or WhatsApp campaign | id, organizer\_id, channel (PUSH, WHATSAPP), audience (MEMBERS, EVENT\_HOLDERS), event\_id, title, body, status (DRAFT, SCHEDULED, SENDING, SENT, CANCELLED), scheduled\_at, created\_by, started\_at, finished\_at |
+| fan\_messages | Push and WhatsApp outbox other than ticket PDFs | id, organizer\_id, user\_id, channel, kind (TICKET\_RECEIVED, SPLIT\_INVITE, PAY\_CODE, ORDER\_PAID, CAMPAIGN), campaign\_id, order\_id, ticket\_id, status, attempts, next\_attempt\_at, last\_error |
 
 Indexes that matter: `scans (event_id, ticket_id, device_time)` for canonical-first resolution; `scans (event_id, seq)` for `used_since`; `scans (event_id, gate_id, device_time)` for the live dashboard; `tickets (event_id, status)` for manifest builds; a GIN index on `events.metadata` only if type-specific search is needed. A partial unique index on `scans (ticket_id, direction) WHERE result = 'OK'` is deliberately not used, because the first `OK` must be chosen by device\_time after the fact, not by arrival order.
 
@@ -179,6 +184,7 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | Insider issues free tickets | Every ticket comes from an order; manifests are signed; sold vs scanned reconciled per zone after every event | Collusion with POS cash sales: covered by till sessions (expected vs declared cash, audited) in Lot 3; bank deposit matching with the Lot 5 finance module |
 | Cash confirmed without cash taken | Signed network callbacks, exact amount, unique network ref; club tills reconciled per session (expected vs declared) | A cashier's gap is found at close, not prevented |
 | Ticket cancelled after last delta | Refund/cancel freeze at T0 − 60 min | Cancellations in the last hour are not possible, by policy |
+| Ticket transferred after a scanner's last delta | Transfers and re-issues close at `refund_cutoff_at` − 30 min (T0 − 90), leaving deltas 30 min of signal | A scanner offline before T0 − 90 still admits the old QR and refuses the new one (INCONNU) |
 | Fan phone clock tampered | Server time offset pushed to the app; ±1 slot tolerance | None practical |
 | Replay of an old static QR at the next event | event\_id in the token and a new K\_e per event | None |
 | Bots on on-sale day | Not a gate problem: on-sale queue, per-account limits, payment-first reservation. Separate spec | — |
@@ -227,7 +233,7 @@ The ticket is the hero object: one full-screen, club-coloured ticket card with t
 - The club's identity, not a generic ticketing look: club colours, crest, typography, and a different hero treatment per opponent (derby vs regular match).
 - Motion with meaning: the QR card flips to show gate directions; a confirmed purchase animates the ticket sliding into the wallet; a successful gate scan (when online) flips the card to "You're in".
 - One-thumb reach: all primary actions in the bottom 40% of the screen; seat/zone picking on a stadium map, not a dropdown.
-- Sharing built in: transfer a ticket to a friend by phone number; the recipient gets their own K\_t and the sender's QR dies.
+- Sharing built in: transfer a ticket to a friend by phone number **and name**; the recipient gets a new ticket (new K\_t), and the sender's QR dies with the next manifest version (transfers close at T0 − 90).
 - Dark theme by default (stadiums at night), haptics on every confirmation, Arabic / French / English with RTL done properly.
 
 Next step: mock the five core screens (home, match, seat pick, checkout, ticket) as a design the club can react to before any code.
@@ -243,7 +249,7 @@ One V1 covers the full platform (gate, Moroccan payments, fan platform, organize
 | 2 · Gate | Scanner app, offline validation, manifest + K\_e distribution, sync and duplicate resolution, supervisor override, live gate dashboard, reconciliation report | First pilot match end to end (sell → scan → reconcile) | 3 wk |
 | 3 · Moroccan payments | Cash at agencies (reserve → pay code → QR unlocks), mobile wallet, POS thermal print at kiosks, cash reconciliation (installments for passes: Lot 5) | Every Moroccan fan can pay, online or offline | 3 wk |
 | 4 · Fan platform | Group buying with split pay, ticket transfer (new K\_t, old QR dies), membership + loyalty, matchday companion (gate directions, live gate load), push and WhatsApp campaigns, Darija/Arabic/French with RTL | The app people open between matches, not only on match day | 4 wk |
-| 5 · Organizer platform | Accreditations and invitations (press, VIP, sponsors), promo codes, season passes (`passes`) with installments, finance module (daily settlement, VAT invoices, 48 h payouts), fan CRM export, fair on-sale (virtual queue, verified fans) | The club runs the whole season without us in the loop | 3 wk |
+| 5 · Organizer platform | Accreditations and invitations (press, VIP, sponsors), promo codes, season passes (`passes`) with installments, paid membership, finance module (daily settlement, VAT invoices, 48 h payouts), fan CRM export, fair on-sale (virtual queue, verified fans) | The club runs the whole season without us in the loop | 3 wk |
 | 6 · Hardening & launch | On-sale load test (derby scenario), pen test on QR and sync, device fleet and runbooks, monitoring, second organizer onboarded on config only | Public launch and second customer | 2 wk |
 
 Order matters: Lots 0–2 are the pilot match (about 10 weeks); Lots 3–5 can run partly in parallel once Lot 2 is in production; Lot 6 gates the public launch. Official resale with a price cap is the first post-V1 item.
