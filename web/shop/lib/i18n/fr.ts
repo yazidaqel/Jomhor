@@ -255,6 +255,10 @@ export const fr = {
     qrHint: "QR dans l'app et sur le PDF",
     count: '{n} billets',
     countOne: '1 billet',
+    pendingTitle: 'Commandes en attente de paiement',
+    pendingIntro: 'Paie en espèces avec ton code, au montant exact, avant l’heure limite. Sinon, les places sont libérées.',
+    pendingCode: 'Code',
+    pendingBefore: 'À payer avant {deadline}',
   },
   login: {
     metaTitle: 'Connexion',

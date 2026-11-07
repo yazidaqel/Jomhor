@@ -3,7 +3,7 @@ import { GET as getMe, PATCH as patchMe } from '../me/route'
 import { POST as pay } from './[id]/pay/route'
 import { GET as getOrder } from './[id]/route'
 import { formatPayCode, orderNo } from '@/lib/orders'
-import { POST as createOrder } from './route'
+import { GET as listOrders, POST as createOrder } from './route'
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSIsImF1ZCI6ImZhbiJ9.c2lnbmF0dXJl'
 const ORDER_ID = '0190f3a2-7c1e-7b55-9a1e-3f1f6b2c9d10'
@@ -320,3 +320,67 @@ it.each([
 ])('formatPayCode(%j) → %j', (raw, shown) => expect(formatPayCode(raw)).toBe(shown))
 
 it('orderNo: last 8 hex digits of the id, 4-4', () => expect(orderNo(ORDER_ID)).toBe('6B2C 9D10'))
+
+it('list (W5 pending): cookie → Bearer on /fan/orders only; AWAITING_CASH with a code, still in time, mapped; no-store', async () => {
+  const row = (id: string, status: string, reserved_until: string | null, pay_code: string | null) => ({
+    id,
+    event: { id: 12, title: 'Atlas FC – Raja', starts_at: '2099-02-07T19:00:00Z', timezone: 'Africa/Casablanca', venue: 'x' },
+    channel: 'WEB',
+    status,
+    total_mad: 10000,
+    reserved_until,
+    payment_method: 'CASH_AGENCY',
+    pay_code,
+    created_at: '2026-02-01T12:00:00Z',
+    user_phone: '+212600000000',
+  })
+  const CASH_ID = '0190f3a2-7c1e-7b55-9a1e-000000000001'
+  fetchMock.mockResolvedValue(
+    upstream(200, {
+      orders: [
+        row(CASH_ID, 'AWAITING_CASH', '2099-02-01T12:00:00Z', '4F7K29'),
+        row('0190f3a2-7c1e-7b55-9a1e-000000000002', 'AWAITING_CASH', '2099-02-01T12:00:00Z', null), // code no longer PENDING
+        row('0190f3a2-7c1e-7b55-9a1e-000000000003', 'AWAITING_CASH', '2020-02-01T12:00:00Z', 'AAAA11'), // hold over, not yet swept
+        row('0190f3a2-7c1e-7b55-9a1e-000000000004', 'RESERVED', '2099-02-01T12:00:00Z', null),
+        row('0190f3a2-7c1e-7b55-9a1e-000000000005', 'PAID', null, null),
+        row('../../org/x', 'AWAITING_CASH', '2099-02-01T12:00:00Z', 'BBBB22'),
+      ],
+      k_t: 'SECRET',
+    }),
+  )
+
+  const res = await listOrders(req('/api/orders', { method: 'GET', headers: { origin: '' } }))
+
+  expect(res.status).toBe(200)
+  expect(res.headers.get('cache-control')).toBe('no-store')
+  const text = await res.text()
+  expect(text).not.toContain(TOKEN)
+  expect(text).not.toContain('SECRET')
+  expect(text).not.toContain('+212600000000')
+  expect(JSON.parse(text)).toEqual({
+    orders: [
+      {
+        id: CASH_ID,
+        event: { title: 'Atlas FC – Raja', starts_at: '2099-02-07T19:00:00Z', timezone: 'Africa/Casablanca' },
+        code: 'JMH 4F7K 29',
+        amount_mad: 10000,
+        reserved_until: '2099-02-01T12:00:00Z',
+      },
+    ],
+  })
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  expect(sent().url).toBe('http://backend.test/v1/fan/orders')
+  expect(sent().headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
+  expect(sent().init.cache).toBe('no-store')
+})
+
+it('list: no session → 401 without calling the backend; backend error passes through', async () => {
+  const res = await listOrders(new Request('http://shop.test/api/orders'))
+  expect(res.status).toBe(401)
+  expect(fetchMock).not.toHaveBeenCalled()
+
+  fetchMock.mockResolvedValue(upstream(401, { code: 'UNAUTHORIZED', message: 'expired', details: {} }))
+  const expired = await listOrders(req('/api/orders', { method: 'GET' }))
+  expect(expired.status).toBe(401)
+  expect((await expired.json()).code).toBe('UNAUTHORIZED')
+})

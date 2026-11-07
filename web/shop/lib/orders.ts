@@ -156,3 +156,40 @@ export const checkoutPath = (c: CheckoutQuery) =>
   `/orders/new?${new URLSearchParams({ event: String(c.event), price: c.price, qty: String(c.qty) })}`
 
 export const loginUrl = (next: string) => `/login?next=${encodeURIComponent(next)}`
+
+/** W5 "Commandes en attente de paiement": an AWAITING_CASH order still payable, with its code. Nothing else. */
+export type PendingCashOrder = {
+  id: string
+  event: { title: string; starts_at: string; timezone: string }
+  /** As shown: `JMH 4F7K 29` (formatPayCode). */
+  code: string
+  amount_mad: number
+  reserved_until: string
+}
+
+/**
+ * The buyer's AWAITING_CASH orders with a PENDING code (`pay_code` not null) whose hold is still open by the shop
+ * server's clock (not the fan's device), in the backend's order, from `GET /fan/orders` alone.
+ */
+export async function getPendingCash(token: string, now = Date.now()): Promise<PendingCashOrder[]> {
+  return list(obj(await api('/fan/orders', { token })).orders)
+    .filter(
+      (o) =>
+        o.status === 'AWAITING_CASH' &&
+        typeof o.pay_code === 'string' &&
+        typeof o.id === 'string' &&
+        SAFE_ID.test(o.id) &&
+        Number.isSafeInteger(o.total_mad) &&
+        Date.parse(String(o.reserved_until)) > now,
+    )
+    .map((o) => {
+      const e = obj(o.event)
+      return {
+        id: o.id as string,
+        event: { title: String(e.title), starts_at: String(e.starts_at), timezone: String(e.timezone) },
+        code: formatPayCode(o.pay_code as string),
+        amount_mad: o.total_mad as number,
+        reserved_until: String(o.reserved_until),
+      }
+    })
+}
