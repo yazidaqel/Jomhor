@@ -563,7 +563,8 @@ function CodeResult({ code }: { code: string }) {
 /**
  * Collect sends the exact amount shown. A repeat from this till is a 200 (same order), so a lost answer is just
  * clicked again: a lookup that now reads PAID may be this till's own collect, so "Encaisser" stays on and the server
- * decides (200 replay, or 409). Only a 409 CODE_NOT_PAYABLE on the collect itself says "ne gardez pas l'argent".
+ * decides (200 replay, or 409). Only a 409 CODE_NOT_PAYABLE on the collect itself says "ne gardez pas l'argent", unless
+ * it carries `collected_by_you` (an earlier till of this cashier took it): then "gardez l'argent".
  * An expired or otherwise unpayable lookup can't be this till's (a collected order is PAID): nothing to collect.
  */
 function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
@@ -574,6 +575,8 @@ function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
   const tillOpen = useTillOpen()
   const error = collect.error
   const refused = (error instanceof ApiError && error.code === 'CODE_NOT_PAYABLE') || (!order.payable && order.status !== 'PAID')
+  // Collected in an earlier till of this cashier (04-api §Point of sale): the cash is counted there, keep it.
+  const earlier = error instanceof ApiError && error.code === 'CODE_NOT_PAYABLE' && error.details.collected_by_you === true
   const paidHint = !refused && !order.payable
   const errorText =
     !error || refused ? null : error instanceof ApiError && error.code === 'VALIDATION_FAILED' ? t('pos.code.amountChanged') : message(error)
@@ -612,11 +615,17 @@ function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
             </dd>
           </div>
         </dl>
-        {refused && (
-          <p role="alert" className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
-            <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-            {t('pos.code.notPayable')}
+        {earlier ? (
+          <p role="alert" className="rounded-lg bg-muted px-4 py-3 text-sm font-medium">
+            {t('pos.code.collectedEarlier')}
           </p>
+        ) : (
+          refused && (
+            <p role="alert" className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+              <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+              {t('pos.code.notPayable')}
+            </p>
+          )
         )}
         {paidHint && <p className="rounded-lg bg-muted px-4 py-3 text-sm">{t('pos.code.paidHint')}</p>}
         {errorText && (

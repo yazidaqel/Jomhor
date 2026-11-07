@@ -235,7 +235,7 @@ These override the screen specs above for Lot 2 (see `docs/plans/lot-2.md`).
 | Scanner screens (not mocked) | Same dark components: Enrôlement (scan QR, label, fingerprint at 28 px, "En attente d'approbation"), Événement (assignment, download progress, drift check result), Déverrouillage (name list + 44 px PIN pad), Recherche (ticket no → zone, status, initials only), Clôture (drain progress, "Données effacées"). |
 | B4 | Data from `/live` refetched every 5 s (no SSE). Amber row = `devices_stale` (no "scans en attente" figure: the server can't know it). "Clôturer l'événement" opens a confirm dialog with the stale-device count. "Exporter CSV" = reconciliation CSV. Charge = `rate_per_min` ÷ (`devices_total` × 24). |
 | B5 | "Provisoire" / "Définitive" badge (`final`), totals cards, zone table, gate table, unsynced devices, CSV. |
-| B6 | Tabs Appareils (list with status badge, fingerprint, last seen; "Ajouter des appareils" dialog with the QR + countdown; Approuver; Révoquer with confirm) and Équipe de porte (staff list, add → "PIN : 4821, affiché une seule fois" dialog, reset PIN, deactivate). |
+| B6 | Tabs Appareils (list with status badge, fingerprint, last seen; "Ajouter des appareils" dialog with the QR + countdown; Approuver; Révoquer with confirm) and Équipe (gate staff and cashiers; staff list, add → "PIN : 4821, affiché une seule fois" dialog, reset PIN, deactivate). |
 | B2 | Appareils tab (device → gate select, manifest version, last seen, wipe ack); Règles "Ré-entrée · aucune" read-only. |
 
 ## Lot 3 adjustments

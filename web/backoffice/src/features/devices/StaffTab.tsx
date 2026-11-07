@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { KeyRound, Plus } from 'lucide-react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -23,6 +23,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { normalizePhone } from '@/features/auth/phone'
 import { ApiError } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { showFormError } from '@/lib/forms'
@@ -31,7 +32,7 @@ import { STAFF_ROLES, useStaff, useStaffMutation, type Staff, type StaffRole } f
 
 type Pin = { pin: string; name: string }
 
-/** Équipe de porte: GATE and SUPERVISOR staff, their PIN (shown once, Q31), deactivate. */
+/** Équipe: GATE and SUPERVISOR staff with their PIN (shown once, Q31), CASHIER staff (phone, OTP login, no PIN), deactivate. */
 export function StaffTab() {
   const { t } = useTranslation()
   const staff = useStaff()
@@ -41,7 +42,7 @@ export function StaffTab() {
   const [adding, setAdding] = useState(false)
   const [resetting, setResetting] = useState<{ staff: Staff; open: boolean } | null>(null)
   const toggle = useStaffMutation(showPin)
-  // Back-office members are listed too by the API (has_pin false); this tab is the gate team.
+  // Back-office members are listed too by the API (has_pin false); this tab is the gate team and the cashiers.
   const team = staff.data?.filter((s) => (STAFF_ROLES as readonly string[]).includes(s.role))
 
   const add = (
@@ -83,7 +84,7 @@ export function StaffTab() {
               <TableRow key={s.id} className={cn(!s.active && 'text-muted-foreground')}>
                 <TableCell className="font-medium">{s.name}</TableCell>
                 <TableCell>{t(`staff.roles.${s.role as StaffRole}`)}</TableCell>
-                <TableCell>{t(s.has_pin ? 'staff.hasPin' : 'staff.noPin')}</TableCell>
+                <TableCell>{t(s.role === 'CASHIER' ? 'staff.phoneLogin' : s.has_pin ? 'staff.hasPin' : 'staff.noPin')}</TableCell>
                 <TableCell>
                   <Badge
                     variant="outline"
@@ -97,15 +98,17 @@ export function StaffTab() {
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label={t('staff.resetPinLabel', { name: s.name })}
-                      onClick={() => setResetting({ staff: s, open: true })}
-                    >
-                      <KeyRound />
-                      {t('staff.resetPin')}
-                    </Button>
+                    {s.role !== 'CASHIER' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        aria-label={t('staff.resetPinLabel', { name: s.name })}
+                        onClick={() => setResetting({ staff: s, open: true })}
+                      >
+                        <KeyRound />
+                        {t('staff.resetPin')}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -155,25 +158,40 @@ export function StaffTab() {
 function AddStaffForm({ onPin, onDone }: { onPin: (pin: string, name: string) => void; onDone: () => void }) {
   const { t } = useTranslation()
   // 04-api §Holder names: the server normalises and has the last word (Latin letters, 2-60); here, the length.
-  const schema = z.object({
-    name: z
-      .string()
-      .transform((s) => s.trim().replace(/\s+/g, ' '))
-      .refine((s) => s.length >= 2 && s.length <= 60, t('staff.nameInvalid')),
-    role: z.enum(['GATE', 'SUPERVISOR']),
-  })
-  const form = useForm({ resolver: zodResolver(schema), defaultValues: { name: '', role: 'GATE' as StaffRole } })
+  // A CASHIER logs in by OTP: phone required (E.164); GATE/SUPERVISOR send none.
+  const schema = z
+    .object({
+      name: z
+        .string()
+        .transform((s) => s.trim().replace(/\s+/g, ' '))
+        .refine((s) => s.length >= 2 && s.length <= 60, t('staff.nameInvalid')),
+      role: z.enum(['GATE', 'SUPERVISOR', 'CASHIER']),
+      phone: z.string(),
+    })
+    .superRefine((v, ctx) => {
+      if (v.role === 'CASHIER' && normalizePhone(v.phone) === null) ctx.addIssue({ code: 'custom', path: ['phone'], message: t('staff.phoneInvalid') })
+    })
+    .transform(({ name, role, phone }) => (role === 'CASHIER' ? { name, role, phone: normalizePhone(phone)! } : { name, role }))
+  const form = useForm({ resolver: zodResolver(schema), defaultValues: { name: '', role: 'GATE' as StaffRole, phone: '' } })
+  const role = useWatch({ control: form.control, name: 'role' })
   const create = useStaffMutation(onPin)
   const { errors } = form.formState
   const submit = form.handleSubmit((body) =>
     create.mutate(
       { kind: 'create', body },
       {
-        onSuccess: onDone,
+        onSuccess: () => {
+          if (body.role === 'CASHIER') toast.success(t('staff.cashierCreated', { name: body.name }))
+          onDone()
+        },
         onError: (e) => {
           showFormError(e, form, t)
-          if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && Object.hasOwn(Object(e.details.fields), 'name'))
-            form.setError('name', { message: t('staff.nameInvalid') })
+          if (!(e instanceof ApiError && e.code === 'VALIDATION_FAILED')) return
+          const fields = Object(e.details.fields) as object
+          if (Object.hasOwn(fields, 'name')) form.setError('name', { message: t('staff.nameInvalid') })
+          // 422 on `phone` with details.reason TAKEN: already staff of this organizer.
+          if (Object.hasOwn(fields, 'phone'))
+            form.setError('phone', { message: t(e.details.reason === 'TAKEN' ? 'staff.phoneTaken' : 'staff.phoneInvalid') }, { shouldFocus: true })
         },
       },
     ),
@@ -216,6 +234,23 @@ function AddStaffForm({ onPin, onDone }: { onPin: (pin: string, name: string) =>
             </Field>
           )}
         />
+        {role === 'CASHIER' && (
+          <Field data-invalid={!!errors.phone}>
+            <FieldLabel htmlFor="staff-phone">{t('staff.phone')}</FieldLabel>
+            <Input
+              id="staff-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="off"
+              placeholder={t('login.phonePlaceholder')}
+              aria-invalid={!!errors.phone}
+              aria-describedby={errors.phone ? 'staff-phone-hint staff-phone-error' : 'staff-phone-hint'}
+              {...form.register('phone')}
+            />
+            <FieldDescription id="staff-phone-hint">{t('staff.phoneHint')}</FieldDescription>
+            {errors.phone && <FieldError id="staff-phone-error">{errors.phone.message}</FieldError>}
+          </Field>
+        )}
         {errors.root?.message && <FieldError>{errors.root.message}</FieldError>}
         <DialogFooter>
           <DialogClose asChild>
@@ -224,7 +259,7 @@ function AddStaffForm({ onPin, onDone }: { onPin: (pin: string, name: string) =>
             </Button>
           </DialogClose>
           <Button type="submit" disabled={create.isPending}>
-            {t('staff.create')}
+            {t(role === 'CASHIER' ? 'staff.createCashier' : 'staff.create')}
           </Button>
         </DialogFooter>
       </FieldGroup>

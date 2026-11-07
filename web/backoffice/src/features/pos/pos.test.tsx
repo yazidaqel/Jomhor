@@ -575,6 +575,21 @@ it('B11 Code cash: a 409 CODE_NOT_PAYABLE tells the cashier not to keep the mone
   expect(router.state.location.pathname).toBe('/pos')
 })
 
+it('B11 Code cash: a 409 CODE_NOT_PAYABLE with collected_by_you says the cash is in an earlier till of yours: keep it', async () => {
+  const user = userEvent.setup()
+  stubApi({ '/org/pos/codes/4F7K29/collect': () => apiError(409, 'CODE_NOT_PAYABLE', { status: 'PAID', collected_by_you: true }) })
+  const { router } = renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  const collect = await screen.findByRole('button', { name: spaced(i18n.t('pos.code.submit', { amount: formatDh(LOOKUP.amount_mad, 'fr') })) })
+  await user.click(collect)
+  expect((await screen.findByRole('alert')).textContent).toBe(fr.pos.code.collectedEarlier)
+  expect(fr.pos.code.collectedEarlier).toContain("gardez l'argent, il y est compté")
+  expect(screen.queryByText(fr.pos.code.notPayable)).toBeNull()
+  expect(collect).toHaveProperty('disabled', true)
+  expect(router.state.location.pathname).toBe('/pos')
+})
+
 it('CASHIER: lands on the Guichet, the sidebar shows only "Guichet", every other page sends back to it', async () => {
   const user = userEvent.setup()
   const calls = stubApi({ '/org/me': () => Response.json(withRole('CASHIER')) })

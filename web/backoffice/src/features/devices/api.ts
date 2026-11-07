@@ -14,8 +14,8 @@ export type Device = {
   last_seen_at: string | null
 }
 export type EnrolCode = { enrol_code: string; expires_at: string }
-export type StaffRole = 'GATE' | 'SUPERVISOR'
-export const STAFF_ROLES: readonly StaffRole[] = ['GATE', 'SUPERVISOR']
+export type StaffRole = 'GATE' | 'SUPERVISOR' | 'CASHIER'
+export const STAFF_ROLES: readonly StaffRole[] = ['GATE', 'SUPERVISOR', 'CASHIER']
 export type Staff = { id: string; name: string; role: StaffRole | 'ADMIN' | 'OPS' | 'FINANCE'; active: boolean; has_pin: boolean }
 export type Assignment = {
   device_id: string
@@ -39,13 +39,14 @@ export const useDeviceMutation = <V, R = unknown>(run: (v: V, send: Send) => Pro
 
 /**
  * Staff writes. A PIN (create, reset) goes to `onPin` and is stripped from the result, so it never sits in the
- * mutation cache: the caller keeps it in the PIN dialog's state only (Q31: shown once).
+ * mutation cache: the caller keeps it in the PIN dialog's state only (Q31: shown once). A CASHIER has no PIN (OTP
+ * login on the back-office): its create answers without one and `onPin` is not called.
  */
 export function useStaffMutation(onPin: (pin: string, name: string) => void) {
   return useOrgMutation(['staff'], async (r: StaffWrite, send): Promise<void> => {
     if (r.kind === 'create') {
-      const { pin, name } = await send<Staff & { pin: string }>({ method: 'POST', path: '/org/staff', body: r.body })
-      onPin(pin, name)
+      const { pin, name } = await send<Staff & { pin?: string }>({ method: 'POST', path: '/org/staff', body: r.body })
+      if (pin !== undefined) onPin(pin, name)
     } else if (r.kind === 'pin') {
       const { pin } = await send<{ pin: string }>({ method: 'POST', path: `${path('org', 'staff', r.staff.id)}/pin` })
       onPin(pin, r.staff.name)
@@ -55,6 +56,6 @@ export function useStaffMutation(onPin: (pin: string, name: string) => void) {
   })
 }
 export type StaffWrite =
-  | { kind: 'create'; body: { name: string; role: StaffRole } }
+  | { kind: 'create'; body: { name: string; role: Exclude<StaffRole, 'CASHIER'> } | { name: string; role: 'CASHIER'; phone: string } }
   | { kind: 'pin'; staff: Staff }
   | { kind: 'active'; staff: Staff; active: boolean }
