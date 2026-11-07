@@ -2,10 +2,12 @@ import { useRef, useState, type ComponentProps, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ChevronRight } from 'lucide-react'
+import { ChartNoAxesColumn } from 'lucide-react'
 import { Controller, useForm, useWatch, type FieldError as RhfFieldError, type UseFormRegisterReturn, type UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
-import { Link, Navigate, useNavigate, useParams } from 'react-router'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
+import { toast } from 'sonner'
+import { ErrorNotice, LoadingRows, PageHeader } from '@/components/page'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -65,22 +67,13 @@ export function EventPage() {
 }
 
 function EditEvent({ id }: { id: string }) {
-  const { t } = useTranslation()
   const event = useEvent(id)
   if (event.error instanceof ApiError && ['NOT_FOUND', 'BAD_REQUEST'].includes(event.error.code)) {
     // Unknown id, another organizer's, or not an id at all.
     return <Navigate to="/events" replace state={{ notFound: true }} />
   }
-  if (event.isPending) return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
-  if (!event.data)
-    return (
-      <div className="flex items-center gap-3 text-sm">
-        <span className="text-destructive">{t(errorKey(event.error))}</span>
-        <Button variant="outline" size="sm" onClick={() => void event.refetch()}>
-          {t('common.retry')}
-        </Button>
-      </div>
-    )
+  if (event.isPending) return <LoadingRows rows={6} />
+  if (!event.data) return <ErrorNotice error={event.error} onRetry={() => void event.refetch()} className="p-0" />
   return <EventEditor key={event.data.id} event={event.data} />
 }
 
@@ -92,8 +85,12 @@ function EventEditor({ event }: { event?: EventDetail }) {
   const canWrite = useCanWrite()
   const editable = canWrite && (!event || EDITABLE.includes(event.status))
   const venues = useVenues()
-  const [tab, setTab] = useState<Tab>('general')
-  const [notice, setNotice] = useState<'saved' | 'published' | null>(null)
+  // `?tab=prices` (Aperçu's "Tarifs & quotas" shortcut) opens on that tab once the event exists.
+  const [search] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => {
+    const asked = TABS.find((x) => x === search.get('tab'))
+    return asked && (event || !AFTER_SAVE.includes(asked)) ? asked : 'general'
+  })
   const [rowEditing, setRowEditing] = useState(false) // a price row is open on Tarifs & quotas
   const [publishRefused, setPublishRefused] = useState(false) // EVENT_NOT_EDITABLE on publish, shown on the page
   const refusedAlert = useRef<HTMLParagraphElement>(null)
@@ -128,7 +125,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
   const onSaved = (e: EventDetail) => {
     if (event) {
       form.reset(toForm(e)) // nothing dirty any more, before `values` follows the new server copy
-      setNotice('saved')
+      toast.success(t('events.saved'))
     }
     queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
     if (!event) void navigate(`/events/${encodeURIComponent(e.id)}`)
@@ -148,7 +145,6 @@ function EventEditor({ event }: { event?: EventDetail }) {
   }
   const submit = form.handleSubmit(
     (v) => {
-      setNotice(null)
       if (!event) {
         if (!zone) return form.setError('venue_id', { message: t('events.form.venueRequired') })
         return save.mutate({ method: 'POST', path: '/org/events', body: createBody(v, zone) }, { onSuccess: onSaved, onError })
@@ -164,51 +160,43 @@ function EventEditor({ event }: { event?: EventDetail }) {
   const err = (e?: RhfFieldError) => e?.message
   const canPublish = !!event && canWrite && event.status === 'DRAFT'
   const unsaved = isDirty || rowEditing
-  const noticeText = notice && !isDirty ? t(notice === 'saved' ? 'events.saved' : 'events.publish.done') : null
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <nav aria-label={t('events.breadcrumb')} className="flex items-center gap-1 text-sm text-muted-foreground">
-            <Link to="/events" className="hover:text-foreground hover:underline">
-              {t('events.title')}
-            </Link>
-            <ChevronRight className="size-4" aria-hidden="true" />
-            <span aria-current="page" className="truncate">
-              {title}
-            </span>
-          </nav>
-          <div className="mt-1 flex flex-wrap items-center gap-2.5">
-            <h1 className="text-[22px] font-bold">{title}</h1>
-            <StatusBadge status={event?.status ?? 'DRAFT'} />
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {event && (
-            <Button variant="outline" asChild>
-              <Link to={`/events/${encodeURIComponent(event.id)}/sales`}>{t('nav.sales')}</Link>
-            </Button>
-          )}
-          {editable && (
-            <Button type="submit" form="event-form" variant="outline" disabled={save.isPending || (!!event && !isDirty)}>
-              {t(event?.status === 'ON_SALE' ? 'events.saveChanges' : 'events.saveDraft')}
-            </Button>
-          )}
-          {canPublish && (
-            <PublishAction
-              event={event}
-              dirty={unsaved}
-              onPublished={(e) => {
-                queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
-                setPublishRefused(false)
-                setNotice('published')
-              }}
-              onRefused={() => setPublishRefused(true)}
-              refusedFocus={refusedAlert}
-            />
-          )}
-        </div>
-      </div>
+      <PageHeader
+        crumbs={[{ label: t('events.title'), to: '/events' }, { label: title }]}
+        title={title}
+        badge={<StatusBadge status={event?.status ?? 'DRAFT'} />}
+        actions={
+          <>
+            {event && (
+              <Button variant="outline" asChild>
+                <Link to={`/events/${encodeURIComponent(event.id)}/sales`}>
+                  <ChartNoAxesColumn />
+                  {t('nav.sales')}
+                </Link>
+              </Button>
+            )}
+            {editable && (
+              <Button type="submit" form="event-form" variant="outline" disabled={save.isPending || (!!event && !isDirty)}>
+                {t(event?.status === 'ON_SALE' ? 'events.saveChanges' : 'events.saveDraft')}
+              </Button>
+            )}
+            {canPublish && (
+              <PublishAction
+                event={event}
+                dirty={unsaved}
+                onPublished={(e) => {
+                  queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
+                  setPublishRefused(false)
+                  toast.success(t('events.publish.done'))
+                }}
+                onRefused={() => setPublishRefused(true)}
+                refusedFocus={refusedAlert}
+              />
+            )}
+          </>
+        }
+      />
       {!canWrite && <p className="text-sm text-muted-foreground">{t('events.readOnly')}</p>}
       {canWrite && !editable && <p className="text-sm text-muted-foreground">{t('events.notEditable')}</p>}
       {canPublish && unsaved && <p className="text-sm text-muted-foreground">{t('events.publish.saveFirst')}</p>}
@@ -216,16 +204,6 @@ function EventEditor({ event }: { event?: EventDetail }) {
       {publishRefused && (
         <p ref={refusedAlert} tabIndex={-1} role="alert" className="text-sm text-destructive">
           {t('events.publish.EVENT_NOT_EDITABLE')}
-        </p>
-      )}
-      {/* The live region stays in the accessibility tree (sr-only, out of the layout) so its text is announced; the
-          visible copy beside it is hidden from assistive tech to avoid reading it twice. */}
-      <p role="status" className="sr-only">
-        {noticeText}
-      </p>
-      {noticeText && (
-        <p aria-hidden="true" className="text-sm text-muted-foreground">
-          {noticeText}
         </p>
       )}
       {errors.root?.message && <FieldError>{errors.root.message}</FieldError>}
@@ -463,7 +441,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
 function GatesTab({ venueId }: { venueId: string }) {
   const { t } = useTranslation()
   const venue = useVenue(venueId)
-  if (venue.isPending) return <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+  if (venue.isPending) return <LoadingRows rows={5} />
   if (!venue.data) return <p className="text-sm text-destructive">{t(errorKey(venue.error))}</p>
   return <GateZoneMatrix venue={venue.data} readOnly description={t('events.gates.description')} />
 }

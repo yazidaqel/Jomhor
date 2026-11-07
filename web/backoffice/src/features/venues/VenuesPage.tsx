@@ -5,7 +5,8 @@ import { Link, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { errorKey } from '@/lib/errors'
+import { BrandEmpty, ErrorNotice, LoadingRows, PageHeader, STICKY_TABLE } from '@/components/page'
+import { cn } from '@/lib/utils'
 import { useNotFoundNotice } from '@/lib/useNotFoundNotice'
 import { useCanWrite } from '@/features/auth/organizer'
 import { useVenues } from './api'
@@ -22,13 +23,12 @@ export function VenuesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-[22px] font-bold">{t('venues.title')}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('venues.description')}</p>
-        </div>
-        {canWrite && (
-          <>
+      <PageHeader
+        title={t('venues.title')}
+        description={t('venues.description')}
+        actions={
+          canWrite && (
+            <>
             <Button onClick={() => setCreating(true)}>
               <Plus />
               {t('venues.new')}
@@ -38,28 +38,24 @@ export function VenuesPage() {
               onOpenChange={setCreating}
               onSaved={(v) => void navigate(`/settings/venues/${encodeURIComponent(v.id)}`)}
             />
-          </>
-        )}
-      </div>
+            </>
+          )
+        }
+      />
       {notFound && <p className="text-sm text-destructive">{t('venues.notFound')}</p>}
       {!canWrite && <p className="text-sm text-muted-foreground">{t('venues.readOnly')}</p>}
-      <Card className="py-2">
-        <CardContent className="px-2">
+      <Card className={cn('gap-0 overflow-hidden py-0', STICKY_TABLE)}>
+        <CardContent className="px-0">
           {venues.isPending ? (
-            <p className="p-4 text-sm text-muted-foreground">{t('common.loading')}</p>
+            <LoadingRows className="p-5" />
           ) : venues.isError ? (
-            <div className="flex items-center gap-3 p-4 text-sm">
-              <span className="text-destructive">{t(errorKey(venues.error))}</span>
-              <Button variant="outline" size="sm" onClick={() => void venues.refetch()}>
-                {t('common.retry')}
-              </Button>
-            </div>
+            <ErrorNotice error={venues.error} onRetry={() => void venues.refetch()} />
           ) : venues.data.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">{t('venues.empty')}</p>
+            <BrandEmpty title={t('venues.emptyTitle')} description={t('venues.empty')} />
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableHead>{t('venues.name')}</TableHead>
                   <TableHead>{t('venues.city')}</TableHead>
                   <TableHead>{t('venues.timezone')}</TableHead>

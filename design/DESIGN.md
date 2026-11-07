@@ -161,14 +161,18 @@ and swaps to the ticket view on `PAID`.
 
 Internal tool: light neutral theme, shadcn defaults (background `#F8FAFC`, card `#FFFFFF`,
 border `#E2E8F0`, foreground `#0F172A`, muted `#64748B`, radius 8–10, primary = black
-button). No club accent here except in previews. 240 px sidebar that stacks at phone
-width; content `flex: 999 1 560px`.
+button). No club accent here except in previews. 240 px sidebar (shadcn Sidebar): icons
+only with tooltips from 768 to 1023 px, a sheet below 768 px that closes on navigation;
+content in a centred main up to 1320 px wide.
 
-Sidebar: Jomhor mark, organizer switcher, Événements · Ventes · Portes en direct ·
-Appareils · Accréditations · Finance · Fans/CRM · Paramètres; user + role at the bottom.
+Sidebar: Jomhor mark + "Espace organisateur", grouped nav — Pilotage (Aperçu · Événements ·
+Ventes), Jour J (Portes en direct · Appareils), Fans & finance (Accréditations · Finance ·
+Fans/CRM), Paramètres (Lieux); items not built yet show "Bientôt". Sticky top bar: sidebar
+toggle, organizer switcher (organizer name), user menu (name, role, Se déconnecter).
 
 | # | Page | Mockup | Route | Lot |
 | --- | --- | --- | --- | --- |
+| B0 | Aperçu | — | `/` (landing after login: next event hero with countdown, paid/quota ring, KPIs, zone fill, channels, upcoming list, quick actions; existing endpoints only) | 1 |
 | B1 | Événements (liste) | — | `/events` | 0 |
 | B2 | Configuration événement | `BoEvent` | `/events/:id` (tabs Général · Tarifs & quotas · Portes & zones · Appareils · Règles) | 0 |
 | B3 | Ventes | — | `/events/:id/sales` | 1 |

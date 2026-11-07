@@ -3,6 +3,7 @@ import { Shell } from '@/app/Shell'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { EventPage } from '@/features/events/EventPage'
 import { EventsPage } from '@/features/events/EventsPage'
+import { OverviewPage } from '@/features/overview/OverviewPage'
 import { SalesIndexPage, SalesPage } from '@/features/sales/SalesPage'
 import { VenuePage } from '@/features/venues/VenuePage'
 import { VenuesPage } from '@/features/venues/VenuesPage'
@@ -12,6 +13,7 @@ export const routes: RouteObject[] = [
   {
     element: <Shell />,
     children: [
+      { index: true, element: <OverviewPage /> },
       { path: 'events', element: <EventsPage /> },
       { path: 'events/new', element: <EventPage /> },
       { path: 'events/:id', element: <EventPage /> },
@@ -19,7 +21,7 @@ export const routes: RouteObject[] = [
       { path: 'sales', element: <SalesIndexPage /> },
       { path: 'settings/venues', element: <VenuesPage /> },
       { path: 'settings/venues/:id', element: <VenuePage /> },
-      { path: '*', element: <Navigate to="/events" replace /> },
+      { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
 ]

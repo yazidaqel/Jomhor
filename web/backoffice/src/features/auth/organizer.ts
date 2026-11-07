@@ -28,11 +28,12 @@ export function useOrganizer(): Membership {
  * organizer as X-Organizer-Id, so two organizers' data never share a cache entry.
  * Use this (and `useOrganizer().organizer_id` in mutations) for every /org/* call except /org/me.
  */
-export function useOrgQuery<T>(key: readonly unknown[], path: string) {
+export function useOrgQuery<T>(key: readonly unknown[], path: string, options?: { refetchInterval?: number }) {
   const { organizer_id: organizerId } = useOrganizer()
   return useQuery({
     queryKey: ['org', organizerId, ...key],
     queryFn: ({ signal }) => api<T>(path, { organizerId, signal }),
+    ...options,
   })
 }
 

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
 
 /* Back-office light neutral theme (design/DESIGN.md §Back-office). */
 :root {
@@ -20,11 +22,37 @@
   --destructive: #dc2626;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #94a3b8;
+  /* Focus: border-ring is 4.8:1 on white (WCAG 1.4.11), the 3 px halo at 50 % on top of it. */
+  --ring: #64748b;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #0f172a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #64748b;
+  /* Charts and meters: ink for paid, amber (the brand's 12th dot) for held, slate track. */
+  --chart-1: #0f172a;
+  --chart-2: #f5b700;
+  --chart-3: #94a3b8;
+  --chart-4: #cbd5e1;
+  --chart-5: #e2e8f0;
+  /* Status: dot/accent, text on tint (AA), tint, border. */
+  --success: #10b981;
+  --success-foreground: #065f46;
+  --success-muted: #ecfdf5;
+  --success-border: #a7f3d0;
+  --info: #0ea5e9;
+  --info-foreground: #075985;
+  --info-muted: #f0f9ff;
+  --info-border: #bae6fd;
+  --brand-ink: #0b0f1a;
+  --brand-amber: #f5b700;
 }
 
 @theme inline {
-  --font-sans: Inter, system-ui, sans-serif;
+  --font-sans: "Inter Variable", Inter, system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -47,13 +75,53 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-success-border: var(--success-border);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-muted: var(--info-muted);
+  --color-info-border: var(--info-border);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-amber: var(--brand-amber);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* No horizontal jump when a page grows a scrollbar. */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv11", "ss01"; /* Inter: straight-legged 1 and open digits read better in tables */
+  }
+}
+
+/* Motion is a hint, never required: off for users who ask for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

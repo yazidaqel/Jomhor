@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react'
-import { ChevronLeft, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link, Navigate, useParams } from 'react-router'
+import { Navigate, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { errorKey } from '@/lib/errors'
+import { ErrorNotice, LoadingRows, PageHeader } from '@/components/page'
 import { useCanWrite } from '@/features/auth/organizer'
 import { ApiError, path } from '@/lib/api'
 import { useVenue, type Gate, type VenueDetail, type Zone } from './api'
@@ -29,39 +29,27 @@ export function VenuePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Button asChild variant="link" className="self-start px-0 text-muted-foreground">
-        <Link to="/settings/venues">
-          <ChevronLeft />
-          {t('venues.back')}
-        </Link>
-      </Button>
       {venue.isPending ? (
-        <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+        <LoadingRows rows={6} />
       ) : !venue.data ? (
-        <div className="flex items-center gap-3 text-sm">
-          <span className="text-destructive">{t(errorKey(venue.error))}</span>
-          <Button variant="outline" size="sm" onClick={() => void venue.refetch()}>
-            {t('common.retry')}
-          </Button>
-        </div>
+        <ErrorNotice error={venue.error} onRetry={() => void venue.refetch()} className="p-0" />
       ) : (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-[22px] font-bold">{venue.data.name}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {[venue.data.city, t('venues.capacityPlaces', { count: venue.data.capacity }), venue.data.timezone].filter(Boolean).join(' · ')}
-              </p>
-            </div>
-            {canWrite && (
-              <>
-                <Button variant="outline" onClick={() => setEditing(true)}>
-                  {t('common.edit')}
-                </Button>
-                <VenueDialog venue={venue.data} open={editing} onOpenChange={setEditing} />
-              </>
-            )}
-          </div>
+          <PageHeader
+            crumbs={[{ label: t('venues.back'), to: '/settings/venues' }, { label: venue.data.name }]}
+            title={venue.data.name}
+            description={[venue.data.city, t('venues.capacityPlaces', { count: venue.data.capacity }), venue.data.timezone].filter(Boolean).join(' · ')}
+            actions={
+              canWrite && (
+                <>
+                  <Button variant="outline" onClick={() => setEditing(true)}>
+                    {t('common.edit')}
+                  </Button>
+                  <VenueDialog venue={venue.data} open={editing} onOpenChange={setEditing} />
+                </>
+              )
+            }
+          />
           {!canWrite && <p className="text-sm text-muted-foreground">{t('venues.readOnly')}</p>}
           {/* grid-cols-1 = minmax(0, 1fr): without it the implicit column grows to the tables' min-content width at phone width. */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
