@@ -29,7 +29,20 @@ a crowd at 1024 px.
 | White | `#FFFFFF` | Dots on ink, ticket paper |
 | Surface | `#141A2B` | Cards on ink |
 
-Clubs skin their own app with their accent; the Jomhor brand itself stays ink + amber.
+Jomhor is not white-label (founder, 2026-11-07): the product chrome is always Jomhor, ink + amber. A club appears as
+content (its name and crest on its events, tickets and club pages), never as the app's identity, and its colours do
+not re-skin the chrome.
+
+## Where the logo appears
+
+| Surface | Jomhor brand |
+| --- | --- |
+| Fan app (Android/iOS) | Launcher icon = `app-icon-1024.png` (adaptive icon on Android: ink background, transparent mark as foreground); name "Jomhor"; native splash: ink + centred mark; login and onboarding: large lockup + tagline; top bar of every main tab: mark + wordmark (lockup) at the start, club crest only inside club content; Profil footer: lockup + version; ticket card: small mark in the card header, never over or near the QR |
+| Scanner app | Launcher icon = the Jomhor mark (same files); name "Jomhor Porte"; native splash: ink + mark; home and PIN screens: lockup at the top |
+| Web shop | Header: lockup at the start, on every page; footer: lockup + tagline; favicon, apple-touch icon, web manifest icons from `design/logo/`; default OG image: lockup on ink; login page: large lockup |
+| Back-office | Sidebar top: lockup (mark only when collapsed); login page: large lockup; favicon; browser title "Jomhor · …" |
+| PDF ticket | Header: Jomhor lockup; the club crest stays next to the event |
+| WhatsApp / push | Sender name and icon "Jomhor" (when the providers are set up) |
 
 ## Type
 
