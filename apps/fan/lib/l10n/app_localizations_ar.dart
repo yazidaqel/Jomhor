@@ -623,6 +623,14 @@ class AppLocalizationsAr extends AppLocalizations {
   String get ticketWhatsAppFailed => 'Ce billet ne peut pas être renvoyé pour le moment. Réessaie plus tard.';
 
   @override
+  String get homeCashTitle => 'Commande en attente de paiement';
+
+  @override
+  String homeCashDeadline(String deadline) {
+    return 'Code cash à payer avant $deadline';
+  }
+
+  @override
   String myTicketTitle(String what, String date) {
     return 'Mon billet · $what, $date';
   }

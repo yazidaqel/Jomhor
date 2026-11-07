@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/app/router.dart';
+import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
@@ -26,14 +27,16 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
   void initState() {
     super.initState();
     // Back from the background (e.g. the fan waited for the opening in another app): re-read sale states, and
-    // the tickets (saved ones first, which also re-anchors the server clock), then check matchday mode again.
+    // the tickets (saved ones first, which also re-anchors the server clock) and the pending cash code, then check
+    // matchday mode again.
     _lifecycle = AppLifecycleListener(
       onResume: () {
         _matchdayChecked = false;
         ref
           ..invalidate(upcomingEventsProvider)
           ..invalidate(eventDetailProvider)
-          ..invalidate(ticketsProvider);
+          ..invalidate(ticketsProvider)
+          ..invalidate(pendingCashProvider);
       },
     );
   }

@@ -227,6 +227,8 @@ class CheckoutController extends Notifier<CheckoutState> {
     final method = state.method ?? PayMethod.card;
     if (state.phase == CheckoutPhase.expired) return null;
     state = _with(state.next(CheckoutPhase.working), payingCash: !method.hosted);
+    // Kept before the await: leaving screen 4 mid-/pay disposes this controller, yet the strip must still refresh.
+    final container = ref.container;
     try {
       final start = await _repo.pay(order.id, method);
       if (!ref.mounted) return null;
@@ -259,6 +261,10 @@ class CheckoutController extends Notifier<CheckoutState> {
           ? state.next(CheckoutPhase.expired)
           : state.next(CheckoutPhase.reserved, error: unexpectedAnswer);
       return null;
+    } finally {
+      // A cash /pay that failed on our side (a timeout, say) may still have issued the code: screen 1's strip
+      // asks the server, so the code stays reachable even when this screen shows the hold as over, or is gone.
+      if (!method.hosted) container.invalidate(pendingCashProvider);
     }
   }
 

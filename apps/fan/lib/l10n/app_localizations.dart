@@ -1167,6 +1167,18 @@ abstract class AppLocalizations {
   /// **'Ce billet ne peut pas être renvoyé pour le moment. Réessaie plus tard.'**
   String get ticketWhatsAppFailed;
 
+  /// Screen 1 amber strip: an AWAITING_CASH order of an upcoming event.
+  ///
+  /// In fr, this message translates to:
+  /// **'Commande en attente de paiement'**
+  String get homeCashTitle;
+
+  /// Screen 1 strip, under the event title. deadline = reserved_until in the venue zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code cash à payer avant {deadline}'**
+  String homeCashDeadline(String deadline);
+
   /// Screen 1 strip. what = competition or event title.
   ///
   /// In fr, this message translates to:

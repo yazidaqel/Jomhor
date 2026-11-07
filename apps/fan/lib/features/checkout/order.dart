@@ -171,6 +171,44 @@ class CashCode {
 
 typedef CashPoint = ({String name, String? address, String? hours});
 
+/// One row of `GET /fan/orders`: only what screen 1's pending-payment strip reads.
+class OrderRow {
+  new({
+    required this.id,
+    required this.status,
+    required this.eventTitle,
+    required this.eventStartsAt,
+    required this.timezone,
+    this.reservedUntil,
+    this.payCode,
+  });
+
+  factory fromJson(Map<String, Object?> j) {
+    final e = j['event']! as Map<String, Object?>;
+    return OrderRow(
+      id: j['id']! as String,
+      status: j['status']! as String,
+      eventTitle: e['title']! as String,
+      eventStartsAt: _instant(e['starts_at'])!,
+      timezone: e['timezone']! as String,
+      reservedUntil: _instant(j['reserved_until']),
+      payCode: j['pay_code'] as String?,
+    );
+  }
+
+  final String id;
+  final String status;
+  final String eventTitle;
+  final DateTime eventStartsAt;
+
+  /// The venue's zone (IANA), for the deadline.
+  final String timezone;
+  final DateTime? reservedUntil;
+
+  /// The PENDING code of an AWAITING_CASH order (6 symbols), else null: nothing to pay at a counter.
+  final String? payCode;
+}
+
 const _crockford = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 /// `JMH 4F7K 29` (docs/04-api.md §Cash codes) from the 6 symbols, with or without the `JMH` prefix, spaces or

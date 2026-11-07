@@ -5,6 +5,7 @@ import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/clock.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
+import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
@@ -17,7 +18,8 @@ import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
-/// Screen 1 · Accueil: greeting, next event hero, the "Mon billet" strip (saved tickets) and the calendar.
+/// Screen 1 · Accueil: greeting, the pending cash code strip, next event hero, the "Mon billet" strip (saved
+/// tickets) and the calendar.
 class HomeScreen extends ConsumerWidget {
   const new({super.key});
 
@@ -34,7 +36,10 @@ class HomeScreen extends ConsumerWidget {
       child: RefreshIndicator(
         color: JomhorColors.accent,
         backgroundColor: JomhorColors.surface,
-        onRefresh: () => ref.refresh(upcomingEventsProvider.future),
+        onRefresh: () {
+          ref.invalidate(pendingCashProvider);
+          return ref.refresh(upcomingEventsProvider.future);
+        },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.m, JomhorSpace.xl, JomhorSpace.xxl),
@@ -54,6 +59,7 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: JomhorSpace.l),
+            const _CashStrip(),
             ...events.when(
               // Without the hero (offline on matchday, say) the strip still leads to the ticket.
               loading: () => [const MyTicketStrip(), const SkeletonList(hero: true)],
@@ -82,6 +88,56 @@ class HomeScreen extends ConsumerWidget {
                     ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// DESIGN.md Lot 3, screen 1: the AWAITING_CASH order whose code runs out first, in amber, → the cash order
+/// screen. Nothing while loading, signed out, offline or on error: it never holds the home back.
+class _CashStrip extends ConsumerWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final o = ref.watch(pendingCashProvider).value;
+    if (o == null) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
+    final deadline = venueWhen(o.reservedUntil!, o.timezone, l.localeName);
+    return Entrance(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: JomhorSpace.l),
+        child: TapCard(
+          inkKey: const Key('home.cashOrder'),
+          onTap: () => context.push('/orders/${o.id}'),
+          color: JomhorColors.accent.withValues(alpha: 0.12),
+          borderColor: JomhorColors.accent.withValues(alpha: 0.5),
+          radius: JomhorRadius.card,
+          padding: const EdgeInsets.symmetric(vertical: JomhorSpace.l, horizontal: JomhorSpace.xl),
+          child: Row(
+            children: [
+              const Icon(Icons.payments_outlined, size: 22, color: JomhorColors.accent),
+              const SizedBox(width: JomhorSpace.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.homeCashTitle,
+                      style: JomhorType.body.copyWith(color: JomhorColors.text, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      l.dotPair(o.eventTitle, l.homeCashDeadline(deadline)),
+                      key: const Key('home.cashDeadline'),
+                      style: JomhorType.bodySmall.copyWith(color: JomhorColors.accentHover),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

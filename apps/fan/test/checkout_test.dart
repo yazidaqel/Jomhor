@@ -434,7 +434,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(routerProvider).routerDelegate.currentConfiguration.uri.path, '/');
       expect(find.byType(OrderScreen), findsNothing);
-      expect(sale.requests.where((r) => r.url.path.startsWith('/v1/fan/orders')), isEmpty);
+      expect(sale.requests.where((r) => r.url.path.startsWith('/v1/fan/orders/')), isEmpty);
     });
   }
 

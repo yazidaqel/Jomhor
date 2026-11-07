@@ -53,10 +53,14 @@ class OrderStatus extends AsyncNotifier<OrderView> {
 
   @override
   Future<OrderView> build() async {
-    final waitingCash = state.value?.order.awaitingCash ?? false;
+    final before = state.value?.order;
+    final waitingCash = before?.awaitingCash ?? false;
     final seen = ref.read(rePayProvider(id)).attempts;
     try {
       final (order, serverDate) = await ref.watch(checkoutRepositoryProvider).order(id);
+      // Into or out of AWAITING_CASH (paid, expired) since the last read: screen 1's strip reads it again. Not on
+      // the first read: the strip (or the cash /pay) that led here already knows.
+      if (before != null && order.awaitingCash != waitingCash) ref.invalidate(pendingCashProvider);
       if (!order.settled) _again(order.awaitingCash ? everyCash : every);
       return OrderView(order, serverDate, ref.read(nowProvider)(), seenAttempts: seen);
     } on ApiError catch (e) {
