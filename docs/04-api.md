@@ -230,7 +230,8 @@ X-Device-Signature: base64url (no padding) of the DER ECDSA P-256 / SHA-256 sign
 | Rule | Value |
 | --- | --- |
 | PATH | Raw path + query exactly as sent, including `/v1` (`/v1/gate/events/12/manifest?since=3`) |
-| body | Raw request bytes (requests are not compressed); empty body → SHA-256 of the empty string |
+| X-Device-Time | Decimal digits, no leading zero (`0` or `[1-9]` followed by up to 14 digits), signed exactly as sent; anything else → 401 |
+| body | Raw request bytes (requests are not compressed), at most 1 MiB (larger → 413 `BAD_REQUEST` before any signature check); empty body → SHA-256 of the empty string |
 | Server order | Device known (enrol: key from the body) → signature → \|time − now\| ≤ 5 min (else `DEVICE_CLOCK_SKEW`) → status `ACTIVE` (except enrol, and `GET /gate/events` which answers 403 for `PENDING`). Then `devices.last_seen_at = now()` |
 | Replay | Accepted within the 5-min window: GETs are reads, scans are idempotent, enrol is idempotent per key; TLS throughout |
 | `server_time` | In every gate JSON response (RFC 3339, ms). The device offset = `server_time` − the midpoint of request send and response receive |

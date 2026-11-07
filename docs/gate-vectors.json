@@ -1,0 +1,54 @@
+{
+  "signing": [
+    {
+      "method": "GET",
+      "path": "/v1/gate/events",
+      "time": 1793995200000,
+      "body": "",
+      "expected_string": "JMH-GATE-1\nGET\n/v1/gate/events\n1793995200000\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/gate/events/12/manifest?since=3",
+      "time": 1793995200123,
+      "body": "",
+      "expected_string": "JMH-GATE-1\nGET\n/v1/gate/events/12/manifest?since=3\n1793995200123\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/gate/devices/enrol",
+      "time": 1793995200000,
+      "body": "{\"public_key\":\"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEywbQayvKJf7EE3eixozLL2IL9ybXy-BliZa3mnRDoHYjTh3g40a5V_gOY8EltE25ZgPRkdas0YKviSgrDjPncg\",\"label\":\"Tablette B\u00e2b 3\",\"enrol_code\":\"eyJhbGciOiJIUzI1NiJ9.e30.c2lnbmF0dXJl\"}",
+      "expected_string": "JMH-GATE-1\nPOST\n/v1/gate/devices/enrol\n1793995200000\n2de56bbc981e41141777e54c374769382da26f07ec5d9ea25a0f9cad411e5791",
+      "expected_body_sha256": "2de56bbc981e41141777e54c374769382da26f07ec5d9ea25a0f9cad411e5791"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/gate/events/12/scans",
+      "time": 1793995260999,
+      "body": "{\n  \"cursor\": 0,\n  \"scans\": [\n    {\"scan_id\": \"0192f0c1-7a3e-7c4d-9b1a-2f3e4d5c6b7a\", \"result\": \"OK\"}\n  ]\n}\n",
+      "expected_string": "JMH-GATE-1\nPOST\n/v1/gate/events/12/scans\n1793995260999\na606465d0455b90547c2d2d8bcd618e8f0431375985e16b8eceeec95d9814cb1",
+      "expected_body_sha256": "a606465d0455b90547c2d2d8bcd618e8f0431375985e16b8eceeec95d9814cb1"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/gate/events/4294967295/closed-ack",
+      "time": 9999999999999,
+      "body": "",
+      "expected_string": "JMH-GATE-1\nPOST\n/v1/gate/events/4294967295/closed-ack\n9999999999999\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "fingerprints": [
+    {
+      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEywbQayvKJf7EE3eixozLL2IL9ybXy-BliZa3mnRDoHYjTh3g40a5V_gOY8EltE25ZgPRkdas0YKviSgrDjPncg",
+      "fingerprint": "602F 0D53"
+    },
+    {
+      "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmwzt5JOrpjgxUkhG5_CThvrvGwPznd-ZebY8UpTKGbxwKXMlFTpIMUdG9FxuGDX9aMceJxWYs5dT3tfLRL6CPg",
+      "fingerprint": "E5DE C776"
+    }
+  ]
+}

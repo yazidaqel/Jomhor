@@ -106,12 +106,21 @@ public class VenueService {
         return venues.findGate(org, venueId, gateId).orElseThrow();
     }
 
-    // ponytail: no GATE_IN_USE yet, nothing references gates in Lot 0; Lot 2 (device_assignments, scans) must add it.
-    // The gate lock orders this after (or before) a concurrent PUT of its zones: never a gate_zones FK error.
+    /**
+     * Referenced gates (device_assignments, scans) are refused by their FKs: GATE_IN_USE, and the gate_zones delete
+     * rolls back with it. The gate lock orders this after (or before) a concurrent PUT of its zones: never a
+     * gate_zones FK error.
+     */
     @Transactional
     public void deleteGate(UUID org, UUID venueId, UUID gateId) {
         boolean ofThisVenue = venues.lockGate(org, gateId).filter(venueId::equals).isPresent();
-        if (!ofThisVenue || !venues.deleteGate(org, venueId, gateId)) {
+        boolean deleted;
+        try {
+            deleted = ofThisVenue && venues.deleteGate(org, venueId, gateId);
+        } catch (DataIntegrityViolationException e) {
+            throw new ApiException("GATE_IN_USE", HttpStatus.CONFLICT, "Gate is referenced");
+        }
+        if (!deleted) {
             throw notFound("Gate").get();
         }
     }

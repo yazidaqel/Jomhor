@@ -45,7 +45,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Four stateless chains. /fan/** needs a JWT with aud=fan, /org/** one with aud=org (same HS256 key,
  * the audience is what separates them); /fan/auth/** and /org/auth/** are open. Everything else is
- * closed except /payments/** (gateway-facing, verified per provider). 401/403 bodies use the 04 shape.
+ * closed except /payments/** (gateway-facing, verified per provider) and /gate/** (scanners: no token, every request
+ * is checked by the gate module's device-signature filter, 04 §Gate auth). 401/403 bodies use the 04 shape.
  * GET /fan/events and GET /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
  * server, so an Authorization header sent there is ignored rather than checked, and without the default
  * no-store cache headers (04: public reads carry no cache headers; the authenticated chains keep them).
@@ -66,6 +67,12 @@ class SecurityConfig {
     @Bean
     JwtEncoder jwtEncoder() {
         return NimbusJwtEncoder.withSecretKey(key).algorithm(MacAlgorithm.HS256).build();
+    }
+
+    /** Scanner enrol codes (aud=enrol), read by {@link AuthService#enrolOrganizer}; never used by a chain. */
+    @Bean
+    JwtDecoder enrolCodeDecoder() {
+        return decoder(AuthService.ENROL, jwt -> OAuth2TokenValidatorResult.success());
     }
 
     /** Exactly the two public reads; anything else under /fan (other methods, deeper paths) falls to fanChain. */
@@ -101,7 +108,7 @@ class SecurityConfig {
     @Order(3)
     SecurityFilterChain otherChain(HttpSecurity http) {
         return stateless(http)
-                .authorizeHttpRequests(a -> a.requestMatchers("/payments/**", "/error").permitAll().anyRequest().denyAll())
+                .authorizeHttpRequests(a -> a.requestMatchers("/payments/**", "/gate/**", "/error").permitAll().anyRequest().denyAll())
                 .build();
     }
 
