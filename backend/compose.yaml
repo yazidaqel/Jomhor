@@ -1,4 +1,4 @@
-# Local dev database. Dev defaults only; override with env (DB_NAME, DB_USER, DB_PASSWORD).
+# Local dev database. Dev defaults only; override with env (DB_NAME, DB_USER, DB_PASSWORD, DB_PORT).
 services:
   postgres:
     image: postgres:18
@@ -7,7 +7,12 @@ services:
       POSTGRES_USER: ${DB_USER:-jomhor}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-jomhor}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck: # over TCP: the init-time server listens on the socket only, so it never looks ready too early
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
     volumes:
       # PG18 keeps its data in 18/docker under this mount; a volume created by postgres:16 needs `docker compose down -v` once.
       - pgdata:/var/lib/postgresql

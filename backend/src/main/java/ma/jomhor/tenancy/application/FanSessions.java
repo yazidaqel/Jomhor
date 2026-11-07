@@ -14,4 +14,7 @@ public interface FanSessions {
     void revoke(UUID sessionId, UUID userId);
 
     void revokeAll(UUID userId);
+
+    /** Every session of the user but {@code keep} (lost-phone re-issue). */
+    void revokeOthers(UUID keep, UUID userId);
 }

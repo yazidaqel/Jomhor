@@ -73,6 +73,11 @@ public class AuthService {
         return sessions.isActive(sessionId, userId);
     }
 
+    /** Signs out every other phone of the user (04 POST /fan/tickets/{id}/reissue); {@code sessionId} stays. */
+    public void fanRevokeOtherSessions(UUID sessionId, UUID userId) {
+        sessions.revokeOthers(sessionId, userId);
+    }
+
     /** Revokes this session, or every session of the user when {@code all}. */
     public void fanLogout(UUID sessionId, UUID userId, boolean all) {
         if (all) {

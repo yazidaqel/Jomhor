@@ -402,8 +402,12 @@ class TicketTransferApiTest extends PaymentTest {
         UUID old = b.tickets().getFirst();
         String oldKey = JsonPath.read(held(b.token()), "$.tickets[0].k_t");
         int soldBefore = sold(s.priceId());
+        String lostPhone = fanToken(b.phone()); // the same fan, still signed in on the lost phone
 
         String json = body(reissue(b.token(), old).andExpect(status().isCreated()));
+        // 04: the re-issue signs the other phones out; the calling one stays signed in
+        fan(lostPhone, get("/fan/tickets")).andExpect(status().isUnauthorized());
+        fan(b.token(), get("/fan/tickets")).andExpect(status().isOk());
         assertKeys(json, "$", "ticket_id");
         UUID fresh = UUID.fromString(JsonPath.read(json, "$.ticket_id"));
         assertThat(fresh).isNotEqualTo(old).isEqualTo(newTicket(old));

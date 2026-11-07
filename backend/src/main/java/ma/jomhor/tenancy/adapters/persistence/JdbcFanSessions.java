@@ -44,4 +44,10 @@ class JdbcFanSessions implements FanSessions {
         jdbc.sql("update fan_sessions set revoked_at = now() where user_id = ? and revoked_at is null")
                 .param(userId).update();
     }
+
+    @Override
+    public void revokeOthers(UUID keep, UUID userId) {
+        jdbc.sql("update fan_sessions set revoked_at = now() where user_id = ? and id <> ? and revoked_at is null")
+                .params(userId, keep).update();
+    }
 }

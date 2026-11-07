@@ -12,6 +12,7 @@ import ma.jomhor.common.HolderNames;
 import ma.jomhor.common.web.ApiException;
 import ma.jomhor.gate.application.ScanService;
 import ma.jomhor.notifications.application.TicketDeliveryService;
+import ma.jomhor.tenancy.application.AuthService;
 import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tickets.domain.Ticket;
 import org.springframework.http.HttpStatus;
@@ -42,10 +43,11 @@ public class TicketTransferService {
     private final ScanService scans;
     private final AuditLog audit;
     private final JsonMapper json;
+    private final AuthService auth;
 
     public TicketTransferService(Tickets tickets, TicketService issuer, EventService events, UserService users,
                                  TicketDeliveryService deliveries, ScanService scans, AuditLog audit,
-                                 JsonMapper json) {
+                                 JsonMapper json, AuthService auth) {
         this.tickets = tickets;
         this.issuer = issuer;
         this.events = events;
@@ -54,6 +56,7 @@ public class TicketTransferService {
         this.scans = scans;
         this.audit = audit;
         this.json = json;
+        this.auth = auth;
     }
 
     /**
@@ -82,8 +85,9 @@ public class TicketTransferService {
 
     /** Lost or replaced phone: the same checks, to the caller with the same name. No delivery. Returns the new id. */
     @Transactional
-    public UUID reissue(UUID caller, UUID ticketId) {
+    public UUID reissue(UUID caller, UUID sessionId, UUID ticketId) {
         Ticket.Locked t = lockOpen(caller, ticketId);
+        auth.fanRevokeOtherSessions(sessionId, caller); // the lost phone can't fetch the new K_t
         UUID newId = replace(t, caller, t.holderName());
         Tickets.Transfer tr = tickets.insertTransfer(t.organizerId(), t.id(), newId, caller, caller);
         audit.user(t.organizerId(), caller, "ticket.reissue", t.id().toString(), json.writeValueAsString(Map.of(

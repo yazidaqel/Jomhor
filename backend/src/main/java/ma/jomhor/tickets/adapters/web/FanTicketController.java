@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.common.HolderNames;
+import ma.jomhor.tenancy.application.AuthService;
 import ma.jomhor.tickets.application.TicketService;
 import ma.jomhor.tickets.application.TicketTransferService;
 import ma.jomhor.tickets.domain.Ticket;
@@ -120,6 +121,7 @@ class FanTicketController {
     @PostMapping("/fan/tickets/{id}/reissue")
     @ResponseStatus(HttpStatus.CREATED)
     ReissuedDto reissue(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return new ReissuedDto(transfers.reissue(UUID.fromString(jwt.getSubject()), id));
+        return new ReissuedDto(transfers.reissue(UUID.fromString(jwt.getSubject()),
+                UUID.fromString(jwt.getClaimAsString(AuthService.SID)), id));
     }
 }
