@@ -1,6 +1,7 @@
 import 'server-only'
 import { cache } from 'react'
 import { api, ApiError, organizerId } from './api'
+import { PAY_METHODS, type PayMethod } from './order-client'
 
 // Public event reads (`GET /fan/events*`, no Authorization header). Responses are mapped field by field to the types
 // below: whatever else the backend sends (now or by mistake) never reaches HTML or client props.
@@ -25,7 +26,13 @@ export type ShopEvent = {
   from_price_mad: number | null
   per_account_limit: number
 }
-export type ShopEventDetail = ShopEvent & { zones: Zone[] }
+/**
+ * Lot 3: `payment_methods` = known methods in the 04 order (absent, a Lot 1 backend → card only); `cash_until` = when
+ * cash stops being offered (refund cutoff − min window), null when the organizer has no cash set up.
+ */
+export type ShopEventDetail = ShopEvent & { zones: Zone[]; payment_methods: PayMethod[]; cash_until: string | null }
+
+const methodsOf = (v: unknown): PayMethod[] => (Array.isArray(v) ? PAY_METHODS.filter((m) => v.includes(m)) : ['CARD'])
 
 /** Seconds the backend response is reused (W1 list, W2 detail): DESIGN.md §Web shop. */
 export const LIST_REVALIDATE_S = 60
@@ -107,7 +114,7 @@ export const getEvent = cache(async (id: number, now = Date.now()): Promise<Shop
   let raw = await read(false)
   if (raw && windowContradicts(toEvent(raw), now)) raw = await read(true)
   if (!raw || raw.organizer_id !== organizerId()) return null
-  return { ...toEvent(raw), zones: (Array.isArray(raw.zones) ? (raw.zones as Raw[]) : []).map(toZone) }
+  return { ...toEvent(raw), zones: (Array.isArray(raw.zones) ? (raw.zones as Raw[]) : []).map(toZone), payment_methods: methodsOf(raw.payment_methods), cash_until: str(raw.cash_until) }
 })
 
 /** `ATLAS FC vs Rapid Oued` → `atlas-fc-vs-rapid-oued` (accents folded, at most 80 chars). */

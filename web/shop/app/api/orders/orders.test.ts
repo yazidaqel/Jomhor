@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { GET as getMe, PATCH as patchMe } from '../me/route'
 import { POST as pay } from './[id]/pay/route'
 import { GET as getOrder } from './[id]/route'
+import { formatPayCode, orderNo } from '@/lib/orders'
 import { POST as createOrder } from './route'
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSIsImF1ZCI6ImZhbiJ9.c2lnbmF0dXJl'
@@ -114,10 +115,10 @@ it.each<[string, unknown]>([
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
-it('pay: Bearer from the cookie, method CARD, answers only redirect_url', async () => {
+it.each(['CARD', 'WALLET'])('pay %s: Bearer from the cookie, method forwarded, answers only redirect_url', async (method) => {
   fetchMock.mockResolvedValue(upstream(200, { payment_id: 'p1', redirect_url: 'https://api.test/v1/payments/card/p1/redirect' }))
 
-  const res = await pay(req(`/api/orders/${ORDER_ID}/pay`), params(ORDER_ID))
+  const res = await pay(req(`/api/orders/${ORDER_ID}/pay`, { body: { method, extra: 'x' } }), params(ORDER_ID))
 
   expect(res.status).toBe(200)
   expect(await res.json()).toEqual({ redirect_url: 'https://api.test/v1/payments/card/p1/redirect' })
@@ -125,7 +126,42 @@ it('pay: Bearer from the cookie, method CARD, answers only redirect_url', async 
   const s = sent()
   expect(s.url).toBe(`http://backend.test/v1/fan/orders/${ORDER_ID}/pay`)
   expect(s.headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
-  expect(s.body).toEqual({ method: 'CARD' })
+  expect(s.body).toEqual({ method })
+})
+
+it('pay CASH_AGENCY: method forwarded; answers {method} only, never the code payload nor the cookie token', async () => {
+  fetchMock.mockResolvedValue(
+    upstream(200, { payment_id: 'p1', method: 'CASH_AGENCY', pay_code: '4F7K29', reserved_until: '2026-02-02T12:00:00Z', amount_mad: 10000, token: TOKEN }),
+  )
+  const res = await pay(req(`/api/orders/${ORDER_ID}/pay`, { body: { method: 'CASH_AGENCY' } }), params(ORDER_ID))
+  expect(res.status).toBe(200)
+  expect(res.headers.get('cache-control')).toBe('no-store')
+  const text = await res.text()
+  expect(JSON.parse(text)).toEqual({ method: 'CASH_AGENCY' })
+  expect(text).not.toContain(TOKEN)
+  expect(sent().body).toEqual({ method: 'CASH_AGENCY' })
+  expect(sent().headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
+})
+
+it.each([
+  ['no body', undefined],
+  ['no method', {}],
+  ['POS_CASH (staff only)', { method: 'POS_CASH' }],
+  ['FREE', { method: 'FREE' }],
+  ['a lower-case method', { method: 'card' }],
+  ['a number', { method: 1 }],
+])('pay refuses %s (422) and calls nothing', async (_, body) => {
+  const res = await pay(req(`/api/orders/${ORDER_ID}/pay`, { body }), params(ORDER_ID))
+  expect(res.status).toBe(422)
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('pay passes 409 METHOD_NOT_AVAILABLE through with its reason', async () => {
+  const err = { code: 'METHOD_NOT_AVAILABLE', message: '', details: { reason: 'TOO_LATE', sales_close_at: '2026-02-07T18:00:00Z' } }
+  fetchMock.mockResolvedValue(upstream(409, err))
+  const res = await pay(req(`/api/orders/${ORDER_ID}/pay`, { body: { method: 'CASH_AGENCY' } }), params(ORDER_ID))
+  expect(res.status).toBe(409)
+  expect(await res.json()).toEqual(err)
 })
 
 it.each([
@@ -145,7 +181,7 @@ it.each([
   ['a number', 42],
 ])('pay refuses a redirect_url with %s (502)', async (_, url) => {
   fetchMock.mockResolvedValue(upstream(200, { payment_id: 'p1', redirect_url: url }))
-  expect((await pay(req(`/api/orders/${ORDER_ID}/pay`), params(ORDER_ID))).status).toBe(502)
+  expect((await pay(req(`/api/orders/${ORDER_ID}/pay`, { body: { method: 'CARD' } }), params(ORDER_ID))).status).toBe(502)
 })
 
 it.each([
@@ -154,13 +190,13 @@ it.each([
 ])('pay refuses every redirect when API_PUBLIC_URL is %s (fail closed)', async (_, conf) => {
   vi.stubEnv('API_PUBLIC_URL', conf)
   fetchMock.mockResolvedValue(upstream(200, { payment_id: 'p1', redirect_url: 'https://api.test/v1/payments/card/p1/redirect' }))
-  expect((await pay(req(`/api/orders/${ORDER_ID}/pay`), params(ORDER_ID))).status).toBe(502)
+  expect((await pay(req(`/api/orders/${ORDER_ID}/pay`, { body: { method: 'CARD' } }), params(ORDER_ID))).status).toBe(502)
   expect(console.error).toHaveBeenCalledWith('API_PUBLIC_URL is not set or malformed: refusing payment redirects')
 })
 
 it('pay passes 409 ORDER_EXPIRED through', async () => {
   fetchMock.mockResolvedValue(upstream(409, { code: 'ORDER_EXPIRED', message: '', details: {} }))
-  const res = await pay(req(`/api/orders/${ORDER_ID}/pay`), params(ORDER_ID))
+  const res = await pay(req(`/api/orders/${ORDER_ID}/pay`, { body: { method: 'CARD' } }), params(ORDER_ID))
   expect(res.status).toBe(409)
   expect((await res.json()).code).toBe('ORDER_EXPIRED')
 })
@@ -188,6 +224,19 @@ it.each([
   const body = await (await getOrder(req(`/api/orders/${ORDER_ID}`, { method: 'GET' }), params(ORDER_ID))).json()
   expect('payment_status' in body).toBe(expected !== undefined)
   expect(body.payment_status).toBe(expected)
+})
+
+it('status of a cash order: payment_method passed on, the code itself is not polled', async () => {
+  const cash = { pay_code: '4F7K29', amount_mad: 10000, points: [], networks: [] }
+  fetchMock.mockResolvedValue(upstream(200, { ...ORDER, status: 'AWAITING_CASH', payment_status: 'PENDING', payment_method: 'CASH_AGENCY', cash }))
+  const body = await (await getOrder(req(`/api/orders/${ORDER_ID}`, { method: 'GET' }), params(ORDER_ID))).json()
+  expect(body).toEqual({
+    status: 'AWAITING_CASH',
+    reserved_until: '2026-02-01T12:08:00Z',
+    ticket_count: 0,
+    payment_status: 'PENDING',
+    payment_method: 'CASH_AGENCY',
+  })
 })
 
 it("status passes 404 through (someone else's order)", async () => {
@@ -259,3 +308,15 @@ it.each([
   expect((await res.json()).code).toBe('UNAUTHORIZED')
   expect(fetchMock).not.toHaveBeenCalled()
 })
+
+it.each([
+  ['4F7K29', 'JMH 4F7K 29'], // the wire form (04 §Cash codes)
+  ['4f7k29', 'JMH 4F7K 29'],
+  ['JMH 4F7K 29', 'JMH 4F7K 29'],
+  ['jmh-4f7k-29', 'JMH 4F7K 29'],
+  ['4F7KO1', 'JMH 4F7K 01'], // O → 0
+  ['ABCDEFG', 'ABCDEFG'], // not 6 symbols: shown as sent
+  ['4F7KU9', '4F7KU9'], // U is not a Crockford symbol
+])('formatPayCode(%j) → %j', (raw, shown) => expect(formatPayCode(raw)).toBe(shown))
+
+it('orderNo: last 8 hex digits of the id, 4-4', () => expect(orderNo(ORDER_ID)).toBe('6B2C 9D10'))

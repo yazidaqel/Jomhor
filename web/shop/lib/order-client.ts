@@ -65,32 +65,53 @@ export async function withBusyRetry(send: () => Promise<Result>, onWait: (second
   }
 }
 
+/** `/pay` methods, in the order W3 lists them (04 `payment_methods`). */
+export const PAY_METHODS = ['CARD', 'WALLET', 'CASH_AGENCY'] as const
+export type PayMethod = (typeof PAY_METHODS)[number]
+/** The hosted-page methods: alternatives to a cash code, and "pay again". */
+export type OnlineMethod = Exclude<PayMethod, 'CASH_AGENCY'>
+export const isPayMethod = (v: unknown): v is PayMethod => PAY_METHODS.includes(v as PayMethod)
+
 export type Placed =
   | { kind: 'redirect'; url: string }
+  | { kind: 'cash'; orderId: string }
   | { kind: 'failed'; result: Result }
-  | { kind: 'payFailed'; orderId: string }
+  | { kind: 'payFailed'; orderId: string; result: Result; reservedUntil?: string | null }
   | { kind: 'held'; orderId: string }
 
 /**
- * W3: create the order (SALE_BUSY → wait and retry), then start the card payment. `redirect` = go to the gateway;
- * `payFailed` = the order exists (places held 8 min) but /pay failed; `failed` = no order; `held` = the order exists
- * and `signal` aborted after it was created (never paid nor followed, but not lost: its page can show it). An abort
- * while the order request itself is in flight rejects.
+ * W3: create the order (SALE_BUSY → wait and retry), unless `existingId` names one already created, then pay it with
+ * `method`. `redirect` = go to the hosted page (card, wallet); `cash` = the code was issued, show the order page;
+ * `payFailed` = the order exists (places held, until `reservedUntil` when created here) but /pay failed; `failed` = no order; `held` = the order exists and
+ * `signal` aborted after it was created (never paid nor followed, but not lost: its page can show it). An abort while
+ * the order request itself is in flight rejects.
  */
-export async function placeOrder(order: unknown, onWait: (seconds: number) => void, signal: AbortSignal, random = Math.random): Promise<Placed> {
-  const created = await withBusyRetry(() => postJson('/api/orders', order, 'POST', signal), onWait, signal, random)
-  if (!created.ok) return { kind: 'failed', result: created }
-  const orderId = String(created.data!.id)
+export async function placeOrder(
+  order: unknown,
+  method: PayMethod,
+  onWait: (seconds: number) => void,
+  signal: AbortSignal,
+  { random = Math.random, existingId }: { random?: () => number; existingId?: string } = {},
+): Promise<Placed> {
+  let orderId = existingId
+  let reservedUntil: string | null | undefined // the hold of an order created here
+  if (!orderId) {
+    const created = await withBusyRetry(() => postJson('/api/orders', order, 'POST', signal), onWait, signal, random)
+    if (!created.ok) return { kind: 'failed', result: created }
+    orderId = String(created.data!.id)
+    reservedUntil = typeof created.data!.reserved_until === 'string' ? created.data!.reserved_until : null
+  }
   if (signal.aborted) return { kind: 'held', orderId }
   let paid: Result
   try {
-    paid = await postJson(`/api/orders/${encodeURIComponent(orderId)}/pay`, undefined, 'POST', signal)
+    paid = await postJson(`/api/orders/${encodeURIComponent(orderId)}/pay`, { method }, 'POST', signal)
   } catch (e) {
     if (signal.aborted) return { kind: 'held', orderId }
     throw e
   }
   if (signal.aborted) return { kind: 'held', orderId }
-  return paid.ok ? { kind: 'redirect', url: String(paid.data!.redirect_url) } : { kind: 'payFailed', orderId }
+  if (!paid.ok) return { kind: 'payFailed', orderId, result: paid, ...(reservedUntil !== undefined && { reservedUntil }) }
+  return method === 'CASH_AGENCY' ? { kind: 'cash', orderId } : { kind: 'redirect', url: String(paid.data!.redirect_url) }
 }
 
 export type OrderStatus = {
@@ -99,6 +120,8 @@ export type OrderStatus = {
   ticket_count: number
   /** Present once the backend sends it (04: PENDING / SUCCEEDED / FAILED, null before any /pay). */
   payment_status?: string | null
+  /** Lot 3: the SUCCEEDED attempt's method, else the latest attempt's; null before any /pay. */
+  payment_method?: string | null
 }
 
 /** Order statuses after which nothing changes by itself (docs/06-glossary.md §Order statuses). */
@@ -106,6 +129,8 @@ export const FINAL = ['PAID', 'EXPIRED', 'CANCELLED', 'REFUNDED']
 
 /** The order poll period on `/orders/[id]` (plan WS-3), and the ceiling of the back-off after failures. */
 export const POLL_MS = 3000
+/** The poll period while a cash code waits to be paid (DESIGN W4: every 10 s). */
+export const CASH_POLL_MS = 10_000
 export const POLL_MAX_MS = 30_000
 
 /** One poll: the order, a reason to stop for good (401, 404), or null for a failure worth retrying (5xx, network). */
@@ -167,26 +192,39 @@ export function pageClock(now: () => number = () => performance.now()) {
 export const RETRY_PAY_AFTER_MS = 60_000
 
 /**
- * Whether to offer "pay again" (04 GET /fan/orders/{id}; same rule as apps/fan `payAgain`): a RESERVED order whose hold
- * still runs on server time (`renderedAt`, the server's clock at SSR, plus `msOnPage` on the monotonic page clock;
- * the device wall clock is never used). A callback can land after the fan is back from the gateway and a late
- * success is honoured, so a second payment could double-charge: with `payment_status`, only when the last attempt
- * FAILED or there was none; without it, only after RETRY_PAY_AFTER_MS on the page.
+ * Whether to offer paying online now (04 GET /fan/orders/{id}; same rule as apps/fan `payAgain`), while the hold still
+ * runs on server time (`renderedAt`, the server's clock at SSR, plus `msOnPage` on the monotonic page clock; the
+ * device wall clock is never used).
+ * - AWAITING_CASH: card / wallet as alternatives to the code, unless the latest attempt is a CARD or WALLET one still
+ *   PENDING (or one already SUCCEEDED): the code stays payable meanwhile.
+ * - RESERVED ("pay again"): a callback can land after the fan is back from the gateway and a late success is
+ *   honoured, so a second payment could double-charge: with `payment_status`, only when the last attempt FAILED or
+ *   there was none; without it, only after RETRY_PAY_AFTER_MS on the page.
  */
 export function canRetryPay(o: OrderStatus, msOnPage: number, renderedAt: number): boolean {
-  if (o.status !== 'RESERVED') return false
+  if (o.status !== 'RESERVED' && o.status !== 'AWAITING_CASH') return false
   // ponytail: the page clock starts at mount, a second or so after the SSR, so this can run that long past the hold;
   // the backend then answers ORDER_EXPIRED.
   if (!o.reserved_until || !(Date.parse(o.reserved_until) > renderedAt + msOnPage)) return false
+  if (o.status === 'AWAITING_CASH') {
+    const online = o.payment_method === 'CARD' || o.payment_method === 'WALLET'
+    return !(online && o.payment_status === 'PENDING') && o.payment_status !== 'SUCCEEDED'
+  }
   if ('payment_status' in o) return o.payment_status === 'FAILED' || o.payment_status === null
   return msOnPage >= RETRY_PAY_AFTER_MS
 }
 
-/** FR copy for an error answer: reason-specific for EVENT_NOT_ON_SALE, limit numbers for PER_ACCOUNT_LIMIT. */
+/**
+ * FR copy for an error answer: reason-specific for EVENT_NOT_ON_SALE and METHOD_NOT_AVAILABLE, limit numbers for
+ * PER_ACCOUNT_LIMIT.
+ */
 export function errorText(errors: Dict['errors'], r: Result): string {
   const code = errorCode(r)
   const details = (r.data?.details ?? {}) as Record<string, unknown>
   if (code === 'EVENT_NOT_ON_SALE' && (details.reason === 'NOT_STARTED' || details.reason === 'CLOSED')) return errors[details.reason]
+  if (code === 'METHOD_NOT_AVAILABLE' && (details.reason === 'TOO_LATE' || details.reason === 'CASH_CAP' || details.reason === 'NOT_CONFIGURED')) {
+    return errors[`METHOD_${details.reason}`]
+  }
   if (code === 'PER_ACCOUNT_LIMIT') return fmt(errors.PER_ACCOUNT_LIMIT, { limit: String(details.limit ?? ''), held: String(details.held ?? '') })
   return Object.hasOwn(errors, code) ? (errors as Record<string, string>)[code]! : errors.generic
 }

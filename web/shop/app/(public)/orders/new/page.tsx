@@ -32,7 +32,8 @@ export default async function CheckoutPage({ searchParams }: Props) {
   const price = zone?.prices.find((p) => p.price_category_id === q.price)
   if (!e || !zone || !price) notFound()
   // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
-  if (saleState(e, Date.now()) !== 'ON_SALE' || price.remaining === 0) redirect(`/events/${eventSlug(e)}`)
+  const now = Date.now()
+  if (saleState(e, now) !== 'ON_SALE' || price.remaining === 0) redirect(`/events/${eventSlug(e)}`)
   let me: { display_name?: unknown }
   try {
     me = await api('/fan/me', { token })
@@ -51,6 +52,11 @@ export default async function CheckoutPage({ searchParams }: Props) {
   const total = price.price_mad * qty // integer centimes × integer count: exact
   const zoneLabel = zone.prices.length > 1 ? `${zone.name} · ${price.name}` : zone.name
   const when = `${formatDateTime(e.starts_at, e.timezone, d.meta.intl)} · ${e.venue.name}`
+  // Cash (04 GET /fan/events/{id}): hidden when not set up (cash_until null), "trop tard" from cash_until on (also when
+  // a cached read still lists it). A code issued now is valid until least(now + 24 h, sales close): the hint says so.
+  const cashLate = !!e.cash_until && (now >= Date.parse(e.cash_until) || !e.payment_methods.includes('CASH_AGENCY'))
+  const methods = e.payment_methods.filter((m) => m !== 'CASH_AGENCY' || (e.cash_until && !cashLate))
+  const cashUntil = Math.min(now + 24 * 3_600_000, e.sales_close_at ? Date.parse(e.sales_close_at) : Infinity)
 
   return (
     <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-16">
@@ -71,7 +77,12 @@ export default async function CheckoutPage({ searchParams }: Props) {
           qty={qty}
           displayName={typeof me?.display_name === 'string' ? me.display_name : null}
           totalMad={total}
-          copy={{ checkout: d.checkout, errors: d.errors }}
+          methods={methods}
+          cashLate={cashLate}
+          now={now}
+          timezone={e.timezone}
+          cashDeadline={formatDateTime(new Date(cashUntil).toISOString(), e.timezone, d.meta.intl)}
+          copy={{ checkout: d.checkout, errors: d.errors, meta: d.meta }}
         />
       </section>
       <aside
@@ -102,7 +113,6 @@ export default async function CheckoutPage({ searchParams }: Props) {
           <span className="font-semibold">{d.checkout.total}</span>
           <span className="font-display text-[34px] font-extrabold leading-none">{formatDh(total)}</span>
         </p>
-        <p className="text-body-small text-text-muted">{d.checkout.method}</p>
         <Link href={`/events/${eventSlug(e)}`} className="flex min-h-touch-min items-center text-body-small font-semibold text-accent hover:underline">
           {d.checkout.back}
         </Link>

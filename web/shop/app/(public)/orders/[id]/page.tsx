@@ -5,9 +5,11 @@ import { eventSlug, getEvent } from '@/lib/events'
 import { currentSession } from '@/lib/http'
 import { defaultLocale, fmt, getDictionary } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
-import { getOrder, loginUrl, SAFE_ID, type OrderView } from '@/lib/orders'
+import type { OnlineMethod } from '@/lib/order-client'
+import { getOrder, loginUrl, orderNo, SAFE_ID, type OrderView } from '@/lib/orders'
 import { formatDateTime } from '@/lib/time'
 import { Crest } from '../../../brand'
+import { CashDetails } from './CashDetails'
 import { OrderStatus } from './OrderStatus'
 
 const d = getDictionary(defaultLocale)
@@ -15,8 +17,9 @@ const d = getDictionary(defaultLocale)
 export const metadata: Metadata = { title: d.orderPage.metaTitle, robots: { index: false } }
 
 /**
- * W4 (Lot 1) · `/orders/{id}`: where the gateway's `/return` lands (WEB). SSR of the order, then OrderStatus polls it.
- * Not signed in → login and back; not the buyer's or unknown → 404.
+ * W4 · `/orders/{id}`: where the gateway's `/return` lands (WEB) and where a cash code is shown (Lot 3). SSR of the
+ * order (the code card is server-rendered, CashDetails), then OrderStatus polls it. Not signed in → login and back;
+ * not the buyer's or unknown → 404.
  */
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -35,6 +38,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const places = order.items.reduce((n, i) => n + i.qty, 0)
   const labels = order.items.flatMap((i) => i.labels)
   const when = e && `${formatDateTime(e.starts_at, e.timezone, d.meta.intl)} · ${e.venue.name}`
+  // Card and wallet as alternatives to a code, or to pay again; wallet only if the event offers it.
+  const online = (e?.payment_methods ?? ['CARD']).filter((m): m is OnlineMethod => m !== 'CASH_AGENCY')
 
   return (
     <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-16">
@@ -46,22 +51,31 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             reserved_until: order.reserved_until,
             ticket_count: order.ticket_count,
             ...(order.payment_status !== undefined && { payment_status: order.payment_status }),
+            ...(order.payment_method !== undefined && { payment_method: order.payment_method }),
           }}
           // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
           now={Date.now()}
           places={places}
           timezone={e?.timezone ?? null}
           eventHref={e && `/events/${eventSlug(e)}`}
+          methods={online}
           copy={{ orderPage: d.orderPage, errors: d.errors, meta: d.meta, steps: d.steps }}
-        />
+        >
+          {order.cash && <CashDetails cash={order.cash} copy={d.orderPage} intl={d.meta.intl} />}
+        </OrderStatus>
       </section>
       <aside
         aria-labelledby="order-summary"
         className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-border bg-surface p-5 shadow-2xl shadow-ground md:sticky md:top-24 md:max-w-[380px]"
       >
-        <h2 id="order-summary" className="font-display text-h2 uppercase">
-          {d.orderPage.summary}
-        </h2>
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 id="order-summary" className="font-display text-h2 uppercase">
+            {d.orderPage.summary}
+          </h2>
+          <p className="text-body-small text-text-muted">
+            {fmt(d.orderPage.order, { no: orderNo(order.id) })}
+          </p>
+        </div>
         {e && (
           <div className="flex items-center gap-3 rounded-control bg-ground p-3">
             <Crest size="md" />

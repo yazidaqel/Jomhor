@@ -18,6 +18,8 @@ export function EventView({ e, now }: { e: ShopEventDetail; now: number }) {
   const state = saleState(e, now)
   const label = kicker(d, e)
   const venue = e.venue.city ? `${e.venue.name}, ${e.venue.city}` : e.venue.name
+  // The methods this event offers now ("carte bancaire, wallet mobile ou cash en agence").
+  const paymentList = new Intl.ListFormat(d.meta.intl, { type: 'disjunction' }).format(e.payment_methods.map((m) => d.event[m]))
   return (
     <main>
       <section className="relative isolate overflow-hidden border-b border-border bg-surface">
@@ -75,7 +77,7 @@ export function EventView({ e, now }: { e: ShopEventDetail; now: number }) {
         <ul className="grid gap-3 rounded-control border border-border bg-surface p-4 text-body-small text-text-secondary sm:grid-cols-3">
           {(
             [
-              [CardIcon, d.event.paymentTitle, d.event.payment],
+              [CardIcon, d.event.paymentTitle, fmt(d.event.payment, { methods: paymentList })],
               [TicketIcon, d.event.ticketsTitle, d.event.tickets],
               [QrIcon, d.event.accessTitle, d.event.access],
             ] as const
