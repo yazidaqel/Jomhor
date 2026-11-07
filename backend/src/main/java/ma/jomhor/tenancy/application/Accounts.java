@@ -3,12 +3,13 @@ package ma.jomhor.tenancy.application;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import ma.jomhor.tenancy.domain.CashPoint;
 import ma.jomhor.tenancy.domain.Membership;
 import ma.jomhor.tenancy.domain.StaffMember;
 import ma.jomhor.tenancy.domain.StaffRole;
 import ma.jomhor.tenancy.domain.User;
 
-/** Persistence port for users (platform table) and staff (tenant table). */
+/** Persistence port for users (platform table), staff (tenant table) and organizer settings. */
 public interface Accounts {
 
     /** The user with this phone, created on first login. */
@@ -44,4 +45,7 @@ public interface Accounts {
 
     /** Active GATE/SUPERVISOR rows with a PIN, by name: what the organizer's scanners get. */
     List<StaffMember> activeScannerStaff(UUID organizerId);
+
+    /** organizers.settings.cash_points: object entries with a name, in order; anything else is skipped. */
+    List<CashPoint> cashPoints(UUID organizerId);
 }

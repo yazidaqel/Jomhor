@@ -3,14 +3,16 @@ package ma.jomhor.payments.adapters.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.payments.application.Payments;
 import ma.jomhor.payments.domain.Payment;
 import ma.jomhor.sales.application.PendingPayments;
-import ma.jomhor.sales.application.PendingPayments.AttemptStatus;
+import ma.jomhor.sales.domain.Order.PaymentMethod;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -18,7 +20,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcPayments implements Payments, PendingPayments {
 
-    private static final String COLUMNS = "id, organizer_id, order_id, provider, amount_mad, status";
+    private static final String COLUMNS = "id, organizer_id, order_id, method, provider, amount_mad, status, pay_code";
+    /** The attempt an order reports (04 GET /fan/orders/{id}): a success first, else the latest. */
+    private static final String REPORTED_FIRST = "status = 'SUCCEEDED' desc, created_at desc, id desc";
 
     private final JdbcClient jdbc;
 
@@ -27,13 +31,36 @@ class JdbcPayments implements Payments, PendingPayments {
     }
 
     @Override
-    public Payment insertPending(UUID org, UUID orderId, String provider, long amountMad) {
+    public Payment insertPending(UUID org, UUID orderId, PaymentMethod method, String provider, long amountMad) {
         return jdbc.sql("""
                         insert into payments (organizer_id, order_id, method, provider, amount_mad)
-                        values (:org, :order, 'CARD', :provider, :amount)
+                        values (:org, :order, cast(:method as payment_method), :provider, :amount)
                         returning\s""" + COLUMNS)
-                .param("org", org).param("order", orderId).param("provider", provider).param("amount", amountMad)
+                .param("org", org).param("order", orderId).param("method", method.name()).param("provider", provider)
+                .param("amount", amountMad)
                 .query(JdbcPayments::payment).single();
+    }
+
+    // on conflict: a taken code answers empty instead of aborting the caller's transaction (04 §Cash codes Stored).
+    @Override
+    public Optional<Payment> insertCashPending(UUID org, UUID orderId, String payCode, long amountMad) {
+        return jdbc.sql("""
+                        insert into payments (organizer_id, order_id, method, provider, amount_mad, pay_code)
+                        values (:org, :order, 'CASH_AGENCY', 'CASH', :amount, :code)
+                        on conflict (pay_code) do nothing
+                        returning\s""" + COLUMNS)
+                .param("org", org).param("order", orderId).param("amount", amountMad).param("code", payCode)
+                .query(JdbcPayments::payment).optional();
+    }
+
+    @Override
+    public Optional<Payment> pendingCode(UUID org, UUID orderId) {
+        return jdbc.sql("select " + COLUMNS + """
+                         from payments
+                        where organizer_id = :org and order_id = :order and method = 'CASH_AGENCY' and status = 'PENDING'
+                        order by created_at desc limit 1
+                        """)
+                .param("org", org).param("order", orderId).query(JdbcPayments::payment).optional();
     }
 
     @Override
@@ -49,6 +76,15 @@ class JdbcPayments implements Payments, PendingPayments {
     }
 
     @Override
+    public void markRedirected(UUID org, UUID paymentId) {
+        jdbc.sql("""
+                        update payments set redirected_at = now()
+                        where organizer_id = :org and id = :id and status = 'PENDING' and redirected_at is null
+                        """)
+                .param("org", org).param("id", paymentId).update();
+    }
+
+    @Override
     public void complete(UUID org, UUID paymentId, Payment.Status status, String providerRef, String callbackJson) {
         jdbc.sql("""
                         update payments set status = cast(:status as payment_status), provider_ref = :ref,
@@ -61,31 +97,58 @@ class JdbcPayments implements Payments, PendingPayments {
 
     // A system read across organizers, like the expiry it serves.
     // ponytail: a cross-tenant scan of PENDING payments twice per expiry batch, with no index on
-    // payments (status, created_at); add a partial index (where status = 'PENDING') when volume matters.
+    // payments (status, redirected_at); add a partial index (where status = 'PENDING') when volume matters.
     @Override
-    public Set<UUID> ordersWithPendingYoungerThan(Duration age) {
+    public Set<UUID> ordersRedirectedWithin(Duration age) {
         return new HashSet<>(jdbc.sql("""
                         select distinct order_id from payments
-                        where status = 'PENDING' and created_at > now() - make_interval(secs => :secs)
+                        where status = 'PENDING' and method in ('CARD', 'WALLET')
+                          and redirected_at > now() - make_interval(secs => :secs)
                         """)
                 .param("secs", age.toSeconds()).query(UUID.class).list());
     }
 
     @Override
-    public Optional<AttemptStatus> latestAttempt(UUID org, UUID orderId, Duration pendingFailsAfter) {
+    public Optional<Attempt> latestAttempt(UUID org, UUID orderId, Duration pendingFailsAfter) {
         return jdbc.sql("""
-                        select case when status = 'PENDING' and created_at <= now() - make_interval(secs => :secs)
-                                    then 'FAILED' else status::text end
+                        select method::text as method,
+                               case when status = 'PENDING' and method in ('CARD', 'WALLET')
+                                         and coalesce(redirected_at, created_at) <= now() - make_interval(secs => :secs)
+                                    then 'FAILED' else status::text end as status
                         from payments where organizer_id = :org and order_id = :order
-                        order by status = 'SUCCEEDED' desc, created_at desc, id desc limit 1
-                        """)
+                        order by\s""" + REPORTED_FIRST + " limit 1")
                 .param("org", org).param("order", orderId).param("secs", pendingFailsAfter.toSeconds())
-                .query(String.class).optional().map(AttemptStatus::valueOf);
+                .query((rs, n) -> new Attempt(PaymentMethod.valueOf(rs.getString("method")),
+                        AttemptStatus.valueOf(rs.getString("status"))))
+                .optional();
+    }
+
+    @Override
+    public Map<UUID, PaymentMethod> latestMethods(Map<UUID, UUID> organizerByOrder) {
+        Map<UUID, PaymentMethod> methods = new HashMap<>();
+        if (organizerByOrder.isEmpty()) {
+            return methods;
+        }
+        UUID[] orders = organizerByOrder.keySet().toArray(UUID[]::new);
+        UUID[] orgs = new UUID[orders.length];
+        for (int i = 0; i < orders.length; i++) {
+            orgs[i] = organizerByOrder.get(orders[i]);
+        }
+        jdbc.sql("""
+                        select distinct on (order_id) order_id, method::text as method from payments
+                        where (organizer_id, order_id) in (select * from unnest(cast(:orgs as uuid[]), cast(:orders as uuid[])))
+                        order by order_id,\s""" + REPORTED_FIRST)
+                .param("orgs", orgs).param("orders", orders)
+                .query((rs, n) -> Map.entry(rs.getObject("order_id", UUID.class),
+                        PaymentMethod.valueOf(rs.getString("method"))))
+                .list().forEach(e -> methods.put(e.getKey(), e.getValue()));
+        return methods;
     }
 
     private static Payment payment(ResultSet rs, int n) throws SQLException {
         return new Payment(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
-                rs.getObject("order_id", UUID.class), rs.getString("provider"), rs.getLong("amount_mad"),
-                Payment.Status.valueOf(rs.getString("status")));
+                rs.getObject("order_id", UUID.class), PaymentMethod.valueOf(rs.getString("method")),
+                rs.getString("provider"), rs.getLong("amount_mad"), Payment.Status.valueOf(rs.getString("status")),
+                rs.getString("pay_code"));
     }
 }

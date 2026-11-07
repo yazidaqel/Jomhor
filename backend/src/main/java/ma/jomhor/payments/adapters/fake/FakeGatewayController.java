@@ -52,7 +52,7 @@ class FakeGatewayController {
 
     @GetMapping("/payments/fake/{paymentId}")
     ResponseEntity<String> page(@PathVariable UUID paymentId) {
-        Payment p = payments.get(paymentId);
+        Payment p = payments.hosted(paymentId);
         if (p.status() != Payment.Status.PENDING) {
             return gone();
         }
@@ -73,7 +73,7 @@ class FakeGatewayController {
     /** Schedules the signed approval (through the same callback path), then sends the browser to /return. */
     @PostMapping("/payments/fake/{paymentId}/late")
     ResponseEntity<?> late(@PathVariable UUID paymentId) {
-        Payment p = payments.get(paymentId);
+        Payment p = payments.hosted(paymentId);
         if (p.status() != Payment.Status.PENDING) { // nothing to approve: no task on the shared scheduler
             return gone();
         }

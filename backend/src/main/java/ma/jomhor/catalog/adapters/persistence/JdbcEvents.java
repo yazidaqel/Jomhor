@@ -209,17 +209,19 @@ class JdbcEvents implements Events {
     @Override
     public Optional<Inventory.SaleEvent> forSale(int eventId) {
         return jdbc.sql("""
-                        select organizer_id, sale_starts_at, per_account_limit,
-                          case when status <> 'ON_SALE' then 'NOT_ON_SALE'
-                               when refund_cutoff_at is null or now() >= refund_cutoff_at then 'CLOSED'
-                               when now() < sale_starts_at then 'NOT_STARTED'
-                               else 'OPEN' end as sale_window
-                        from events where id = :id
+                        select e.organizer_id, e.sale_starts_at, e.refund_cutoff_at, e.per_account_limit,
+                          case when e.status <> 'ON_SALE' then 'NOT_ON_SALE'
+                               when e.refund_cutoff_at is null or now() >= e.refund_cutoff_at then 'CLOSED'
+                               when now() < e.sale_starts_at then 'NOT_STARTED'
+                               else 'OPEN' end as sale_window,
+                          (select coalesce(sum(pc.quota), 0) from price_categories pc
+                           where pc.organizer_id = e.organizer_id and pc.event_id = e.id) as quota
+                        from events e where e.id = :id
                         """)
                 .param("id", eventId)
                 .query((rs, n) -> new Inventory.SaleEvent(rs.getObject("organizer_id", UUID.class),
                         Inventory.SaleWindow.valueOf(rs.getString("sale_window")), instant(rs, "sale_starts_at"),
-                        rs.getInt("per_account_limit")))
+                        instant(rs, "refund_cutoff_at"), rs.getInt("per_account_limit"), rs.getLong("quota")))
                 .optional();
     }
 

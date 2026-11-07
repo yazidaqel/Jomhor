@@ -2,13 +2,14 @@ package ma.jomhor.payments.adapters.web;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import ma.jomhor.common.web.ApiException;
 import ma.jomhor.payments.application.CardGateway.Checkout;
 import ma.jomhor.payments.application.CardGateway.HttpCallback;
 import ma.jomhor.payments.application.PaymentService;
+import ma.jomhor.sales.domain.Order.PaymentMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,20 +35,25 @@ class PaymentController {
         this.payments = payments;
     }
 
+    /** What a fan can ask for (POS_CASH and FREE are not fan methods: 422). */
     enum Method { CARD, CASH_AGENCY, WALLET }
 
     record PayRequest(@NotNull Method method) {}
 
-    record PayStarted(UUID paymentId, String redirectUrl) {}
+    record HostedDto(UUID paymentId, PaymentMethod method, String redirectUrl) {}
+
+    /** {@code pay_code}: the 6 stored symbols; clients show it as {@code JMH 4F7K 29} (04 §Cash codes Display). */
+    record CashDto(UUID paymentId, PaymentMethod method, String payCode, Instant reservedUntil, long amountMad) {}
 
     @PostMapping("/fan/orders/{id}/pay")
-    PayStarted pay(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id, @Valid @RequestBody PayRequest body) {
-        if (body.method() != Method.CARD) {
-            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
-                    Map.of("fields", Map.of("method", "only CARD is available for now")));
+    Object pay(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id, @Valid @RequestBody PayRequest body) {
+        UUID userId = UUID.fromString(jwt.getSubject());
+        if (body.method() == Method.CASH_AGENCY) {
+            var c = payments.payCash(userId, id);
+            return new CashDto(c.paymentId(), PaymentMethod.CASH_AGENCY, c.payCode(), c.reservedUntil(), c.amountMad());
         }
-        var started = payments.payByCard(UUID.fromString(jwt.getSubject()), id);
-        return new PayStarted(started.paymentId(), started.redirectUrl());
+        var started = payments.payHosted(userId, id, PaymentMethod.valueOf(body.method().name()));
+        return new HostedDto(started.paymentId(), started.method(), started.redirectUrl());
     }
 
     /** 302 to the gateway, or an auto-submitting form when the gateway wants a POST. */

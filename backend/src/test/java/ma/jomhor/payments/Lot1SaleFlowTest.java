@@ -66,7 +66,7 @@ class Lot1SaleFlowTest extends PaymentTest {
         String orderId = JsonPath.read(reserved, "$.id");
 
         String json = body(pay(fan, orderId).andExpect(status().isOk()));
-        assertKeys(json, "$", "payment_id", "redirect_url");
+        assertKeys(json, "$", "payment_id", "method", "redirect_url");
         String paymentId = JsonPath.read(json, "$.payment_id");
         String redirectUrl = JsonPath.read(json, "$.redirect_url");
         assertThat(redirectUrl).isEqualTo(BASE + "/payments/card/" + paymentId + "/redirect");

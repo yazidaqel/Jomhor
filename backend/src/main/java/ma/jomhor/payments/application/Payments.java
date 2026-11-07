@@ -3,17 +3,28 @@ package ma.jomhor.payments.application;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.payments.domain.Payment;
+import ma.jomhor.sales.domain.Order.PaymentMethod;
 
 /** Persistence port for payments. */
 public interface Payments {
 
-    Payment insertPending(UUID org, UUID orderId, String provider, long amountMad);
+    /** A PENDING CARD or WALLET attempt. */
+    Payment insertPending(UUID org, UUID orderId, PaymentMethod method, String provider, long amountMad);
+
+    /** A PENDING CASH_AGENCY attempt (provider CASH) with this code; empty if the code is taken (draw again). */
+    Optional<Payment> insertCashPending(UUID org, UUID orderId, String payCode, long amountMad);
+
+    /** The order's PENDING CASH_AGENCY attempt, if any (at most one: issued under the order lock). */
+    Optional<Payment> pendingCode(UUID org, UUID orderId);
 
     /** By id alone: a gateway callback or a browser page carries no organizer. */
     Optional<Payment> find(UUID paymentId);
 
     /** Like find, and locks the row until the end of the transaction. */
     Optional<Payment> lock(UUID paymentId);
+
+    /** Sets redirected_at the first time the hosted page of a PENDING attempt is opened (plan P38). */
+    void markRedirected(UUID org, UUID paymentId);
 
     /** PENDING → SUCCEEDED or FAILED, with the gateway's reference and the verified callback (no card data). */
     void complete(UUID org, UUID paymentId, Payment.Status status, String providerRef, String callbackJson);

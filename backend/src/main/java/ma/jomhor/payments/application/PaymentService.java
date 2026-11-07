@@ -1,6 +1,7 @@
 package ma.jomhor.payments.application;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -11,10 +12,12 @@ import ma.jomhor.payments.application.CardGateway.CallbackVerdict;
 import ma.jomhor.payments.application.CardGateway.Checkout;
 import ma.jomhor.payments.application.CardGateway.HttpCallback;
 import ma.jomhor.payments.application.CardGateway.PaymentRef;
+import ma.jomhor.payments.domain.CashCode;
 import ma.jomhor.payments.domain.Payment;
 import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.application.OrderService.Settlement;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.sales.domain.Order.PaymentMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,8 +30,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Card payments (docs/04-api.md §Fan pay, §Payments). Order state changes go through sales' OrderService in this
- * module's transaction; tickets through sales → tickets.
+ * Payments (docs/04-api.md §Fan pay, §Cash codes, §Payments): hosted-page attempts (CARD, WALLET) and cash codes.
+ * Order state changes go through sales' OrderService in this module's transaction; tickets through sales → tickets.
  *
  * <p>Locks: pay takes the order row, then inserts the payment. A callback takes the payment row, then (in
  * settle) the order row, the buyer lock and price categories. Pay never touches an existing payment row, so
@@ -41,7 +44,11 @@ public class PaymentService {
     /** Placeholder in payments.return-url.* templates. */
     private static final String ORDER_ID = "{order_id}";
 
-    public record Started(UUID paymentId, String redirectUrl) {}
+    /** POST /pay CARD or WALLET: the attempt and its hosted page. */
+    public record Started(UUID paymentId, PaymentMethod method, String redirectUrl) {}
+
+    /** POST /pay CASH_AGENCY: the code (6 stored symbols), how long it can be paid, and the exact amount. */
+    public record CashStarted(UUID paymentId, String payCode, Instant reservedUntil, long amountMad) {}
 
     /** A payment that is no longer PENDING: its redirect page is gone (410). */
     public static class NotPending extends RuntimeException {
@@ -53,20 +60,22 @@ public class PaymentService {
     private final Payments payments;
     private final OrderService orders;
     private final CardGateway gateway;
+    private final PaymentOptions options;
     private final AuditLog audit;
     private final JsonMapper json;
     private final TransactionTemplate tx;
     private final String baseUrl;
     private final Map<Order.Channel, String> returnUrls;
 
-    public PaymentService(Payments payments, OrderService orders, CardGateway gateway, AuditLog audit, JsonMapper json,
-                          PlatformTransactionManager transactions,
+    public PaymentService(Payments payments, OrderService orders, CardGateway gateway, PaymentOptions options,
+                          AuditLog audit, JsonMapper json, PlatformTransactionManager transactions,
                           @Value("${payments.public-base-url}") String baseUrl,
                           @Value("${payments.return-url.web}") String webReturnUrl,
                           @Value("${payments.return-url.app}") String appReturnUrl) {
         this.payments = payments;
         this.orders = orders;
         this.gateway = gateway;
+        this.options = options;
         this.audit = audit;
         this.json = json;
         this.tx = new TransactionTemplate(transactions);
@@ -104,12 +113,48 @@ public class PaymentService {
         return baseUrl;
     }
 
-    /** A new PENDING attempt for the buyer's order, inserted under the order lock (see lockForPayment). */
+    /**
+     * A new PENDING CARD or WALLET attempt for the buyer's RESERVED or AWAITING_CASH order, inserted under the order
+     * lock (see lockForPayment). On an AWAITING_CASH order the code stays payable until one method succeeds.
+     */
     @Transactional
-    public Started payByCard(UUID userId, UUID orderId) {
+    public Started payHosted(UUID userId, UUID orderId, PaymentMethod method) {
         Order order = orders.lockForPayment(userId, orderId);
-        Payment p = payments.insertPending(order.organizerId(), order.id(), gateway.provider(), order.totalMad());
-        return new Started(p.id(), baseUrl + "/payments/card/" + p.id() + "/redirect");
+        if (method == PaymentMethod.WALLET && !options.walletConfigured()) {
+            throw OrderService.methodNotAvailable(Map.of("reason", "NOT_CONFIGURED"));
+        }
+        Payment p = payments.insertPending(order.organizerId(), order.id(), method, gateway.provider(), order.totalMad());
+        return new Started(p.id(), method, baseUrl + "/payments/card/" + p.id() + "/redirect");
+    }
+
+    /**
+     * A cash code for the buyer's order, under the order lock (04 POST /pay CASH_AGENCY). RESERVED → AWAITING_CASH
+     * held until least(now + 24 h, sales close) with one PENDING code (NOT_CONFIGURED, TOO_LATE, CASH_CAP checked
+     * first). An AWAITING_CASH order that has a PENDING code → that code again, hold unchanged. One whose code is no
+     * longer PENDING (a failed network confirmation) gets a new code, hold unchanged.
+     */
+    @Transactional
+    public CashStarted payCash(UUID userId, UUID orderId) {
+        Order order = orders.lockForPayment(userId, orderId);
+        UUID org = order.organizerId();
+        Optional<Payment> pending = payments.pendingCode(org, order.id());
+        if (order.status() == Order.Status.AWAITING_CASH && pending.isPresent()) {
+            Payment p = pending.get();
+            return new CashStarted(p.id(), p.payCode(), order.reservedUntil(), p.amountMad());
+        }
+        if (!options.cashConfigured(org)) {
+            throw OrderService.methodNotAvailable(Map.of("reason", "NOT_CONFIGURED"));
+        }
+        Instant until;
+        if (order.status() == Order.Status.RESERVED) {
+            until = orders.awaitCash(order, options.minWindow(), options.maxHeldPercent());
+        } else { // §Cash codes Payable: a reissue keeps the hold, and needs min-window of it left
+            orders.requireCashWindow(order, options.minWindow());
+            until = order.reservedUntil();
+        }
+        Payment p = CashCode.issue(CashCode::draw, code -> payments.insertCashPending(org, order.id(), code,
+                order.totalMad()));
+        return new CashStarted(p.id(), p.payCode(), until, p.amountMad());
     }
 
     /** Unknown id → 404; not PENDING → NotPending (410). */
@@ -117,11 +162,27 @@ public class PaymentService {
         return payments.find(paymentId).orElseThrow(() -> ApiException.notFound("Payment not found"));
     }
 
-    public Checkout checkout(UUID paymentId) {
+    /** A CARD or WALLET attempt: anything else (a cash code) has no hosted page → 404. */
+    public Payment hosted(UUID paymentId) {
         Payment p = get(paymentId);
-        if (p.status() != Payment.Status.PENDING) {
+        if (p.method() != PaymentMethod.CARD && p.method() != PaymentMethod.WALLET) {
+            throw ApiException.notFound("Payment not found");
+        }
+        return p;
+    }
+
+    /**
+     * The hosted page of a CARD or WALLET attempt (a cash code has none: 404). Gone (410) once the attempt isn't
+     * PENDING or its order's hold has passed, so a page opened late can't start a charge the order no longer
+     * waits for. Marks the attempt redirected the first time, so the expiry waits for it (plan P38); a redirect
+     * never otherwise changes state.
+     */
+    public Checkout checkout(UUID paymentId) {
+        Payment p = hosted(paymentId);
+        if (p.status() != Payment.Status.PENDING || !orders.holding(p.organizerId(), p.orderId())) {
             throw new NotPending();
         }
+        payments.markRedirected(p.organizerId(), p.id());
         return gateway.checkout(new PaymentRef(p.id(), p.amountMad()));
     }
 
@@ -163,7 +224,7 @@ public class PaymentService {
             return;
         }
         payments.complete(p.organizerId(), p.id(), Payment.Status.SUCCEEDED, v.providerRef(), callback);
-        Settlement settled = orders.settle(p.orderId(), v.providerRef());
+        Settlement settled = orders.settle(p.orderId(), p.method(), v.providerRef());
         if (settled != Settlement.PAID) {
             refundRequired(p, v, settled.name());
         }

@@ -14,6 +14,9 @@ public record Order(UUID id, UUID organizerId, int eventId, UUID userId, Channel
     // ponytail: POS (sales_channel in the schema) is the back-office counter, added with its lot.
     public enum Channel { APP, WEB }
 
+    /** payment_method: the method of an order's payment attempts (docs/06-glossary.md payment methods). */
+    public enum PaymentMethod { CARD, CASH_AGENCY, WALLET, POS_CASH, FREE }
+
     /**
      * unit_price_mad is the snapshot taken at reservation; holders one per place (plan Q15), empty on Lot 0 orders
      * (their tickets go to the buyer).

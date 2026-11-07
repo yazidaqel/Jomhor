@@ -25,6 +25,7 @@ import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.payments.PaymentTest;
 import ma.jomhor.sales.application.OrderService;
+import ma.jomhor.sales.domain.Order;
 import ma.jomhor.tickets.TicketPdfApiTest;
 import ma.jomhor.tickets.domain.TicketToken;
 import org.junit.jupiter.api.BeforeEach;
@@ -128,7 +129,7 @@ class TicketDeliveryTest extends PaymentTest {
         Sale s = onSale(10);
         String orderId = order(fanToken(randomPhone()), s, 2);
         new TransactionTemplate(transactions).executeWithoutResult(tx -> {
-            assertThat(orders.settle(UUID.fromString(orderId), "REF-1")).isEqualTo(OrderService.Settlement.PAID);
+            assertThat(orders.settle(UUID.fromString(orderId), Order.PaymentMethod.CARD, "REF-1")).isEqualTo(OrderService.Settlement.PAID);
             assertThat(rows(orderId)).hasSize(2); // queued inside the settle's own transaction
             tx.setRollbackOnly();
         });

@@ -29,9 +29,14 @@ public class Inventory {
 
     /**
      * What a sale needs to know about an event. {@code window} is computed on the database clock (now()):
-     * OPEN = ON_SALE, now >= sale_starts_at (if set) and now < refund_cutoff_at (plan Q19, Q20).
+     * OPEN = ON_SALE, now >= sale_starts_at (if set) and now < refund_cutoff_at (plan Q19, Q20). {@code quota} =
+     * Σ quota of its price categories.
      */
-    public record SaleEvent(UUID organizerId, SaleWindow window, Instant saleStartsAt, int perAccountLimit) {}
+    public record SaleEvent(UUID organizerId, SaleWindow window, Instant saleStartsAt, Instant refundCutoffAt,
+                            int perAccountLimit, long quota) {}
+
+    /** What a fan's order list shows of its event. */
+    public record EventLabel(int id, String title, Instant startsAt, String timezone) {}
 
     /** docs/04-api.md EVENT_NOT_ON_SALE details.reason, plus OPEN. */
     public enum SaleWindow { OPEN, NOT_ON_SALE, NOT_STARTED, CLOSED }
@@ -66,6 +71,11 @@ public class Inventory {
 
     public Optional<SaleEvent> saleEvent(int eventId) {
         return events.forSale(eventId);
+    }
+
+    /** Public: the event by id alone (not DRAFT). */
+    public Optional<EventLabel> label(int eventId) {
+        return events.listing(eventId).map(e -> new EventLabel(e.id(), e.title(), e.startsAt(), e.timezone()));
     }
 
     public List<SalePrice> prices(UUID org, int eventId) {

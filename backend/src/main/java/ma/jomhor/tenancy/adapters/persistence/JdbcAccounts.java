@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.tenancy.application.Accounts;
+import ma.jomhor.tenancy.domain.CashPoint;
 import ma.jomhor.tenancy.domain.Membership;
 import ma.jomhor.tenancy.domain.StaffMember;
 import ma.jomhor.tenancy.domain.StaffRole;
@@ -31,6 +32,23 @@ class JdbcAccounts implements Accounts {
         jdbc.sql("insert into users (phone_e164) values (?) on conflict (phone_e164) do nothing").param(phone).update();
         return jdbc.sql("select " + USER_COLUMNS + " from users where phone_e164 = ?")
                 .param(phone).query(JdbcAccounts::user).single();
+    }
+
+    // Set by ops via SQL (plan Q54): read defensively, a malformed entry is left out rather than failing the page.
+    @Override
+    public List<CashPoint> cashPoints(UUID organizerId) {
+        return jdbc.sql("""
+                        select p ->> 'name' as name, p ->> 'address' as address, p ->> 'hours' as hours
+                        from organizers o,
+                             jsonb_array_elements(case when jsonb_typeof(o.settings -> 'cash_points') = 'array'
+                                                       then o.settings -> 'cash_points' else '[]'::jsonb end)
+                               with ordinality as e(p, n)
+                        where o.id = ? and jsonb_typeof(p) = 'object' and coalesce(p ->> 'name', '') <> ''
+                        order by n
+                        """)
+                .param(organizerId)
+                .query((rs, n) -> new CashPoint(rs.getString("name"), rs.getString("address"), rs.getString("hours")))
+                .list();
     }
 
     @Override

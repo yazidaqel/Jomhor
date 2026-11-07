@@ -83,7 +83,7 @@ class PaymentApiTest extends PaymentTest {
         error(pay(fan, UUID.randomUUID().toString()), 404, "NOT_FOUND");
         error(mvc.perform(post("/fan/orders/" + orderId + "/pay").header("Authorization", "Bearer " + s.org().token())
                 .contentType("application/json").content("{\"method\": \"CARD\"}")), 401, "UNAUTHORIZED");
-        for (String method : List.of("CASH_AGENCY", "WALLET", "BITCOIN")) {
+        for (String method : List.of("BITCOIN", "POS_CASH", "FREE")) { // CASH_AGENCY, WALLET: CashOrderApiTest
             fan(fan, post("/fan/orders/" + orderId + "/pay"), "{\"method\": \"%s\"}".formatted(method))
                     .andExpect(status().isUnprocessableContent())
                     .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
@@ -144,13 +144,14 @@ class PaymentApiTest extends PaymentTest {
                 .isZero();
     }
 
-    /** The other order of events: a pay that committed first keeps its order out of the expiry. */
+    /** The other order of events: a pay whose hosted page was opened (plan P38) keeps its order out of the expiry. */
     @Test
     void anOrderBeingPaidIsNotExpired() throws Exception {
         Sale s = onSale(10);
         String fan = fanToken(randomPhone());
         String orderId = order(fan, s, 1);
         String p = payment(fan, orderId);
+        mvc.perform(get("/payments/card/" + p + "/redirect")).andExpect(status().isFound());
         jdbc.sql("update orders set reserved_until = now() - interval '1 second' where id = ?::uuid").param(orderId).update();
         orderService.expireDue();
         assertThat(orderStatus(orderId)).isEqualTo("RESERVED");
