@@ -114,11 +114,11 @@ public abstract class PaymentTest extends OrgApiTest {
         return jdbc.sql("select status::text from payments where id = ?::uuid").param(paymentId).query(String.class).single();
     }
 
-    String orderStatus(String orderId) {
+    protected String orderStatus(String orderId) {
         return jdbc.sql("select status::text from orders where id = ?::uuid").param(orderId).query(String.class).single();
     }
 
-    int sold(String priceId) {
+    protected int sold(String priceId) {
         return jdbc.sql("select sold from price_categories where id = ?::uuid").param(priceId).query(Integer.class).single();
     }
 

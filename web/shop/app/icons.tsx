@@ -88,3 +88,29 @@ export const ClockIcon = ({ className }: P) =>
       <path d="M12 7v5l3 2" />
     </>,
   )
+export const WalletIcon = ({ className }: P) =>
+  svg(
+    className,
+    <>
+      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3" />
+      <rect x="4" y="8" width="16" height="11" rx="2.5" />
+      <path d="M16 13.5h1.5" />
+    </>,
+  )
+export const CashIcon = ({ className }: P) =>
+  svg(
+    className,
+    <>
+      <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 9.5v5M18 9.5v5" />
+    </>,
+  )
+export const CopyIcon = ({ className }: P) =>
+  svg(
+    className,
+    <>
+      <rect x="8.5" y="8.5" width="11" height="11" rx="2.5" />
+      <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
+    </>,
+  )

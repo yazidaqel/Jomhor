@@ -13,12 +13,23 @@ export type OrderView = {
   status: string
   /** Absent until the backend sends it (04: PENDING / SUCCEEDED / FAILED, null before any /pay). */
   payment_status?: string | null
+  /** Lot 3: the SUCCEEDED attempt's method, else the latest attempt's; null before /pay; absent from older backends. */
+  payment_method?: string | null
+  /** Lot 3: the pay code and where to pay it, while AWAITING_CASH with a PENDING code; else null. */
+  cash: CashView | null
   total_mad: number
   reserved_until: string | null
   paid_at: string | null
   items: { price_category_id: string; name: string; qty: number; unit_price_mad: number; labels: string[] }[]
   /** Tickets the caller holds (a friend's ticket is never listed to the buyer). */
   ticket_count: number
+}
+
+export type CashView = {
+  pay_code: string
+  amount_mad: number
+  points: { name: string; address: string | null; hours: string | null }[]
+  networks: string[]
 }
 
 type Raw = Record<string, unknown>
@@ -33,6 +44,7 @@ export function toOrderView(raw: unknown): OrderView {
     event_id: Number(r.event_id),
     status: String(r.status),
     ...('payment_status' in r && { payment_status: strOrNull(r.payment_status) }),
+    ...('payment_method' in r && { payment_method: strOrNull(r.payment_method) }),
     total_mad: Number(r.total_mad),
     reserved_until: strOrNull(r.reserved_until),
     paid_at: strOrNull(r.paid_at),
@@ -44,7 +56,37 @@ export function toOrderView(raw: unknown): OrderView {
       labels: list(i.holders).map((h) => String(h.label)),
     })),
     ticket_count: Array.isArray(r.ticket_ids) ? r.ticket_ids.length : 0,
+    cash: toCash(r.cash),
   }
+}
+
+function toCash(v: unknown): CashView | null {
+  if (!v || typeof v !== 'object') return null
+  const c = v as Raw
+  if (typeof c.pay_code !== 'string' || !Number.isSafeInteger(c.amount_mad)) return null
+  return {
+    pay_code: c.pay_code,
+    amount_mad: c.amount_mad as number,
+    points: list(c.points).map((p) => ({ name: String(p.name), address: strOrNull(p.address), hours: strOrNull(p.hours) })),
+    networks: Array.isArray(c.networks) ? c.networks.filter((n): n is string => typeof n === 'string') : [],
+  }
+}
+
+/**
+ * The pay code as shown (04 §Cash codes): `4f7k29`, `JMH4F7K29` or `JMH 4F7K 29` → `JMH 4F7K 29`. Anything that isn't
+ * 6 Crockford symbols after the input rules is shown as sent.
+ */
+export function formatPayCode(raw: string): string {
+  const t = raw.toUpperCase().replace(/[\s-]/g, '')
+  // A leading JMH is the prefix only on 9 characters: a bare code can itself start with J, M, H.
+  const s = (t.length === 9 && t.startsWith('JMH') ? t.slice(3) : t).replace(/O/g, '0').replace(/[IL]/g, '1')
+  return /^[0-9A-HJKMNP-TV-Z]{6}$/.test(s) ? `JMH ${s.slice(0, 4)} ${s.slice(4)}` : raw
+}
+
+/** DESIGN Lot 3 W4: the last 8 hex digits of the order id, 4-4 (`…3f1f6b2c9d10` → `6B2C 9D10`). */
+export function orderNo(id: string): string {
+  const hex = id.replace(/[^0-9a-f]/gi, '').slice(-8).toUpperCase()
+  return `${hex.slice(0, 4)} ${hex.slice(4)}`
 }
 
 /**
@@ -114,3 +156,40 @@ export const checkoutPath = (c: CheckoutQuery) =>
   `/orders/new?${new URLSearchParams({ event: String(c.event), price: c.price, qty: String(c.qty) })}`
 
 export const loginUrl = (next: string) => `/login?next=${encodeURIComponent(next)}`
+
+/** W5 "Commandes en attente de paiement": an AWAITING_CASH order still payable, with its code. Nothing else. */
+export type PendingCashOrder = {
+  id: string
+  event: { title: string; starts_at: string; timezone: string }
+  /** As shown: `JMH 4F7K 29` (formatPayCode). */
+  code: string
+  amount_mad: number
+  reserved_until: string
+}
+
+/**
+ * The buyer's AWAITING_CASH orders with a PENDING code (`pay_code` not null) whose hold is still open by the shop
+ * server's clock (not the fan's device), in the backend's order, from `GET /fan/orders` alone.
+ */
+export async function getPendingCash(token: string, now = Date.now()): Promise<PendingCashOrder[]> {
+  return list(obj(await api('/fan/orders', { token })).orders)
+    .filter(
+      (o) =>
+        o.status === 'AWAITING_CASH' &&
+        typeof o.pay_code === 'string' &&
+        typeof o.id === 'string' &&
+        SAFE_ID.test(o.id) &&
+        Number.isSafeInteger(o.total_mad) &&
+        Date.parse(String(o.reserved_until)) > now,
+    )
+    .map((o) => {
+      const e = obj(o.event)
+      return {
+        id: o.id as string,
+        event: { title: String(e.title), starts_at: String(e.starts_at), timezone: String(e.timezone) },
+        code: formatPayCode(o.pay_code as string),
+        amount_mad: o.total_mad as number,
+        reserved_until: String(o.reserved_until),
+      }
+    })
+}

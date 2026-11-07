@@ -50,8 +50,8 @@ public class EventService {
                              Instant saleStartsAt, Event.ReentryPolicy reentryPolicy, Integer perAccountLimit,
                              JsonNode metadata) {}
 
-    /** GET /fan/events/{id}: the event and its zones with prices. */
-    public record PublicEvent(Event.Listing event, List<Event.ZoneListing> zones) {}
+    /** GET /fan/events/{id}: the event, its zones with prices, and how it can be paid. */
+    public record PublicEvent(Event.Listing event, List<Event.ZoneListing> zones, PaymentMethods.Options payment) {}
 
     /** A zone with at least one of the event's price categories, and those categories (sales' read model). */
     public record PricedZone(int zoneId, String code, String name, List<PriceCategory> prices) {}
@@ -60,13 +60,16 @@ public class EventService {
     private final KeyEncryptor keys;
     private final AuditLog audit;
     private final EventLock gateLock;
+    private final PaymentMethods paymentMethods;
     private final SecureRandom random = new SecureRandom();
 
-    public EventService(Events events, KeyEncryptor keys, AuditLog audit, EventLock gateLock) {
+    public EventService(Events events, KeyEncryptor keys, AuditLog audit, EventLock gateLock,
+                        PaymentMethods paymentMethods) {
         this.events = events;
         this.keys = keys;
         this.audit = audit;
         this.gateLock = gateLock;
+        this.paymentMethods = paymentMethods;
     }
 
     public List<Event.Summary> list(UUID org, Status status, Instant from) {
@@ -209,7 +212,8 @@ public class EventService {
         List<Event.ZoneListing> zones = events.zoneListings(e.organizerId(), eventId);
         Long fromPrice = zones.stream().flatMap(z -> z.prices().stream()).filter(p -> p.remaining() > 0)
                 .map(Event.PriceListing::priceMad).min(Long::compare).orElse(null);
-        return new PublicEvent(e.withStock(fromPrice == null, fromPrice), zones);
+        return new PublicEvent(e.withStock(fromPrice == null, fromPrice), zones,
+                paymentMethods.available(e.organizerId(), e.salesCloseAt(), events.now()));
     }
 
     // ---------- prices ----------

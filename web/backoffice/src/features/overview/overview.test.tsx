@@ -73,16 +73,20 @@ const SALES: EventSales = {
   quota: 39600,
   paid: 1250,
   held: 12,
+  awaiting_cash: 0,
+  refunded: 0,
+  refunded_mad: 0,
   revenue_mad: 9_007_199_254_740_991, // 2^53 − 1 centimes: exact only through formatDh's bigint path
   zones: [
-    { zone_id: 3, code: 'NORD', name: 'Virage Nord', quota: 12000, paid: 1000, held: 12, revenue_mad: 5_000_000 },
-    { zone_id: 4, code: 'EST', name: 'Latérale Est', quota: 6000, paid: 250, held: 0, revenue_mad: 3_000_000 },
+    { zone_id: 3, code: 'NORD', name: 'Virage Nord', quota: 12000, paid: 1000, held: 12, awaiting_cash: 0, refunded: 0, revenue_mad: 5_000_000 },
+    { zone_id: 4, code: 'EST', name: 'Latérale Est', quota: 6000, paid: 250, held: 0, awaiting_cash: 0, refunded: 0, revenue_mad: 3_000_000 },
   ],
   channels: [
     { channel: 'APP', paid: 900, revenue_mad: 4_500_050 },
     { channel: 'WEB', paid: 350, revenue_mad: 3_500_000 },
     { channel: 'POS', paid: 0, revenue_mad: 0 },
   ],
+  methods: (['CARD', 'WALLET', 'CASH_AGENCY', 'POS_CASH', 'FREE'] as const).map((method) => ({ method, paid: 0, revenue_mad: 0 })),
   refunds_required: [],
 }
 

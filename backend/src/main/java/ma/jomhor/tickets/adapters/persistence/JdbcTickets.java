@@ -70,6 +70,68 @@ class JdbcTickets implements Tickets {
     }
 
     @Override
+    public Optional<Ticket.Locked> lock(UUID org, UUID ticketId) {
+        return jdbc.sql("""
+                        select id, event_id, order_id, price_category_id, status from tickets
+                        where organizer_id = :org and id = :id for no key update
+                        """)
+                .param("org", org).param("id", ticketId)
+                .query((rs, n) -> new Ticket.Locked(rs.getObject("id", UUID.class), rs.getInt("event_id"),
+                        rs.getObject("order_id", UUID.class), rs.getObject("price_category_id", UUID.class),
+                        Ticket.Status.valueOf(rs.getString("status"))))
+                .optional();
+    }
+
+    @Override
+    public void setStatus(UUID org, UUID ticketId, Ticket.Status status) {
+        jdbc.sql("update tickets set status = cast(:status as ticket_status) where organizer_id = :org and id = :id")
+                .param("status", status.name()).param("org", org).param("id", ticketId).update();
+    }
+
+    // A staff read joining the order item (price snapshot), the order (channel, method) and the refund, each on
+    // organizer_id as well, so a lookup is one query.
+    private static final String ROWS = """
+            select t.id, t.status, t.zone_id, z.code as zone_code, z.name as zone_name, t.holder_name, i.unit_price_mad,
+                   t.order_id, o.channel, o.payment_method, t.issued_at,
+                   r.id as refund_id, r.status as refund_status, r.amount_mad as refund_amount_mad
+            from tickets t
+            join zones z on z.id = t.zone_id and z.organizer_id = t.organizer_id
+            join orders o on o.id = t.order_id and o.organizer_id = t.organizer_id
+            join order_items i on i.order_id = t.order_id and i.price_category_id = t.price_category_id
+                              and i.organizer_id = t.organizer_id
+            left join refunds r on r.ticket_id = t.id and r.organizer_id = t.organizer_id
+            where t.organizer_id = :org
+            """;
+
+    private static final RowMapper<Tickets.Row> ROW = (rs, n) -> new Tickets.Row(rs.getObject("id", UUID.class),
+            Ticket.Status.valueOf(rs.getString("status")), rs.getInt("zone_id"), rs.getString("zone_code"),
+            rs.getString("zone_name"), rs.getString("holder_name"), rs.getLong("unit_price_mad"),
+            rs.getObject("order_id", UUID.class), rs.getString("channel"), rs.getString("payment_method"),
+            rs.getObject("issued_at", OffsetDateTime.class).toInstant(), rs.getObject("refund_id", UUID.class),
+            rs.getString("refund_status"), rs.getObject("refund_amount_mad", Long.class));
+
+    @Override
+    public List<Tickets.Row> search(UUID org, int eventId, Match match, String value, int limit) {
+        String filter = switch (match) {
+            case TICKET_NO -> "right(t.id::text, 8) = :value";
+            case PHONE -> "t.holder_user_id = (select u.id from users u where u.phone_e164 = :value)";
+            case CASH_CODE ->
+                    "t.order_id = (select p.order_id from payments p where p.organizer_id = :org and p.pay_code = :value)";
+        };
+        // ponytail: a ticket-number match scans the event's tickets (no index on the id's tail); fine at 45,000 rows.
+        // ticket_no order = the last 8 hex chars (lowercase and uppercase hex sort alike)
+        return jdbc.sql(ROWS + " and t.event_id = :event and " + filter
+                        + " order by right(t.id::text, 8), t.id limit :limit")
+                .param("org", org).param("event", eventId).param("value", value).param("limit", limit)
+                .query(ROW).list();
+    }
+
+    @Override
+    public Optional<Tickets.Row> row(UUID org, UUID ticketId) {
+        return jdbc.sql(ROWS + " and t.id = :id").param("org", org).param("id", ticketId).query(ROW).optional();
+    }
+
+    @Override
     public Instant now() {
         return jdbc.sql("select now()").query(OffsetDateTime.class).single().toInstant();
     }
@@ -87,12 +149,13 @@ class JdbcTickets implements Tickets {
     }
 
     @Override
-    public Map<Integer, Long> validByZone(UUID org, int eventId) {
+    public Map<Integer, Long> countByZone(UUID org, int eventId, Ticket.Status status) {
         return jdbc.sql("""
                         select zone_id, count(*) as n from tickets
-                        where organizer_id = :org and event_id = :event and status = 'VALID' group by zone_id
+                        where organizer_id = :org and event_id = :event and status = cast(:status as ticket_status)
+                        group by zone_id
                         """)
-                .param("org", org).param("event", eventId)
+                .param("org", org).param("event", eventId).param("status", status.name())
                 .query((rs, n) -> Map.entry(rs.getInt("zone_id"), rs.getLong("n"))).stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
@@ -102,6 +165,19 @@ class JdbcTickets implements Tickets {
         return new HashSet<>(jdbc.sql("select id from tickets where organizer_id = :org and event_id = :event and id = any(:ids)")
                 .param("org", org).param("event", eventId).param("ids", ticketIds.toArray(UUID[]::new))
                 .query(UUID.class).list());
+    }
+
+    @Override
+    public List<Ticket.OfOrder> inOrder(UUID org, UUID orderId) {
+        return jdbc.sql("""
+                        select id, event_id, zone_id, price_category_id, status, holder_name from tickets
+                        where organizer_id = :org and order_id = :order order by id
+                        """)
+                .param("org", org).param("order", orderId)
+                .query((rs, n) -> new Ticket.OfOrder(rs.getObject("id", UUID.class), rs.getInt("event_id"),
+                        rs.getInt("zone_id"), rs.getObject("price_category_id", UUID.class),
+                        Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name")))
+                .list();
     }
 
     @Override

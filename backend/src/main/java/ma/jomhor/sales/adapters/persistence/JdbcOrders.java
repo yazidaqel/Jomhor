@@ -2,8 +2,10 @@ package ma.jomhor.sales.adapters.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -58,6 +60,38 @@ class JdbcOrders implements Orders {
                 .param("org", org).param("event", eventId).param("user", userId).param("channel", channel.name())
                 .param("total", totalMad)
                 .query((rs, n) -> order(rs, items)).single();
+        insertItems(org, order.id(), items);
+        return order;
+    }
+
+    @Override
+    public Optional<Order> insertPos(UUID id, UUID org, int eventId, long totalMad, List<Order.Item> items) {
+        Optional<Order> order = jdbc.sql("""
+                        insert into orders (id, organizer_id, event_id, user_id, channel, status, total_mad, payment_method,
+                                            reserved_until, paid_at)
+                        values (:id, :org, :event, null, 'POS', 'PAID', :total, 'POS_CASH', now(), now())
+                        on conflict (id) do nothing
+                        returning\s""" + ORDER_COLUMNS)
+                .param("id", id).param("org", org).param("event", eventId).param("total", totalMad)
+                .query((rs, n) -> order(rs, items)).optional();
+        order.ifPresent(o -> insertItems(org, o.id(), items));
+        return order;
+    }
+
+    @Override
+    public boolean exists(UUID orderId) {
+        return jdbc.sql("select exists (select 1 from orders where id = ?)").param(orderId).query(Boolean.class).single();
+    }
+
+    @Override
+    public Optional<Order> findInOrg(UUID org, UUID orderId) {
+        return jdbc.sql("select " + ORDER_COLUMNS + " from orders where organizer_id = :org and id = :id")
+                .param("org", org).param("id", orderId)
+                .query((rs, n) -> order(rs, null)).optional()
+                .map(o -> o.withItems(items(o.organizerId(), o.id())));
+    }
+
+    private void insertItems(UUID org, UUID orderId, List<Order.Item> items) {
         for (Order.Item item : items) {
             // holders as [{"name", "user_id"}] in place order, built by Postgres from two parallel arrays.
             jdbc.sql("""
@@ -68,13 +102,12 @@ class JdbcOrders implements Orders {
                                      from unnest(cast(:names as text[]), cast(:users as uuid[])) with ordinality
                                           as h(name, user_id, n)))
                             """)
-                    .param("org", org).param("order", order.id()).param("category", item.priceCategoryId())
+                    .param("org", org).param("order", orderId).param("category", item.priceCategoryId())
                     .param("qty", item.qty()).param("price", item.unitPriceMad())
                     .param("names", item.holders().stream().map(Order.Holder::name).toArray(String[]::new))
                     .param("users", item.holders().stream().map(Order.Holder::userId).toArray(UUID[]::new))
                     .update();
         }
-        return order;
     }
 
     @Override
@@ -110,19 +143,72 @@ class JdbcOrders implements Orders {
     }
 
     @Override
-    public void markPaid(UUID org, UUID orderId, String paymentRef) {
+    public void markPaid(UUID org, UUID orderId, Order.PaymentMethod method, String paymentRef) {
         jdbc.sql("""
-                        update orders set status = 'PAID', paid_at = now(), payment_method = 'CARD', payment_ref = :ref
+                        update orders set status = 'PAID', paid_at = now(), payment_method = cast(:method as payment_method),
+                          payment_ref = :ref
                         where organizer_id = :org and id = :id
                         """)
-                .param("org", org).param("id", orderId).param("ref", paymentRef).update();
+                .param("org", org).param("id", orderId).param("method", method.name()).param("ref", paymentRef).update();
+    }
+
+    @Override
+    public Optional<Instant> awaitCash(UUID org, UUID orderId, Instant salesCloseAt, Duration minWindow) {
+        return jdbc.sql("""
+                        update orders set status = 'AWAITING_CASH',
+                          reserved_until = least(now() + interval '24 hours', :close)
+                        where organizer_id = :org and id = :id and status = 'RESERVED'
+                          and least(now() + interval '24 hours', :close) >= now() + make_interval(secs => :min)
+                        returning reserved_until
+                        """)
+                .param("org", org).param("id", orderId).param("close", salesCloseAt.atOffset(ZoneOffset.UTC))
+                .param("min", minWindow.toSeconds())
+                .query((rs, n) -> instant(rs, "reserved_until")).optional();
+    }
+
+    @Override
+    public boolean holdsFor(UUID org, UUID orderId, Duration left) {
+        return jdbc.sql("""
+                        select exists (select 1 from orders
+                                       where organizer_id = :org and id = :id and status in ('RESERVED', 'AWAITING_CASH')
+                                         and reserved_until > now() + make_interval(secs => :left))
+                        """)
+                .param("org", org).param("id", orderId).param("left", left.toSeconds()).query(Boolean.class).single();
+    }
+
+    @Override
+    public long cashHeld(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select coalesce(sum(i.qty), 0)
+                        from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
+                        where o.organizer_id = :org and o.event_id = :event and o.status = 'AWAITING_CASH'
+                          and o.reserved_until > now()
+                        """)
+                .param("org", org).param("event", eventId).query(Long.class).single();
+    }
+
+    @Override
+    public List<Listed> listed(UUID userId, int limit) {
+        return jdbc.sql("""
+                        select id, organizer_id, event_id, channel, status, total_mad, reserved_until, created_at
+                        from orders where user_id = :user
+                        order by status = 'AWAITING_CASH' desc, created_at desc, id desc
+                        limit :limit
+                        """)
+                .param("user", userId).param("limit", limit)
+                .query((rs, n) -> new Listed(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
+                        rs.getInt("event_id"), Order.Channel.valueOf(rs.getString("channel")),
+                        Order.Status.valueOf(rs.getString("status")), rs.getLong("total_mad"),
+                        instant(rs, "reserved_until"), instant(rs, "created_at")))
+                .list();
     }
 
     @Override
     public List<UUID> claimDue(int limit, Collection<UUID> exclude) {
         return jdbc.sql("""
                         select id from orders
-                        where status = 'RESERVED' and reserved_until < now() and not (id = any(:exclude))
+                        where status in ('RESERVED', 'AWAITING_CASH') and reserved_until < now()
+                          and not (id = any(:exclude))
                         order by reserved_until
                         limit :limit
                         for no key update skip locked
@@ -136,7 +222,7 @@ class JdbcOrders implements Orders {
         return jdbc.sql("""
                         with expired as (
                           update orders set status = 'EXPIRED'
-                          where id = any(:ids) and status = 'RESERVED'
+                          where id = any(:ids) and status in ('RESERVED', 'AWAITING_CASH')
                           returning id, organizer_id, event_id)
                         select e.organizer_id, e.event_id, i.price_category_id, sum(i.qty) as qty,
                                array_agg(e.id order by e.id) as order_ids
@@ -191,17 +277,21 @@ class JdbcOrders implements Orders {
     @Override
     public List<SalesLine> salesLines(UUID org, int eventId) {
         return jdbc.sql("""
-                        select i.price_category_id, o.channel::text as channel,
+                        select i.price_category_id, o.channel::text as channel, o.payment_method::text as payment_method,
                                coalesce(sum(i.qty) filter (where o.status = 'PAID'), 0) as paid,
                                coalesce(sum(i.qty) filter (where o.status = 'RESERVED' and o.reserved_until > now()), 0) as held,
+                               coalesce(sum(i.qty) filter (where o.status = 'AWAITING_CASH' and o.reserved_until > now()), 0)
+                                   as awaiting_cash,
                                coalesce(sum(i.qty * i.unit_price_mad) filter (where o.status = 'PAID'), 0) as revenue_mad
                         from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
-                        where o.organizer_id = :org and o.event_id = :event and o.status in ('PAID', 'RESERVED')
-                        group by i.price_category_id, o.channel
+                        where o.organizer_id = :org and o.event_id = :event
+                          and o.status in ('PAID', 'RESERVED', 'AWAITING_CASH')
+                        group by i.price_category_id, o.channel, o.payment_method
                         """)
                 .param("org", org).param("event", eventId)
                 .query((rs, n) -> new SalesLine(rs.getObject("price_category_id", UUID.class), rs.getString("channel"),
-                        rs.getLong("paid"), rs.getLong("held"), rs.getLong("revenue_mad")))
+                        rs.getString("payment_method"), rs.getLong("paid"), rs.getLong("held"),
+                        rs.getLong("awaiting_cash"), rs.getLong("revenue_mad")))
                 .list();
     }
 

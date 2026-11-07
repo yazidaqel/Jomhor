@@ -107,9 +107,10 @@ public class TicketDeliveryService {
             } else {
                 log.warn("Ticket delivery {} failed: {}", d.id(), error);
                 int attempts = d.attempts() + 1;
-                // A ticket that is no longer VALID never will be again: no retry.
-                deliveries.markFailed(d.organizerId(), d.id(), error,
-                        "TICKET_NOT_VALID".equals(error) ? null : Delivery.backoff(attempts));
+                // CANCELLED and REFUNDED are final: no retry. BLOCKED can be unblocked: it backs off like any failure.
+                boolean gone = "TICKET_NOT_VALID".equals(error) && tickets.status(d.organizerId(), d.ticketId())
+                        .filter(st -> st == Ticket.Status.CANCELLED || st == Ticket.Status.REFUNDED).isPresent();
+                deliveries.markFailed(d.organizerId(), d.id(), error, gone ? null : Delivery.backoff(attempts));
             }
         }
         return due.size();

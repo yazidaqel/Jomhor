@@ -54,7 +54,7 @@ reports joining `tickets` for zone and status.
 
 ## Key flows
 
-1. Purchase: reserve (8 min hold) → pay (card sync / cash code async) → `order.paid` →
+1. Purchase: reserve (8 min hold) → pay (card/wallet: hosted page + callback; cash: AWAITING_CASH + pay code, collected at a club till or by a network callback) → `order.paid` →
    tickets issued (K_t derived) → delivered (app, PDF, WhatsApp).
 2. Gate: device enrol → event assignment → manifest + K_e download at T0 − 3 h → offline
    validate → background sync → server resolves first-scan-wins → dashboard.

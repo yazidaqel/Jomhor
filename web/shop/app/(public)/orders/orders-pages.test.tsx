@@ -186,3 +186,129 @@ it('/orders/[id] once EXPIRED: back to the event, no pay button', async () => {
   expect(h).toContain('href="/events/12-atlas-fc-vs-rapid-oued"')
   expect(h).not.toContain('Payer à nouveau')
 })
+
+// Lot 3 · payment methods and the cash path (WS-5).
+
+const methodRows = (h: string) =>
+  [...h.matchAll(/<input[^>]*name="method"[^>]*>/g)].map(([tag]) => `${/value="(\w+)"/.exec(tag)![1]}${/disabled/.test(tag) ? ' (off)' : ''}`)
+
+it('W3 lists the event payment_methods; cash says until when a code would be valid (venue time zone)', async () => {
+  backend({ '/fan/events/12': () => json(200, rawEvent()), '/fan/me': ME })
+  const h = renderToString(await checkout({ event: '12', price: 'pc-virage', qty: '2' }))
+  expect(methodRows(h)).toEqual(['CARD', 'WALLET', 'CASH_AGENCY'])
+  expect(h).toContain('Carte bancaire')
+  expect(h).toContain('Wallet mobile')
+  expect(h).toContain('Cash en agence')
+  expect(h).toContain('Avant Lun. 2 févr. 2026 · 13:00') // least(now + 24 h, sales close), 12:00Z in Africa/Casablanca
+  expect(h).toMatch(/checked="" value="CARD"/)
+  expect(h).toContain('Payer 100\u00a0DH')
+})
+
+it('W3 caps the cash deadline at sales close', async () => {
+  backend({ '/fan/events/12': () => json(200, rawEvent({ sales_close_at: '2026-02-01T20:00:00Z' })), '/fan/me': ME })
+  const h = renderToString(await checkout({ event: '12', price: 'pc-virage', qty: '2' }))
+  expect(h).toContain('Avant Dim. 1 févr. 2026 · 21:00')
+})
+
+it('W3 without WALLET hides it; cash past cash_until shows disabled as "Trop tard pour le cash"', async () => {
+  backend({ '/fan/events/12': () => json(200, rawEvent({ payment_methods: ['CARD'] })), '/fan/me': ME })
+  const h = renderToString(await checkout({ event: '12', price: 'pc-virage', qty: '2' }))
+  expect(methodRows(h)).toEqual(['CARD', 'CASH_AGENCY (off)'])
+  expect(h).not.toContain('Wallet mobile')
+  expect(h).toContain('Trop tard pour le cash')
+})
+
+it('W3 at or after cash_until shows cash disabled even if a cached read still lists it', async () => {
+  backend({ '/fan/events/12': () => json(200, rawEvent({ cash_until: '2026-02-01T12:00:00Z' })), '/fan/me': ME })
+  const h = renderToString(await checkout({ event: '12', price: 'pc-virage', qty: '2' }))
+  expect(methodRows(h)).toEqual(['CARD', 'WALLET', 'CASH_AGENCY (off)'])
+  expect(h).toContain('Trop tard pour le cash')
+})
+
+it('W3 for an organizer without cash (cash_until null) hides the cash row', async () => {
+  backend({ '/fan/events/12': () => json(200, rawEvent({ payment_methods: ['CARD', 'WALLET'], cash_until: null })), '/fan/me': ME })
+  const h = renderToString(await checkout({ event: '12', price: 'pc-virage', qty: '2' }))
+  expect(methodRows(h)).toEqual(['CARD', 'WALLET'])
+  expect(h).not.toContain('Cash en agence')
+  expect(h).not.toContain('Trop tard pour le cash')
+})
+
+const CASH = {
+  status: 'AWAITING_CASH',
+  payment_status: 'PENDING',
+  payment_method: 'CASH_AGENCY',
+  reserved_until: '2026-02-02T12:00:00Z',
+  cash: {
+    pay_code: '4F7K29',
+    amount_mad: 10000,
+    points: [{ name: 'Guichet du stade', address: 'Porte 1, avenue de la Victoire', hours: 'Lun.-sam. 10:00-18:00' }],
+    networks: ['Wafacash', 'Cash Plus'],
+  },
+}
+const buttons = (h: string) => [...h.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)].map(([, inner]) => inner!.replace(/<[^>]+>/g, ''))
+
+it('W4 AWAITING_CASH: grouped code and exact amount server-rendered, countdown in the venue zone, where to pay, card / wallet, no WhatsApp button', async () => {
+  backend({ [`/fan/orders/${ORDER_ID}`]: ORDER(CASH), '/fan/events/12': () => json(200, rawEvent()) })
+  const h = renderToString(await orderPage(ORDER_ID))
+  expect(h).toContain('Ton code de paiement cash')
+  expect(h).toMatch(/data-pay-code="true"[^>]*>JMH 4F7K 29</)
+  expect(h).toMatch(/data-amount="true"[^>]*>100\u00a0DH</)
+  expect(h).toContain('JMH 4F7K 29 · 100\u00a0DH. Montant exact')
+  expect(h).toContain('Places réservées · paie avant Lun. 2 févr. 2026 · 13:00 (24 h 0 min restantes)')
+  expect(h).toContain('Un guichet du club ou une agence Wafacash ou Cash Plus.')
+  expect(h).toContain('Guichet du stade')
+  expect(h).toContain('Lun.-sam. 10:00-18:00')
+  expect(h).toContain('Agences Wafacash et Cash Plus')
+  expect(h).toContain('Commande 6B2C 9D10')
+  expect(buttons(h)).toEqual(['Copier le code', 'Payer par carte', 'Payer par wallet'])
+  expect(h).not.toContain('Recevoir sur WhatsApp')
+  expect(h).not.toContain('Payer à nouveau')
+  expect(h).not.toContain(TOKEN)
+})
+
+it('W4 AWAITING_CASH while a CARD attempt is PENDING: the code stays, card / wallet are hidden', async () => {
+  backend({ [`/fan/orders/${ORDER_ID}`]: ORDER({ ...CASH, payment_method: 'CARD' }), '/fan/events/12': () => json(200, rawEvent()) })
+  const h = renderToString(await orderPage(ORDER_ID))
+  expect(h).toContain('JMH 4F7K 29')
+  expect(buttons(h)).toEqual(['Copier le code'])
+  expect(h).not.toContain('data-pay-now')
+  expect(h).toContain('Un paiement en ligne est en cours de confirmation')
+})
+
+it('W4 AWAITING_CASH whose code is no longer payable (cash null, FAILED): no code, card / wallet offered', async () => {
+  backend({ [`/fan/orders/${ORDER_ID}`]: ORDER({ ...CASH, payment_status: 'FAILED', cash: null }), '/fan/events/12': () => json(200, rawEvent()) })
+  const h = renderToString(await orderPage(ORDER_ID))
+  expect(h).toContain('Paiement en attente')
+  expect(h).toContain('n’est plus payable')
+  expect(h).not.toContain('JMH')
+  expect(buttons(h)).toEqual(['Payer par carte', 'Payer par wallet'])
+})
+
+it('W4 AWAITING_CASH for an event without wallet offers the card only', async () => {
+  backend({ [`/fan/orders/${ORDER_ID}`]: ORDER(CASH), '/fan/events/12': () => json(200, rawEvent({ payment_methods: ['CARD', 'CASH_AGENCY'] })) })
+  expect(buttons(renderToString(await orderPage(ORDER_ID)))).toEqual(['Copier le code', 'Payer par carte'])
+})
+
+it('W4 cash order once PAID: the ticket view, no code', async () => {
+  backend({
+    [`/fan/orders/${ORDER_ID}`]: ORDER({ status: 'PAID', payment_status: 'SUCCEEDED', payment_method: 'CASH_AGENCY', cash: null, ticket_ids: ['t1', 't2'] }),
+    '/fan/events/12': () => json(200, rawEvent()),
+  })
+  const h = renderToString(await orderPage(ORDER_ID))
+  expect(h).toContain('Paiement confirmé')
+  expect(h).toContain('href="/me/tickets"')
+  expect(h).not.toContain('JMH')
+})
+
+it('W4 cash order once EXPIRED: "Code expiré", places released, back to the event, nothing to pay', async () => {
+  backend({
+    [`/fan/orders/${ORDER_ID}`]: ORDER({ status: 'EXPIRED', payment_status: 'PENDING', payment_method: 'CASH_AGENCY', cash: null }),
+    '/fan/events/12': () => json(200, rawEvent()),
+  })
+  const h = renderToString(await orderPage(ORDER_ID))
+  expect(h).toContain('Code expiré')
+  expect(h).toContain('les places ont été libérées')
+  expect(h).toContain('href="/events/12-atlas-fc-vs-rapid-oued"')
+  expect(h).not.toContain('JMH')
+  expect(buttons(h)).toEqual([])
+})

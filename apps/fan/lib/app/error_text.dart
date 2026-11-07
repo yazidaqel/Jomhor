@@ -20,10 +20,14 @@ String errorText(AppLocalizations l, String code) => switch (code) {
   _ => l.errorGeneric,
 };
 
-/// [errorText], plus the codes whose copy reads `details` (EVENT_NOT_ON_SALE reason, PER_ACCOUNT_LIMIT numbers).
+/// [errorText], plus the codes whose copy reads `details` (EVENT_NOT_ON_SALE and METHOD_NOT_AVAILABLE reasons,
+/// PER_ACCOUNT_LIMIT numbers).
 String apiErrorText(AppLocalizations l, ApiError e) => switch ((e.code, e.details)) {
   ('EVENT_NOT_ON_SALE', {'reason': 'NOT_STARTED'}) => l.errorNotStarted,
   ('EVENT_NOT_ON_SALE', {'reason': 'CLOSED'}) => l.errorSaleClosed,
   ('PER_ACCOUNT_LIMIT', {'limit': final int limit, 'held': final int held}) => l.errorPerAccountLimit(limit, held),
+  ('METHOD_NOT_AVAILABLE', {'reason': 'TOO_LATE'}) => l.errorCashTooLate,
+  ('METHOD_NOT_AVAILABLE', {'reason': 'CASH_CAP'}) => l.errorCashCap,
+  ('METHOD_NOT_AVAILABLE', _) => l.errorMethodNotConfigured,
   _ => errorText(l, e.code),
 };

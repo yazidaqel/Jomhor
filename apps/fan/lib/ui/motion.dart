@@ -98,12 +98,16 @@ class _TapCardState extends State<TapCard> {
           type: MaterialType.transparency,
           borderRadius: radius,
           clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            key: widget.inkKey,
-            onTap: widget.onTap,
-            onHighlightChanged: (on) => setState(() => _pressed = on),
-            onHover: (on) => setState(() => _hovered = on),
-            child: Padding(padding: widget.padding, child: widget.child),
+          // Announced as a button (the screen 1 strips, event rows): InkWell alone only adds the tap action.
+          child: Semantics(
+            button: widget.onTap != null,
+            child: InkWell(
+              key: widget.inkKey,
+              onTap: widget.onTap,
+              onHighlightChanged: (on) => setState(() => _pressed = on),
+              onHover: (on) => setState(() => _hovered = on),
+              child: Padding(padding: widget.padding, child: widget.child),
+            ),
           ),
         ),
       ),

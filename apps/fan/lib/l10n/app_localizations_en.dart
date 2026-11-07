@@ -333,6 +333,119 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cardPageTitle => 'Paiement sécurisé';
 
   @override
+  String get methodWallet => 'Wallet mobile';
+
+  @override
+  String get methodWalletHint => 'Paiement depuis ton wallet';
+
+  @override
+  String get methodCash => 'Cash en agence';
+
+  @override
+  String get methodCashHint => 'Un code à payer au guichet du club ou en agence';
+
+  @override
+  String methodCashBefore(String deadline) {
+    return 'Avant $deadline';
+  }
+
+  @override
+  String get methodCashTooLate => 'Trop tard pour le cash';
+
+  @override
+  String payWalletCta(String total) {
+    return 'Payer $total par wallet';
+  }
+
+  @override
+  String get payCashCta => 'Obtenir mon code cash';
+
+  @override
+  String get errorCashTooLate =>
+      'Trop tard pour payer en cash : la vente ferme bientôt. Choisis un autre moyen de paiement.';
+
+  @override
+  String get errorCashCap =>
+      'Le paiement cash n\'est plus possible pour cet événement pour le moment. Choisis un autre moyen de paiement.';
+
+  @override
+  String get errorMethodNotConfigured => 'Ce moyen de paiement n\'est pas disponible. Choisis-en un autre.';
+
+  @override
+  String get cashTitle => 'Ton code de paiement cash';
+
+  @override
+  String cashHoldBanner(String deadline) {
+    return 'Places réservées · paie avant $deadline';
+  }
+
+  @override
+  String get cashCodeLabel => 'Code à présenter';
+
+  @override
+  String cashExactAmount(String amount) {
+    return 'Montant exact à régler : $amount';
+  }
+
+  @override
+  String get cashCopy => 'Copier le code';
+
+  @override
+  String get cashCopied => 'Code copié';
+
+  @override
+  String get cashTimeLeft => 'Temps restant';
+
+  @override
+  String get cashWhereTitle => 'Où payer';
+
+  @override
+  String cashNetworks(String names) {
+    return 'En agence : $names';
+  }
+
+  @override
+  String get cashStepsTitle => 'Comment ça marche';
+
+  @override
+  String get cashStep1Title => 'Va au guichet ou en agence';
+
+  @override
+  String get cashStep2Title => 'Donne le code et le montant exact';
+
+  @override
+  String get cashStep3Title => 'Tes billets arrivent';
+
+  @override
+  String get cashStep3Body => 'Dans l\'app et sur WhatsApp, dès que le paiement est enregistré.';
+
+  @override
+  String get cashPayNowTitle => 'Tu préfères payer maintenant ?';
+
+  @override
+  String get cashPayByCard => 'Payer par carte';
+
+  @override
+  String get cashPayByWallet => 'Payer par wallet';
+
+  @override
+  String get cashHostedPending =>
+      'Un paiement par carte ou wallet est en cours de confirmation. Ton code reste valable en attendant.';
+
+  @override
+  String get cashStatus => 'En attente de paiement · cette page se met à jour toute seule.';
+
+  @override
+  String get cashExpiredTitle => 'Code expiré · places libérées';
+
+  @override
+  String get cashExpiredBody =>
+      'Le délai pour payer ce code est passé. Tu peux refaire une commande s\'il reste des places.';
+
+  @override
+  String get backToEvent => 'Retour à l\'événement';
+
+  @override
   String get orderPending => 'Paiement en cours de confirmation.';
 
   @override
@@ -508,6 +621,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ticketWhatsAppFailed => 'Ce billet ne peut pas être renvoyé pour le moment. Réessaie plus tard.';
+
+  @override
+  String get homeCashTitle => 'Commande en attente de paiement';
+
+  @override
+  String homeCashDeadline(String deadline) {
+    return 'Code cash à payer avant $deadline';
+  }
 
   @override
   String myTicketTitle(String what, String date) {

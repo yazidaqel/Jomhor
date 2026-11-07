@@ -79,12 +79,55 @@ public class TicketService {
 
     /** Gate reports: VALID tickets of the event per zone id (docs/04-api.md §Gate reports {@code sold}). */
     public Map<Integer, Long> soldByZone(UUID org, int eventId) {
-        return tickets.validByZone(org, eventId);
+        return tickets.countByZone(org, eventId, Ticket.Status.VALID);
+    }
+
+    /** REFUNDED tickets of the event per zone id (04 /sales {@code refunded}). */
+    public Map<Integer, Long> refundedByZone(UUID org, int eventId) {
+        return tickets.countByZone(org, eventId, Ticket.Status.REFUNDED);
     }
 
     /** Gate scan ingestion: the ids among {@code ticketIds} of tickets of the event (any status). */
     public Set<UUID> ofEvent(UUID org, int eventId, Collection<UUID> ticketIds) {
         return ticketIds.isEmpty() ? Set.of() : tickets.ofEvent(org, eventId, ticketIds);
+    }
+
+    /** Every ticket of the order, by id (a till: the order has no buyer). */
+    public List<UUID> ofOrder(UUID org, UUID orderId) {
+        return tickets.inOrder(org, orderId).stream().map(Ticket.OfOrder::id).toList();
+    }
+
+    /**
+     * A till slip (04 GET /org/pos/orders/{id}/tickets): the ticket, its zone, the holder label (never the full
+     * name) and, for a VALID ticket only, its QR = the static v1 token as on the PDF. Not for logs.
+     */
+    public record Slip(Ticket.OfOrder ticket, Event.ZoneListing zone, String holderLabel, String qr) {
+        @Override
+        public String toString() {
+            return "Slip[" + ticket.id() + "]";
+        }
+    }
+
+    /** The order's event and one slip per ticket, by ticket id. */
+    public record Slips(Event.Listing event, List<Slip> slips) {}
+
+    /**
+     * Print data for an order of {@code org} (the caller checked it was paid at a till). The tokens of every VALID
+     * ticket are signed with K_e in one withEventKey call: only the token strings leave it.
+     */
+    public Slips slips(UUID org, int eventId, UUID orderId) {
+        List<Ticket.OfOrder> all = tickets.inOrder(org, orderId);
+        EventService.PublicEvent pe = events.publicEvent(eventId);
+        Map<Integer, Event.ZoneListing> zones = pe.zones().stream()
+                .collect(Collectors.toMap(Event.ZoneListing::id, z -> z));
+        List<Ticket.OfOrder> valid = all.stream().filter(t -> t.status() == Ticket.Status.VALID).toList();
+        Map<UUID, String> qr = valid.isEmpty() ? Map.of() : events.withEventKey(org, eventId, k -> {
+            Map<UUID, String> out = new HashMap<>();
+            valid.forEach(t -> out.put(t.id(), TicketToken.encodeStatic(k, eventId, t.id(), t.zoneId())));
+            return out;
+        });
+        return new Slips(pe.event(), all.stream().map(t -> new Slip(t, zones.get(t.zoneId()),
+                t.holderName() == null ? null : HolderNames.label(t.holderName()), qr.get(t.id()))).toList());
     }
 
     /** The order's tickets this user holds (04: a friend's ticket is never listed to the buyer). */
@@ -161,6 +204,11 @@ public class TicketService {
             throw new ApiException("TICKET_NOT_VALID", HttpStatus.CONFLICT, "Ticket is not valid");
         }
         return t;
+    }
+
+    /** The status of ticket {@code ticketId} of organizer {@code org} (notifications: a BLOCKED one is retried). */
+    public Optional<Ticket.Status> status(UUID org, UUID ticketId) {
+        return tickets.row(org, ticketId).map(Tickets.Row::status);
     }
 
     /** Who holds ticket {@code ticketId} of organizer {@code org} (notifications: the recipient, read at send time). */

@@ -25,6 +25,7 @@ import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.payments.PaymentTest;
 import ma.jomhor.sales.application.OrderService;
+import ma.jomhor.sales.domain.Order;
 import ma.jomhor.tickets.TicketPdfApiTest;
 import ma.jomhor.tickets.domain.TicketToken;
 import org.junit.jupiter.api.BeforeEach;
@@ -128,7 +129,7 @@ class TicketDeliveryTest extends PaymentTest {
         Sale s = onSale(10);
         String orderId = order(fanToken(randomPhone()), s, 2);
         new TransactionTemplate(transactions).executeWithoutResult(tx -> {
-            assertThat(orders.settle(UUID.fromString(orderId), "REF-1")).isEqualTo(OrderService.Settlement.PAID);
+            assertThat(orders.settle(UUID.fromString(orderId), Order.PaymentMethod.CARD, "REF-1")).isEqualTo(OrderService.Settlement.PAID);
             assertThat(rows(orderId)).hasSize(2); // queued inside the settle's own transaction
             tx.setRollbackOnly();
         });
@@ -215,6 +216,40 @@ class TicketDeliveryTest extends PaymentTest {
         // Due again in 1 min: settle it so a later test of this class never meets it.
         jdbc.sql("update ticket_deliveries set status = 'FAILED' where ticket_id = ?")
                 .param(ticketHeldBy(orderId, phone)).update();
+    }
+
+    @Test
+    void aBlockedTicketBacksOffAndIsSentOnceUnblocked() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String orderId = paid(fanToken(phone), s, 1, holders(1));
+        UUID ticket = ticketHeldBy(orderId, phone);
+        call(s.org(), post("/org/tickets/" + ticket + "/block"), "{\"reason\": \"doute\"}").andExpect(status().isOk());
+        deliveries.deliverDue();
+        Map<String, Object> row = rows(orderId).getFirst();
+        assertThat(row).containsEntry("status", "PENDING").containsEntry("last_error", "TICKET_NOT_VALID");
+        assertThat(((Number) row.get("due_in_s")).longValue()).isBetween(55L, 60L); // the normal 1 min backoff
+        assertThat(sent(orderId)).isEmpty();
+
+        call(s.org(), post("/org/tickets/" + ticket + "/unblock"), "{\"reason\": \"leve\"}").andExpect(status().isOk());
+        dueNow(ticket);
+        deliveries.deliverDue();
+        assertThat(rows(orderId).getFirst()).containsEntry("status", "SENT").containsEntry("last_error", null);
+        assertThat(attempts(rows(orderId).getFirst())).isEqualTo(2);
+        assertThat(sent(orderId)).hasSize(1);
+    }
+
+    @Test
+    void aRefundedTicketFailsWithoutRetry() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String orderId = paid(fanToken(phone), s, 1, holders(1));
+        UUID ticket = ticketHeldBy(orderId, phone);
+        call(s.org(), post("/org/tickets/" + ticket + "/refund"), "{\"reason\": \"x\"}").andExpect(status().isOk());
+        deliveries.deliverDue();
+        assertThat(rows(orderId).getFirst()).containsEntry("status", "FAILED")
+                .containsEntry("last_error", "TICKET_NOT_VALID");
+        assertThat(sent(orderId)).isEmpty();
     }
 
     @Test

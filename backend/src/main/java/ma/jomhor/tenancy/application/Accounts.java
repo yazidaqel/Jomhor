@@ -3,12 +3,13 @@ package ma.jomhor.tenancy.application;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import ma.jomhor.tenancy.domain.CashPoint;
 import ma.jomhor.tenancy.domain.Membership;
 import ma.jomhor.tenancy.domain.StaffMember;
 import ma.jomhor.tenancy.domain.StaffRole;
 import ma.jomhor.tenancy.domain.User;
 
-/** Persistence port for users (platform table) and staff (tenant table). */
+/** Persistence port for users (platform table), staff (tenant table) and organizer settings. */
 public interface Accounts {
 
     /** The user with this phone, created on first login. */
@@ -36,7 +37,10 @@ public interface Accounts {
     /** A PIN-only scanner staff row (no user), active. */
     StaffMember insertScannerStaff(UUID organizerId, String name, StaffRole role, String pinVerifier);
 
-    /** GATE/SUPERVISOR rows only; null = unchanged. Empty if no such row of this organizer. */
+    /** A CASHIER row of this user, active; empty if the user is already staff of this organizer. */
+    Optional<StaffMember> insertCashier(UUID organizerId, UUID userId, String name);
+
+    /** GATE/SUPERVISOR/CASHIER rows only; null = unchanged. Empty if no such row of this organizer. */
     Optional<StaffMember> updateScannerStaff(UUID organizerId, UUID staffId, String name, Boolean active);
 
     /** GATE/SUPERVISOR rows only; false if no such row of this organizer. */
@@ -44,4 +48,7 @@ public interface Accounts {
 
     /** Active GATE/SUPERVISOR rows with a PIN, by name: what the organizer's scanners get. */
     List<StaffMember> activeScannerStaff(UUID organizerId);
+
+    /** organizers.settings.cash_points: object entries with a name, in order; anything else is skipped. */
+    List<CashPoint> cashPoints(UUID organizerId);
 }

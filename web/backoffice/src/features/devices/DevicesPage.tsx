@@ -90,7 +90,8 @@ function DevicesTab() {
     const c = await send<EnrolCode>({ method: 'POST', path: '/org/devices/enrol-codes' })
     if (live.current) setCode(c)
   })
-  const [action, setAction] = useState<(Action & { open: boolean }) | null>(null)
+  // `n` counts openings: the dialog's key, so reopening it never shows the last attempt's error.
+  const [action, setAction] = useState<(Action & { open: boolean; n: number }) | null>(null)
 
   const openEnrol = () => {
     live.current = true
@@ -149,7 +150,7 @@ function DevicesTab() {
                 <TableCell>
                   <div className="flex justify-end gap-2">
                     {d.status === 'PENDING' && (
-                      <Button size="sm" aria-label={t('devices.approve.label', { label: d.label })} onClick={() => setAction({ kind: 'approve', device: d, open: true })}>
+                      <Button size="sm" aria-label={t('devices.approve.label', { label: d.label })} onClick={() => setAction((a) => ({ kind: 'approve', device: d, open: true, n: (a?.n ?? 0) + 1 }))}>
                         {t('devices.approve.action')}
                       </Button>
                     )}
@@ -159,7 +160,7 @@ function DevicesTab() {
                         variant="ghost"
                         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                         aria-label={t('devices.revoke.label', { label: d.label })}
-                        onClick={() => setAction({ kind: 'revoke', device: d, open: true })}
+                        onClick={() => setAction((a) => ({ kind: 'revoke', device: d, open: true, n: (a?.n ?? 0) + 1 }))}
                       >
                         {t('devices.revoke.action')}
                       </Button>
@@ -186,7 +187,7 @@ function DevicesTab() {
         onRegenerate={() => enrol.mutate()}
         pendingDevices={devices.data?.filter((d) => d.status === 'PENDING').length ?? 0}
       />
-      {action && <DeviceActionDialog key={`${action.kind}-${action.device.id}`} {...action} onOpenChange={(open) => setAction((a) => a && { ...a, open })} />}
+      {action && <DeviceActionDialog key={action.n} {...action} onOpenChange={(open) => setAction((a) => a && { ...a, open })} />}
     </Card>
   )
 }

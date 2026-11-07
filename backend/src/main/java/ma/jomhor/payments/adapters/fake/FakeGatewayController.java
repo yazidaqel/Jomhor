@@ -10,6 +10,7 @@ import ma.jomhor.payments.adapters.web.Pages;
 import ma.jomhor.payments.application.CardGateway.HttpCallback;
 import ma.jomhor.payments.application.PaymentService;
 import ma.jomhor.payments.domain.Payment;
+import ma.jomhor.sales.domain.Order.PaymentMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +25,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The simulated gateway's hosted page (docs/04-api.md GET /payments/fake/{payment_id}). "Approuver" and "Refuser"
+ * The simulated gateway's hosted page (docs/04-api.md GET /payments/fake/{payment_id}), "Wallet simulé" for a WALLET
+ * attempt. "Approuver" and "Refuser"
  * post a signed callback to /payments/fake/callback, whose answer lands the browser on /return. "Réponse tardive"
  * sends the approval server-side after payments.fake.late-delay (default 21 min: past the 20 min the expiry waits
  * for a PENDING payment, so the late-success path of plan Q8 runs) and lands on /return at once.
@@ -52,19 +54,22 @@ class FakeGatewayController {
 
     @GetMapping("/payments/fake/{paymentId}")
     ResponseEntity<String> page(@PathVariable UUID paymentId) {
-        Payment p = payments.get(paymentId);
+        Payment p = payments.hosted(paymentId);
         if (p.status() != Payment.Status.PENDING) {
             return gone();
         }
         String ref = providerRef();
-        return Pages.html(HttpStatus.OK, "Paiement simulé", """
-                <h1>Paiement simulé</h1>
-                <p>Passerelle de test : aucune carte n'est débitée.</p>
+        boolean wallet = p.method() == PaymentMethod.WALLET; // one gateway serves both (plan Q47)
+        String title = wallet ? "Wallet simulé" : "Paiement simulé";
+        return Pages.html(HttpStatus.OK, title, """
+                <h1>%s</h1>
+                <p>Passerelle de test : %s</p>
                 <p>Montant : <strong>%s</strong></p>
                 %s
                 %s
                 <form method="post" action="%s/late"><button type="submit">Réponse tardive (approuver dans %s)</button></form>
-                """.formatted(Pages.dirhams(p.amountMad()),
+                """.formatted(title, wallet ? "aucun wallet n'est débité." : "aucune carte n'est débitée.",
+                Pages.dirhams(p.amountMad()),
                 form(gateway.callback(p.id(), FakeCardGateway.APPROVED, p.amountMad(), ref), "Approuver"),
                 form(gateway.callback(p.id(), FakeCardGateway.DECLINED, p.amountMad(), ref), "Refuser"),
                 p.id(), duration(lateDelay)));
@@ -73,7 +78,7 @@ class FakeGatewayController {
     /** Schedules the signed approval (through the same callback path), then sends the browser to /return. */
     @PostMapping("/payments/fake/{paymentId}/late")
     ResponseEntity<?> late(@PathVariable UUID paymentId) {
-        Payment p = payments.get(paymentId);
+        Payment p = payments.hosted(paymentId);
         if (p.status() != Payment.Status.PENDING) { // nothing to approve: no task on the shared scheduler
             return gone();
         }

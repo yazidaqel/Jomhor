@@ -235,9 +235,11 @@ class FanEventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.zones[?(@.id == %d)].gate_codes[*]".formatted(est)).value(contains("P10", "P2")))
                 .andExpect(jsonPath("$.zones[?(@.id == %d)].prices[*].name".formatted(nord)).value(contains("Tribune", "Virage")))
                 .andExpect(jsonPath("$.zones[?(@.id == %d)].prices[*].remaining".formatted(nord)).value(contains(1, 2))));
-        String[] detailKeys = new String[EVENT_KEYS.length + 1];
+        String[] detailKeys = new String[EVENT_KEYS.length + 3];
         System.arraycopy(EVENT_KEYS, 0, detailKeys, 0, EVENT_KEYS.length);
         detailKeys[EVENT_KEYS.length] = "zones";
+        detailKeys[EVENT_KEYS.length + 1] = "payment_methods";
+        detailKeys[EVENT_KEYS.length + 2] = "cash_until";
         assertKeys(json, "$", detailKeys);
         assertKeys(json, "$.venue", "name", "city");
         assertKeys(json, "$.zones[0]", "id", "code", "name", "seated", "gate_codes", "prices");

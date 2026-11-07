@@ -62,6 +62,7 @@ const STAFF: Staff[] = [
   { id: 's-admin', name: 'Samira Admin', role: 'ADMIN', active: true, has_pin: false },
   { id: 's1', name: 'Karim Bennani', role: 'GATE', active: true, has_pin: true },
   { id: 's2', name: 'Nadia Alaoui', role: 'SUPERVISOR', active: false, has_pin: true },
+  { id: 's3', name: 'Omar Tazi', role: 'CASHIER', active: true, has_pin: false },
 ]
 const EVENT: EventDetail = {
   id: 1,
@@ -118,7 +119,12 @@ function stubApi(role: Role = 'ADMIN', handler: Handler = () => undefined) {
         return Response.json({ ...d, status: action[2] === 'approve' ? 'ACTIVE' : 'REVOKED' })
       }
       if (key === 'GET /org/staff') return Response.json(STAFF)
-      if (key === 'POST /org/staff') return Response.json({ id: 's9', ...(call.body as object), active: true, has_pin: true, pin: '4821' }, { status: 201 })
+      if (key === 'POST /org/staff') {
+        const { name, role } = call.body as { name: string; role: string }
+        // 04-api: a CASHIER answers has_pin false and no `pin` key; GATE/SUPERVISOR get their PIN once.
+        const pin = role === 'CASHIER' ? { has_pin: false } : { has_pin: true, pin: '4821' }
+        return Response.json({ id: 's9', name, role, active: true, ...pin }, { status: 201 })
+      }
       if (key === 'POST /org/staff/s1/pin') return Response.json({ pin: '0937' })
       if (key === 'PATCH /org/staff/s1') return Response.json({ ...STAFF[1], ...(call.body as object) })
       if (key === 'GET /org/events/1') return Response.json(EVENT)
@@ -301,14 +307,14 @@ it('revoke asks for confirmation: cancel sends nothing, confirm sends POST revok
   await waitFor(() => expect(writes(calls)).toEqual([{ method: 'POST', path: '/org/devices/d1/revoke', org: 'org-a', body: undefined }]))
 })
 
-// ---- Équipe de porte ----
+// ---- Équipe ----
 
 async function openStaff(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('tab', { name: fr.devices.tabs.staff }))
   return screen.findByRole('tabpanel', { name: fr.devices.tabs.staff })
 }
 
-it('staff: the gate team only (no back-office member), role, PIN set, status', async () => {
+it('staff: the gate team and the cashiers (no back-office member), role, PIN set, status', async () => {
   const { user } = (stubApi(), renderApp('/devices'))
   const panel = await openStaff(user)
   await within(panel).findByText('Karim Bennani')
@@ -316,8 +322,63 @@ it('staff: the gate team only (no back-office member), role, PIN set, status', a
   expect(rows.map((r) => within(r).getAllByRole('cell').slice(0, 4).map((c) => c.textContent))).toEqual([
     ['Karim Bennani', fr.staff.roles.GATE, fr.staff.hasPin, fr.staff.active],
     ['Nadia Alaoui', fr.staff.roles.SUPERVISOR, fr.staff.hasPin, fr.staff.inactive],
+    ['Omar Tazi', fr.staff.roles.CASHIER, fr.staff.phoneLogin, fr.staff.active],
   ])
   expect(within(panel).queryByText('Samira Admin')).toBeNull()
+  // A CASHIER has no PIN to reset (`/pin` answers 404); deactivating still works.
+  const cashier = within(rows[2]!)
+  expect(cashier.queryByRole('button', { name: i18n.t('staff.resetPinLabel', { name: 'Omar Tazi' }) })).toBeNull()
+  expect(cashier.getByRole('button', { name: i18n.t('staff.deactivateLabel', { name: 'Omar Tazi' }) })).toBeTruthy()
+})
+
+async function openCashierForm(user: ReturnType<typeof userEvent.setup>) {
+  const panel = await openStaff(user)
+  await user.click(within(panel).getByRole('button', { name: fr.staff.add }))
+  const form = await screen.findByRole('dialog', { name: fr.staff.newTitle })
+  expect(within(form).queryByLabelText(fr.staff.phone)).toBeNull() // GATE by default: no phone
+  await user.type(within(form).getByLabelText(fr.staff.name), 'Omar Tazi')
+  await user.click(within(form).getByRole('combobox', { name: fr.staff.role }))
+  await user.click(await screen.findByRole('option', { name: fr.staff.roles.CASHIER }))
+  return form
+}
+
+it('staff: add a Caissier: POST {name, role: CASHIER, phone} in E.164, no PIN dialog, the list refetches', async () => {
+  const calls = stubApi()
+  const { user } = renderApp('/devices')
+  const form = await openCashierForm(user)
+  await user.type(within(form).getByLabelText(fr.staff.phone), '06 12 34 56 78')
+  await user.click(within(form).getByRole('button', { name: fr.staff.createCashier }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(writes(calls)).toEqual([{ method: 'POST', path: '/org/staff', org: 'org-a', body: { name: 'Omar Tazi', role: 'CASHIER', phone: '+212612345678' } }])
+  expect(await screen.findByText(i18n.t('staff.cashierCreated', { name: 'Omar Tazi' }))).toBeTruthy()
+  expect(screen.queryByRole('dialog', { name: /PIN/ })).toBeNull()
+  await waitFor(() => expect(calls.filter((c) => c.path === '/org/staff' && c.method === 'GET').length).toBeGreaterThan(1))
+})
+
+it('staff: a Caissier needs a valid phone; nothing is sent without one', async () => {
+  const calls = stubApi()
+  const { user } = renderApp('/devices')
+  const form = await openCashierForm(user)
+  await user.click(within(form).getByRole('button', { name: fr.staff.createCashier }))
+  expect(await within(form).findByText(fr.staff.phoneInvalid)).toBeTruthy()
+  await user.type(within(form).getByLabelText(fr.staff.phone), '12345')
+  await user.click(within(form).getByRole('button', { name: fr.staff.createCashier }))
+  expect(within(form).getByLabelText(fr.staff.phone).getAttribute('aria-invalid')).toBe('true')
+  expect(writes(calls)).toEqual([])
+})
+
+it('staff: a phone already in the team (422 TAKEN on phone) is marked on the phone field; no PIN dialog', async () => {
+  stubApi('ADMIN', (c) =>
+    c.method === 'POST' && c.path === '/org/staff' ? err(422, 'VALIDATION_FAILED', { fields: { phone: 'taken' }, reason: 'TAKEN' }) : undefined,
+  )
+  const { user } = renderApp('/devices')
+  const form = await openCashierForm(user)
+  await user.type(within(form).getByLabelText(fr.staff.phone), '0612345678')
+  await user.click(within(form).getByRole('button', { name: fr.staff.createCashier }))
+  expect(await within(form).findByText(fr.staff.phoneTaken)).toBeTruthy()
+  expect(within(form).getByLabelText(fr.staff.phone).getAttribute('aria-invalid')).toBe('true')
+  expect(within(form).queryByText(fr.common.fieldInvalid)).toBeNull()
+  expect(screen.queryByRole('dialog', { name: /PIN/ })).toBeNull()
 })
 
 it('staff: add → POST {name, role}, the PIN is shown once and never reaches the query cache; closing clears it', async () => {

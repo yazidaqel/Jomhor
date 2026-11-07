@@ -1,0 +1,163 @@
+### Lot 3 demo, organizer and point-of-sale side: cash code at a till, walk-up sale + print, block/refund, till
+### close 10 DH short, Encaissements and B3 figures (IntelliJ HTTP client).
+#
+# Start the backend with the dev profile (dev seed: ATLAS FC with cash points, admin +212600000001; dev enables the
+# simulated card gateway, wallet and cash network):
+#   docker compose up -d && SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Make the event and the fan cash code with lot1-sale.http first (steps 1-8), then pay with
+#   POST /fan/orders/{id}/pay {"method": "CASH_AGENCY"}  -> pay_code (put it in @payCode)
+# A second code can be paid on the simulated agent terminal instead: open {{base}}/payments/cash/fake in a browser.
+# OTP codes are printed by the dev log sender ([dev OTP] +2126... -> 123456): paste into @orgCode / @cashierCode.
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@adminPhone = +212600000001
+@cashierPhone = +212633333333
+@walkUpPhone = +212644444444
+@orgCode = 000000
+@cashierCode = 000000
+@eventId = 1
+@priceId = 00000000-0000-0000-0000-000000000000
+@payCode = 4F7K29
+# Local dates, both included (the server turns them into instants with its own tzdata); at most 92 days.
+@from = 2026-11-01
+@to = 2026-11-07
+@timezone = Africa/Casablanca
+
+### 1. Admin: ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 2. Admin: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{orgCode}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 3. Admin: a cashier (OTP login, no PIN). Again with the same phone -> 422 TAKEN.
+POST {{base}}/org/staff
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"name": "Nadia Guichet", "role": "CASHIER", "phone": "{{cashierPhone}}"}
+
+### 4. Cashier: ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}"}
+
+### 5. Cashier: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}", "code": "{{cashierCode}}"}
+
+> {% client.global.set("cashierToken", response.body.token); %}
+
+### 6. Cashier: open the till (201; already open -> 200 with it)
+POST {{base}}/org/pos/sessions
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Guichet Nord"}
+
+> {% client.global.set("sessionId", response.body.id); %}
+
+### 7. Cashier: look the fan's code up (case, spaces, hyphens and the JMH prefix are ignored; O reads 0)
+GET {{base}}/org/pos/codes/jmh-{{payCode}}
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("amount", response.body.amount_mad); %}
+
+### 8. Cashier: "Encaisser" the exact amount -> PAID + tickets; the fan's WhatsApp delivery row is queued
+POST {{base}}/org/pos/codes/{{payCode}}/collect
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"amount_mad": {{amount}}}
+
+### 9. Cashier: walk-up sale of 2 places; the 2nd holder has no phone (paper only)
+POST {{base}}/org/pos/orders
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"sale_id": "{{$random.uuid}}", "event_id": {{eventId}}, "items": [{"price_category_id": "{{priceId}}", "qty": 2,
+  "holders": [{"name": "Salma Bennani", "phone": "{{walkUpPhone}}"}, {"name": "Karim Tazi"}]}]}
+
+> {% client.global.set("saleId", response.body.id); %}
+
+### 10. Cashier: print data, one 80 mm slip per ticket (qr = static v1 token; every call is an audited print)
+GET {{base}}/org/pos/orders/{{saleId}}/tickets
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("ticketA", response.body.tickets[0].id); client.global.set("ticketB", response.body.tickets[1].id); %}
+
+### 11. Cashier: the running figures (collected_mad so far)
+GET {{base}}/org/pos/session
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+
+### 12. Admin (or OPS): block one ticket -> BLOCKED in the next manifest version
+POST {{base}}/org/tickets/{{ticketA}}/block
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "Démo blocage"}
+
+### 13. Admin: refund another ticket -> REFUNDED, place back on sale, a REQUIRED refund
+POST {{base}}/org/tickets/{{ticketB}}/refund
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "Démo remboursement"}
+
+### 14. Refunds to do (REQUIRED first)
+GET {{base}}/org/refunds?status=REQUIRED&event_id={{eventId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("refundId", response.body[0].id); %}
+
+### 15. Admin or FINANCE: money given back by hand -> DONE with a reference
+POST {{base}}/org/refunds/{{refundId}}/done
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reference": "Caisse club 0001"}
+
+### 16. Cashier: close the till declaring 10 DH less than expected (expected 15000 if steps 8 + 9 only)
+POST {{base}}/org/pos/sessions/{{sessionId}}/close
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"declared_mad": 14000}
+
+### 17. B8 Encaissements (ADMIN, OPS, FINANCE; CASHIER -> 403): per day x collector, sessions with the gap
+GET {{base}}/org/finance/cash?from={{from}}&to={{to}}&timezone={{timezone}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 18. Same as CSV (; separated, UTF-8 BOM, CRLF, amounts like 1250,50)
+GET {{base}}/org/finance/cash.csv?from={{from}}&to={{to}}&timezone={{timezone}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 19. B3: awaiting_cash, methods (every payment method, zeros included), refunded, refunded_mad
+GET {{base}}/org/events/{{eventId}}/sales
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}

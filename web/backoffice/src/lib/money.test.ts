@@ -49,3 +49,12 @@ it('formatDh is exact for a bigint total past 2^53', () => {
   expect(formatDh(total, 'fr')).toBe(nf.format('184467440737095516.17'))
   expect(Number.isSafeInteger(Number(total))).toBe(false)
 })
+
+it('formatDh keeps the sign of a negative amount (a till gap), and adds + on request', () => {
+  const nf = (o: Intl.NumberFormatOptions = {}) => new Intl.NumberFormat('fr', { minimumFractionDigits: 2, maximumFractionDigits: 2, ...o })
+  expect(formatDh(-1_000, 'fr')).toBe(nf().format(-10))
+  expect(formatDh(-1_050, 'fr')).toBe(nf().format('-10.50'))
+  expect(formatDh(-5, 'fr')).toBe(nf().format('-0.05'))
+  expect(formatDh(250, 'fr', 'exceptZero')).toBe(nf({ signDisplay: 'exceptZero' }).format(2.5))
+  expect(formatDh(0, 'fr', 'exceptZero')).toBe(nf().format(0))
+})

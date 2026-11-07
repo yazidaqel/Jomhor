@@ -78,8 +78,11 @@ class SalesReportApiTest extends PaymentTest {
 
         String json = body(sales(a, eventId).andExpect(status().isOk()));
         assertThat(statusOf(lapsed)).isEqualTo("RESERVED");
-        assertKeys(json, "$", "event_id", "quota", "paid", "held", "revenue_mad", "zones", "channels", "refunds_required");
-        assertKeys(json, "$.zones[0]", "zone_id", "code", "name", "quota", "paid", "held", "revenue_mad");
+        assertKeys(json, "$", "event_id", "quota", "paid", "held", "awaiting_cash", "refunded", "revenue_mad",
+                "refunded_mad", "zones", "channels", "methods", "refunds_required");
+        assertKeys(json, "$.zones[0]", "zone_id", "code", "name", "quota", "paid", "held", "awaiting_cash", "refunded",
+                "revenue_mad");
+        assertKeys(json, "$.methods[0]", "method", "paid", "revenue_mad");
         assertKeys(json, "$.channels[0]", "channel", "paid", "revenue_mad");
         assertThat(JsonPath.<Integer>read(json, "$.event_id")).isEqualTo(eventId);
         assertThat(JsonPath.<Integer>read(json, "$.quota")).isEqualTo(35);
@@ -87,8 +90,10 @@ class SalesReportApiTest extends PaymentTest {
         assertThat(JsonPath.<Integer>read(json, "$.held")).isEqualTo(1);
         assertThat(JsonPath.<Integer>read(json, "$.revenue_mad")).isEqualTo(15000);
         assertThat(JsonPath.<List<Map<String, Object>>>read(json, "$.zones")).containsExactly(
-                Map.of("zone_id", est, "code", "EST", "name", "Zone EST", "quota", 25, "paid", 1, "held", 0, "revenue_mad", 5000),
-                Map.of("zone_id", sud, "code", "SUD", "name", "Zone SUD", "quota", 10, "paid", 2, "held", 1, "revenue_mad", 10000));
+                Map.of("zone_id", est, "code", "EST", "name", "Zone EST", "quota", 25, "paid", 1, "held", 0,
+                        "awaiting_cash", 0, "refunded", 0, "revenue_mad", 5000),
+                Map.of("zone_id", sud, "code", "SUD", "name", "Zone SUD", "quota", 10, "paid", 2, "held", 1,
+                        "awaiting_cash", 0, "refunded", 0, "revenue_mad", 10000));
         assertThat(JsonPath.<List<Map<String, Object>>>read(json, "$.channels")).containsExactly(
                 Map.of("channel", "APP", "paid", 2, "revenue_mad", 10000),
                 Map.of("channel", "WEB", "paid", 1, "revenue_mad", 5000),
@@ -104,7 +109,61 @@ class SalesReportApiTest extends PaymentTest {
                 .andExpect(jsonPath("$.held").value(0)).andExpect(jsonPath("$.revenue_mad").value(0))
                 .andExpect(jsonPath("$.zones.length()").value(1)).andExpect(jsonPath("$.zones[0].zone_id").value(s.zoneId()))
                 .andExpect(jsonPath("$.channels[*].channel").value(contains("APP", "WEB", "POS")))
+                .andExpect(jsonPath("$.methods[*].method").value(contains("CARD", "CASH_AGENCY", "WALLET", "POS_CASH", "FREE")))
+                .andExpect(jsonPath("$.methods[*].paid").value(contains(0, 0, 0, 0, 0)))
+                .andExpect(jsonPath("$.awaiting_cash").value(0)).andExpect(jsonPath("$.refunded").value(0))
+                .andExpect(jsonPath("$.refunded_mad").value(0))
                 .andExpect(jsonPath("$.refunds_required").isEmpty());
+    }
+
+    @Test
+    void awaitingCashIsNotHeldMethodsListEveryMethodAndRefundsStayInPaid() throws Exception {
+        Sale s = onSale(20);
+        jdbc.sql("update organizers set settings = settings || jsonb_build_object('cash_points', ?::jsonb) where id = ?")
+                .params("[{\"name\": \"Guichet Stade\"}]", s.org().org()).update();
+        String f1 = fanToken(randomPhone());
+        String card = order(f1, s, 2);
+        paid(f1, card); // 2 x 50 DH by CARD
+        String f2 = fanToken(randomPhone());
+        String cash = order(f2, s, 3);
+        fan(f2, post("/fan/orders/" + cash + "/pay"), "{\"method\": \"CASH_AGENCY\"}").andExpect(status().isOk());
+        assertThat(statusOf(cash)).isEqualTo("AWAITING_CASH");
+        String f3 = fanToken(randomPhone());
+        String lapsed = order(f3, s, 1);
+        fan(f3, post("/fan/orders/" + lapsed + "/pay"), "{\"method\": \"CASH_AGENCY\"}").andExpect(status().isOk());
+        holdPast(lapsed); // a code past its deadline, not swept yet: not awaiting
+        String f4 = fanToken(randomPhone());
+        order(f4, s, 1); // RESERVED: held
+        // ADMIN refunds one of the card tickets: refunded 1, refunded_mad 50 DH; paid and revenue stay gross.
+        String ticket = jdbc.sql("select id::text from tickets where order_id = ?::uuid order by id limit 1").param(card)
+                .query(String.class).single();
+        call(s.org(), post("/org/tickets/" + ticket + "/refund"), "{\"reason\": \"Annulation\"}").andExpect(status().isOk());
+
+        String json = body(sales(s.org(), s.eventId()).andExpect(status().isOk()));
+        assertThat(JsonPath.<Integer>read(json, "$.paid")).isEqualTo(2);
+        assertThat(JsonPath.<Integer>read(json, "$.held")).isEqualTo(1);
+        assertThat(JsonPath.<Integer>read(json, "$.awaiting_cash")).isEqualTo(3);
+        assertThat(JsonPath.<Integer>read(json, "$.refunded")).isEqualTo(1);
+        assertThat(JsonPath.<Integer>read(json, "$.revenue_mad")).isEqualTo(10000);
+        assertThat(JsonPath.<Integer>read(json, "$.refunded_mad")).isEqualTo(5000);
+        assertThat(JsonPath.<List<Map<String, Object>>>read(json, "$.zones")).containsExactly(
+                Map.of("zone_id", s.zoneId(), "code", "NORD", "name", "Zone NORD", "quota", 20, "paid", 2, "held", 1,
+                        "awaiting_cash", 3, "refunded", 1, "revenue_mad", 10000));
+        assertThat(JsonPath.<List<Map<String, Object>>>read(json, "$.methods")).containsExactly(
+                Map.of("method", "CARD", "paid", 2, "revenue_mad", 10000),
+                Map.of("method", "CASH_AGENCY", "paid", 0, "revenue_mad", 0),
+                Map.of("method", "WALLET", "paid", 0, "revenue_mad", 0),
+                Map.of("method", "POS_CASH", "paid", 0, "revenue_mad", 0),
+                Map.of("method", "FREE", "paid", 0, "revenue_mad", 0));
+        // Another event of another organizer with its own refund: not counted here.
+        Sale other = onSale(5);
+        String f5 = fanToken(randomPhone());
+        String o = order(f5, other, 1);
+        paid(f5, o);
+        String t = jdbc.sql("select id::text from tickets where order_id = ?::uuid").param(o).query(String.class).single();
+        call(other.org(), post("/org/tickets/" + t + "/refund"), "{\"reason\": \"Annulation\"}").andExpect(status().isOk());
+        sales(s.org(), s.eventId()).andExpect(status().isOk()).andExpect(jsonPath("$.refunded").value(1))
+                .andExpect(jsonPath("$.refunded_mad").value(5000));
     }
 
     @Test

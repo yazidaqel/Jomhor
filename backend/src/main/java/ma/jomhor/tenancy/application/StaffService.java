@@ -3,6 +3,7 @@ package ma.jomhor.tenancy.application;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.HolderNames;
 import ma.jomhor.common.web.ApiException;
@@ -21,13 +22,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class StaffService {
 
-    /** POST /org/staff: the row and its PIN, shown once. */
+    /** POST /org/staff: the row and its PIN, shown once (null for a CASHIER). */
     public record Created(StaffMember staff, String pin) {
         @Override
         public String toString() {
             return "Created[staff=" + staff + ", pin=****]";
         }
     }
+
+    /** Same as the auth endpoints. */
+    private static final Pattern E164 = Pattern.compile("\\+[1-9][0-9]{7,14}");
 
     private final Accounts accounts;
     private final AuditLog audit;
@@ -41,18 +45,31 @@ public class StaffService {
         return accounts.staff(org);
     }
 
-    /** GATE or SUPERVISOR only; {@code name} per §Holder names. */
+    /**
+     * GATE or SUPERVISOR (a PIN, {@code phone} ignored) or CASHIER (no PIN: {@code phone} E.164 required, its user
+     * created or linked, so it logs in by OTP; a phone already staff of this organizer → 422 TAKEN). {@code name}
+     * per §Holder names.
+     */
     @Transactional
-    public Created create(UUID org, String name, StaffRole role) {
+    public Created create(UUID org, String name, StaffRole role, String phone) {
         String n = name(name);
+        if (role == StaffRole.CASHIER) {
+            if (phone == null || !E164.matcher(phone).matches()) {
+                throw invalid("phone", "an E.164 phone number");
+            }
+            UUID user = accounts.upsertByPhone(phone).id();
+            return new Created(accounts.insertCashier(org, user, n).orElseThrow(() -> new ApiException(
+                    "VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                    Map.of("fields", Map.of("phone", "already staff of this organizer"), "reason", "TAKEN"))), null);
+        }
         if (role != StaffRole.GATE && role != StaffRole.SUPERVISOR) {
-            throw invalid("role", "GATE or SUPERVISOR");
+            throw invalid("role", "GATE, SUPERVISOR or CASHIER");
         }
         String pin = Pins.newPin();
         return new Created(accounts.insertScannerStaff(org, n, role, Pins.verifier(pin)), pin);
     }
 
-    /** GATE/SUPERVISOR rows only (others → 404); null = unchanged. */
+    /** GATE/SUPERVISOR/CASHIER rows only (others → 404); null = unchanged. */
     @Transactional
     public StaffMember update(UUID org, UUID staffId, String name, Boolean active) {
         return accounts.updateScannerStaff(org, staffId, name == null ? null : name(name), active)

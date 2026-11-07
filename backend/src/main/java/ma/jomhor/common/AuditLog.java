@@ -1,6 +1,7 @@
 package ma.jomhor.common;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -21,6 +22,13 @@ public class AuditLog {
                 .params(organizerId, userId, action, target).update();
     }
 
+    /** A staff action with a payload: {@code payloadJson} is a JSON object and must never hold a secret. */
+    public void staff(UUID organizerId, UUID userId, String action, String target, String payloadJson) {
+        jdbc.sql("insert into audit_log (organizer_id, actor_type, actor_id, action, target, payload) "
+                        + "values (?, 'STAFF', ?, ?, ?, ?::jsonb)")
+                .params(organizerId, userId, action, target, payloadJson).update();
+    }
+
     /** One audit row: {@code payloadJson} is a JSON object and must never hold a secret. */
     public record Entry(String target, String payloadJson) {}
 
@@ -37,6 +45,16 @@ public class AuditLog {
                 .params(organizerId, deviceId, action, entries.stream().map(Entry::target).toArray(String[]::new),
                         entries.stream().map(Entry::payloadJson).toArray(String[]::new))
                 .update();
+    }
+
+    /**
+     * The target of an {@code action} row whose payload contains {@code payloadJson}, in any organizer's log: a system
+     * read (a cash network's refs are network-wide).
+     */
+    // ponytail: no index on the payload; add a partial expression index (where action = ...) when audit_log grows.
+    public Optional<String> target(String action, String payloadJson) {
+        return jdbc.sql("select target from audit_log where action = ? and payload @> ?::jsonb limit 1")
+                .params(action, payloadJson).query(String.class).optional();
     }
 
     /** A system action (no actor); {@code payloadJson} is a JSON object and must never hold a secret. */

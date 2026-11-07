@@ -25,6 +25,10 @@ jomhor:
 payments:
   card:
     provider: ${PAYMENTS_CARD_PROVIDER:fake}
+  cash:
+    networks: ${PAYMENTS_CASH_NETWORKS:fake}
+  wallet:
+    provider: ${PAYMENTS_WALLET_PROVIDER:fake}
   public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080/v1}
   fake:
     secret: ${PAYMENTS_FAKE_SECRET:dev-only-payments-fake-secret-not-for-prod}

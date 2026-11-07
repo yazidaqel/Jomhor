@@ -155,7 +155,12 @@ it.each<[string, OrderStatus, number, boolean]>([
   ['payment_status PENDING', order('RESERVED', { payment_status: 'PENDING' }), 60_000, false],
   ['payment_status SUCCEEDED (callback in, order not yet PAID)', order('RESERVED', { payment_status: 'SUCCEEDED' }), 60_000, false],
   ['an order that is not RESERVED', order('EXPIRED', { payment_status: 'FAILED' }), 0, false],
-  ['AWAITING_CASH', order('AWAITING_CASH', { payment_status: null }), 0, false],
+  ['AWAITING_CASH, code PENDING: card / wallet offered', order('AWAITING_CASH', { payment_status: 'PENDING', payment_method: 'CASH_AGENCY' }), 0, true],
+  ['AWAITING_CASH, a CARD attempt PENDING', order('AWAITING_CASH', { payment_status: 'PENDING', payment_method: 'CARD' }), 60_000, false],
+  ['AWAITING_CASH, a WALLET attempt PENDING', order('AWAITING_CASH', { payment_status: 'PENDING', payment_method: 'WALLET' }), 60_000, false],
+  ['AWAITING_CASH, the CARD attempt FAILED', order('AWAITING_CASH', { payment_status: 'FAILED', payment_method: 'CARD' }), 0, true],
+  ['AWAITING_CASH, an attempt SUCCEEDED (not yet PAID)', order('AWAITING_CASH', { payment_status: 'SUCCEEDED', payment_method: 'CARD' }), 0, false],
+  ['AWAITING_CASH, hold over', order('AWAITING_CASH', { payment_status: 'PENDING', payment_method: 'CASH_AGENCY' }), HOLD_MS, false],
 ])('canRetryPay: %s → %s', (_, o, ms, offered) => {
   expect(canRetryPay(o, ms, RENDERED)).toBe(offered)
 })
@@ -193,16 +198,31 @@ describe('placeOrder', () => {
       .mockResolvedValueOnce(res(201, { id: 'o1', status: 'RESERVED' }))
       .mockResolvedValueOnce(res(200, { redirect_url: 'https://api.test/v1/payments/card/p1/redirect' }))
     const abort = new AbortController()
-    expect(await placeOrder(ORDER, () => {}, abort.signal)).toEqual({ kind: 'redirect', url: 'https://api.test/v1/payments/card/p1/redirect' })
+    expect(await placeOrder(ORDER, 'CARD', () => {}, abort.signal)).toEqual({ kind: 'redirect', url: 'https://api.test/v1/payments/card/p1/redirect' })
     expect(fetchMock.mock.calls.map(([u]) => u)).toEqual(['/api/orders', '/api/orders/o1/pay'])
     expect(fetchMock.mock.calls[0]![1]!.signal).toBe(abort.signal)
+    expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)).toEqual({ method: 'CARD' })
+  })
+
+  it('cash: pays with CASH_AGENCY and hands back the order (its page shows the code), no redirect', async () => {
+    fetchMock.mockResolvedValueOnce(res(201, { id: 'o1', status: 'RESERVED' })).mockResolvedValueOnce(res(200, { method: 'CASH_AGENCY' }))
+    expect(await placeOrder(ORDER, 'CASH_AGENCY', () => {}, new AbortController().signal)).toEqual({ kind: 'cash', orderId: 'o1' })
+    expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)).toEqual({ method: 'CASH_AGENCY' })
+  })
+
+  it('an existing order (its method was refused) is paid again without a second order', async () => {
+    fetchMock.mockResolvedValueOnce(res(200, { redirect_url: 'https://api.test/v1/payments/card/p2/redirect' }))
+    const placed = await placeOrder(ORDER, 'WALLET', () => {}, new AbortController().signal, { existingId: 'o1' })
+    expect(placed).toEqual({ kind: 'redirect', url: 'https://api.test/v1/payments/card/p2/redirect' })
+    expect(fetchMock.mock.calls.map(([u]) => u)).toEqual(['/api/orders/o1/pay'])
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({ method: 'WALLET' })
   })
 
   it('Annuler while the order request is in flight, then a 201 arrives: no /pay, no redirect', async () => {
     let answer: (r: Response) => void = () => {}
     fetchMock.mockImplementationOnce(() => new Promise<Response>((r) => (answer = r))) // a fetch that ignores abort
     const abort = new AbortController()
-    const placed = placeOrder(ORDER, () => {}, abort.signal).then(
+    const placed = placeOrder(ORDER, 'CARD', () => {}, abort.signal).then(
       (p) => p,
       (e: unknown) => ({ aborted: e }),
     )
@@ -216,7 +236,7 @@ describe('placeOrder', () => {
     let answer: (r: Response) => void = () => {}
     fetchMock.mockResolvedValueOnce(res(201, { id: 'o1', status: 'RESERVED' })).mockImplementationOnce(() => new Promise<Response>((r) => (answer = r)))
     const abort = new AbortController()
-    const placed = placeOrder(ORDER, () => {}, abort.signal)
+    const placed = placeOrder(ORDER, 'CARD', () => {}, abort.signal)
     await vi.advanceTimersByTimeAsync(0)
     abort.abort()
     answer(res(200, { redirect_url: 'https://api.test/v1/payments/card/p1/redirect' }))
@@ -227,7 +247,7 @@ describe('placeOrder', () => {
     const abort = new AbortController()
     fetchMock.mockImplementationOnce(async () => (abort.abort(), res(201, { id: 'o1', status: 'RESERVED' })))
     // The abort lands as the 201 arrives: withBusyRetry sees it first and rejects (order request still "in flight").
-    await expect(placeOrder(ORDER, () => {}, abort.signal)).rejects.toBeDefined()
+    await expect(placeOrder(ORDER, 'CARD', () => {}, abort.signal)).rejects.toBeDefined()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -239,17 +259,17 @@ describe('placeOrder', () => {
         abort.abort()
         throw abort.signal.reason
       })
-    expect(await placeOrder(ORDER, () => {}, abort.signal)).toEqual({ kind: 'held', orderId: 'o1' })
+    expect(await placeOrder(ORDER, 'CARD', () => {}, abort.signal)).toEqual({ kind: 'held', orderId: 'o1' })
   })
 
-  it('a /pay failure keeps the order id (its page offers the retry)', async () => {
-    fetchMock.mockResolvedValueOnce(res(201, { id: 'o1', status: 'RESERVED' })).mockResolvedValueOnce(res(502, { code: 'INTERNAL_ERROR' }))
-    expect(await placeOrder(ORDER, () => {}, new AbortController().signal)).toEqual({ kind: 'payFailed', orderId: 'o1' })
+  it('a /pay failure keeps the order id and its hold (its page offers the retry)', async () => {
+    fetchMock.mockResolvedValueOnce(res(201, { id: 'o1', status: 'RESERVED', reserved_until: '2026-02-01T12:08:00Z' })).mockResolvedValueOnce(res(502, { code: 'INTERNAL_ERROR' }))
+    expect(await placeOrder(ORDER, 'CARD', () => {}, new AbortController().signal)).toMatchObject({ kind: 'payFailed', orderId: 'o1', reservedUntil: '2026-02-01T12:08:00Z', result: { status: 502 } })
   })
 
   it('an order refusal comes back as failed, without /pay', async () => {
     fetchMock.mockResolvedValueOnce(res(409, { code: 'SOLD_OUT', message: '', details: {} }))
-    expect(await placeOrder(ORDER, () => {}, new AbortController().signal)).toMatchObject({ kind: 'failed', result: { status: 409 } })
+    expect(await placeOrder(ORDER, 'CARD', () => {}, new AbortController().signal)).toMatchObject({ kind: 'failed', result: { status: 409 } })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -273,6 +293,10 @@ it.each<[Result, string]>([
   [fail('SOLD_OUT', { price_category_id: 'pc' }), errors.SOLD_OUT],
   [fail('PER_ACCOUNT_LIMIT', { limit: 4, held: 3 }), 'Tu as atteint la limite de 4 billets par compte pour cet événement (déjà 3 réservés ou achetés).'],
   [fail('ORDER_EXPIRED'), errors.ORDER_EXPIRED],
+  [fail('METHOD_NOT_AVAILABLE', { reason: 'TOO_LATE', sales_close_at: '2026-02-07T18:00:00Z' }), errors.METHOD_TOO_LATE],
+  [fail('METHOD_NOT_AVAILABLE', { reason: 'CASH_CAP' }), errors.METHOD_CASH_CAP],
+  [fail('METHOD_NOT_AVAILABLE', { reason: 'NOT_CONFIGURED' }), errors.METHOD_NOT_CONFIGURED],
+  [fail('METHOD_NOT_AVAILABLE', { reason: 'SOMETHING_NEW' }), errors.METHOD_NOT_AVAILABLE],
   [{ ok: false, status: 0, data: { code: 'NETWORK' } }, errors.NETWORK],
   [fail('SOMETHING_NEW'), errors.generic],
   [fail('constructor'), errors.generic], // never an Object.prototype member

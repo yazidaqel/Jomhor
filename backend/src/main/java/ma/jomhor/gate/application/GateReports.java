@@ -19,6 +19,7 @@ import java.util.function.ToLongFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import ma.jomhor.catalog.application.EventService;
+import ma.jomhor.common.Csv;
 import ma.jomhor.catalog.application.VenueService;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Venue;
@@ -270,16 +271,11 @@ public class GateReports {
     }
 
     private static void row(StringBuilder out, String kind, String code, String name, Object... counts) {
-        out.append(kind).append(';').append(field(code)).append(';').append(field(name));
+        out.append(kind).append(';').append(Csv.text(code)).append(';').append(Csv.text(name));
         for (Object n : counts) {
             out.append(';').append(n == null ? "" : n);
         }
         out.append("\r\n");
     }
 
-    /** RFC 4180 quoting for a text field that holds the separator, a quote or a line break. */
-    private static String field(String s) {
-        return s.contains(";") || s.contains("\"") || s.contains("\n") || s.contains("\r")
-                ? '"' + s.replace("\"", "\"\"") + '"' : s;
-    }
 }

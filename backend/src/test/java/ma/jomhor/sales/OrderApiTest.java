@@ -45,7 +45,7 @@ class OrderApiTest extends OrgApiTest {
     private static final String[] RESERVED_KEYS = {"id", "status", "reserved_until", "total_mad", "items"};
     private static final String[] ORDER_KEYS =
             {"id", "event_id", "channel", "status", "payment_status", "total_mad", "reserved_until", "paid_at", "items",
-             "ticket_ids"};
+             "ticket_ids", "payment_method", "cash"};
     private static final String[] ITEM_KEYS =
             {"price_category_id", "zone_id", "zone_name", "name", "qty", "unit_price_mad", "holders"};
 
@@ -104,11 +104,13 @@ class OrderApiTest extends OrgApiTest {
         jdbc.sql("update orders set reserved_until = now() - interval '1 second' where id = ?::uuid").param(orderId).update();
     }
 
+    /** A PENDING card attempt whose hosted page was opened {@code age} ago (plan P38). */
     private void pendingPayment(String orderId, String age) {
         jdbc.sql("""
-                insert into payments (organizer_id, order_id, method, provider, amount_mad, created_at)
-                select organizer_id, id, 'CARD', 'FAKE', total_mad, now() - cast(? as interval) from orders where id = ?::uuid
-                """).params(age, orderId).update();
+                insert into payments (organizer_id, order_id, method, provider, amount_mad, created_at, redirected_at)
+                select organizer_id, id, 'CARD', 'FAKE', total_mad, now() - cast(? as interval), now() - cast(? as interval)
+                from orders where id = ?::uuid
+                """).params(age, age, orderId).update();
     }
 
     private static void error(ResultActions r, int status, String code) throws Exception {

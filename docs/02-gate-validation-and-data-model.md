@@ -125,7 +125,9 @@ Server (PostgreSQL):
 | price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold |
 | orders | Purchase | id, organizer\_id, event\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status |
 | order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, qty, unit\_price\_mad, holders jsonb (name, user\_id per place) |
-| payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref |
+| payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref, pay\_code (cash code), pos\_session\_id, redirected\_at |
+| pos\_sessions | Club till sessions (one cashier's shift) | id, organizer\_id, staff\_id, label, opened\_at, closed\_at, expected\_mad, declared\_mad |
+| refunds | Money owed back for a refunded ticket, paid back by hand | id, organizer\_id, event\_id, ticket\_id, order\_id, payment\_id, amount\_mad, reason, status (REQUIRED, DONE), requested\_by, done\_by, reference |
 | tickets | One seat / admission | id (UUID), order\_id, event\_id, zone\_id, seat\_label, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_user\_id, holder\_name (never in a manifest), holder\_initials, issued\_at |
 | passes | Season ticket / multi-event bundle | id, series\_id, user\_id, zone\_id, status; materialised as one ticket per event |
 | devices | Enrolled scanners | id, organizer\_id, label, public\_key (ECDSA P-256 SPKI DER), status (PENDING, ACTIVE, REVOKED), enrolled\_at, approved\_at, revoked\_at, last\_seen\_at |
@@ -174,7 +176,8 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | PDF ticket printed twice | First scan wins, second is `DUPLICATE` once gates have synced | Same offline window as above; mitigated by naming the gate on the red screen so staff can escalate |
 | Forged QR | 128-bit HMAC tag with K\_e, which never leaves enrolled devices | None practical |
 | Lost or stolen scanner | Keystore-wrapped K\_e, staff PIN lock, key wiped at event close; the P-256 device key is non-exportable; revoke → next call 403 → wipe | Attacker with an unlocked device during the event could read the manifest (no PII in it) |
-| Insider issues free tickets | Every ticket comes from an order; manifests are signed; sold vs scanned reconciled per zone after every event | Collusion with POS cash sales: covered by POS reconciliation against cash deposits |
+| Insider issues free tickets | Every ticket comes from an order; manifests are signed; sold vs scanned reconciled per zone after every event | Collusion with POS cash sales: covered by till sessions (expected vs declared cash, audited) in Lot 3; bank deposit matching with the Lot 5 finance module |
+| Cash confirmed without cash taken | Signed network callbacks, exact amount, unique network ref; club tills reconciled per session (expected vs declared) | A cashier's gap is found at close, not prevented |
 | Ticket cancelled after last delta | Refund/cancel freeze at T0 − 60 min | Cancellations in the last hour are not possible, by policy |
 | Fan phone clock tampered | Server time offset pushed to the app; ±1 slot tolerance | None practical |
 | Replay of an old static QR at the next event | event\_id in the token and a new K\_e per event | None |
@@ -238,9 +241,9 @@ One V1 covers the full platform (gate, Moroccan payments, fan platform, organize
 | 0 · Foundations | Tenancy (`organizers`), `events` model with `metadata jsonb`, venues/zones/gates, pricing, auth (phone OTP), card payment (Payzone; simulated gateway until the kit arrives), back-office skeleton, event creation | Admin can create an event and sell a test ticket by card | 3 wk |
 | 1 · Sell & deliver | Fan app + web shop purchase flow, named tickets and per-account limits, static and rotating QR, PDF + WhatsApp delivery, ticket wallet screen, basic on-sale queue | Fans can buy and hold a ticket for a real fixture | 4 wk |
 | 2 · Gate | Scanner app, offline validation, manifest + K\_e distribution, sync and duplicate resolution, supervisor override, live gate dashboard, reconciliation report | First pilot match end to end (sell → scan → reconcile) | 3 wk |
-| 3 · Moroccan payments | Cash at agencies (reserve → pay code → QR unlocks), mobile wallet, POS thermal print at kiosks, cash reconciliation, installments for passes | Every Moroccan fan can pay, online or offline | 3 wk |
+| 3 · Moroccan payments | Cash at agencies (reserve → pay code → QR unlocks), mobile wallet, POS thermal print at kiosks, cash reconciliation (installments for passes: Lot 5) | Every Moroccan fan can pay, online or offline | 3 wk |
 | 4 · Fan platform | Group buying with split pay, ticket transfer (new K\_t, old QR dies), membership + loyalty, matchday companion (gate directions, live gate load), push and WhatsApp campaigns, Darija/Arabic/French with RTL | The app people open between matches, not only on match day | 4 wk |
-| 5 · Organizer platform | Accreditations and invitations (press, VIP, sponsors), promo codes, season passes (`passes`), finance module (daily settlement, VAT invoices, 48 h payouts), fan CRM export, fair on-sale (virtual queue, verified fans) | The club runs the whole season without us in the loop | 3 wk |
+| 5 · Organizer platform | Accreditations and invitations (press, VIP, sponsors), promo codes, season passes (`passes`) with installments, finance module (daily settlement, VAT invoices, 48 h payouts), fan CRM export, fair on-sale (virtual queue, verified fans) | The club runs the whole season without us in the loop | 3 wk |
 | 6 · Hardening & launch | On-sale load test (derby scenario), pen test on QR and sync, device fleet and runbooks, monitoring, second organizer onboarded on config only | Public launch and second customer | 2 wk |
 
 Order matters: Lots 0–2 are the pilot match (about 10 weeks); Lots 3–5 can run partly in parallel once Lot 2 is in production; Lot 6 gates the public launch. Official resale with a price cap is the first post-V1 item.

@@ -12,25 +12,31 @@ import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * GET /org/events/{id}/sales (docs/04-api.md §Organizer). ADMIN, OPS, FINANCE (a GET); GATE and SUPERVISOR get
- * 403 from the org interceptor. Responses are the DTO records below, built field by field. Money in centimes.
+ * GET /org/events/{id}/sales (docs/04-api.md §Organizer). ADMIN, OPS, FINANCE (a GET); GATE, SUPERVISOR and CASHIER
+ * get 403 from the org interceptor. Responses are the DTO records below, built field by field. Money in centimes.
  */
 @RestController
 class OrgSalesController {
 
-    record ZoneDto(int zoneId, String code, String name, long quota, long paid, long held, long revenueMad) {}
+    record ZoneDto(int zoneId, String code, String name, long quota, long paid, long held, long awaitingCash,
+                   long refunded, long revenueMad) {}
 
     record ChannelDto(String channel, long paid, long revenueMad) {}
 
+    record MethodDto(String method, long paid, long revenueMad) {}
+
     record RefundDto(UUID paymentId, UUID orderId, long amountMad, String reason, Instant at) {}
 
-    record SalesDto(int eventId, long quota, long paid, long held, long revenueMad, List<ZoneDto> zones,
-                    List<ChannelDto> channels, List<RefundDto> refundsRequired) {
+    record SalesDto(int eventId, long quota, long paid, long held, long awaitingCash, long refunded, long revenueMad,
+                    long refundedMad, List<ZoneDto> zones, List<ChannelDto> channels, List<MethodDto> methods,
+                    List<RefundDto> refundsRequired) {
         static SalesDto of(EventSales s) {
-            return new SalesDto(s.eventId(), s.quota(), s.paid(), s.held(), s.revenueMad(),
+            return new SalesDto(s.eventId(), s.quota(), s.paid(), s.held(), s.awaitingCash(), s.refunded(),
+                    s.revenueMad(), s.refundedMad(),
                     s.zones().stream().map(z -> new ZoneDto(z.zoneId(), z.code(), z.name(), z.quota(), z.paid(),
-                            z.held(), z.revenueMad())).toList(),
+                            z.held(), z.awaitingCash(), z.refunded(), z.revenueMad())).toList(),
                     s.channels().stream().map(c -> new ChannelDto(c.channel(), c.paid(), c.revenueMad())).toList(),
+                    s.methods().stream().map(m -> new MethodDto(m.method(), m.paid(), m.revenueMad())).toList(),
                     s.refundsRequired().stream().map(r -> new RefundDto(r.paymentId(), r.orderId(), r.amountMad(),
                             r.reason(), r.at())).toList());
         }

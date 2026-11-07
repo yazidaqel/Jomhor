@@ -47,7 +47,8 @@ class FanEventController {
         }
     }
 
-    record EventDetailDto(@JsonUnwrapped EventDto event, List<ZoneDto> zones) {}
+    record EventDetailDto(@JsonUnwrapped EventDto event, List<ZoneDto> zones, List<String> paymentMethods,
+                          Instant cashUntil) {}
 
     @GetMapping("/fan/events")
     List<EventDto> list(@RequestParam(required = false) UUID organizer, @RequestParam(required = false) Instant from) {
@@ -57,6 +58,7 @@ class FanEventController {
     @GetMapping("/fan/events/{id}")
     EventDetailDto get(@PathVariable int id) {
         EventService.PublicEvent e = events.publicEvent(id);
-        return new EventDetailDto(EventDto.of(e.event()), e.zones().stream().map(ZoneDto::of).toList());
+        return new EventDetailDto(EventDto.of(e.event()), e.zones().stream().map(ZoneDto::of).toList(),
+                e.payment().methods(), e.payment().cashUntil());
     }
 }

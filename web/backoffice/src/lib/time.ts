@@ -50,8 +50,9 @@ export function isVenueZone(zone: string) {
 /**
  * A `datetime-local` value (`YYYY-MM-DDTHH:mm`, wall time in `zone`) → RFC 3339 UTC (`…T…:00.000Z`).
  * Two passes so the offset used is the one in force at the result, not at the first guess.
- * ponytail: a wall time skipped by a clock change moves 1 h forward and one repeated by it takes the later instant;
- * fine for event times, revisit if the small hours around a change matter.
+ * ponytail: a wall time skipped by a clock change lands on either side of the gap, off by the gap's length (Europe
+ * 02:30 -> 03:30; Santiago's skipped midnight -> 23:00 the day before), and one repeated by it takes the later
+ * instant; fine for event times, revisit if the small hours around a change matter.
  */
 export function wallToUtc(wall: string, zone: string): string {
   const [y, mo, d, h, mi] = wall.split(/[-T:]/).map(Number) as [number, number, number, number, number]
@@ -60,6 +61,15 @@ export function wallToUtc(wall: string, zone: string): string {
   ms = asUtc - (wallMs(ms, zone) - ms)
   return new Date(ms).toISOString()
 }
+
+/** A `YYYY-MM-DD` date `n` days later (calendar maths in UTC, where every day has 24 h). */
+export const addDays = (day: string, n: number) => new Date(Date.parse(day) + n * 86_400_000).toISOString().slice(0, 10)
+
+/** Today's date (`YYYY-MM-DD`) in `zone`. */
+export const todayIn = (zone: string, ms = Date.now()) => new Date(wallMs(ms, zone)).toISOString().slice(0, 10)
+
+/** A `YYYY-MM-DD` date for display (`3 nov. 2026`): a calendar date, in no zone. */
+export const formatDay = (day: string, locale: string) => new Intl.DateTimeFormat(locale, { timeZone: 'UTC', dateStyle: 'medium' }).format(Date.parse(day))
 
 /** RFC 3339 instant → wall time in `zone` as a `datetime-local` value (`YYYY-MM-DDTHH:mm`). */
 export const utcToWall = (iso: string, zone: string) => new Date(wallMs(Date.parse(iso), zone)).toISOString().slice(0, 16)

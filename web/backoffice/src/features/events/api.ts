@@ -40,7 +40,8 @@ export type EventDetail = {
   created_at: string
 }
 
-export type Price = { id: string; zone_id: number; name: string; price_mad: number; quota: number; sold: number }
+/** `zone`: read-only (Lot 3), so a till can tell two zones' "Plein tarif" apart without the venue (CASHIER can't read it). */
+export type Price = { id: string; zone_id: number; zone: { code: string; name: string }; name: string; price_mad: number; quota: number; sold: number }
 
 export const useEvents = () => useOrgQuery<EventSummary[]>(['events'], '/org/events')
 export const useEvent = (id: string) => useOrgQuery<EventDetail>(['events', id], path('org', 'events', id))

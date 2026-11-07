@@ -4,6 +4,7 @@ import { currentSession } from '@/lib/http'
 import { defaultLocale, getDictionary } from '@/lib/i18n'
 import { loginUrl } from '@/lib/orders'
 import { PhoneIcon } from '../../../icons'
+import { PendingOrders } from './PendingOrders'
 import { TicketList } from './TicketList'
 
 const d = getDictionary(defaultLocale)
@@ -16,7 +17,7 @@ const APP_TICKETS_URL = 'jomhor-fan://tickets'
 
 /**
  * W5 · `/me/tickets`. Not signed in → login and back. The tickets themselves load in the browser from `/api/tickets`
- * (no ticket data, and never a key, in this HTML).
+ * (no ticket data, and never a key, in this HTML); the pending cash orders above them from `/api/orders`.
  */
 export default async function TicketsPage() {
   if (!(await currentSession())) redirect(loginUrl('/me/tickets'))
@@ -47,7 +48,8 @@ export default async function TicketsPage() {
           </div>
         </div>
       </section>
-      <div className="mx-auto w-full max-w-[1180px] px-6 pt-10 pb-16">
+      <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-12 px-6 pt-10 pb-16">
+        <PendingOrders copy={{ ticketsPage: d.ticketsPage, meta: d.meta }} />
         <TicketList copy={{ ticketsPage: d.ticketsPage, errors: d.errors, meta: d.meta }} />
       </div>
     </main>

@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.ResultActions;
  */
 class PriceApiTest extends OrgApiTest {
 
-    private static final String[] PRICE_KEYS = {"id", "zone_id", "name", "price_mad", "quota", "sold"};
+    private static final String[] PRICE_KEYS = {"id", "zone_id", "zone", "name", "price_mad", "quota", "sold"};
 
     private static void invalid(ResultActions r, String field) throws Exception {
         r.andExpect(status().isUnprocessableContent())
@@ -60,12 +60,16 @@ class PriceApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.quota").value(40))
                 .andExpect(jsonPath("$.sold").value(0)));
         assertKeys(json, "$", PRICE_KEYS);
+        assertKeys(json, "$.zone", "code", "name"); // Lot 3, read-only
+        assertThat(JsonPath.<String>read(json, "$.zone.code")).isEqualTo("EST");
+        assertThat(JsonPath.<String>read(json, "$.zone.name")).isEqualTo("Zone EST");
         String estPrice = JsonPath.read(json, "$.id");
         String nordPrice = price(a, id, nord, "Abonné", 10);
 
         json = body(call(a, get("/org/events/" + id + "/prices")).andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].zone_id").value(contains(Math.min(nord, est), Math.max(nord, est)))));
         assertKeys(json, "$[0]", PRICE_KEYS);
+        assertThat(JsonPath.<List<String>>read(json, "$[*].zone.code")).containsExactlyInAnyOrder("NORD", "EST");
 
         json = body(call(a, patch("/org/events/" + id + "/prices/" + estPrice), "{\"price_mad\": 0}")
                 .andExpect(status().isOk())

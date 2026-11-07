@@ -179,12 +179,57 @@ class StaffApiTest extends OrgApiTest {
         call(ops, get("/org/staff")).andExpect(status().isOk());
         call(ops, post("/org/staff/" + id + "/pin")).andExpect(status().isOk());
 
-        for (String role : List.of("FINANCE", "GATE", "SUPERVISOR")) {
+        for (String role : List.of("FINANCE", "GATE", "SUPERVISOR", "CASHIER")) {
             Caller c = caller(a.org(), role);
             call(c, get("/org/staff")).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));
             call(c, post("/org/staff"), "{\"name\": \"Yazid\", \"role\": \"GATE\"}").andExpect(status().isForbidden());
             call(c, patch("/org/staff/" + id), "{\"active\": false}").andExpect(status().isForbidden());
             call(c, post("/org/staff/" + id + "/pin")).andExpect(status().isForbidden());
         }
+    }
+
+    /** Lot 3: a CASHIER has a phone and no PIN, logs in to the back-office by OTP, and is managed like gate staff. */
+    @Test
+    void aCashierHasAPhoneNoPinAndLogsInByOtp() throws Exception {
+        Caller a = admin();
+        String phone = randomPhone();
+        String json = body(call(a, post("/org/staff"), """
+                {"name": " Salma  Idrissi ", "role": "CASHIER", "phone": "%s"}""".formatted(phone))
+                .andExpect(status().isCreated()));
+        assertKeys(json, "$", "id", "name", "role", "active", "has_pin"); // no pin
+        assertThat(JsonPath.<String>read(json, "$.name")).isEqualTo("Salma Idrissi");
+        assertThat(JsonPath.<String>read(json, "$.role")).isEqualTo("CASHIER");
+        assertThat(JsonPath.<Boolean>read(json, "$.has_pin")).isFalse();
+        String id = JsonPath.read(json, "$.id");
+        assertThat(jdbc.sql("""
+                select s.pin_hash is null and s.active from staff s join users u on u.id = s.user_id
+                where s.id = ?::uuid and s.organizer_id = ? and u.phone_e164 = ?""")
+                .params(id, a.org(), phone).query(Boolean.class).single()).isTrue();
+
+        // OTP login works and lists the membership
+        String token = orgToken(phone);
+        String me = body(mvc.perform(get("/org/me").header("Authorization", "Bearer " + token)).andExpect(status().isOk()));
+        assertThat(JsonPath.<List<String>>read(me, "$.memberships[*].role")).containsExactly("CASHIER");
+        call(new Caller(a.org(), token), get("/org/pos/session")).andExpect(status().isOk());
+
+        // phone required, E.164; a phone already staff of this organizer is TAKEN; another organizer may add it
+        for (String bad : List.of("{\"name\": \"Salma\", \"role\": \"CASHIER\"}",
+                "{\"name\": \"Salma\", \"role\": \"CASHIER\", \"phone\": \"0612345678\"}")) {
+            call(a, post("/org/staff"), bad).andExpect(status().isUnprocessableContent())
+                    .andExpect(jsonPath("$.details.fields.phone").exists());
+        }
+        call(a, post("/org/staff"), "{\"name\": \"Salma\", \"role\": \"CASHIER\", \"phone\": \"%s\"}".formatted(phone))
+                .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.details.fields.phone").exists())
+                .andExpect(jsonPath("$.details.reason").value("TAKEN"));
+        Caller b = admin();
+        call(b, post("/org/staff"), "{\"name\": \"Salma\", \"role\": \"CASHIER\", \"phone\": \"%s\"}".formatted(phone))
+                .andExpect(status().isCreated());
+
+        // PATCH covers CASHIER rows; /pin does not (no PIN)
+        call(a, patch("/org/staff/" + id), "{\"name\": \"Salma Benani\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Salma Benani")).andExpect(jsonPath("$.has_pin").value(false));
+        call(a, post("/org/staff/" + id + "/pin")).andExpect(status().isNotFound());
+        call(a, patch("/org/staff/" + id), "{\"active\": false}").andExpect(status().isOk());
+        call(new Caller(a.org(), token), get("/org/pos/session")).andExpect(status().isForbidden());
     }
 }

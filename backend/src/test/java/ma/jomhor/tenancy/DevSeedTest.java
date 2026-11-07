@@ -44,6 +44,8 @@ class DevSeedTest {
                 select name || ' ' || kind || ' ' || (settings -> 'theme' ->> 'accent') || ' ' || (settings -> 'theme' ->> 'on_accent')
                 from organizers""").query(String.class).list())
                 .containsExactly("ATLAS FC SPORTS_CLUB #F5B700 #0B0F1A");
+        assertThat(jdbc.sql("select p ->> 'name' from organizers, jsonb_array_elements(settings -> 'cash_points') p")
+                .query(String.class).list()).containsExactly("Guichet Grand Stade", "Boutique du club"); // cash on in dev
         assertThat(jdbc.sql("""
                 select s.role::text from staff s join users u on u.id = s.user_id
                 where u.phone_e164 = '+212600000001' and s.active""").query(String.class).list())

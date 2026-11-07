@@ -1,5 +1,6 @@
 package ma.jomhor.tenancy.adapters.web;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
@@ -25,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class OrgStaffController {
 
-    record StaffCreate(@NotNull String name, @NotNull StaffRole role) {}
+    record StaffCreate(@NotNull String name, @NotNull StaffRole role, String phone) {}
 
     /** Partial: null = unchanged. */
     record StaffPatch(String name, Boolean active) {}
@@ -36,7 +37,9 @@ class OrgStaffController {
         }
     }
 
-    record CreatedDto(UUID id, String name, StaffRole role, boolean active, boolean hasPin, String pin) {
+    /** {@code pin} absent for a CASHIER (no PIN). */
+    record CreatedDto(UUID id, String name, StaffRole role, boolean active, boolean hasPin,
+                      @JsonInclude(JsonInclude.Include.NON_NULL) String pin) {
         @Override
         public String toString() {
             return "CreatedDto[id=" + id + ", role=" + role + ", pin=****]";
@@ -64,7 +67,7 @@ class OrgStaffController {
     @PostMapping("/org/staff")
     @ResponseStatus(HttpStatus.CREATED)
     CreatedDto create(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @Valid @RequestBody StaffCreate body) {
-        var c = staff.create(org.adminOrOps().organizerId(), body.name(), body.role());
+        var c = staff.create(org.adminOrOps().organizerId(), body.name(), body.role(), body.phone());
         StaffMember s = c.staff();
         return new CreatedDto(s.id(), s.name(), s.role(), s.active(), s.hasPin(), c.pin());
     }

@@ -22,6 +22,8 @@ export function rawEvent(over: Record<string, unknown> = {}) {
     sold_out: false,
     from_price_mad: 5000,
     per_account_limit: 4,
+    payment_methods: ['CARD', 'WALLET', 'CASH_AGENCY'],
+    cash_until: '2026-02-07T16:00:00Z',
     zones: [
       {
         id: 3,
