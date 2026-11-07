@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:jomhor_scanner/features/home/device_status.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
 
-/// Start screen: the device's enrolment state. Enrolment, event mode and scanning come in FL-11 to FL-14.
+/// Start screen: the device's enrolment state, and the way to the scan screen once active. Enrolment and
+/// event mode come in FL-12.
 class HomeScreen extends ConsumerWidget {
   const new({super.key});
 
@@ -27,7 +29,14 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
           DeviceStatus.pending => Text(l10n.devicePending, style: Theme.of(context).textTheme.titleLarge),
-          DeviceStatus.active => Text(l10n.deviceActive, style: Theme.of(context).textTheme.titleLarge),
+          DeviceStatus.active => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(l10n.deviceActive, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: JomhorSpace.xxl),
+              FilledButton(onPressed: () => context.push('/scan'), child: Text(l10n.homeOpenScanner)),
+            ],
+          ),
         },
       ),
     );

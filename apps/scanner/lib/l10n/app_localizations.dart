@@ -122,6 +122,288 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Appareil actif'**
   String get deviceActive;
+
+  /// Home button to the scan screen (DESIGN screen 6).
+  ///
+  /// In fr, this message translates to:
+  /// **'Ouvrir le scanner'**
+  String get homeOpenScanner;
+
+  /// Scan screen when no event is loaded, the gate is unset, the device is locked or K_e is absent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mode événement inactif'**
+  String get scanInactive;
+
+  /// No description provided for @scanInactiveHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Chargez le manifeste de l\'événement et déverrouillez l\'appareil avec votre PIN.'**
+  String get scanInactiveHint;
+
+  /// Scanner mode label. Lot 2 has entry only (plan lot-2 Q33).
+  ///
+  /// In fr, this message translates to:
+  /// **'ENTRÉE'**
+  String get scanModeIn;
+
+  /// Screen 6 top line: gate code, gate name, mode.
+  ///
+  /// In fr, this message translates to:
+  /// **'PORTE {code} · {name} · {mode}'**
+  String scanTopLine(String code, String name, String mode);
+
+  /// Scan rows not yet acked by the server.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} à synchroniser'**
+  String scanUnsynced(int count);
+
+  /// Under the camera viewfinder; PDA triggers type into the same screen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Présentez le QR du billet'**
+  String get scanHint;
+
+  /// Camera failed or permission refused; keyboard-wedge input still works.
+  ///
+  /// In fr, this message translates to:
+  /// **'Caméra indisponible. Utilisez la gâchette du terminal.'**
+  String get scanCameraError;
+
+  /// Counter: admitted at this gate on this device.
+  ///
+  /// In fr, this message translates to:
+  /// **'ENTRÉS ICI'**
+  String get scanEntered;
+
+  /// Counter: refused at this gate on this device.
+  ///
+  /// In fr, this message translates to:
+  /// **'REFUSÉS'**
+  String get scanRefusedCount;
+
+  /// Counter: admitted per minute over the last 5 min.
+  ///
+  /// In fr, this message translates to:
+  /// **'CADENCE'**
+  String get scanRate;
+
+  /// No description provided for @scanRateValue.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} / min'**
+  String scanRateValue(int count);
+
+  /// Result screen primary button: back to the camera.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scanner le suivant'**
+  String get scanNext;
+
+  /// The scan row could not be written: nothing was decided.
+  ///
+  /// In fr, this message translates to:
+  /// **'ERREUR'**
+  String get scanFailed;
+
+  /// No description provided for @scanFailedReason.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scan non enregistré. Rescannez le billet.'**
+  String get scanFailedReason;
+
+  /// Green result footer: local validation time and clock time.
+  ///
+  /// In fr, this message translates to:
+  /// **'Validé hors ligne en {ms} ms · {time}'**
+  String scanCheckedOk(int ms, String time);
+
+  /// Red or amber result footer.
+  ///
+  /// In fr, this message translates to:
+  /// **'Contrôlé hors ligne en {ms} ms · {time}'**
+  String scanCheckedRefused(int ms, String time);
+
+  /// No description provided for @factZone.
+  ///
+  /// In fr, this message translates to:
+  /// **'ZONE'**
+  String get factZone;
+
+  /// Holder initials only (Y. A.).
+  ///
+  /// In fr, this message translates to:
+  /// **'TITULAIRE'**
+  String get factHolder;
+
+  /// No description provided for @factTicketNo.
+  ///
+  /// In fr, this message translates to:
+  /// **'N° BILLET'**
+  String get factTicketNo;
+
+  /// No description provided for @factType.
+  ///
+  /// In fr, this message translates to:
+  /// **'TYPE'**
+  String get factType;
+
+  /// Token v2.
+  ///
+  /// In fr, this message translates to:
+  /// **'App · QR tournant'**
+  String get tokenRotating;
+
+  /// Token v1.
+  ///
+  /// In fr, this message translates to:
+  /// **'PDF · QR fixe'**
+  String get tokenStatic;
+
+  /// docs/06 screen word.
+  ///
+  /// In fr, this message translates to:
+  /// **'VALIDE'**
+  String get resultOK;
+
+  /// No description provided for @resultDUPLICATE.
+  ///
+  /// In fr, this message translates to:
+  /// **'DÉJÀ UTILISÉ'**
+  String get resultDUPLICATE;
+
+  /// No description provided for @resultBAD_SIG.
+  ///
+  /// In fr, this message translates to:
+  /// **'NON VALIDE'**
+  String get resultBAD_SIG;
+
+  /// No description provided for @resultBAD_FORMAT.
+  ///
+  /// In fr, this message translates to:
+  /// **'ILLISIBLE'**
+  String get resultBAD_FORMAT;
+
+  /// No description provided for @resultUNKNOWN.
+  ///
+  /// In fr, this message translates to:
+  /// **'INCONNU'**
+  String get resultUNKNOWN;
+
+  /// No description provided for @resultCANCELLED.
+  ///
+  /// In fr, this message translates to:
+  /// **'ANNULÉ'**
+  String get resultCANCELLED;
+
+  /// No description provided for @resultBLOCKED.
+  ///
+  /// In fr, this message translates to:
+  /// **'BLOQUÉ'**
+  String get resultBLOCKED;
+
+  /// No description provided for @resultWRONG_ZONE.
+  ///
+  /// In fr, this message translates to:
+  /// **'MAUVAISE PORTE'**
+  String get resultWRONG_ZONE;
+
+  /// No description provided for @resultWRONG_EVENT.
+  ///
+  /// In fr, this message translates to:
+  /// **'AUTRE ÉVÉNEMENT'**
+  String get resultWRONG_EVENT;
+
+  /// No description provided for @resultEXPIRED_SLOT.
+  ///
+  /// In fr, this message translates to:
+  /// **'CODE EXPIRÉ'**
+  String get resultEXPIRED_SLOT;
+
+  /// No description provided for @resultOVERRIDE.
+  ///
+  /// In fr, this message translates to:
+  /// **'DÉROGATION'**
+  String get resultOVERRIDE;
+
+  /// DUPLICATE: time and gate of the first scan.
+  ///
+  /// In fr, this message translates to:
+  /// **'Entré à {time} · porte {gate}'**
+  String reasonDuplicate(String time, String gate);
+
+  /// No description provided for @reasonBadSig.
+  ///
+  /// In fr, this message translates to:
+  /// **'Signature invalide : billet falsifié ou modifié.'**
+  String get reasonBadSig;
+
+  /// No description provided for @reasonBadFormat.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce code n\'est pas un billet Jomhor.'**
+  String get reasonBadFormat;
+
+  /// No description provided for @reasonUnknown.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet absent du manifeste de cet appareil.'**
+  String get reasonUnknown;
+
+  /// No description provided for @reasonCancelled.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet annulé ou remboursé.'**
+  String get reasonCancelled;
+
+  /// No description provided for @reasonBlocked.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet bloqué par l\'organisateur.'**
+  String get reasonBlocked;
+
+  /// WRONG_ZONE: the gate codes that serve the ticket's zone, comma-separated.
+  ///
+  /// In fr, this message translates to:
+  /// **'Portes de cette zone : {gates}'**
+  String reasonWrongZone(String gates);
+
+  /// No description provided for @reasonWrongZoneNone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucune porte ne dessert cette zone.'**
+  String get reasonWrongZoneNone;
+
+  /// No description provided for @reasonWrongEvent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet d\'un autre événement.'**
+  String get reasonWrongEvent;
+
+  /// No description provided for @reasonExpiredSlot.
+  ///
+  /// In fr, this message translates to:
+  /// **'QR expiré : demandez au supporter de rouvrir son billet dans l\'app.'**
+  String get reasonExpiredSlot;
+
+  /// No description provided for @reasonOverride.
+  ///
+  /// In fr, this message translates to:
+  /// **'Entrée accordée par un superviseur.'**
+  String get reasonOverride;
+
+  /// DUPLICATE when the first scan has no gate code (remote row without one).
+  ///
+  /// In fr, this message translates to:
+  /// **'Entré à {time}'**
+  String reasonDuplicateNoGate(String time);
+
+  /// Under the counters card when the counters could not be refreshed; they keep their last values.
+  ///
+  /// In fr, this message translates to:
+  /// **'Compteurs indisponibles'**
+  String get scanCountersStale;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

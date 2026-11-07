@@ -1,12 +1,190 @@
 {
   "@@locale": "fr",
   "appTitle": "Jomhor Porte",
-  "@appTitle": {"description": "Scanner app name in the OS task switcher and top bar. Brand name, not translated."},
+  "@appTitle": {
+    "description": "Scanner app name in the OS task switcher and top bar. Brand name, not translated."
+  },
   "deviceNotEnrolled": "Appareil non enrôlé",
-  "@deviceNotEnrolled": {"description": "Home status: no device key registered with the server yet."},
+  "@deviceNotEnrolled": {
+    "description": "Home status: no device key registered with the server yet."
+  },
   "deviceNotEnrolledHint": "Scannez le QR d'enrôlement affiché dans le back-office, onglet Appareils.",
   "devicePending": "En attente d'approbation",
-  "@devicePending": {"description": "Home status: enrolled, the admin has not approved the device yet (DESIGN Lot 2 adjustments)."},
+  "@devicePending": {
+    "description": "Home status: enrolled, the admin has not approved the device yet (DESIGN Lot 2 adjustments)."
+  },
   "deviceActive": "Appareil actif",
-  "@deviceActive": {"description": "Home status: the admin approved the device."}
+  "@deviceActive": {
+    "description": "Home status: the admin approved the device."
+  },
+  "homeOpenScanner": "Ouvrir le scanner",
+  "@homeOpenScanner": {
+    "description": "Home button to the scan screen (DESIGN screen 6)."
+  },
+  "scanInactive": "Mode événement inactif",
+  "@scanInactive": {
+    "description": "Scan screen when no event is loaded, the gate is unset, the device is locked or K_e is absent."
+  },
+  "scanInactiveHint": "Chargez le manifeste de l'événement et déverrouillez l'appareil avec votre PIN.",
+  "scanModeIn": "ENTRÉE",
+  "@scanModeIn": {
+    "description": "Scanner mode label. Lot 2 has entry only (plan lot-2 Q33)."
+  },
+  "scanTopLine": "PORTE {code} · {name} · {mode}",
+  "@scanTopLine": {
+    "description": "Screen 6 top line: gate code, gate name, mode.",
+    "placeholders": {
+      "code": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "scanUnsynced": "{count} à synchroniser",
+  "@scanUnsynced": {
+    "description": "Scan rows not yet acked by the server.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scanHint": "Présentez le QR du billet",
+  "@scanHint": {
+    "description": "Under the camera viewfinder; PDA triggers type into the same screen."
+  },
+  "scanCameraError": "Caméra indisponible. Utilisez la gâchette du terminal.",
+  "@scanCameraError": {
+    "description": "Camera failed or permission refused; keyboard-wedge input still works."
+  },
+  "scanEntered": "ENTRÉS ICI",
+  "@scanEntered": {
+    "description": "Counter: admitted at this gate on this device."
+  },
+  "scanRefusedCount": "REFUSÉS",
+  "@scanRefusedCount": {
+    "description": "Counter: refused at this gate on this device."
+  },
+  "scanRate": "CADENCE",
+  "@scanRate": {
+    "description": "Counter: admitted per minute over the last 5 min."
+  },
+  "scanRateValue": "{count} / min",
+  "@scanRateValue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scanNext": "Scanner le suivant",
+  "@scanNext": {
+    "description": "Result screen primary button: back to the camera."
+  },
+  "scanFailed": "ERREUR",
+  "@scanFailed": {
+    "description": "The scan row could not be written: nothing was decided."
+  },
+  "scanFailedReason": "Scan non enregistré. Rescannez le billet.",
+  "scanCheckedOk": "Validé hors ligne en {ms} ms · {time}",
+  "@scanCheckedOk": {
+    "description": "Green result footer: local validation time and clock time.",
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scanCheckedRefused": "Contrôlé hors ligne en {ms} ms · {time}",
+  "@scanCheckedRefused": {
+    "description": "Red or amber result footer.",
+    "placeholders": {
+      "ms": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "factZone": "ZONE",
+  "factHolder": "TITULAIRE",
+  "@factHolder": {
+    "description": "Holder initials only (Y. A.)."
+  },
+  "factTicketNo": "N° BILLET",
+  "factType": "TYPE",
+  "tokenRotating": "App · QR tournant",
+  "@tokenRotating": {
+    "description": "Token v2."
+  },
+  "tokenStatic": "PDF · QR fixe",
+  "@tokenStatic": {
+    "description": "Token v1."
+  },
+  "resultOK": "VALIDE",
+  "@resultOK": {
+    "description": "docs/06 screen word."
+  },
+  "resultDUPLICATE": "DÉJÀ UTILISÉ",
+  "resultBAD_SIG": "NON VALIDE",
+  "resultBAD_FORMAT": "ILLISIBLE",
+  "resultUNKNOWN": "INCONNU",
+  "resultCANCELLED": "ANNULÉ",
+  "resultBLOCKED": "BLOQUÉ",
+  "resultWRONG_ZONE": "MAUVAISE PORTE",
+  "resultWRONG_EVENT": "AUTRE ÉVÉNEMENT",
+  "resultEXPIRED_SLOT": "CODE EXPIRÉ",
+  "resultOVERRIDE": "DÉROGATION",
+  "reasonDuplicate": "Entré à {time} · porte {gate}",
+  "@reasonDuplicate": {
+    "description": "DUPLICATE: time and gate of the first scan.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "gate": {
+        "type": "String"
+      }
+    }
+  },
+  "reasonBadSig": "Signature invalide : billet falsifié ou modifié.",
+  "reasonBadFormat": "Ce code n'est pas un billet Jomhor.",
+  "reasonUnknown": "Billet absent du manifeste de cet appareil.",
+  "reasonCancelled": "Billet annulé ou remboursé.",
+  "reasonBlocked": "Billet bloqué par l'organisateur.",
+  "reasonWrongZone": "Portes de cette zone : {gates}",
+  "@reasonWrongZone": {
+    "description": "WRONG_ZONE: the gate codes that serve the ticket's zone, comma-separated.",
+    "placeholders": {
+      "gates": {
+        "type": "String"
+      }
+    }
+  },
+  "reasonWrongZoneNone": "Aucune porte ne dessert cette zone.",
+  "reasonWrongEvent": "Billet d'un autre événement.",
+  "reasonExpiredSlot": "QR expiré : demandez au supporter de rouvrir son billet dans l'app.",
+  "reasonOverride": "Entrée accordée par un superviseur.",
+  "reasonDuplicateNoGate": "Entré à {time}",
+  "@reasonDuplicateNoGate": {
+    "description": "DUPLICATE when the first scan has no gate code (remote row without one).",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "scanCountersStale": "Compteurs indisponibles",
+  "@scanCountersStale": {
+    "description": "Under the counters card when the counters could not be refreshed; they keep their last values."
+  }
 }

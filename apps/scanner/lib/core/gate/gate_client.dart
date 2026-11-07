@@ -7,7 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:jomhor_scanner/app/config.dart';
 import 'package:jomhor_scanner/core/device_key.dart';
+import 'package:jomhor_scanner/core/server_clock.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
+
+export 'package:jomhor_scanner/core/server_clock.dart';
 
 /// docs/04-api.md §Gate auth: the exact string the device key signs.
 String gateSigningString({
@@ -19,25 +22,6 @@ String gateSigningString({
 
 /// The signed PATH: raw path plus query, as the request line sends it (`/v1/gate/events/12/manifest?since=3`).
 String signedPath(Uri url) => url.hasQuery ? '${url.path}?${url.query}' : url.path;
-
-/// The server-corrected clock: device clock + [offsetMs] (docs/05 `config.server_time_offset_ms`). Used for
-/// `X-Device-Time` here, and for scan times and token slots on the gate path.
-class ServerClock {
-  new({this.offsetMs = 0, this.measured = false, DateTime Function()? deviceNow})
-    : _deviceNow = deviceNow ?? DateTime.now;
-
-  final DateTime Function() _deviceNow;
-
-  /// Server time − device time, in ms.
-  int offsetMs;
-
-  /// An offset has been measured at least once (docs/05 `config.last_server_time_at` is set).
-  bool measured;
-
-  int deviceMs() => _deviceNow().millisecondsSinceEpoch;
-
-  int nowMs() => deviceMs() + offsetMs;
-}
 
 /// A gate API failure: the 04 `{code, message, details}` body, or a client-side code.
 class GateApiError implements Exception {
@@ -186,9 +170,6 @@ final httpClientProvider = Provider<http.Client>((ref) {
   ref.onDispose(client.close);
   return client;
 });
-
-/// Overridden in `main` with the offset saved in `config`.
-final serverClockProvider = Provider<ServerClock>((ref) => ServerClock());
 
 final gateClientProvider = Provider<GateClient>((ref) {
   final db = ref.watch(databaseProvider);
