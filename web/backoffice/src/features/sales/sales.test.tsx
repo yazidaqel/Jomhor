@@ -12,7 +12,7 @@ import type { EventDetail, EventSummary } from '@/features/events/api'
 import { createQueryClient } from '@/lib/queryClient'
 import { formatDh } from '@/lib/money'
 import { session } from '@/lib/session'
-import type { EventSales } from './api'
+import type { EventSales, Refund } from './api'
 
 beforeAll(() => {
   // Radix (the shell's organizer select) needs these; jsdom does not implement them.
@@ -70,19 +70,22 @@ const SALES: EventSales = {
   ],
 }
 
-type Call = { path: string; org: string | null }
+type Call = { method: string; path: string; org: string | null; body: unknown }
 
-function stubApi(role: Role, sales: () => Response = () => Response.json(SALES)) {
+function stubApi(role: Role, sales: () => Response = () => Response.json(SALES), refunds: Refund[] = []) {
   const calls: Call[] = []
   vi.stubGlobal(
     'fetch',
     vi.fn<typeof fetch>(async (input, init) => {
       const path = String(input).replace(/^\/v1/, '')
-      calls.push({ path, org: new Headers(init?.headers).get('X-Organizer-Id') })
+      const method = init?.method ?? 'GET'
+      calls.push({ method, path, org: new Headers(init?.headers).get('X-Organizer-Id'), body: init?.body ? JSON.parse(String(init.body)) : undefined })
       if (path === '/org/me') return Response.json(me(role))
       if (path === '/org/events') return Response.json(LIST)
       if (path === '/org/events/1') return Response.json(EVENT)
       if (path === '/org/events/1/sales') return sales()
+      if (path === '/org/refunds?status=REQUIRED&event_id=1') return Response.json(refunds)
+      if (method === 'POST' && path === '/org/refunds/r-1/done') return Response.json({ ...refunds[0], status: 'DONE' })
       return Response.json({ code: 'NOT_FOUND', message: 'x', details: {} }, { status: 404 })
     }),
   )
@@ -146,6 +149,7 @@ it('empty states: no refunds to make, no paid ticket yet, no zone', async () => 
   renderApp('/events/1/sales')
 
   expect(await screen.findByText(fr.sales.refunds.empty)).toBeTruthy()
+  expect(await screen.findByText(fr.sales.refunds.tickets.empty)).toBeTruthy()
   expect(screen.getByText(fr.sales.channels.empty)).toBeTruthy() // three zero rows: the notice, not a table
   expect(within(section(fr.sales.channels.title)).queryByRole('table')).toBeNull()
   expect(screen.getByText(fr.sales.zones.empty)).toBeTruthy()
@@ -179,4 +183,57 @@ it('sidebar Ventes is enabled: event list → the event’s sales page', async (
   await user.click(await screen.findByRole('link', { name: EVENT.title }))
   expect(router.state.location.pathname).toBe('/events/1/sales')
   expect(await screen.findByText(spaced(dh(SALES.revenue_mad)))).toBeTruthy()
+})
+
+const REFUND: Refund = {
+  id: 'r-1',
+  event_id: 1,
+  ticket_id: 't-3',
+  ticket_no: '9F8E 7D6C',
+  order_id: 'ord-3',
+  amount_mad: 15_050,
+  method: 'CASH_AGENCY',
+  reason: 'Fan malade',
+  status: 'REQUIRED',
+  requested_by: { id: 'u-2', name: 'Karim' },
+  requested_at: '2026-11-11T09:30:00Z',
+  done_by: null,
+  done_at: null,
+  reference: null,
+}
+
+it.each(['FINANCE', 'ADMIN'] as const)('%s marks a ticket refund done: the reference is required and sent', async (role) => {
+  const user = userEvent.setup()
+  const calls = stubApi(role, undefined, [REFUND, { ...REFUND, id: 'r-2', ticket_no: '1A2B 3C4D', method: null, amount_mad: 5_005 }])
+  renderApp('/events/1/sales')
+
+  const row = (await screen.findByText('9F8E 7D6C')).closest('tr') as HTMLElement
+  const at = new Intl.DateTimeFormat('fr', { timeZone: CASA, dateStyle: 'medium', timeStyle: 'short' }).format(Date.parse(REFUND.requested_at))
+  expect(cells(row)).toEqual([at, '9F8E 7D6C', 'Fan malade', fr.sales.methods.CASH_AGENCY, 'Karim', dh(15_050), fr.sales.refunds.tickets.markDone])
+  expect(dh(15_050)).toMatch(/^150,50\sDH$/u)
+  expect(cells(screen.getByText('1A2B 3C4D').closest('tr') as HTMLElement)[3]).toBe(fr.sales.refunds.tickets.noMethod)
+  expect(calls.find((c) => c.path.startsWith('/org/refunds'))!.org).toBe('org-a')
+
+  await user.click(within(row).getByRole('button', { name: i18n.t('sales.refunds.tickets.markDoneLabel', { ticket: '9F8E 7D6C' }) }))
+  const dialog = await screen.findByRole('dialog', { name: i18n.t('sales.refunds.tickets.done.title', { ticket: '9F8E 7D6C' }) })
+  expect(within(dialog).getByText(spaced(i18n.t('sales.refunds.tickets.done.description', { amount: formatDh(15_050, 'fr'), method: fr.sales.methods.CASH_AGENCY })))).toBeTruthy()
+  const submit = within(dialog).getByRole('button', { name: fr.sales.refunds.tickets.done.submit })
+  await user.click(submit)
+  expect(await within(dialog).findByText(fr.sales.refunds.tickets.done.referenceInvalid)).toBeTruthy()
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([])
+
+  await user.type(within(dialog).getByRole('textbox', { name: fr.sales.refunds.tickets.done.reference }), '  REC-2026-0042 ')
+  await user.click(submit)
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ method: 'POST', path: '/org/refunds/r-1/done', org: 'org-a', body: { reference: 'REC-2026-0042' } }])
+  expect(await screen.findByText(i18n.t('sales.refunds.tickets.done.toast', { ticket: '9F8E 7D6C' }))).toBeTruthy()
+  await waitFor(() => expect(calls.filter((c) => c.path.startsWith('/org/refunds?'))).toHaveLength(2)) // refetched
+})
+
+it('OPS sees the ticket refunds to make but cannot mark them done', async () => {
+  stubApi('OPS', undefined, [REFUND])
+  renderApp('/events/1/sales')
+  const row = (await screen.findByText('9F8E 7D6C')).closest('tr') as HTMLElement
+  expect(within(row).queryByRole('button')).toBeNull()
+  expect(screen.queryByRole('button', { name: new RegExp(fr.sales.refunds.tickets.markDone) })).toBeNull()
 })

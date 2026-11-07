@@ -2,7 +2,7 @@ import { useRef, useState, type ComponentProps, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ChartNoAxesColumn, ClipboardCheck } from 'lucide-react'
+import { ChartNoAxesColumn, ClipboardCheck, Ticket } from 'lucide-react'
 import { Controller, useForm, useWatch, type FieldError as RhfFieldError, type UseFormRegisterReturn, type UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
@@ -178,7 +178,15 @@ function EventEditor({ event }: { event?: EventDetail }) {
                 </Link>
               </Button>
             )}
-            {/* A draft has no ticket and no scan: nothing to reconcile yet. */}
+            {/* A draft has no ticket and no scan: nothing to look up or reconcile yet. */}
+            {event && event.status !== 'DRAFT' && (
+              <Button variant="outline" asChild>
+                <Link to={`/events/${encodeURIComponent(event.id)}/tickets`}>
+                  <Ticket />
+                  {t('tickets.title')}
+                </Link>
+              </Button>
+            )}
             {event && event.status !== 'DRAFT' && (
               <Button variant="outline" asChild>
                 <Link to={`/events/${encodeURIComponent(event.id)}/reconciliation`}>

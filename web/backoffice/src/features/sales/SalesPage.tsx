@@ -17,6 +17,7 @@ import { formatDh } from '@/lib/money'
 import { percent } from '@/lib/percent'
 import { formatDateTime } from '@/lib/time'
 import { useSales, type EventSales } from './api'
+import { RefundsTodo } from './RefundsTodo'
 
 type Reason = keyof typeof fr.sales.refunds.reasons
 
@@ -91,13 +92,13 @@ function EventSalesPage({ id }: { id: string }) {
           <ErrorNotice error={sales.error} onRetry={() => void sales.refetch()} />
         </Card>
       ) : (
-        <SalesBody sales={sales.data} zone={event.data.timezone} />
+        <SalesBody eventId={id} sales={sales.data} zone={event.data.timezone} />
       )}
     </div>
   )
 }
 
-function SalesBody({ sales, zone }: { sales: EventSales; zone: string }) {
+function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSales; zone: string }) {
   const { t, i18n } = useTranslation()
   const n = (count: number) => count.toLocaleString(i18n.language)
   const dh = (centimes: number) => t('sales.amount', { amount: formatDh(centimes, i18n.language) })
@@ -179,7 +180,13 @@ function SalesBody({ sales, zone }: { sales: EventSales; zone: string }) {
         )}
       </Section>
 
-      <Section title={t('sales.refunds.title')} description={t('sales.refunds.description')}>
+      {/* DESIGN Lot 3 B3: the tickets refunded in B12, then the Lot 1 gateway flags. */}
+      <Section title={t('sales.refunds.title')}>
+        <h3 className="text-sm font-semibold">{t('sales.refunds.tickets.title')}</h3>
+        <p className="mt-1 mb-3 max-w-prose text-sm text-muted-foreground">{t('sales.refunds.tickets.description')}</p>
+        <RefundsTodo eventId={eventId} zone={zone} />
+        <h3 className="mt-8 text-sm font-semibold">{t('sales.refunds.gateway.title')}</h3>
+        <p className="mt-1 mb-3 max-w-prose text-sm text-muted-foreground">{t('sales.refunds.description')}</p>
         {sales.refunds_required.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('sales.refunds.empty')}</p>
         ) : (

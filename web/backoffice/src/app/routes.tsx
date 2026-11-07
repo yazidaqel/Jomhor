@@ -10,6 +10,7 @@ import { OverviewPage } from '@/features/overview/OverviewPage'
 import { PosPage } from '@/features/pos/PosPage'
 import { PrintPage } from '@/features/pos/PrintPage'
 import { SalesIndexPage, SalesPage } from '@/features/sales/SalesPage'
+import { TicketsPage } from '@/features/tickets/TicketsPage'
 import { VenuePage } from '@/features/venues/VenuePage'
 import { VenuesPage } from '@/features/venues/VenuesPage'
 
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
       { path: 'events/new', element: <EventPage /> },
       { path: 'events/:id', element: <EventPage /> },
       { path: 'events/:id/sales', element: <SalesPage /> },
+      { path: 'events/:id/tickets', element: <TicketsPage /> },
       { path: 'events/:id/live', element: <LivePage /> },
       { path: 'events/:id/reconciliation', element: <ReconciliationPage /> },
       { path: 'sales', element: <SalesIndexPage /> },

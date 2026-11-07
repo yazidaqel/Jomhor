@@ -40,7 +40,8 @@ export function StaffTab() {
   const [pin, setPin] = useState<Pin | null>(null)
   const showPin = (p: string, name: string) => setPin({ pin: p, name })
   const [adding, setAdding] = useState(false)
-  const [resetting, setResetting] = useState<{ staff: Staff; open: boolean } | null>(null)
+  // `n` counts openings: the dialog's key, so reopening it never shows the last attempt's state.
+  const [resetting, setResetting] = useState<{ staff: Staff; open: boolean; n: number } | null>(null)
   const toggle = useStaffMutation(showPin)
   // Back-office members are listed too by the API (has_pin false); this tab is the gate team and the cashiers.
   const team = staff.data?.filter((s) => (STAFF_ROLES as readonly string[]).includes(s.role))
@@ -103,7 +104,7 @@ export function StaffTab() {
                         size="sm"
                         variant="outline"
                         aria-label={t('staff.resetPinLabel', { name: s.name })}
-                        onClick={() => setResetting({ staff: s, open: true })}
+                        onClick={() => setResetting((r) => ({ staff: s, open: true, n: (r?.n ?? 0) + 1 }))}
                       >
                         <KeyRound />
                         {t('staff.resetPin')}
@@ -143,7 +144,7 @@ export function StaffTab() {
       </Dialog>
       {resetting && (
         <ResetPinDialog
-          key={resetting.staff.id}
+          key={resetting.n}
           staff={resetting.staff}
           open={resetting.open}
           onOpenChange={(open) => setResetting((r) => r && { ...r, open })}
