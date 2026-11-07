@@ -52,8 +52,7 @@ export function isVenueZone(zone: string) {
  * Two passes so the offset used is the one in force at the result, not at the first guess.
  * ponytail: a wall time skipped by a clock change lands on either side of the gap, off by the gap's length (Europe
  * 02:30 -> 03:30; Santiago's skipped midnight -> 23:00 the day before), and one repeated by it takes the later
- * instant; fine for event times, revisit if the small hours around a change matter. `dayRange` corrects a skipped
- * midnight.
+ * instant; fine for event times, revisit if the small hours around a change matter.
  */
 export function wallToUtc(wall: string, zone: string): string {
   const [y, mo, d, h, mi] = wall.split(/[-T:]/).map(Number) as [number, number, number, number, number]
@@ -68,23 +67,6 @@ export const addDays = (day: string, n: number) => new Date(Date.parse(day) + n 
 
 /** Today's date (`YYYY-MM-DD`) in `zone`. */
 export const todayIn = (zone: string, ms = Date.now()) => new Date(wallMs(ms, zone)).toISOString().slice(0, 10)
-
-/**
- * Local dates `from` to `to`, both included, in `zone` → the RFC 3339 bounds of a [from, to) range: midnight at the
- * start of `from`, midnight at the end of `to`. A day with a clock change is 23 or 25 h long, as it was locally.
- */
-export const dayRange = (from: string, to: string, zone: string) => ({ from: startOfDay(from, zone), to: startOfDay(addDays(to, 1), zone) })
-
-/**
- * The first instant of local date `day` in `zone`. Where a clock change skips midnight (America/Santiago in
- * September), wallToUtc can land on the day before: the day then starts at the change, i.e. midnight in the offset in
- * force just before it.
- */
-function startOfDay(day: string, zone: string) {
-  const iso = wallToUtc(`${day}T00:00`, zone)
-  const ms = Date.parse(iso)
-  return todayIn(zone, ms) >= day ? iso : new Date(Date.parse(day) - (wallMs(ms, zone) - ms)).toISOString()
-}
 
 /** A `YYYY-MM-DD` date for display (`3 nov. 2026`): a calendar date, in no zone. */
 export const formatDay = (day: string, locale: string) => new Intl.DateTimeFormat(locale, { timeZone: 'UTC', dateStyle: 'medium' }).format(Date.parse(day))

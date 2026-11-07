@@ -42,7 +42,10 @@ export type CashReport = {
   totals: { collected_mad: number; declared_mad: number; variance_mad: number; open_sessions: number }
 }
 
-/** RFC 3339 [from, to) bounds and the IANA zone that makes `day`: at most 92 days (422 past that). */
+/**
+ * Local dates `YYYY-MM-DD`, both included, in the IANA `timezone`: at most 92 days (422 past that). The server turns
+ * them into instants with its own tzdata (a browser's Casablanca rules can be out of date).
+ */
 export type CashRange = { from: string; to: string; timezone: string }
 
 const query = ({ from, to, timezone }: CashRange) => `?${new URLSearchParams({ from, to, timezone })}`

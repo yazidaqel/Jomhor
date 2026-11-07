@@ -12,7 +12,7 @@ import type { Venue } from '@/features/venues/api'
 import { createQueryClient } from '@/lib/queryClient'
 import { formatDh } from '@/lib/money'
 import { session } from '@/lib/session'
-import { addDays, dayRange, todayIn } from '@/lib/time'
+import { addDays, todayIn } from '@/lib/time'
 import type { CashReport } from './api'
 
 beforeAll(() => {
@@ -160,10 +160,10 @@ it('FINANCE opens Finance › Encaissements: last 7 local days, per day × colle
   expect(await screen.findByRole('heading', { name: fr.finance.cash.days.title })).toBeTruthy()
   expect(nav().getByRole('link', { name: fr.nav.finance }).getAttribute('aria-current')).toBe('page')
 
-  // Default range: today and the 6 days before, in the venue zone, sent as RFC 3339 bounds with that zone.
+  // Default range: today and the 6 days before, in the venue zone, sent as local dates with that zone.
   const today = todayIn(CASA)
   const [query] = cashCalls(calls)
-  expect(query).toEqual({ ...dayRange(addDays(today, -6), today, CASA), timezone: CASA })
+  expect(query).toEqual({ from: addDays(today, -6), to: today, timezone: CASA })
   expect((screen.getByLabelText(fr.finance.cash.range.from) as HTMLInputElement).value).toBe(addDays(today, -6))
   expect((screen.getByLabelText(fr.finance.cash.range.to) as HTMLInputElement).value).toBe(today)
   expect(calls.find((c) => c.path.startsWith('/org/finance/cash?'))!.org).toBe('org-a')
@@ -201,18 +201,18 @@ it('FINANCE opens Finance › Encaissements: last 7 local days, per day × colle
   expect(kpi(fr.finance.cash.kpi.open).getByText('1')).toBeTruthy()
 })
 
-it('a local-date range becomes RFC 3339 bounds in the venue zone, a clock change included; bad ranges are not sent', async () => {
+it('the picked local dates are sent as they are, with the venue zone; bad ranges are not sent', async () => {
   const user = userEvent.setup()
   const calls = stubApi('ADMIN', { report: { ...REPORT, totals: { ...REPORT.totals, variance_mad: 0 } } })
   renderApp('/finance/cash')
 
   await screen.findByRole('heading', { name: fr.finance.cash.days.title })
-  // tzdata 2026c: Casablanca is UTC+00:00 from 15 February to 22 March 2026, UTC+01:00 then until 20 September.
+  // No instant conversion in the browser: across Casablanca's 22 March change too, the server's tzdata decides.
   fireEvent.change(screen.getByLabelText(fr.finance.cash.range.from), { target: { value: '2026-03-20' } })
   fireEvent.change(screen.getByLabelText(fr.finance.cash.range.to), { target: { value: '2026-03-23' } })
   await user.click(screen.getByRole('button', { name: fr.finance.cash.range.submit }))
   await waitFor(() => expect(cashCalls(calls)).toHaveLength(2))
-  expect(cashCalls(calls)[1]).toEqual({ from: '2026-03-20T00:00:00.000Z', to: '2026-03-23T23:00:00.000Z', timezone: CASA })
+  expect(cashCalls(calls)[1]).toEqual({ from: '2026-03-20', to: '2026-03-23', timezone: CASA })
   // No gap overall: no red, the words instead.
   const variance = screen.getByText(fr.finance.cash.kpi.variance, { selector: 'span' }).closest('[data-slot="card"]') as HTMLElement
   expect(within(variance).getByText(fr.finance.cash.noGap).className).not.toContain('text-destructive')
@@ -227,16 +227,15 @@ it('a local-date range becomes RFC 3339 bounds in the venue zone, a clock change
   await user.click(screen.getByRole('button', { name: fr.finance.cash.range.submit }))
   expect(await screen.findByText(fr.finance.cash.range.tooLong)).toBeTruthy()
 
-  // 1 July to 30 September is 92 local days: sent, although 20 September (UTC+01:00 → UTC+00:00) lasts 25 h.
+  // 1 July to 30 September is 92 local days: sent, whatever 20 September's clock change makes of it in hours.
   fireEvent.change(screen.getByLabelText(fr.finance.cash.range.to), { target: { value: '2026-09-30' } })
   await user.click(screen.getByRole('button', { name: fr.finance.cash.range.submit }))
   await waitFor(() => expect(cashCalls(calls)).toHaveLength(3))
-  expect(cashCalls(calls)[2]).toEqual({ from: '2026-06-30T23:00:00.000Z', to: '2026-10-01T00:00:00.000Z', timezone: CASA })
-  expect(screen.queryByText(fr.finance.cash.range.tooLong)).toBeNull()
+  expect(cashCalls(calls)[2]).toEqual({ from: '2026-07-01', to: '2026-09-30', timezone: CASA })
   expect(screen.queryByText(fr.finance.cash.range.tooLong)).toBeNull()
 })
 
-it('the zone is the venues’ zone: Europe/Paris midnight is 23:00 UTC the day before in November', async () => {
+it('the zone is the venues’ zone: Europe/Paris goes with the picked dates', async () => {
   const user = userEvent.setup()
   const calls = stubApi('OPS', { venues: [venue('Europe/Paris'), { ...venue('Europe/Paris'), id: 'v-2' }] })
   renderApp('/finance/cash')
@@ -247,7 +246,7 @@ it('the zone is the venues’ zone: Europe/Paris midnight is 23:00 UTC the day b
   fireEvent.change(screen.getByLabelText(fr.finance.cash.range.to), { target: { value: '2026-11-01' } })
   await user.click(screen.getByRole('button', { name: fr.finance.cash.range.submit }))
   await waitFor(() => expect(cashCalls(calls)).toHaveLength(2))
-  expect(cashCalls(calls)[1]).toEqual({ from: '2026-10-31T23:00:00.000Z', to: '2026-11-01T23:00:00.000Z', timezone: 'Europe/Paris' })
+  expect(cashCalls(calls)[1]).toEqual({ from: '2026-11-01', to: '2026-11-01', timezone: 'Europe/Paris' })
 })
 
 it('venues in two zones: the report falls back to Africa/Casablanca', async () => {

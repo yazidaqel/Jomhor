@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { useVenues } from '@/features/venues/api'
 import { fr } from '@/i18n/fr'
 import { formatDh } from '@/lib/money'
-import { addDays, dayRange, DEFAULT_ZONE, formatDateTime, formatDay, todayIn } from '@/lib/time'
+import { addDays, DEFAULT_ZONE, formatDateTime, formatDay, todayIn } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useCashCsv, useCashReport, type CashRange, type CashReport } from './api'
 
@@ -68,7 +68,8 @@ function CashReportView({ zone }: { zone: string }) {
     const today = todayIn(zone)
     return { from: addDays(today, -6), to: today }
   })
-  const range: CashRange = { ...dayRange(days.from, days.to, zone), timezone: zone }
+  // Sent as picked: the server computes the instants (04 §/org/finance/cash).
+  const range: CashRange = { ...days, timezone: zone }
   const report = useCashReport(range)
   const csv = useCashCsv()
 
