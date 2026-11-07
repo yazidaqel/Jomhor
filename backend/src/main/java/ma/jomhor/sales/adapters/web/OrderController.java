@@ -7,10 +7,12 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.application.Inventory.SalePrice;
 import ma.jomhor.common.HolderNames;
+import ma.jomhor.common.web.ApiException;
 import ma.jomhor.sales.application.CashInstructions;
 import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.application.OrderService.HolderRequest;
@@ -71,13 +73,17 @@ class OrderController {
     record EventRefDto(int id, String title, Instant startsAt, String timezone) {}
 
     record SummaryDto(UUID id, EventRefDto event, Order.Channel channel, Order.Status status, long totalMad,
-                      Instant reservedUntil, Order.PaymentMethod paymentMethod, Instant createdAt) {}
+                      Instant reservedUntil, Order.PaymentMethod paymentMethod, String payCode, Instant createdAt) {}
 
     record OrderList(List<SummaryDto> orders) {}
 
     @PostMapping("/fan/orders")
     @ResponseStatus(HttpStatus.CREATED)
     Reserved create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OrderCreate body) {
+        if (body.channel() == Order.Channel.POS) { // APP | WEB only: a till sale goes through /org/pos/orders
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                    Map.of("fields", Map.of("channel", "APP or WEB")));
+        }
         View v = orders.place(UUID.fromString(jwt.getSubject()), body.eventId(), body.channel(),
                 body.items().stream().map(i -> new ItemRequest(i.priceCategoryId(), i.qty(), i.holders() == null ? null
                         : i.holders().stream().map(h -> h == null ? null : new HolderRequest(h.name(), h.phone())).toList()))
@@ -105,7 +111,7 @@ class OrderController {
             Orders.Listed o = r.order();
             Inventory.EventLabel e = r.event();
             return new SummaryDto(o.id(), new EventRefDto(e.id(), e.title(), e.startsAt(), e.timezone()), o.channel(),
-                    o.status(), o.totalMad(), o.reservedUntil(), r.paymentMethod(), o.createdAt());
+                    o.status(), o.totalMad(), o.reservedUntil(), r.paymentMethod(), r.payCode(), o.createdAt());
         }).toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new OrderList(rows));
     }

@@ -21,6 +21,13 @@ public class AuditLog {
                 .params(organizerId, userId, action, target).update();
     }
 
+    /** A staff action with a payload: {@code payloadJson} is a JSON object and must never hold a secret. */
+    public void staff(UUID organizerId, UUID userId, String action, String target, String payloadJson) {
+        jdbc.sql("insert into audit_log (organizer_id, actor_type, actor_id, action, target, payload) "
+                        + "values (?, 'STAFF', ?, ?, ?, ?::jsonb)")
+                .params(organizerId, userId, action, target, payloadJson).update();
+    }
+
     /** One audit row: {@code payloadJson} is a JSON object and must never hold a secret. */
     public record Entry(String target, String payloadJson) {}
 

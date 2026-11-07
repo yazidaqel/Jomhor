@@ -60,6 +60,38 @@ class JdbcOrders implements Orders {
                 .param("org", org).param("event", eventId).param("user", userId).param("channel", channel.name())
                 .param("total", totalMad)
                 .query((rs, n) -> order(rs, items)).single();
+        insertItems(org, order.id(), items);
+        return order;
+    }
+
+    @Override
+    public Optional<Order> insertPos(UUID id, UUID org, int eventId, long totalMad, List<Order.Item> items) {
+        Optional<Order> order = jdbc.sql("""
+                        insert into orders (id, organizer_id, event_id, user_id, channel, status, total_mad, payment_method,
+                                            reserved_until, paid_at)
+                        values (:id, :org, :event, null, 'POS', 'PAID', :total, 'POS_CASH', now(), now())
+                        on conflict (id) do nothing
+                        returning\s""" + ORDER_COLUMNS)
+                .param("id", id).param("org", org).param("event", eventId).param("total", totalMad)
+                .query((rs, n) -> order(rs, items)).optional();
+        order.ifPresent(o -> insertItems(org, o.id(), items));
+        return order;
+    }
+
+    @Override
+    public boolean exists(UUID orderId) {
+        return jdbc.sql("select exists (select 1 from orders where id = ?)").param(orderId).query(Boolean.class).single();
+    }
+
+    @Override
+    public Optional<Order> findInOrg(UUID org, UUID orderId) {
+        return jdbc.sql("select " + ORDER_COLUMNS + " from orders where organizer_id = :org and id = :id")
+                .param("org", org).param("id", orderId)
+                .query((rs, n) -> order(rs, null)).optional()
+                .map(o -> o.withItems(items(o.organizerId(), o.id())));
+    }
+
+    private void insertItems(UUID org, UUID orderId, List<Order.Item> items) {
         for (Order.Item item : items) {
             // holders as [{"name", "user_id"}] in place order, built by Postgres from two parallel arrays.
             jdbc.sql("""
@@ -70,13 +102,12 @@ class JdbcOrders implements Orders {
                                      from unnest(cast(:names as text[]), cast(:users as uuid[])) with ordinality
                                           as h(name, user_id, n)))
                             """)
-                    .param("org", org).param("order", order.id()).param("category", item.priceCategoryId())
+                    .param("org", org).param("order", orderId).param("category", item.priceCategoryId())
                     .param("qty", item.qty()).param("price", item.unitPriceMad())
                     .param("names", item.holders().stream().map(Order.Holder::name).toArray(String[]::new))
                     .param("users", item.holders().stream().map(Order.Holder::userId).toArray(UUID[]::new))
                     .update();
         }
-        return order;
     }
 
     @Override

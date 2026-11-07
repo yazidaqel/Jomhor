@@ -15,6 +15,9 @@ public interface Tickets {
     UUID insert(UUID org, UUID orderId, int eventId, int zoneId, UUID priceCategoryId, UUID holderUserId,
                 String holderName, String holderInitials);
 
+    /** Every ticket of the order (any status, any holder), by id. */
+    List<Ticket.OfOrder> inOrder(UUID org, UUID orderId);
+
     /** Ids of the order's tickets held by {@code holderUserId}, ascending. */
     List<UUID> heldInOrder(UUID org, UUID orderId, UUID holderUserId);
 

@@ -32,4 +32,7 @@ public interface PendingPayments {
 
     /** The method of {@link #latestAttempt} for each order (order id → its organizer); orders with no attempt are absent. */
     Map<UUID, PaymentMethod> latestMethods(Map<UUID, UUID> organizerByOrder);
+
+    /** The PENDING cash code (6 symbols) of each order that has one (order id → its organizer); others are absent. */
+    Map<UUID, String> pendingCodes(Map<UUID, UUID> organizerByOrder);
 }

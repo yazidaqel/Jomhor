@@ -7,6 +7,13 @@ insert into organizers (id, name, kind, settings) values
    '{"theme": {"accent": "#F5B700", "on_accent": "#0B0F1A", "crest_url": null, "display_font": null}}')
 on conflict do nothing;
 
+-- Cash points (plan Q54), so cash codes are offered in local dev. Added once, also to a dev database seeded before
+-- they existed; an edited list is left alone.
+update organizers set settings = settings || jsonb_build_object('cash_points', jsonb_build_array(
+    jsonb_build_object('name', 'Guichet Grand Stade', 'address', 'Porte 1', 'hours', 'Lun-Sam 10:00-19:00'),
+    jsonb_build_object('name', 'Boutique du club', 'address', 'Centre-ville', 'hours', 'Lun-Sam 09:00-18:00')))
+where id = 'a7a5fc00-0000-4000-8000-000000000001' and not settings ? 'cash_points';
+
 -- Test phone, not a real subscriber. Log in with the code printed by LogOtpSender.
 insert into users (id, phone_e164, display_name) values
   ('a7a5fc00-0000-4000-8000-000000000101', '+212600000001', 'Admin Dev')

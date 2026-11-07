@@ -224,6 +224,17 @@ created in the last 24 h, so it can lift up to 5 min before the oldest failure i
 | POST | `/org/pos/codes/{code}/collect` | `{amount_mad}` = the amount the cashier confirmed (≠ `total_mad` → 422 on `amount_mad`). Needs an open session. Payable → in one transaction (payment row, then order): payment `SUCCEEDED` (provider `POS`, `pos_session_id`, `completed_at`), order `PAID` (`payment_method` `CASH_AGENCY`, `payment_ref` = code), tickets + deliveries → `200 {order_id, status: PAID, ticket_ids}`. Already collected by this session → `200` same. Otherwise 409 `CODE_NOT_PAYABLE`. Audit `pos.collect`. |
 | GET | `/org/pos/orders/{id}/tickets` | Print data for an order paid in a till session of this organizer (POS sale or collected code; else 404); needs an open session. → `{order_id, event:{id, title, starts_at, timezone, venue:{name}}, tickets:[{id, ticket_no, status, zone:{code, name}, gate_codes[], holder_label, unit_price_mad, qr}]}`. `qr` = the static v1 token (as on the PDF), built inside `withEventKey`, for `VALID` tickets only (else null). `Cache-Control: no-store`. Each call is a print: audit `pos.print` (session, order, ticket count), counted in the session's `prints`. |
 
+
+| Rule | Value |
+| --- | --- |
+| Sale answer | The `POST /fan/orders` order shape (`items[]` with `price_category_id, zone_id, zone_name, name, qty, unit_price_mad, holders:[{label}]`), status `PAID`, channel `POS`, no buyer. `201`, or `200` on a replay |
+| `sale_id` | Replay only for a POS order whose till payment is in the caller's current open session; any other existing order id → 422 `VALIDATION_FAILED` `details.reason: TAKEN` on `sale_id` |
+| Session figures | `orders` = distinct orders with a `SUCCEEDED` payment in the session; `tickets` = their tickets; `prints` = `pos.print` audit rows of the session |
+| Code lookup | Needs no open session |
+| Collect order | Open session (409) → code unknown or another organizer's (404) → already collected in this session (`200` replay) → not payable (409 `CODE_NOT_PAYABLE`, `EXPIRED` once the hold passed, else the order status) → amount ≠ total (422). After the session closes, a repeat is 409 with status `PAID` |
+| Locks | A sale or collect locks the caller's open session row first (one till at a time; close waits for in-flight sales), then payment → order → buyer → categories |
+| Staff | CASHIER `phone` (E.164) already staff of this organizer → 422 `details.reason: TAKEN` on `phone`; `phone` is ignored for GATE/SUPERVISOR; `/pin` on a CASHIER → 404 |
+| Audits | `pos.open` only when a session is created; `pos.sale`, `pos.collect`, `pos.print`, `pos.close` (expected, declared, variance) carry ids and amounts only |
 ## Event metadata
 
 | `event_type` | Keys (sent inside `metadata`, never as top-level fields) |

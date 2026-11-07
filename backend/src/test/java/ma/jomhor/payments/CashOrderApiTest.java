@@ -399,7 +399,7 @@ class CashOrderApiTest extends PaymentTest {
         Sale s = cashSale(10);
         String fan = fanToken(randomPhone());
         String cash = order(fan, s, 1);
-        payCash(fan, cash);
+        String code = JsonPath.read(payCash(fan, cash), "$.pay_code");
         String card = order(fan, s, 1);
         String p = payment(fan, card);
         String plain = order(fan, s, 1);
@@ -412,13 +412,16 @@ class CashOrderApiTest extends PaymentTest {
         assertThat(JsonPath.<List<String>>read(json, "$.orders[*].id")).containsExactly(cash, plain, card)
                 .doesNotContain(strangers);
         assertKeys(json, "$.orders[0]", "id", "event", "channel", "status", "total_mad", "reserved_until",
-                "payment_method", "created_at");
+                "payment_method", "pay_code", "created_at");
         assertKeys(json, "$.orders[0].event", "id", "title", "starts_at", "timezone");
         assertThat(JsonPath.<Integer>read(json, "$.orders[0].event.id")).isEqualTo(s.eventId());
         assertThat(JsonPath.<String>read(json, "$.orders[0].event.title")).isEqualTo("Match");
         assertThat(JsonPath.<String>read(json, "$.orders[0].event.timezone")).isEqualTo("Africa/Casablanca");
         assertThat(JsonPath.<String>read(json, "$.orders[0].status")).isEqualTo("AWAITING_CASH");
         assertThat(JsonPath.<String>read(json, "$.orders[0].payment_method")).isEqualTo("CASH_AGENCY");
+        assertThat(JsonPath.<String>read(json, "$.orders[0].pay_code")).isEqualTo(code); // the PENDING code, 6 symbols
+        assertThat(JsonPath.<Object>read(json, "$.orders[1].pay_code")).isNull();
+        assertThat(JsonPath.<Object>read(json, "$.orders[2].pay_code")).isNull();
         assertThat(JsonPath.<Object>read(json, "$.orders[1].payment_method")).isNull();
         assertThat(JsonPath.<String>read(json, "$.orders[2].payment_method")).isEqualTo("CARD");
         assertThat(JsonPath.<Integer>read(json, "$.orders[2].total_mad")).isEqualTo(5000);

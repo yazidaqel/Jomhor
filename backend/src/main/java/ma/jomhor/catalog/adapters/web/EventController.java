@@ -85,9 +85,13 @@ class EventController {
         }
     }
 
-    record PriceDto(UUID id, int zoneId, String name, long priceMad, int quota, int sold) {
+    /** Read-only (Lot 3): what the till shows of a category's zone. */
+    record ZoneRef(String code, String name) {}
+
+    record PriceDto(UUID id, int zoneId, ZoneRef zone, String name, long priceMad, int quota, int sold) {
         static PriceDto of(PriceCategory p) {
-            return new PriceDto(p.id(), p.zoneId(), p.name(), p.priceMad(), p.quota(), p.sold());
+            return new PriceDto(p.id(), p.zoneId(), new ZoneRef(p.zoneCode(), p.zoneName()), p.name(), p.priceMad(),
+                    p.quota(), p.sold());
         }
     }
 

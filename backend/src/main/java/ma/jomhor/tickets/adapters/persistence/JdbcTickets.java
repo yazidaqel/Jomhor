@@ -105,6 +105,19 @@ class JdbcTickets implements Tickets {
     }
 
     @Override
+    public List<Ticket.OfOrder> inOrder(UUID org, UUID orderId) {
+        return jdbc.sql("""
+                        select id, event_id, zone_id, price_category_id, status, holder_name from tickets
+                        where organizer_id = :org and order_id = :order order by id
+                        """)
+                .param("org", org).param("order", orderId)
+                .query((rs, n) -> new Ticket.OfOrder(rs.getObject("id", UUID.class), rs.getInt("event_id"),
+                        rs.getInt("zone_id"), rs.getObject("price_category_id", UUID.class),
+                        Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name")))
+                .list();
+    }
+
+    @Override
     public List<UUID> heldInOrder(UUID org, UUID orderId, UUID holderUserId) {
         return jdbc.sql("""
                         select id from tickets where organizer_id = :org and order_id = :order and holder_user_id = :holder

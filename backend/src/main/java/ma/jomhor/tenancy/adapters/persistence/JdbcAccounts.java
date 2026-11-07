@@ -20,6 +20,8 @@ class JdbcAccounts implements Accounts {
     private static final String USER_COLUMNS = "id, phone_e164, display_name, locale";
     private static final String STAFF_COLUMNS = "id, name, role::text as role, active, pin_hash";
     private static final String SCANNER_ROLES = "role in ('GATE', 'SUPERVISOR')";
+    /** The rows PATCH /org/staff/{id} may change. */
+    private static final String MANAGED_ROLES = "role in ('GATE', 'SUPERVISOR', 'CASHIER')";
 
     private final JdbcClient jdbc;
 
@@ -120,9 +122,16 @@ class JdbcAccounts implements Accounts {
     }
 
     @Override
+    public Optional<StaffMember> insertCashier(UUID organizerId, UUID userId, String name) {
+        return jdbc.sql("insert into staff (organizer_id, user_id, name, role) values (?, ?, ?, 'CASHIER') "
+                        + "on conflict (organizer_id, user_id) do nothing returning " + STAFF_COLUMNS)
+                .params(organizerId, userId, name).query(JdbcAccounts::staffMember).optional();
+    }
+
+    @Override
     public Optional<StaffMember> updateScannerStaff(UUID organizerId, UUID staffId, String name, Boolean active) {
         return jdbc.sql("update staff set name = coalesce(?, name), active = coalesce(?, active) "
-                        + "where organizer_id = ? and id = ? and " + SCANNER_ROLES + " returning " + STAFF_COLUMNS)
+                        + "where organizer_id = ? and id = ? and " + MANAGED_ROLES + " returning " + STAFF_COLUMNS)
                 .params(name, active, organizerId, staffId).query(JdbcAccounts::staffMember).optional();
     }
 

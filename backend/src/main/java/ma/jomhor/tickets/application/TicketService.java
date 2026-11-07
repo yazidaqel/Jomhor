@@ -87,6 +87,44 @@ public class TicketService {
         return ticketIds.isEmpty() ? Set.of() : tickets.ofEvent(org, eventId, ticketIds);
     }
 
+    /** Every ticket of the order, by id (a till: the order has no buyer). */
+    public List<UUID> ofOrder(UUID org, UUID orderId) {
+        return tickets.inOrder(org, orderId).stream().map(Ticket.OfOrder::id).toList();
+    }
+
+    /**
+     * A till slip (04 GET /org/pos/orders/{id}/tickets): the ticket, its zone, the holder label (never the full
+     * name) and, for a VALID ticket only, its QR = the static v1 token as on the PDF. Not for logs.
+     */
+    public record Slip(Ticket.OfOrder ticket, Event.ZoneListing zone, String holderLabel, String qr) {
+        @Override
+        public String toString() {
+            return "Slip[" + ticket.id() + "]";
+        }
+    }
+
+    /** The order's event and one slip per ticket, by ticket id. */
+    public record Slips(Event.Listing event, List<Slip> slips) {}
+
+    /**
+     * Print data for an order of {@code org} (the caller checked it was paid at a till). The tokens of every VALID
+     * ticket are signed with K_e in one withEventKey call: only the token strings leave it.
+     */
+    public Slips slips(UUID org, int eventId, UUID orderId) {
+        List<Ticket.OfOrder> all = tickets.inOrder(org, orderId);
+        EventService.PublicEvent pe = events.publicEvent(eventId);
+        Map<Integer, Event.ZoneListing> zones = pe.zones().stream()
+                .collect(Collectors.toMap(Event.ZoneListing::id, z -> z));
+        List<Ticket.OfOrder> valid = all.stream().filter(t -> t.status() == Ticket.Status.VALID).toList();
+        Map<UUID, String> qr = valid.isEmpty() ? Map.of() : events.withEventKey(org, eventId, k -> {
+            Map<UUID, String> out = new HashMap<>();
+            valid.forEach(t -> out.put(t.id(), TicketToken.encodeStatic(k, eventId, t.id(), t.zoneId())));
+            return out;
+        });
+        return new Slips(pe.event(), all.stream().map(t -> new Slip(t, zones.get(t.zoneId()),
+                t.holderName() == null ? null : HolderNames.label(t.holderName()), qr.get(t.id()))).toList());
+    }
+
     /** The order's tickets this user holds (04: a friend's ticket is never listed to the buyer). */
     public List<UUID> heldInOrder(UUID org, UUID orderId, UUID holderUserId) {
         return tickets.heldInOrder(org, orderId, holderUserId);

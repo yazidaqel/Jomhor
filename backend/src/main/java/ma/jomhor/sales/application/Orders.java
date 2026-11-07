@@ -27,6 +27,18 @@ public interface Orders {
     /** A RESERVED order held 8 min from now (database clock), with its items and their holders. */
     Order insert(UUID org, int eventId, UUID userId, Order.Channel channel, long totalMad, List<Order.Item> items);
 
+    /**
+     * A till sale (04 POST /org/pos/orders): order {@code id} PAID now, channel POS, no buyer, payment_method POS_CASH,
+     * with its items and holders (a holder's user id may be null: paper only). Empty if {@code id} is already an order.
+     */
+    Optional<Order> insertPos(UUID id, UUID org, int eventId, long totalMad, List<Order.Item> items);
+
+    /** Whether any order (of any organizer) has this id. */
+    boolean exists(UUID orderId);
+
+    /** The organizer's order with its items. */
+    Optional<Order> findInOrg(UUID org, UUID orderId);
+
     /** The buyer's own order; another user's is absent. */
     Optional<Order> find(UUID userId, UUID orderId);
 

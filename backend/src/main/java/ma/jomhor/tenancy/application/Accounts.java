@@ -37,7 +37,10 @@ public interface Accounts {
     /** A PIN-only scanner staff row (no user), active. */
     StaffMember insertScannerStaff(UUID organizerId, String name, StaffRole role, String pinVerifier);
 
-    /** GATE/SUPERVISOR rows only; null = unchanged. Empty if no such row of this organizer. */
+    /** A CASHIER row of this user, active; empty if the user is already staff of this organizer. */
+    Optional<StaffMember> insertCashier(UUID organizerId, UUID userId, String name);
+
+    /** GATE/SUPERVISOR/CASHIER rows only; null = unchanged. Empty if no such row of this organizer. */
     Optional<StaffMember> updateScannerStaff(UUID organizerId, UUID staffId, String name, Boolean active);
 
     /** GATE/SUPERVISOR rows only; false if no such row of this organizer. */

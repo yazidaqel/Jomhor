@@ -72,8 +72,12 @@ public class OrderService {
     public record View(Order order, Map<UUID, SalePrice> categories, List<UUID> ticketIds,
                        PendingPayments.Attempt attempt, CashInstructions.Cash cash) {}
 
-    /** A row of GET /fan/orders: the order, its event and its payment method (null before any /pay). */
-    public record Summary(Orders.Listed order, Inventory.EventLabel event, Order.PaymentMethod paymentMethod) {}
+    /**
+     * A row of GET /fan/orders: the order, its event, its payment method (null before any /pay) and, while it is
+     * AWAITING_CASH, its PENDING code (else null).
+     */
+    public record Summary(Orders.Listed order, Inventory.EventLabel event, Order.PaymentMethod paymentMethod,
+                          String payCode) {}
 
     /** What became of an order whose card payment succeeded. Anything but PAID needs a manual refund. */
     public enum Settlement { PAID, SOLD_OUT, PER_ACCOUNT_LIMIT, NOT_PAYABLE }
@@ -118,20 +122,7 @@ public class OrderService {
             throw notOnSale(event);
         }
         UUID org = event.organizerId();
-        Map<UUID, SalePrice> ofEvent = byId(inventory.prices(org, eventId));
-        Map<UUID, Integer> qty = new LinkedHashMap<>();
-        long requested = 0;
-        for (int i = 0; i < items.size(); i++) {
-            ItemRequest item = items.get(i);
-            if (!ofEvent.containsKey(item.priceCategoryId())) {
-                throw invalid("items[%d].price_category_id".formatted(i), "not a price category of this event");
-            }
-            if (qty.put(item.priceCategoryId(), item.qty()) != null) {
-                throw invalid("items[%d].price_category_id".formatted(i), "duplicate price category");
-            }
-            requested += item.qty();
-        }
-        List<List<HolderRequest>> holders = validHolders(items);
+        Checked checked = check(byId(inventory.prices(org, eventId)), items);
 
         // ponytail: soft cap on a plain count, no lock (04 §On-sale Busy); the ranked queue is Lot 5.
         if (orders.activeHolds(org, eventId) >= maxActiveHolds) {
@@ -141,28 +132,65 @@ public class OrderService {
 
         orders.lockBuyer(userId, eventId);
         long held = orders.held(org, userId, eventId);
-        if (held + requested > event.perAccountLimit()) {
+        if (held + checked.places() > event.perAccountLimit()) {
             throw new ApiException("PER_ACCOUNT_LIMIT", HttpStatus.CONFLICT, "Per-account limit reached",
                     Map.of("limit", event.perAccountLimit(), "held", held));
         }
 
-        Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, qty);
-        // Each distinct phone once, in sorted order: two orders naming the same new phones insert their users rows
-        // in the same order, so they queue on the unique index instead of deadlocking.
-        Map<String, UUID> byPhone = new TreeMap<>();
-        holders.stream().flatMap(List::stream).map(HolderRequest::phone).filter(Objects::nonNull)
-                .forEach(p -> byPhone.put(p, null));
-        byPhone.replaceAll((phone, none) -> users.holder(phone));
-        List<Order.Item> lines = new ArrayList<>();
-        for (int i = 0; i < items.size(); i++) {
-            UUID category = items.get(i).priceCategoryId();
-            List<Order.Holder> holding = holders.get(i).stream()
-                    .map(h -> new Order.Holder(h.name(), h.phone() == null ? userId : byPhone.get(h.phone())))
-                    .toList();
-            lines.add(new Order.Item(category, items.get(i).qty(), taken.get(category).priceMad(), holding));
-        }
+        Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, checked.qty());
+        List<Order.Item> lines = lines(items, checked.holders(), taken, userId);
         long total = lines.stream().mapToLong(l -> l.qty() * l.unitPriceMad()).sum();
         return new View(orders.insert(org, eventId, userId, channel, total, lines), taken, List.of(), null, null);
+    }
+
+    /**
+     * A walk-up cash sale at a till (04 POST /org/pos/orders), in the caller's transaction (payments adds the
+     * POS_CASH payment). Same checks and order as {@link #place}, but the event must be the organizer's (404),
+     * there is no SALE_BUSY, and the limit is on this sale alone (no buyer: sum of qty <= per_account_limit, held 0).
+     * Then the order is PAID at once (id = {@code orderId}, channel POS, no buyer) with its tickets; a holder with a
+     * phone gets that account and a delivery, one without is paper only (holder_user_id null, no delivery). Empty if
+     * {@code orderId} is already an order id (the caller's transaction must then roll back).
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<View> placePos(UUID org, UUID orderId, int eventId, List<ItemRequest> items) {
+        Inventory.SaleEvent event = inventory.saleEvent(eventId).filter(e -> e.organizerId().equals(org))
+                .orElseThrow(() -> ApiException.notFound("Event not found"));
+        if (event.window() != Inventory.SaleWindow.OPEN) {
+            throw notOnSale(event);
+        }
+        Checked checked = check(byId(inventory.prices(org, eventId)), items);
+        if (checked.places() > event.perAccountLimit()) {
+            throw new ApiException("PER_ACCOUNT_LIMIT", HttpStatus.CONFLICT, "Per-account limit reached",
+                    Map.of("limit", event.perAccountLimit(), "held", 0));
+        }
+        Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, checked.qty());
+        List<Order.Item> lines = lines(items, checked.holders(), taken, null);
+        long total = lines.stream().mapToLong(l -> l.qty() * l.unitPriceMad()).sum();
+        return orders.insertPos(orderId, org, eventId, total, lines)
+                .map(o -> {
+                    issue(o, taken);
+                    return new View(o, taken, tickets.ofOrder(org, o.id()), null, null);
+                });
+    }
+
+    /** Whether any order, of any organizer, has this id (a till's sale_id must be new). */
+    public boolean exists(UUID orderId) {
+        return orders.exists(orderId);
+    }
+
+    /** The organizer's order with its categories and every ticket of it (the till's view: no buyer). */
+    public Optional<View> inOrg(UUID org, UUID orderId) {
+        return orders.findInOrg(org, orderId).map(o -> new View(o, byId(inventory.prices(org, o.eventId())),
+                tickets.ofOrder(org, o.id()), null, null));
+    }
+
+    /**
+     * The organizer's order, locked like {@link #lockForPayment} (a till collecting its cash code), with whether its
+     * hold still runs by the database clock. Another organizer's: empty.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Orders.Locked> lockInOrg(UUID org, UUID orderId) {
+        return orders.lock(orderId).filter(l -> l.order().organizerId().equals(org));
     }
 
     public View get(UUID userId, UUID orderId) {
@@ -180,10 +208,15 @@ public class OrderService {
         Map<UUID, UUID> orgByOrder = new HashMap<>();
         listed.forEach(o -> orgByOrder.put(o.id(), o.organizerId()));
         Map<UUID, Order.PaymentMethod> methods = pendingPayments.latestMethods(orgByOrder);
+        Map<UUID, UUID> awaiting = new HashMap<>();
+        listed.stream().filter(o -> o.status() == Order.Status.AWAITING_CASH)
+                .forEach(o -> awaiting.put(o.id(), o.organizerId()));
+        Map<UUID, String> codes = pendingPayments.pendingCodes(awaiting);
         // ponytail: one event read per distinct event (a fan has a handful); batch it if lists grow.
         Map<Integer, Inventory.EventLabel> events = new HashMap<>();
         listed.forEach(o -> events.computeIfAbsent(o.eventId(), id -> inventory.label(id).orElseThrow()));
-        return listed.stream().map(o -> new Summary(o, events.get(o.eventId()), methods.get(o.id()))).toList();
+        return listed.stream()
+                .map(o -> new Summary(o, events.get(o.eventId()), methods.get(o.id()), codes.get(o.id()))).toList();
     }
 
     // ---------- payment (called by payments) ----------
@@ -278,8 +311,16 @@ public class OrderService {
         } else if (o.status() != Order.Status.RESERVED && o.status() != Order.Status.AWAITING_CASH) {
             return Settlement.NOT_PAYABLE;
         }
-        Map<UUID, SalePrice> categories = byId(inventory.prices(o.organizerId(), o.eventId()));
         orders.markPaid(o.organizerId(), o.id(), method, paymentRef);
+        issue(o, byId(inventory.prices(o.organizerId(), o.eventId())));
+        return Settlement.PAID;
+    }
+
+    /**
+     * One ticket per place of a paid order, and one WhatsApp delivery per ticket that has a holding account (a till
+     * holder without a phone has none: paper only, nothing queued). Returns the ticket ids in place order.
+     */
+    private List<UUID> issue(Order o, Map<UUID, SalePrice> categories) {
         List<TicketService.Seat> seats = new ArrayList<>();
         for (Order.Item i : o.items()) {
             int zone = categories.get(i.priceCategoryId()).zoneId();
@@ -291,8 +332,15 @@ public class OrderService {
                 i.holders().forEach(h -> seats.add(new TicketService.Seat(zone, i.priceCategoryId(), h.userId(), h.name())));
             }
         }
-        deliveries.enqueue(o.organizerId(), tickets.issue(o.organizerId(), o.id(), o.eventId(), seats));
-        return Settlement.PAID;
+        List<UUID> ids = tickets.issue(o.organizerId(), o.id(), o.eventId(), seats);
+        List<UUID> delivered = new ArrayList<>();
+        for (int n = 0; n < ids.size(); n++) {
+            if (seats.get(n).holderUserId() != null) {
+                delivered.add(ids.get(n));
+            }
+        }
+        deliveries.enqueue(o.organizerId(), delivered);
+        return ids;
     }
 
     /** The channel of an order (payments' /return picks its landing URL by it). Reads only. */
@@ -357,6 +405,49 @@ public class OrderService {
             throw e;
         }
         return new Batch(due.size(), (int) expired.stream().flatMap(d -> d.orderIds().stream()).distinct().count());
+    }
+
+    /** Items checked against the event's categories: qty per category, total places, holders per item (normalized). */
+    private record Checked(Map<UUID, Integer> qty, long places, List<List<HolderRequest>> holders) {}
+
+    /** Each category of the event, at most once (422 on items[i].price_category_id), then the holders. */
+    private static Checked check(Map<UUID, SalePrice> ofEvent, List<ItemRequest> items) {
+        Map<UUID, Integer> qty = new LinkedHashMap<>();
+        long places = 0;
+        for (int i = 0; i < items.size(); i++) {
+            ItemRequest item = items.get(i);
+            if (!ofEvent.containsKey(item.priceCategoryId())) {
+                throw invalid("items[%d].price_category_id".formatted(i), "not a price category of this event");
+            }
+            if (qty.put(item.priceCategoryId(), item.qty()) != null) {
+                throw invalid("items[%d].price_category_id".formatted(i), "duplicate price category");
+            }
+            places += item.qty();
+        }
+        return new Checked(qty, places, validHolders(items));
+    }
+
+    /**
+     * The order lines at the reserved prices. A holder with a phone: that phone's account (found or created); one
+     * without: {@code noPhone} (the buyer online, null at a till).
+     */
+    private List<Order.Item> lines(List<ItemRequest> items, List<List<HolderRequest>> holders,
+                                   Map<UUID, SalePrice> taken, UUID noPhone) {
+        // Each distinct phone once, in sorted order: two orders naming the same new phones insert their users rows
+        // in the same order, so they queue on the unique index instead of deadlocking.
+        Map<String, UUID> byPhone = new TreeMap<>();
+        holders.stream().flatMap(List::stream).map(HolderRequest::phone).filter(Objects::nonNull)
+                .forEach(p -> byPhone.put(p, null));
+        byPhone.replaceAll((phone, none) -> users.holder(phone));
+        List<Order.Item> lines = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            UUID category = items.get(i).priceCategoryId();
+            List<Order.Holder> holding = holders.get(i).stream()
+                    .map(h -> new Order.Holder(h.name(), h.phone() == null ? noPhone : byPhone.get(h.phone())))
+                    .toList();
+            lines.add(new Order.Item(category, items.get(i).qty(), taken.get(category).priceMad(), holding));
+        }
+        return lines;
     }
 
     /**

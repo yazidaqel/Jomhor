@@ -17,6 +17,23 @@ public interface Payments {
     /** The order's PENDING CASH_AGENCY attempt, if any (at most one: issued under the order lock). */
     Optional<Payment> pendingCode(UUID org, UUID orderId);
 
+    // ---------- club till (04 §Point of sale) ----------
+
+    /** A SUCCEEDED POS_CASH payment (provider POS) of a till sale, tied to the till session. */
+    void insertPos(UUID org, UUID orderId, long amountMad, UUID sessionId);
+
+    /** The organizer's CASH_AGENCY payment with this code (6 normalised symbols). */
+    Optional<Payment> findCode(UUID org, String payCode);
+
+    /** Like findCode, and locks the row until the end of the transaction. */
+    Optional<Payment> lockCode(UUID org, String payCode);
+
+    /** A PENDING code collected at a till: SUCCEEDED, provider POS, the session, completed_at. */
+    void collect(UUID org, UUID paymentId, UUID sessionId);
+
+    /** The till session of the order's SUCCEEDED payment taken at a till of the organizer, if any. */
+    Optional<UUID> tillSession(UUID org, UUID orderId);
+
     /** By id alone: a gateway callback or a browser page carries no organizer. */
     Optional<Payment> find(UUID paymentId);
 

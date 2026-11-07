@@ -20,7 +20,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcPayments implements Payments, PendingPayments {
 
-    private static final String COLUMNS = "id, organizer_id, order_id, method, provider, amount_mad, status, pay_code";
+    private static final String COLUMNS =
+            "id, organizer_id, order_id, method, provider, amount_mad, status, pay_code, pos_session_id";
     /** The attempt an order reports (04 GET /fan/orders/{id}): a success first, else the latest. */
     private static final String REPORTED_FIRST = "status = 'SUCCEEDED' desc, created_at desc, id desc";
 
@@ -61,6 +62,49 @@ class JdbcPayments implements Payments, PendingPayments {
                         order by created_at desc limit 1
                         """)
                 .param("org", org).param("order", orderId).query(JdbcPayments::payment).optional();
+    }
+
+    @Override
+    public void insertPos(UUID org, UUID orderId, long amountMad, UUID sessionId) {
+        jdbc.sql("""
+                        insert into payments (organizer_id, order_id, method, provider, amount_mad, status, pos_session_id,
+                                              completed_at)
+                        values (:org, :order, 'POS_CASH', 'POS', :amount, 'SUCCEEDED', :session, now())
+                        """)
+                .param("org", org).param("order", orderId).param("amount", amountMad).param("session", sessionId)
+                .update();
+    }
+
+    @Override
+    public Optional<Payment> findCode(UUID org, String payCode) {
+        return jdbc.sql("select " + COLUMNS + " from payments where organizer_id = :org and pay_code = :code")
+                .param("org", org).param("code", payCode).query(JdbcPayments::payment).optional();
+    }
+
+    @Override
+    public Optional<Payment> lockCode(UUID org, String payCode) {
+        return jdbc.sql("select " + COLUMNS + " from payments where organizer_id = :org and pay_code = :code for update")
+                .param("org", org).param("code", payCode).query(JdbcPayments::payment).optional();
+    }
+
+    @Override
+    public void collect(UUID org, UUID paymentId, UUID sessionId) {
+        jdbc.sql("""
+                        update payments set status = 'SUCCEEDED', provider = 'POS', pos_session_id = :session,
+                          completed_at = now()
+                        where organizer_id = :org and id = :id and status = 'PENDING'
+                        """)
+                .param("org", org).param("id", paymentId).param("session", sessionId).update();
+    }
+
+    @Override
+    public Optional<UUID> tillSession(UUID org, UUID orderId) {
+        return jdbc.sql("""
+                        select pos_session_id from payments
+                        where organizer_id = :org and order_id = :order and status = 'SUCCEEDED' and pos_session_id is not null
+                        order by completed_at limit 1
+                        """)
+                .param("org", org).param("order", orderId).query(UUID.class).optional();
     }
 
     @Override
@@ -145,10 +189,33 @@ class JdbcPayments implements Payments, PendingPayments {
         return methods;
     }
 
+    @Override
+    public Map<UUID, String> pendingCodes(Map<UUID, UUID> organizerByOrder) {
+        Map<UUID, String> codes = new HashMap<>();
+        if (organizerByOrder.isEmpty()) {
+            return codes;
+        }
+        UUID[] orders = organizerByOrder.keySet().toArray(UUID[]::new);
+        UUID[] orgs = new UUID[orders.length];
+        for (int i = 0; i < orders.length; i++) {
+            orgs[i] = organizerByOrder.get(orders[i]);
+        }
+        jdbc.sql("""
+                        select distinct on (order_id) order_id, pay_code from payments
+                        where (organizer_id, order_id) in (select * from unnest(cast(:orgs as uuid[]), cast(:orders as uuid[])))
+                          and method = 'CASH_AGENCY' and status = 'PENDING'
+                        order by order_id, created_at desc
+                        """)
+                .param("orgs", orgs).param("orders", orders)
+                .query((rs, n) -> Map.entry(rs.getObject("order_id", UUID.class), rs.getString("pay_code")))
+                .list().forEach(e -> codes.put(e.getKey(), e.getValue()));
+        return codes;
+    }
+
     private static Payment payment(ResultSet rs, int n) throws SQLException {
         return new Payment(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
                 rs.getObject("order_id", UUID.class), PaymentMethod.valueOf(rs.getString("method")),
                 rs.getString("provider"), rs.getLong("amount_mad"), Payment.Status.valueOf(rs.getString("status")),
-                rs.getString("pay_code"));
+                rs.getString("pay_code"), rs.getObject("pos_session_id", UUID.class));
     }
 }
