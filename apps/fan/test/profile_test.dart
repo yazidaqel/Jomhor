@@ -6,16 +6,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/features/auth/login_screen.dart';
+import 'package:jomhor_fan/features/profile/profile_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'helpers.dart';
 
-Map<String, Object?> meJson([String? name = 'Yazid Aqel']) => {
+Map<String, Object?> meJson([String? name = 'Yazid Aqel', String locale = 'fr']) => {
   'id': 'u1',
   'phone': '+212612345678',
   'display_name': name,
-  'locale': 'fr',
+  'locale': locale,
 };
 
 /// Same shape as the app writes it (FL-7), so the launch read keeps it.
@@ -37,11 +42,12 @@ void main() {
     http.Response? logout,
     http.Response? patch,
     bool offline = false,
+    String serverLocale = 'fr',
   }) => (r) async {
     requests.add(r);
     if (offline) throw Exception('no network');
     return switch ((r.method, r.url.path)) {
-      ('GET', '/v1/fan/me') => json(meJson()),
+      ('GET', '/v1/fan/me') => json(meJson('Yazid Aqel', serverLocale)),
       ('PATCH', '/v1/fan/me') => patch ?? json(meJson()),
       ('POST', '/v1/fan/me/logout') => logout ?? http.Response('', 204),
       ('GET', '/v1/fan/tickets') => json({'server_time': '2027-02-20T12:00:00Z', 'tickets': <Object?>[]}),
@@ -73,14 +79,119 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows name, read-only phone and FR as the only active language', (tester) async {
+  testWidgets('shows name, read-only phone and the three languages, FR picked', (tester) async {
     await openProfile(tester, backend(), MemoryTokenStore('jwt'));
     expect(find.text('Yazid Aqel'), findsOneWidget);
     expect(find.text('+212612345678'), findsOneWidget);
     expect(find.descendant(of: find.byKey(const Key('profile.phone')), matching: find.byType(TextField)), findsNothing);
-    expect(find.byKey(const Key('profile.lang.fr')), findsOneWidget);
-    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'English')).enabled, isFalse);
-    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'العربية')).enabled, isFalse);
+    expect(tester.widget<ListTile>(find.byKey(const Key('profile.lang.fr'))).selected, isTrue);
+    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'العربية')).selected, isFalse);
+    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'English')).selected, isFalse);
+  });
+
+  testWidgets('the language switch applies at once, persists on the phone and PATCHes /fan/me', (tester) async {
+    SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+    await openProfile(tester, backend(), MemoryTokenStore('jwt'));
+    expect(Directionality.of(tester.element(find.byKey(const Key('profile.lang.ar')))), TextDirection.ltr);
+
+    await tester.ensureVisible(find.byKey(const Key('profile.lang.ar')));
+    await tester.tap(find.byKey(const Key('profile.lang.ar')));
+    await tester.pumpAndSettle();
+
+    // Arabic, right to left, in Darija; the pick is saved and sent to the server.
+    expect(Directionality.of(tester.element(find.byKey(const Key('profile.lang.ar')))), TextDirection.rtl);
+    expect(find.text('حسابي'), findsWidgets);
+    expect(tester.widget<ListTile>(find.byKey(const Key('profile.lang.ar'))).selected, isTrue);
+    expect(await savedLocale(SharedPreferencesAsync()), 'ar');
+    expect(jsonDecode(calls('PATCH', '/fan/me').single.body), {'locale': 'ar'});
+
+    await tester.tap(find.byKey(const Key('profile.lang.en')));
+    await tester.pumpAndSettle();
+    expect(find.text('Profile'), findsWidgets);
+    expect(await savedLocale(SharedPreferencesAsync()), 'en');
+    expect(jsonDecode(calls('PATCH', '/fan/me').last.body), {'locale': 'en'});
+  });
+
+  testWidgets('the saved language wins at startup; /fan/me with another one gets one PATCH', (tester) async {
+    seedTicketCache();
+    final c = await pumpJomhor(
+      tester,
+      backend: backend(),
+      tokens: MemoryTokenStore('jwt'),
+      keepSecureStorage: true,
+      overrides: [initialLocaleProvider.overrideWithValue('ar')],
+    );
+    c.read(routerProvider).go('/profile');
+    await tester.pumpAndSettle();
+    expect(Directionality.of(tester.element(find.byKey(const Key('profile.lang.ar')))), TextDirection.rtl);
+    // The server said fr: told once, and a second /fan/me read sends nothing more.
+    expect(
+      [for (final r in calls('PATCH', '/fan/me')) jsonDecode(r.body)],
+      [
+        {'locale': 'ar'},
+      ],
+    );
+    c.invalidate(profileProvider);
+    await tester.pumpAndSettle();
+    expect(calls('PATCH', '/fan/me'), hasLength(1));
+  });
+
+  testWidgets('no saved choice: the device language wins over the server default and is PATCHed once', (tester) async {
+    seedTicketCache();
+    final c = await pumpJomhor(
+      tester,
+      backend: backend(),
+      tokens: MemoryTokenStore('jwt'),
+      keepSecureStorage: true,
+      locale: const Locale('ar', 'MA'),
+    );
+    c.read(routerProvider).go('/profile');
+    await tester.pumpAndSettle();
+    // The server said fr (its default): the Arabic phone stays Arabic, and the server learns it.
+    expect(Directionality.of(tester.element(find.byKey(const Key('profile.lang.ar')))), TextDirection.rtl);
+    expect(
+      [for (final r in calls('PATCH', '/fan/me')) jsonDecode(r.body)],
+      [
+        {'locale': 'ar'},
+      ],
+    );
+    c.invalidate(profileProvider);
+    await tester.pumpAndSettle();
+    expect(calls('PATCH', '/fan/me'), hasLength(1));
+  });
+
+  testWidgets('the server language never changes the app; the same language sends no PATCH', (tester) async {
+    seedTicketCache();
+    final c = await pumpJomhor(
+      tester,
+      backend: backend(serverLocale: 'ar'),
+      tokens: MemoryTokenStore('jwt'),
+      keepSecureStorage: true,
+      overrides: [initialLocaleProvider.overrideWithValue('ar')],
+    );
+    c.read(routerProvider).go('/profile');
+    await tester.pumpAndSettle();
+    expect(calls('PATCH', '/fan/me'), isEmpty);
+    expect(Directionality.of(tester.element(find.byKey(const Key('profile.lang.ar')))), TextDirection.rtl);
+  });
+
+  testWidgets('a French phone with a server in ar stays French and tells the server', (tester) async {
+    seedTicketCache();
+    final c = await pumpJomhor(
+      tester,
+      backend: backend(serverLocale: 'ar'),
+      tokens: MemoryTokenStore('jwt'),
+      keepSecureStorage: true,
+    );
+    c.read(routerProvider).go('/profile');
+    await tester.pumpAndSettle();
+    expect(Directionality.of(tester.element(find.byKey(const Key('profile.lang.fr')))), TextDirection.ltr);
+    expect(
+      [for (final r in calls('PATCH', '/fan/me')) jsonDecode(r.body)],
+      [
+        {'locale': 'fr'},
+      ],
+    );
   });
 
   testWidgets('logout calls the API and wipes the token and the ticket cache even when offline', (tester) async {
@@ -181,7 +292,10 @@ void main() {
     await tester.tap(find.byKey(const Key('profile.saveName')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Prénom et nom en lettres latines, de 2 à 60 caractères.'), findsOneWidget);
+    expect(
+      find.text('Prénom et nom en lettres latines ou arabes, sans mélanger les deux, de 2 à 60 caractères.'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('profile.nameField')), findsOneWidget);
     expect(find.text('bad name'), findsNothing, reason: 'never the server message');
   });

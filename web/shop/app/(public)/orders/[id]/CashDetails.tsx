@@ -1,4 +1,4 @@
-import { fmt, type Dict } from '@/lib/i18n'
+import { fmt, ltr, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
 import { formatPayCode, type CashView } from '@/lib/orders'
 import { PinIcon } from '../../../icons'
@@ -20,7 +20,7 @@ export function CashDetails({ cash, copy: c, intl }: { cash: CashView; copy: Dic
     : c.step1Points
   const steps = [
     [c.step1Title, where],
-    [c.step2Title, fmt(c.step2, { code, amount })],
+    [c.step2Title, fmt(c.step2, { code: ltr(code), amount })],
     [c.step3Title, c.step3],
   ]
   return (

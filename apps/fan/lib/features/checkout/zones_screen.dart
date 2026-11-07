@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/core/clock.dart';
-import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
 import 'package:jomhor_fan/features/checkout/zone_pick.dart';
@@ -12,6 +11,7 @@ import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 3 · Choix de zone. Lot 1: zone list + stepper (Q22: no stadium map yet).
@@ -91,7 +91,10 @@ class _Body extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(l.pickedZone.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.textMuted)),
+                  Text(
+                    l.pickedZone.toUpperCase(),
+                    style: JomhorType.label.copyWith(color: JomhorColors.textMuted).tracked(context),
+                  ),
                   const SizedBox(height: JomhorSpace.xs),
                   Text(zone.name, style: JomhorType.h2),
                   if (zone.prices.length > 1) ...[
@@ -102,14 +105,14 @@ class _Body extends ConsumerWidget {
                       children: [
                         for (final p in zone.prices)
                           ChoiceChip(
-                            label: Text(l.dotPair(p.name, formatDh(p.priceMad))),
+                            label: Text(l.dotPair(p.name, l.dh(p.priceMad))),
                             selected: p.priceCategoryId == price.priceCategoryId,
                             onSelected: p.remaining == 0 ? null : (_) => picker.selectPrice(p, perAccountLimit: limit),
                           ),
                       ],
                     ),
                   ] else
-                    Text(formatDh(price.priceMad), style: JomhorType.body),
+                    Text(l.dh(price.priceMad), style: JomhorType.body),
                   const SizedBox(height: JomhorSpace.l),
                   Row(
                     children: [
@@ -207,7 +210,7 @@ class _Footer extends ConsumerWidget {
                 children: [
                   Text(l.total, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
                   Text(
-                    formatDh(price == null ? 0 : price.priceMad * pick.qty),
+                    l.dh(price == null ? 0 : price.priceMad * pick.qty),
                     key: const Key('zones.total'),
                     style: JomhorType.h1,
                   ),

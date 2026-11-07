@@ -22,6 +22,15 @@
 | guichet | guichet | الشباك | club point of sale (back-office POS page) |
 | collector | encaisseur | — | who took the cash: POS or a network |
 | refund | remboursement | استرجاع | — |
+| transfer | transfert | تحويل | The ticket is cancelled and a new one is issued to the recipient (new QR) |
+| re-issue | réémission | إعادة الإصدار | A new ticket for the same holder after a lost phone |
+| member | membre | منخرط | A fan who joined the organizer's club (free) |
+| member number | n° de membre | رقم المنخرط | — |
+| tier | niveau | المستوى | From events attended |
+| split pay | paiement partagé | الدفع المشترك | Each friend pays their own place |
+| campaign | campagne | حملة | — |
+| gate load | affluence | الازدحام | Fluide / Modérée / Chargée |
+| opt-in | consentement | الموافقة | — |
 
 ## Scan result codes
 
@@ -41,6 +50,8 @@
 | OVERRIDE | DÉROGATION | blue | Supervisor let the person in; reason logged |
 
 Override reasons (`override_reason`, B5 and CSV labels): `ID_CHECKED` Identité vérifiée · `DEVICE_FAULT` Panne d'appareil · `DAMAGED_TICKET` Billet abîmé · `OTHER` Autre motif.
+
+Fan app entry state (no new code): "Tu es dedans" / "راك داخل" / "You're in".
 
 ## Order statuses
 

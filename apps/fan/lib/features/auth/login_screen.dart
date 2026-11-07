@@ -4,6 +4,7 @@ import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/features/auth/login_controller.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
@@ -60,7 +61,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Entrance(
                   index: 2,
                   child: Text(
-                    codeStep ? l.loginCodeIntro(state.phone!) : l.loginPhoneIntro,
+                    codeStep ? l.loginCodeIntro(l.ltr(state.phone!)) : l.loginPhoneIntro,
                     style: JomhorType.body.copyWith(color: JomhorColors.textSecondary, fontWeight: FontWeight.w400),
                   ),
                 ),
@@ -70,6 +71,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     key: const Key('login.phone'),
                     controller: _phone,
                     keyboardType: TextInputType.phone,
+                    // A phone number reads left to right in every locale.
+                    textDirection: TextDirection.ltr,
                     autofillHints: const [AutofillHints.telephoneNumber],
                     decoration: InputDecoration(
                       labelText: l.loginPhoneLabel,

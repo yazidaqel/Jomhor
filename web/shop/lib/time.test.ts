@@ -18,3 +18,12 @@ it('countdown splits whole minutes and stops once started', () => {
 it('takes the Intl locale from the caller (the dictionary)', () => {
   expect(formatDate('2026-02-07T19:00:00Z', 'Africa/Casablanca', 'en-GB')).toBe('Sat, 7 Feb 2026')
 })
+
+it('AR (ar-MA) dates and numbers use Western digits 0-9 (DESIGN.md, Lot 4 AR/RTL)', () => {
+  const s = formatDateTime('2026-02-07T19:00:00Z', 'Africa/Casablanca', 'ar-MA')
+  expect(s).toMatch(/7/)
+  expect(s).toContain('2026')
+  expect(s).toContain('20:00')
+  expect(s).not.toMatch(/[\u0660-\u0669\u06f0-\u06f9]/) // Arabic-Indic and Extended Arabic-Indic digits
+  expect(new Intl.NumberFormat('ar-MA').format(1234)).toMatch(/^1.?234$/)
+})

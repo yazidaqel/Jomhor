@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { fmt, type Dict } from '@/lib/i18n'
+import { fmt, ltr, type Dict } from '@/lib/i18n'
 import { asciiDigits, normalizePhone } from '@/lib/phone'
 
 type Copy = Pick<Dict, 'login' | 'errors'>
@@ -124,7 +124,7 @@ function CodeStep({ copy, next, phone, onChangePhone }: { copy: Copy; next: stri
         {copy.login.codeLabel}
       </label>
       <p id="code-description" className="mt-1 text-body-small text-text-muted">
-        {fmt(resent ? copy.login.codeResent : copy.login.codeSent, { phone })}
+        {fmt(resent ? copy.login.codeResent : copy.login.codeSent, { phone: ltr(phone) })}
       </p>
       <input
         id="code"

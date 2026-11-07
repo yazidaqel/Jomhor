@@ -59,6 +59,9 @@ String generateTokens(Map<String, Object?> tokens) {
     final doc = ['${style['font']} face', if (style['transform'] case final String t) t].join(', ');
     final args = [
       'fontFamily: JomhorFonts.${style['font']! as String}',
+      // Arabic glyphs (an AR screen, or an Arabic name in any locale) fall back to the face's Arabic family
+      // (DESIGN.md Lot 4: Cairo for display, IBM Plex Sans Arabic for body); digits and codes stay Latin.
+      'fontFamilyFallback: [JomhorFonts.${style['font'] == 'display' ? 'arabicDisplay' : 'arabicBody'}]',
       'fontSize: ${style['size']! as num}',
       'fontWeight: FontWeight.w${style['weight']! as int}',
       if (style['lineHeight'] case final num h) 'height: $h',

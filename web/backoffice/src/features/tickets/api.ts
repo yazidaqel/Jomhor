@@ -21,6 +21,10 @@ export type TicketRow = {
   issued_at: string
   /** Set once the ticket was refunded: the money owed back (centimes) and whether it went back yet. */
   refund: { id: string; status: 'REQUIRED' | 'DONE'; amount_mad: number } | null
+  /** Lot 4: `ticket_no` of the ticket a transfer or re-issue made from this one (this one is then CANCELLED). */
+  transferred_to: string | null
+  /** Lot 4: `ticket_no` of the ticket this one replaced. */
+  transferred_from: string | null
 }
 export type TicketAction = 'block' | 'unblock' | 'refund'
 

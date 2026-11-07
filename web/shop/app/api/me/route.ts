@@ -1,10 +1,11 @@
 import { api, ApiError } from '@/lib/api'
+import { isLocale } from '@/lib/i18n'
 import { badBody, clearedSessionCookie, forbidden, fromError, isSameOrigin, readJson, sessionToken, unauthorized } from '@/lib/http'
 
 /**
  * The header's signed-in state (`GET /fan/me`): `{display_name}` only, never the phone or the token. No cookie → 401
  * without a backend call; a revoked or expired session → 401 and the cookie is cleared. Read by the header island in
- * the browser, so public pages never read the cookie and stay cacheable.
+ * the browser, so no page reads the session cookie for the header.
  */
 export async function GET(req: Request) {
   const token = sessionToken(req)
@@ -23,7 +24,11 @@ export async function GET(req: Request) {
   }
 }
 
-/** `PATCH /fan/me {display_name}` when the fan edits ticket 1's name on W3. Answers `{display_name}`. */
+/**
+ * `PATCH /fan/me` with `display_name` (the fan edits ticket 1's name on W3) and/or `locale` (the language switch, so
+ * WhatsApp and push copy follow it; best-effort on the client). Only those two fields are forwarded; an unknown locale
+ * is dropped. Answers `{display_name}`.
+ */
 export async function PATCH(req: Request) {
   if (!isSameOrigin(req)) return forbidden()
   const token = sessionToken(req)
@@ -31,7 +36,8 @@ export async function PATCH(req: Request) {
   const body = await readJson(req)
   if (!body) return badBody()
   try {
-    const me = await api<{ display_name?: unknown }>('/fan/me', { method: 'PATCH', json: { display_name: body.display_name }, token })
+    const json = { display_name: body.display_name, ...(isLocale(body.locale) && { locale: body.locale }) }
+    const me = await api<{ display_name?: unknown }>('/fan/me', { method: 'PATCH', json, token })
     return Response.json({ display_name: me?.display_name ?? null }, { headers: { 'cache-control': 'no-store' } })
   } catch (e) {
     return fromError(e)

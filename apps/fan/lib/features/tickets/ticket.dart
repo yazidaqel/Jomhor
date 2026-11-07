@@ -23,6 +23,8 @@ class FanTicket {
     required this.gateCodes,
     this.holderLabel,
     this.seatLabel,
+    this.transferUntil,
+    this.transferred,
     this._ticketKey,
   }) : _idBytes = _uuidBytes(id);
 
@@ -37,6 +39,17 @@ class FanTicket {
       event: TicketEvent.fromJson(j['event']! as Map<String, Object?>),
       zone: (id: zone['id']! as int, code: zone['code']! as String, name: zone['name']! as String),
       gateCodes: [for (final g in j['gate_codes']! as List<Object?>) g! as String],
+      transferUntil: switch (j['transfer_until']) {
+        final String at => DateTime.parse(at).toUtc(),
+        _ => null,
+      },
+      transferred: switch (j['transferred']) {
+        {'at': final String at} && final Map<String, Object?> x => (
+          toLabel: x['to_label'] as String?,
+          at: DateTime.parse(at).toUtc(),
+        ),
+        _ => null,
+      },
       ticketKey: _key(j['k_t']),
     );
   }
@@ -55,6 +68,12 @@ class FanTicket {
   final TicketEvent event;
   final ({int id, String code, String name}) zone;
   final List<String> gateCodes;
+
+  /// Transfers and re-issues are refused from this instant (`refund_cutoff_at − 30 min`); null = never possible.
+  final DateTime? transferUntil;
+
+  /// Set on a ticket this holder transferred away (status `CANCELLED`): "Transféré à Karim B.".
+  final Transferred? transferred;
   final Uint8List _idBytes;
   final Uint8List? _ticketKey;
 
@@ -68,10 +87,39 @@ class FanTicket {
     null => null,
   };
 
+  /// This ticket once given away: `CANCELLED`, its K_t dropped, [to] recorded. Used between the 201 and the refetch.
+  FanTicket transferredAway(Transferred? to) => FanTicket(
+    id: id,
+    ticketNo: ticketNo,
+    status: 'CANCELLED',
+    event: event,
+    zone: zone,
+    gateCodes: gateCodes,
+    holderLabel: holderLabel,
+    seatLabel: seatLabel,
+    transferUntil: transferUntil,
+    transferred: to,
+  );
+
+  /// Why the fan cannot transfer or re-issue this ticket at [serverNow] (docs/04-api.md transfer row), or null.
+  /// An admitted ticket is only known from the server's refusal (`transfer.dart` `blockOf`).
+  TransferBlock? transferBlock(DateTime serverNow) => switch (transferUntil) {
+    _ when status != 'VALID' => TransferBlock.notValid,
+    final until? when serverNow.isBefore(until) => null,
+    _ => TransferBlock.closed,
+  };
+
   /// Past, as the API orders them: the event is CLOSED or started more than 12 h ago.
   bool isPast(DateTime serverNow) =>
       event.status == 'CLOSED' || !serverNow.isBefore(event.startsAt.add(const Duration(hours: 12)));
 }
+
+/// The `transferred` field of a ticket the holder gave away.
+typedef Transferred = ({String? toLabel, DateTime at});
+
+/// Why the Transférer action is off: the ticket is not `VALID`, it was admitted at a gate, or the window is closed
+/// (after `transfer_until`, or no cutoff on the event).
+enum TransferBlock { notValid, admitted, closed }
 
 class TicketEvent {
   new({

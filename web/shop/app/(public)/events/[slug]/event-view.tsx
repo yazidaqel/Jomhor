@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ViewTransition } from 'react'
 import { saleState, type ShopEventDetail } from '@/lib/events'
-import { defaultLocale, fmt, getDictionary } from '@/lib/i18n'
+import { fmt, type Dict } from '@/lib/i18n'
 import { countdown, formatDateTime, formatTime } from '@/lib/time'
 import { Crest, Watermark } from '../../../brand'
 import { BackIcon, CalendarIcon, CardIcon, PinIcon, QrIcon, TicketIcon } from '../../../icons'
@@ -9,12 +9,11 @@ import { CountdownTiles } from '../../countdown'
 import { kicker, SaleChip, saleLabel } from '../../sale'
 import { ZonePicker } from './ZonePicker'
 
-const d = getDictionary(defaultLocale)
 const chip = 'flex items-center gap-2 rounded-chip border border-border bg-ground px-3 py-2 text-sm'
 const rise = 'motion-safe:animate-rise stagger'
 
 /** W2 · Page événement: hero (server) + zone grid and summary (client, ZonePicker). */
-export function EventView({ e, now }: { e: ShopEventDetail; now: number }) {
+export function EventView({ e, now, d }: { e: ShopEventDetail; now: number; d: Dict }) {
   const state = saleState(e, now)
   const label = kicker(d, e)
   const venue = e.venue.city ? `${e.venue.name}, ${e.venue.city}` : e.venue.name

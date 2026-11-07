@@ -2,7 +2,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { defaultLocale, getDictionary } from '@/lib/i18n'
+import { defaultLocale, getDictionary, ltr } from '@/lib/i18n'
 import type { PendingCashOrder } from '@/lib/orders'
 import { PendingOrders } from './PendingOrders'
 
@@ -53,7 +53,7 @@ it('one row per pending cash order: event, code, amount, deadline in the venue z
   expect(first.querySelector('h3')!.textContent).toBe('Match o-1')
   expect(first.querySelector('[data-pay-code]')!.textContent).toBe('JMH 4F7K 29')
   expect(first.querySelector('[data-pay-code]')!.getAttribute('dir')).toBe('ltr')
-  expect(first.querySelector('[data-amount]')!.textContent).toBe('150,50\u00a0DH')
+  expect(first.querySelector('[data-amount]')!.textContent).toBe(ltr('150,50\u00a0DH'))
   // 23:30 UTC is 00:30 the next day in Casablanca (UTC+1 outside Ramadan).
   expect(first.textContent).toContain('À payer avant Sam. 7 févr. 2026 · 00:30')
 })

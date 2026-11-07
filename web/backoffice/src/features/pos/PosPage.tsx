@@ -340,6 +340,7 @@ function Places({ eventId, form }: { eventId: string; form: UseFormReturn<SaleVa
                     <Input
                       id={`${id}-name`}
                       autoComplete="off"
+                      dir="auto"
                       aria-invalid={!!err?.name}
                       aria-describedby={err?.name ? `${id}-name-error` : undefined}
                       {...form.register(`holders.${i}.name`)}
@@ -609,7 +610,7 @@ function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
             <dd className="mt-1 flex flex-wrap gap-1.5">
               {order.holders.map((h, i) => (
                 <Badge key={i} variant="secondary">
-                  {h}
+                  <bdi>{h}</bdi>
                 </Badge>
               ))}
             </dd>

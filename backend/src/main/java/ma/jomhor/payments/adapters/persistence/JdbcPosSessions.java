@@ -29,7 +29,9 @@ class JdbcPosSessions implements PosSessions {
             ) as orders,
                    (select count(*) from tickets t where t.organizer_id = p.organizer_id
                       and t.order_id in (select pm.order_id\s""" + PAID + """
-            )) as tickets,
+            )
+                      and not exists (select 1 from ticket_transfers tt
+                                      where tt.organizer_id = t.organizer_id and tt.new_ticket_id = t.id)) as tickets,
                    (select count(*) from audit_log a where a.organizer_id = p.organizer_id and a.action = 'pos.print'
                       and a.target = p.id::text) as prints,
                    (select coalesce(sum(pm.amount_mad), 0)\s""" + PAID + """

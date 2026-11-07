@@ -50,6 +50,10 @@ class AuthRepository {
   /// `PATCH /fan/me`: the server normalises the name (§Holder names) and answers the stored user.
   Future<FanUser> setDisplayName(String name) async =>
       FanUser.fromJson((await _api.patch('/fan/me', body: {'display_name': name}))! as Map<String, Object?>);
+
+  /// `PATCH /fan/me {locale}`: `fr`, `ar` or `en`, the language of the fan's WhatsApp and push messages.
+  Future<FanUser> setLocale(String locale) async =>
+      FanUser.fromJson((await _api.patch('/fan/me', body: {'locale': locale}))! as Map<String, Object?>);
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) => AuthRepository(ref.watch(apiClientProvider)));

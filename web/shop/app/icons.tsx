@@ -114,3 +114,14 @@ export const CopyIcon = ({ className }: P) =>
       <path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" />
     </>,
   )
+export const GlobeIcon = ({ className }: P) =>
+  svg(
+    className,
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z" />
+    </>,
+  )
+/** A ticket handed on: an arrow leaving a box (mirrors in RTL). */
+export const TransferIcon = ({ className }: P) =>
+  svg(`rtl:-scale-x-100 ${className ?? 'size-5'}`, <path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" />)

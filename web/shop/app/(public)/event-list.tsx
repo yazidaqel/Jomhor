@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ViewTransition } from 'react'
 import { eventSlug, saleState, type ShopEvent } from '@/lib/events'
-import { defaultLocale, fmt, getDictionary } from '@/lib/i18n'
+import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
 import { countdown, formatDateTime } from '@/lib/time'
 import { Crest, Watermark } from '../brand'
@@ -9,18 +9,17 @@ import { ArrowIcon, CalendarIcon, CardIcon, PinIcon, QrIcon, TicketIcon } from '
 import { CountdownTiles } from './countdown'
 import { kicker, SaleChip } from './sale'
 
-const d = getDictionary(defaultLocale)
 const rise = 'motion-safe:animate-rise stagger'
 const at = (i: number) => ({ '--i': i }) as React.CSSProperties
 const chip = 'flex items-center gap-2 rounded-chip border border-border bg-ground px-3 py-2 text-sm'
 
 /** W1 body: the next event as the hero, the others as cards (each to its canonical W2 slug), then how it works. */
-export function EventList({ events, now }: { events: ShopEvent[]; now: number }) {
+export function EventList({ events, now, d }: { events: ShopEvent[]; now: number; d: Dict }) {
   const [next, ...more] = events
   return (
     <main>
       {next ? (
-        <Featured e={next} now={now} />
+        <Featured e={next} now={now} d={d} />
       ) : (
         <section className="mx-auto w-full max-w-[1180px] px-6 pt-12 pb-8">
           <h1 className="font-display text-hero uppercase">{d.home.title}</h1>
@@ -35,18 +34,18 @@ export function EventList({ events, now }: { events: ShopEvent[]; now: number })
           <ul className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {more.map((e, i) => (
               <li key={e.id} className={rise} style={at(i)}>
-                <EventCard e={e} now={now} />
+                <EventCard e={e} now={now} d={d} />
               </li>
             ))}
           </ul>
         </section>
       )}
-      <How />
+      <How d={d} />
     </main>
   )
 }
 
-function Featured({ e, now }: { e: ShopEvent; now: number }) {
+function Featured({ e, now, d }: { e: ShopEvent; now: number; d: Dict }) {
   const label = kicker(d, e)
   const href = `/events/${eventSlug(e)}`
   const state = saleState(e, now)
@@ -109,7 +108,7 @@ function Featured({ e, now }: { e: ShopEvent; now: number }) {
   )
 }
 
-function EventCard({ e, now }: { e: ShopEvent; now: number }) {
+function EventCard({ e, now, d }: { e: ShopEvent; now: number; d: Dict }) {
   const label = kicker(d, e)
   return (
     <Link
@@ -141,7 +140,7 @@ function EventCard({ e, now }: { e: ShopEvent; now: number }) {
 }
 
 /** Three steps from zone to gate: what the fan gets, in the order they get it. */
-function How() {
+function How({ d }: { d: Dict }) {
   const steps = [
     [TicketIcon, d.home.how1Title, d.home.how1],
     [CardIcon, d.home.how2Title, d.home.how2],

@@ -189,11 +189,11 @@ abstract class AppLocalizations {
   /// **'Renvoyer le code'**
   String get loginResend;
 
-  /// No description provided for @errorPhoneInvalid.
+  /// The example number (06 12 34 56 78), filled by the app: a left-to-right isolate in AR.
   ///
   /// In fr, this message translates to:
-  /// **'Ce numéro ne semble pas marocain. Essaie par exemple 06 12 34 56 78.'**
-  String get errorPhoneInvalid;
+  /// **'Ce numéro ne semble pas marocain. Essaie par exemple {example}.'**
+  String errorPhoneInvalid(String example);
 
   /// No description provided for @errorOtpInvalid.
   ///
@@ -546,7 +546,7 @@ abstract class AppLocalizations {
   /// No description provided for @holderNameError.
   ///
   /// In fr, this message translates to:
-  /// **'Prénom et nom en lettres latines, de 2 à 60 caractères.'**
+  /// **'Prénom et nom en lettres latines ou arabes, sans mélanger les deux, de 2 à 60 caractères.'**
   String get holderNameError;
 
   /// No description provided for @holderPhoneLabel.
@@ -561,11 +561,11 @@ abstract class AppLocalizations {
   /// **'Il reçoit son billet sur WhatsApp et dans l\'app. Sans numéro, le billet reste chez toi.'**
   String get holderPhoneHelp;
 
-  /// No description provided for @holderPhoneError.
+  /// The example number (06 12 34 56 78), filled by the app: a left-to-right isolate in AR.
   ///
   /// In fr, this message translates to:
-  /// **'Numéro marocain invalide. Essaie 06 12 34 56 78.'**
-  String get holderPhoneError;
+  /// **'Numéro marocain invalide. Essaie {example}.'**
+  String holderPhoneError(String example);
 
   /// No description provided for @methodTitle.
   ///
@@ -1346,6 +1346,228 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Propulsé par Jomhor'**
   String get poweredBy;
+
+  /// Screen 5 action: opens screen 8, the transfer sheet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Transférer'**
+  String get transferAction;
+
+  /// Screen 8 eyebrow, shown uppercase in FR and EN.
+  ///
+  /// In fr, this message translates to:
+  /// **'Transférer ton billet'**
+  String get transferEyebrow;
+
+  /// No description provided for @transferTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'À qui le donnes-tu ?'**
+  String get transferTitle;
+
+  /// when = transfer_until in the venue's zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Possible jusqu\'au {when}'**
+  String transferUntil(String when);
+
+  /// No description provided for @transferPhone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Numéro WhatsApp'**
+  String get transferPhone;
+
+  /// No description provided for @transferPhoneHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le nouveau billet arrive sur ce numéro, dans l\'app et sur WhatsApp.'**
+  String get transferPhoneHint;
+
+  /// No description provided for @transferName.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nom et prénom'**
+  String get transferName;
+
+  /// No description provided for @transferNameHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le nouveau billet sera à ce nom.'**
+  String get transferNameHint;
+
+  /// No description provided for @transferNext.
+  ///
+  /// In fr, this message translates to:
+  /// **'Continuer'**
+  String get transferNext;
+
+  /// No description provided for @transferConfirmTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Confirmer le transfert'**
+  String get transferConfirmTitle;
+
+  /// Confirm step: label of the recipient row.
+  ///
+  /// In fr, this message translates to:
+  /// **'À'**
+  String get transferTo;
+
+  /// No description provided for @transferTicket.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet'**
+  String get transferTicket;
+
+  /// No description provided for @transferWarning.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ton QR ne marchera plus. {name} reçoit un nouveau billet.'**
+  String transferWarning(String name);
+
+  /// No description provided for @transferFinal.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un transfert est définitif : tu ne pourras pas l\'annuler.'**
+  String get transferFinal;
+
+  /// No description provided for @transferEdit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Modifier'**
+  String get transferEdit;
+
+  /// Hold-to-confirm button: the transfer is sent once the fill is complete (800 ms).
+  ///
+  /// In fr, this message translates to:
+  /// **'Maintiens pour transférer'**
+  String get transferHold;
+
+  /// Screen reader hint of the hold-to-confirm button.
+  ///
+  /// In fr, this message translates to:
+  /// **'Garde le doigt appuyé jusqu\'à ce que la barre soit pleine.'**
+  String get transferHoldHint;
+
+  /// No description provided for @transferPending.
+  ///
+  /// In fr, this message translates to:
+  /// **'Transfert en cours…'**
+  String get transferPending;
+
+  /// No description provided for @transferDone.
+  ///
+  /// In fr, this message translates to:
+  /// **'{name} reçoit son billet dans l\'app et sur WhatsApp. Ton ancien QR ne marche plus.'**
+  String transferDone(String name);
+
+  /// 422 SELF on to_phone.
+  ///
+  /// In fr, this message translates to:
+  /// **'C\'est ton numéro : ce billet est déjà à toi.'**
+  String get transferSelf;
+
+  /// No description provided for @transferNotValid.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce billet n\'est plus valide : il ne peut pas être transféré.'**
+  String get transferNotValid;
+
+  /// 409 TICKET_NOT_VALID with reason ADMITTED.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce billet est déjà passé à la porte : il ne peut plus être transféré.'**
+  String get transferAdmitted;
+
+  /// Network failure or 5xx: the transfer may have happened; the list is fetched again.
+  ///
+  /// In fr, this message translates to:
+  /// **'On n\'a pas pu confirmer le transfert. Tes billets se rechargent : vérifie-les avant de réessayer.'**
+  String get transferUnknown;
+
+  /// No description provided for @transferClosed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Transferts fermés {lead} avant le début'**
+  String transferClosed(String lead);
+
+  /// No description provided for @transferUnavailable.
+  ///
+  /// In fr, this message translates to:
+  /// **'Pas de transfert possible pour ce billet'**
+  String get transferUnavailable;
+
+  /// No description provided for @durationHours.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n} h'**
+  String durationHours(int n);
+
+  /// No description provided for @durationMinutes.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n} min'**
+  String durationMinutes(int n);
+
+  /// Billets: the muted row of a ticket given away.
+  ///
+  /// In fr, this message translates to:
+  /// **'Transféré à {name} · {date}'**
+  String transferRow(String name, String date);
+
+  /// No description provided for @transferRowNoName.
+  ///
+  /// In fr, this message translates to:
+  /// **'Transféré · {date}'**
+  String transferRowNoName(String date);
+
+  /// No description provided for @profileLostPhone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Téléphone perdu ?'**
+  String get profileLostPhone;
+
+  /// No description provided for @profileLostPhoneHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un nouveau QR pour tes billets à venir'**
+  String get profileLostPhoneHint;
+
+  /// No description provided for @lostPhoneBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tes billets à venir reçoivent un nouveau QR sur ce téléphone. Ceux du téléphone perdu ne passeront plus.'**
+  String get lostPhoneBody;
+
+  /// Re-issue revokes the caller's other sessions (docs/04-api.md reissue row).
+  ///
+  /// In fr, this message translates to:
+  /// **'Le téléphone perdu sera déconnecté : il ne pourra pas recevoir tes nouveaux billets. Ce téléphone-ci reste connecté.'**
+  String get lostPhoneSignedOut;
+
+  /// No description provided for @lostPhoneNone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun billet à venir ne peut recevoir de nouveau QR.'**
+  String get lostPhoneNone;
+
+  /// No description provided for @lostPhoneConfirm.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nouveaux QR'**
+  String get lostPhoneConfirm;
+
+  /// No description provided for @lostPhoneDone.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{Nouveau QR prêt pour 1 billet.} other{Nouveaux QR prêts pour {count} billets.}}'**
+  String lostPhoneDone(int count);
+
+  /// No description provided for @lostPhoneFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Certains billets n\'ont pas reçu de nouveau QR. Vérifie tes billets.'**
+  String get lostPhoneFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

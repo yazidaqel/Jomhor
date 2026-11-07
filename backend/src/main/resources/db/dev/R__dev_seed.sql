@@ -55,3 +55,34 @@ from (values ('P1', 'HONNEUR'), ('P2', 'HONNEUR'), ('P3', 'NORD'), ('P3', 'EST')
 join gates g on g.venue_id = 'a7a5fc00-0000-4000-8000-000000000301' and g.code = m.gate_code
 join zones z on z.venue_id = 'a7a5fc00-0000-4000-8000-000000000301' and z.code = m.zone_code
 on conflict do nothing;
+
+-- Demo accounts (docs/TESTING.md). Test phones, not real subscribers. With JOMHOR_DEV_FIXED_OTP set (scripts/dev.ps1)
+-- every phone logs in with that code; the real code is still printed by LogOtpSender.
+insert into users (id, phone_e164, display_name) values
+  ('a7a5fc00-0000-4000-8000-000000000102', '+212600000002', 'Caissier Dev'),
+  ('a7a5fc00-0000-4000-8000-000000000103', '+212600000003', 'Ops Dev'),
+  ('a7a5fc00-0000-4000-8000-000000000104', '+212600000004', 'Finance Dev'),
+  ('a7a5fc00-0000-4000-8000-000000000110', '+212600000010', 'Yassine Benali'),
+  ('a7a5fc00-0000-4000-8000-000000000111', '+212600000011', 'Salma El Idrissi')
+on conflict do nothing;
+
+insert into staff (id, organizer_id, user_id, name, role) values
+  ('a7a5fc00-0000-4000-8000-000000000202', 'a7a5fc00-0000-4000-8000-000000000001',
+   'a7a5fc00-0000-4000-8000-000000000102', 'Caissier Dev', 'CASHIER'),
+  ('a7a5fc00-0000-4000-8000-000000000203', 'a7a5fc00-0000-4000-8000-000000000001',
+   'a7a5fc00-0000-4000-8000-000000000103', 'Ops Dev', 'OPS'),
+  ('a7a5fc00-0000-4000-8000-000000000204', 'a7a5fc00-0000-4000-8000-000000000001',
+   'a7a5fc00-0000-4000-8000-000000000104', 'Finance Dev', 'FINANCE')
+on conflict do nothing;
+
+-- PIN-only scanner staff (no account). Verifiers (docs/04-api.md §Gate PINs) of PIN 1234 (GATE) and 5678
+-- (SUPERVISOR), fixed salts: dev PINs, a UI lock only.
+insert into staff (id, organizer_id, name, role, pin_hash) values
+  ('a7a5fc00-0000-4000-8000-000000000205', 'a7a5fc00-0000-4000-8000-000000000001', 'Agent Porte', 'GATE',
+   'pbkdf2-sha256$10000$AAECAwQFBgcICQoLDA0ODw$keoFm64DM6KWn8jM18d4Ud2kP1rblrruokamJM30iew'),
+  ('a7a5fc00-0000-4000-8000-000000000206', 'a7a5fc00-0000-4000-8000-000000000001', 'Chef de porte', 'SUPERVISOR',
+   'pbkdf2-sha256$10000$EBESExQVFhcYGRobHB0eHw$Wzdm_KJN_gc6hqVgmslgQuahKrWpsf0rtnBoe55hD6I')
+on conflict do nothing;
+
+-- Events, prices and the demo fan's tickets need K_e (encrypted in Java) and keep their times relative to now:
+-- DevSeeder writes them at every dev startup.

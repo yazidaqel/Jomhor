@@ -5,6 +5,10 @@ import com.google.zxing.WriterException;
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import com.google.zxing.qrcode.encoder.ByteMatrix;
 import com.google.zxing.qrcode.encoder.Encoder;
+import com.ibm.icu.text.ArabicShaping;
+import com.ibm.icu.text.ArabicShapingException;
+import com.ibm.icu.text.Bidi;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -14,18 +18,23 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
+import ma.jomhor.common.HolderNames;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 
 /**
  * The printable ticket (docs/04-api.md GET /fan/tickets/{id}/pdf): an A4 page with the details and a dashed
  * wallet-size (85.6 x 54 mm) cut-out holding the static v1 QR (version 4, ECC M, 4-module quiet zone) with the
- * ticket number under it. Holder label only: no full name, no phone. Standard fonts (WinAnsi): Latin text only.
+ * ticket number under it. Holder label only: no full name, no phone. Latin lines use the standard fonts (WinAnsi);
+ * a line with Arabic script is shaped (ICU ArabicShaping), put in visual order (ICU Bidi) and drawn with the embedded
+ * IBM Plex Sans Arabic (OFL, resources/fonts), subset. The fixed labels stay French (04 §Holder names, PDF).
  */
 public final class TicketPdf {
 
@@ -46,10 +55,32 @@ public final class TicketPdf {
     private static final int QUIET = 4;
     private static final float GREY = 0.42f;
 
+    private static final Pattern ARABIC = Pattern.compile("\\p{IsArabic}");
+    private static final byte[] ARABIC_REGULAR = font("IBMPlexSansArabic-Regular.ttf");
+    private static final byte[] ARABIC_BOLD = font("IBMPlexSansArabic-Bold.ttf");
+    /** First-strong isolate and its end: the holder label keeps its own direction inside the French line. */
+    private static final String FSI = Character.toString(0x2068);
+    private static final String PDI = Character.toString(0x2069);
+
     private final PDFont regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
     private final PDFont bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
+    private final PDDocument doc = new PDDocument();
+    /** Loaded on the first Arabic line, so a Latin-only ticket embeds no font. */
+    private PDFont arabicRegular;
+    private PDFont arabicBold;
 
     private TicketPdf() {}
+
+    private static byte[] font(String file) {
+        try (var in = TicketPdf.class.getResourceAsStream("/fonts/" + file)) {
+            if (in == null) {
+                throw new IllegalStateException("Font missing: " + file);
+            }
+            return in.readAllBytes();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 
     /** French date and time of {@code startsAt} in the venue's IANA zone, e.g. "sam. 19 d\u00e9c. 2026 \u00b7 19:00". */
     public static String when(Instant startsAt, String timezone) {
@@ -63,8 +94,8 @@ public final class TicketPdf {
     private byte[] draw(Content c) {
         String when = when(c.startsAt(), c.timezone());
         String gates = c.gateCodes().isEmpty() ? null : "Portes " + String.join(", ", c.gateCodes());
-        String holder = c.holderLabel() == null ? null : "Titulaire " + c.holderLabel();
-        try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        String holder = c.holderLabel() == null ? null : "Titulaire " + FSI + c.holderLabel() + PDI;
+        try (doc; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             PDPage page = new PDPage(PDRectangle.A4);
             doc.addPage(page);
             float pageW = page.getMediaBox().getWidth();
@@ -168,30 +199,62 @@ public final class TicketPdf {
         s.fill();
     }
 
-    /** One line, cut with "..." to fit {@code maxWidth}; characters the standard font can't encode become "?". */
-    private static void text(PDPageContentStream s, PDFont font, float size, float x, float y, String text,
-                             float maxWidth, float grey) throws IOException {
-        String line = winAnsi(font, text);
-        if (width(font, size, line) > maxWidth) {
-            while (!line.isEmpty() && width(font, size, line + "...") > maxWidth) {
+    /**
+     * One line, cut with "..." to fit {@code maxWidth} (cut in logical order, before shaping); characters the font
+     * can't encode become "?". A line with Arabic script takes the embedded font of the same weight.
+     */
+    private void text(PDPageContentStream s, PDFont latin, float size, float x, float y, String text,
+                      float maxWidth, float grey) throws IOException {
+        PDFont font = ARABIC.matcher(text).find() ? arabic(latin) : latin;
+        String line = text;
+        String shown = encodable(font, visual(line));
+        if (width(font, size, shown) > maxWidth) {
+            do {
                 line = line.substring(0, line.length() - 1);
-            }
-            line = line.stripTrailing() + "...";
+                shown = encodable(font, visual(line.stripTrailing() + "..."));
+            } while (!line.isEmpty() && width(font, size, shown) > maxWidth);
         }
         s.setNonStrokingColor(grey, grey, grey);
         s.beginText();
         s.setFont(font, size);
         s.newLineAtOffset(x, y);
-        s.showText(line);
+        s.showText(shown);
         s.endText();
+    }
+
+    private PDFont arabic(PDFont latin) throws IOException {
+        if (arabicRegular == null) {
+            arabicRegular = PDType0Font.load(doc, new ByteArrayInputStream(ARABIC_REGULAR), true);
+            arabicBold = PDType0Font.load(doc, new ByteArrayInputStream(ARABIC_BOLD), true);
+        }
+        return latin == bold ? arabicBold : arabicRegular;
+    }
+
+    /**
+     * Logical to drawn text: Arabic letters to their joined presentation forms (lam-alef ligatures included), then
+     * the bidi visual order of the line (first strong character decides its direction), controls removed. Latin
+     * text comes back unchanged, minus the isolate controls. Harakat and tatweel are dropped first: ICU would turn
+     * a mark into a spacing form drawn between two letters, off its own.
+     */
+    // ponytail: ICU presentation forms + PDFBox, no OpenType layout: harakat are dropped, and organizer text with
+    // letters that have no presentation form draws unjoined (no glyph at all: "?"). HarfBuzz, or java.awt
+    // GlyphVector layout drawn as outlines, if organizers need full Arabic typography.
+    static String visual(String logical) {
+        try {
+            String shaped = new ArabicShaping(ArabicShaping.LETTERS_SHAPE | ArabicShaping.TEXT_DIRECTION_LOGICAL)
+                    .shape(HolderNames.withoutArabicMarks(logical));
+            return new Bidi(shaped, Bidi.LEVEL_DEFAULT_LTR)
+                    .writeReordered(Bidi.DO_MIRRORING | Bidi.REMOVE_BIDI_CONTROLS);
+        } catch (ArabicShapingException e) {
+            throw new IllegalStateException("Arabic text not shaped", e);
+        }
     }
 
     private static float width(PDFont font, float size, String text) throws IOException {
         return font.getStringWidth(text) / 1000 * size;
     }
 
-    // ponytail: Latin only (plan Q16); Arabic titles and names need an embedded font and shaping (Lot 4).
-    private static String winAnsi(PDFont font, String text) {
+    private static String encodable(PDFont font, String text) {
         StringBuilder out = new StringBuilder();
         text.codePoints().forEach(cp -> {
             String ch = Character.toString(cp);

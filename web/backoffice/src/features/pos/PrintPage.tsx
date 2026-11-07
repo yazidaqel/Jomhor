@@ -92,7 +92,9 @@ function Slip({ data, ticket }: { data: PrintData; ticket: PrintTicket }) {
         </div>
         <div className="col-span-2 mt-[2mm]">
           <dt className="text-[8pt] font-bold uppercase">{t('pos.print.holder')}</dt>
-          <dd className="text-[12pt] font-bold">{ticket.holder_label}</dd>
+          <dd className="text-[12pt] font-bold">
+            <bdi>{ticket.holder_label}</bdi>
+          </dd>
         </div>
       </dl>
       <div className="mt-[3mm] flex flex-col items-center">

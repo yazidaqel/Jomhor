@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/core/clock.dart';
-import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
@@ -12,6 +11,7 @@ import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
@@ -79,7 +79,7 @@ class CashOrder extends ConsumerWidget {
                   key: const ValueKey('cash.event'),
                   padding: const EdgeInsets.only(top: JomhorSpace.xs),
                   child: Text(
-                    '${event.title} · ${venueWhen(event.startsAt, event.timezone, l.localeName)}',
+                    l.dotPair(event.title, venueWhen(event.startsAt, event.timezone, l.localeName)),
                     style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
                   ),
                 ),
@@ -130,7 +130,8 @@ class CashOrder extends ConsumerWidget {
         const SizedBox(height: JomhorSpace.xl),
         SectionLabel(l.cashStepsTitle),
         _Step(n: 1, title: l.cashStep1Title, body: where.isEmpty ? null : where),
-        if (cash != null) _Step(n: 2, title: l.cashStep2Title, body: '${cash.display} · ${formatDh(cash.amountMad)}'),
+        if (cash != null)
+          _Step(n: 2, title: l.cashStep2Title, body: l.dotPair(l.ltr(cash.display), l.dh(cash.amountMad))),
         _Step(n: cash == null ? 2 : 3, title: l.cashStep3Title, body: l.cashStep3Body),
         if (hosted.isNotEmpty) ...[
           const SizedBox(height: JomhorSpace.l),
@@ -220,7 +221,10 @@ class _CodeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.cashCodeLabel.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.ticketMuted)),
+          Text(
+            l.cashCodeLabel.toUpperCase(),
+            style: JomhorType.label.copyWith(color: JomhorColors.ticketMuted).tracked(context),
+          ),
           const SizedBox(height: JomhorSpace.s),
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -234,7 +238,7 @@ class _CodeCard extends StatelessWidget {
           ),
           const SizedBox(height: JomhorSpace.s),
           Text(
-            l.cashExactAmount(formatDh(cash.amountMad)),
+            l.cashExactAmount(l.dh(cash.amountMad)),
             key: const Key('cash.amount'),
             style: JomhorType.bodySmall.copyWith(color: JomhorColors.ticketMuted),
           ),
@@ -271,30 +275,34 @@ class _Where extends StatelessWidget {
   final List<String> lines;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: const BoxDecoration(
-      color: JomhorColors.surface,
-      border: Border.fromBorderSide(BorderSide(color: JomhorColors.border)),
-      borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control)),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: JomhorColors.accent),
-        const SizedBox(width: JomhorSpace.m),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
-              for (final line in lines) Text(line, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
-            ],
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: const BoxDecoration(
+        color: JomhorColors.surface,
+        border: Border.fromBorderSide(BorderSide(color: JomhorColors.border)),
+        borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: JomhorColors.accent),
+          const SizedBox(width: JomhorSpace.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.isolate(title), style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                for (final line in lines)
+                  Text(l.isolate(line), style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 /// A numbered step: accent disc, title, detail.

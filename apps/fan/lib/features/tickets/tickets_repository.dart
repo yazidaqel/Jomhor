@@ -22,9 +22,21 @@ class TicketCache {
   static const _key = 'fan_tickets_cache';
   final FlutterSecureStorage _storage;
 
+  /// Storage calls run one after the other, in the order they are made, whatever the plugin does underneath: a
+  /// read made after a write sees that write ([Tickets.retire] relies on it).
+  Future<void> _tail = Future<void>.value();
+
+  Future<T> _serial<T>(Future<T> Function() op) {
+    final next = _tail.then((_) => op());
+    _tail = next.then<void>((_) {}, onError: (Object _) {});
+    return next;
+  }
+
   /// The saved answer, or null when there is none. Data that does not decode is dropped; a storage failure
   /// (PlatformException) is thrown, and the saved tickets are kept.
-  Future<({Map<String, Object?> response, Duration offset})?> read() async {
+  Future<({Map<String, Object?> response, Duration offset})?> read() => _serial(_read);
+
+  Future<({Map<String, Object?> response, Duration offset})?> _read() async {
     final raw = await _storage.read(key: _key);
     if (raw == null) return null;
     try {
@@ -36,15 +48,16 @@ class TicketCache {
     } on Object catch (e) {
       // Only a decode error drops the data: bad JSON, or JSON of another shape (a failed cast is a TypeError).
       if (e is! FormatException && e is! TypeError) rethrow;
-      await wipe();
+      await _storage.delete(key: _key);
       return null;
     }
   }
 
-  Future<void> write(Map<String, Object?> response, Duration offset) =>
-      _storage.write(key: _key, value: jsonEncode({'offset_ms': offset.inMilliseconds, 'response': response}));
+  Future<void> write(Map<String, Object?> response, Duration offset) => _serial(
+    () => _storage.write(key: _key, value: jsonEncode({'offset_ms': offset.inMilliseconds, 'response': response})),
+  );
 
-  Future<void> wipe() => _storage.delete(key: _key);
+  Future<void> wipe() => _serial(() => _storage.delete(key: _key));
 }
 
 final ticketCacheProvider = Provider<TicketCache>((ref) => TicketCache());
@@ -62,6 +75,10 @@ class TicketsState {
 /// and by the app on resume (which also re-anchors the server clock). Screen 5 only reads: it never calls [refresh].
 class Tickets extends AsyncNotifier<TicketsState> {
   Future<void>? _refreshing;
+
+  /// Bumped by [retire]: an answer to a request sent before a transfer or re-issue may still carry the old K_t,
+  /// so it is dropped instead of saved.
+  var _generation = 0;
 
   @override
   Future<TicketsState> build() async {
@@ -108,9 +125,77 @@ class Tickets extends AsyncNotifier<TicketsState> {
   }
 
   /// One request at a time. Errors are kept in the state, never thrown: the saved tickets stay on screen.
-  Future<void> refresh() => _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+  /// [force]: after a POST that may have changed the list (a transfer or re-issue whose outcome is unknown), a
+  /// request already running was sent before it and may carry an old K_t: its answer is dropped and a new one sent.
+  Future<void> refresh({bool force = false}) {
+    if (force) _forget();
+    if (_refreshing case final running?) return running;
+    late final Future<void> started;
+    started = _refresh(_generation).whenComplete(() {
+      if (identical(_refreshing, started)) _refreshing = null;
+    });
+    return _refreshing = started;
+  }
 
-  Future<void> _refresh() async {
+  /// After a 201 transfer ([transferred]: ticket id → its `transferred`) or re-issue ([reissued], no longer listed
+  /// by the API): the old K_t leaves the saved answer and the screen at once, then the list is fetched again with
+  /// keys. The refetch may fail offline; the old key is already gone by then.
+  Future<void> retire({Map<String, Transferred> transferred = const {}, Set<String> reissued = const {}}) async {
+    _forget();
+    final cache = ref.read(ticketCacheProvider);
+    try {
+      if (await cache.read() case final saved?) {
+        await cache.write({
+          ...saved.response,
+          'tickets': [
+            for (final t in (saved.response['tickets']! as List<Object?>).cast<Map<String, Object?>>())
+              if (!reissued.contains(t['id']))
+                if (transferred[t['id']] case final to?)
+                  {
+                    ...t,
+                    'status': 'CANCELLED',
+                    'transferred': {'to_label': to.toLabel, 'at': to.at.toIso8601String()},
+                  }..remove('k_t')
+                else
+                  t,
+          ],
+        }, saved.offset);
+      }
+    } on Object {
+      // Could not rewrite it: no saved answer rather than one with a dead K_t; the refetch saves a new one.
+      try {
+        await cache.wipe();
+      } on Object {
+        // Storage is failing altogether; the refetch below overwrites it when it can.
+      }
+    }
+    if (!ref.mounted) return;
+    if (state.value case TicketsState(snapshot: final s?, :final error)) {
+      state = AsyncData(
+        TicketsState(
+          snapshot: TicketsSnapshot(
+            tickets: [
+              for (final t in s.tickets)
+                if (!reissued.contains(t.id))
+                  if (transferred[t.id] case final to?) t.transferredAway(to) else t,
+            ],
+            offset: s.offset,
+            clock: s.clock,
+          ),
+          error: error,
+        ),
+      );
+    }
+    unawaited(refresh());
+  }
+
+  /// The running request predates a change: its answer is dropped, and the next refresh sends a new one.
+  void _forget() {
+    _generation++;
+    _refreshing = null;
+  }
+
+  Future<void> _refresh(int generation) async {
     final before = await future;
     if (!ref.mounted || !ref.read(sessionProvider)) return;
     final tokens = ref.read(tokenStoreProvider);
@@ -125,15 +210,21 @@ class Tickets extends AsyncNotifier<TicketsState> {
         _ => res.date ?? deviceNow,
       };
       final snapshot = TicketsSnapshot.fromResponse(body, serverTime: serverTime, deviceNow: deviceNow);
-      // Signed out (or signed in as someone else) meanwhile: this answer must not land in the cache.
-      if (!ref.mounted || token == null || await tokens.read() != token) return;
+      // Signed out (or signed in as someone else) meanwhile, or a ticket was retired since the request left: this
+      // answer must not land in the cache. The generation is read after the last await before the write.
+      if (!ref.mounted || token == null || await tokens.read() != token || generation != _generation) return;
+      // No await between that check and the write call: a [retire] from here on makes its cache read after this
+      // write, and [TicketCache] runs its calls in order (flutter_secure_storage alone does not promise it), so that
+      // read sees this answer and takes the old K_t out of it again.
       await cache.write(body, snapshot.offset);
       // A logout that ran during the write must not leave K_t behind.
       if (await tokens.read() != token) return await cache.wipe();
-      if (ref.mounted) state = AsyncData(TicketsState(snapshot: snapshot));
+      if (ref.mounted && generation == _generation) state = AsyncData(TicketsState(snapshot: snapshot));
     } on Object catch (e) {
       // A 401 already signed out (ApiClient.onUnauthorized), which wipes the cache and rebuilds this provider.
-      if (ref.mounted) state = AsyncData(TicketsState(snapshot: before.snapshot, error: e));
+      if (ref.mounted && generation == _generation) {
+        state = AsyncData(TicketsState(snapshot: before.snapshot, error: e));
+      }
     }
   }
 }

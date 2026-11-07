@@ -452,7 +452,7 @@ public class OrderService {
 
     /**
      * docs/04-api.md §Fan POST /fan/orders and §Holder names: one holder per place, each name normalized and
-     * Latin, each phone absent or E.164. Returns the holders per item with normalized names.
+     * in one script (Latin or Arabic), each phone absent or E.164. Returns the holders per item with normalized names.
      */
     private static List<List<HolderRequest>> validHolders(List<ItemRequest> items) {
         List<List<HolderRequest>> all = new ArrayList<>();
@@ -466,7 +466,7 @@ public class OrderService {
                 HolderRequest h = item.holders().get(j);
                 String path = "items[%d].holders[%d].".formatted(i, j);
                 String name = HolderNames.normalize(h == null ? null : h.name()).orElseThrow(() -> invalid(path + "name",
-                        "2 to 60 Latin letters, spaces, apostrophes, dots or hyphens"));
+                        HolderNames.INVALID));
                 if (h.phone() != null && !E164.matcher(h.phone()).matches()) {
                     throw invalid(path + "phone", "an E.164 phone number");
                 }

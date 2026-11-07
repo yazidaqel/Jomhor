@@ -62,6 +62,8 @@ function EventTicketsPage({ id }: { id: string }) {
   const { role } = useOrganizer()
   const event = useEvent(id)
   const [q, setQ] = useState<string | null>(null)
+  // A clicked ticket number refills the search box: a new key remounts the form with it.
+  const [prefill, setPrefill] = useState({ n: 0, q: '' })
   const lookup = useTicketLookup(id, q)
   const [action, setAction] = useState<Action | null>(null)
   // ponytail: browser clock, re-read every 30 s; the server enforces the freeze (409 REFUND_FROZEN) either way.
@@ -75,6 +77,16 @@ function EventTicketsPage({ id }: { id: string }) {
   const canAct = (['block', 'refund'] as const).some((k) => ACTION_ROLES[k].includes(role))
   const eventPath = `/events/${encodeURIComponent(event.data.id)}`
   const search = (next: string) => (next === q ? void lookup.refetch() : setQ(next))
+  const searchTicket = (no: string) => {
+    setPrefill((p) => ({ n: p.n + 1, q: no }))
+    search(no)
+  }
+  const ticketLink = (no: string | null) =>
+    no && (
+      <Button variant="link" size="sm" className="h-auto p-0 font-mono tracking-wider" aria-label={t('tickets.searchTicket', { ticket: no })} onClick={() => searchTicket(no)}>
+        {no}
+      </Button>
+    )
   const freeze = cutoff === null ? t('tickets.noCutoff') : t(frozen ? 'tickets.frozen' : 'tickets.freezeAt', { date: formatDateTime(cutoff, i18n.language, timezone) })
 
   return (
@@ -97,7 +109,7 @@ function EventTicketsPage({ id }: { id: string }) {
             {frozen && <Snowflake className="size-4 shrink-0" aria-hidden="true" />}
             {freeze}
           </CardDescription>
-          <SearchForm onSearch={search} />
+          <SearchForm key={prefill.n} initial={prefill.q} onSearch={search} />
         </CardHeader>
         <CardContent className="p-0">
           {q === null ? (
@@ -126,6 +138,8 @@ function EventTicketsPage({ id }: { id: string }) {
                     <TableHead>{t('tickets.columns.holder')}</TableHead>
                     <TableHead>{t('tickets.columns.status')}</TableHead>
                     <TableHead>{t('tickets.columns.order')}</TableHead>
+                    <TableHead>{t('tickets.columns.transferredTo')}</TableHead>
+                    <TableHead>{t('tickets.columns.transferredFrom')}</TableHead>
                     {canAct && (
                       <TableHead className="text-right">
                         <span className="sr-only">{t('tickets.columns.actions')}</span>
@@ -142,7 +156,9 @@ function EventTicketsPage({ id }: { id: string }) {
                       <TableCell>
                         <span className="font-medium">{r.zone.code}</span> <span className="text-muted-foreground">{r.zone.name}</span>
                       </TableCell>
-                      <TableCell>{r.holder_label ?? r.holder_name}</TableCell>
+                      <TableCell>
+                        <bdi>{r.holder_label ?? r.holder_name}</bdi>
+                      </TableCell>
                       <TableCell>
                         <TicketStatusBadge status={r.status} />
                         {r.refund && (
@@ -157,6 +173,8 @@ function EventTicketsPage({ id }: { id: string }) {
                           {[t(`sales.channels.names.${r.channel}`), r.payment_method && t(`sales.methods.${r.payment_method}`)].filter(Boolean).join(' · ')}
                         </div>
                       </TableCell>
+                      <TableCell>{ticketLink(r.transferred_to)}</TableCell>
+                      <TableCell>{ticketLink(r.transferred_from)}</TableCell>
                       {canAct && (
                         <TableCell>
                           <div className="flex justify-end gap-2">
@@ -204,11 +222,11 @@ function EventTicketsPage({ id }: { id: string }) {
   )
 }
 
-function SearchForm({ onSearch }: { onSearch: (q: string) => void }) {
+function SearchForm({ initial, onSearch }: { initial: string; onSearch: (q: string) => void }) {
   const { t } = useTranslation()
   const form = useForm({
     resolver: zodResolver(z.object({ q: z.string().trim().min(1, t('tickets.search.required')) })),
-    defaultValues: { q: '' },
+    defaultValues: { q: initial },
   })
   const error = form.formState.errors.q?.message
   return (

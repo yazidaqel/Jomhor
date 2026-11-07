@@ -5,4 +5,4 @@ output-localization-file: app_localizations.dart
 preferred-supported-locales: [fr]
 nullable-getter: false
 format: true
-# ar/en fall back to FR for any missing key (docs/plans/lot-1.md Q26); real AR copy in Lot 4.
+# ar (Moroccan Darija, Arabic script) and en are complete; test/l10n_test.dart checks every FR key is in both.

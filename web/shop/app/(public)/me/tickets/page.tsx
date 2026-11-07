@@ -1,15 +1,16 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { currentSession } from '@/lib/http'
-import { defaultLocale, getDictionary } from '@/lib/i18n'
+import { getI18n } from '@/lib/i18n/server'
 import { loginUrl } from '@/lib/orders'
 import { PhoneIcon } from '../../../icons'
 import { PendingOrders } from './PendingOrders'
 import { TicketList } from './TicketList'
 
-const d = getDictionary(defaultLocale)
-
-export const metadata: Metadata = { title: d.ticketsPage.metaTitle, robots: { index: false } }
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n()
+  return { title: d.ticketsPage.metaTitle, robots: { index: false } }
+}
 
 // ponytail: placeholder link. The fan app registers the `jomhor-fan` scheme but routes only `orders/{id}` (Android
 // intent filter host `orders`); it needs a `tickets` host → `/tickets`. No store fallback when the app is missing.
@@ -21,6 +22,7 @@ const APP_TICKETS_URL = 'jomhor-fan://tickets'
  */
 export default async function TicketsPage() {
   if (!(await currentSession())) redirect(loginUrl('/me/tickets'))
+  const { d } = await getI18n()
   const c = d.ticketsPage
   return (
     <main>
@@ -50,7 +52,20 @@ export default async function TicketsPage() {
       </section>
       <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-12 px-6 pt-10 pb-16">
         <PendingOrders copy={{ ticketsPage: d.ticketsPage, meta: d.meta }} />
-        <TicketList copy={{ ticketsPage: d.ticketsPage, errors: d.errors, meta: d.meta }} />
+        <TicketList
+          copy={{
+            ticketsPage: d.ticketsPage,
+            transfer: d.transfer,
+            errors: d.errors,
+            meta: d.meta,
+            holder: {
+              nameInvalid: d.checkout.nameInvalid,
+              namePlaceholder: d.checkout.namePlaceholder,
+              phoneInvalid: d.checkout.phoneInvalid,
+              phonePlaceholder: d.checkout.phonePlaceholder,
+            },
+          }}
+        />
       </div>
     </main>
   )

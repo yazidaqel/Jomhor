@@ -34,7 +34,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class TicketAdminApiTest extends PaymentTest {
 
     private static final String[] ROW_KEYS = {"id", "ticket_no", "status", "zone", "holder_name", "holder_label",
-            "unit_price_mad", "order_id", "channel", "payment_method", "issued_at", "refund"};
+            "unit_price_mad", "order_id", "channel", "payment_method", "issued_at", "refund", "transferred_to",
+            "transferred_from"};
     private static final String[] REFUND_KEYS = {"id", "event_id", "ticket_id", "ticket_no", "order_id", "amount_mad",
             "method", "reason", "status", "requested_by", "requested_at", "done_by", "done_at", "reference"};
 

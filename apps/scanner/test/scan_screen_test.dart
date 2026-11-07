@@ -6,6 +6,7 @@ import 'package:jomhor_core/jomhor_core.dart';
 import 'package:jomhor_scanner/core/event_key.dart';
 import 'package:jomhor_scanner/core/server_clock.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
+import 'package:jomhor_scanner/features/scan/result_view.dart';
 import 'package:jomhor_scanner/features/scan/scan_controller.dart';
 import 'package:jomhor_scanner/features/scan/scan_screen.dart';
 import 'package:jomhor_scanner/features/sync/sync_controller.dart';
@@ -158,7 +159,7 @@ void main() {
     expect(find.text('VALIDE'), findsOneWidget);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     expect(background(tester), JomhorColors.scanOk);
-    for (final fact in ['Tribune Nord', 'Y. A.', '1111 1100', 'PDF · QR fixe']) {
+    for (final fact in ['Tribune Nord', isolateName('Y. A.'), '1111 1100', 'PDF · QR fixe']) {
       expect(find.text(fact), findsOneWidget, reason: fact);
     }
     expect(find.textContaining('Validé hors ligne en '), findsOneWidget);

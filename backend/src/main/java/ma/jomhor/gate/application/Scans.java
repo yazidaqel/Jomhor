@@ -11,6 +11,9 @@ public interface Scans {
     /** One statement, {@code insert ... on conflict (scan_id) do nothing}; returns the rows actually inserted. */
     int insert(UUID org, int eventId, UUID deviceId, List<Scan> rows);
 
+    /** Whether the event has an admitted (OK/OVERRIDE) scan of the ticket, so a canonical one. */
+    boolean admitted(UUID org, int eventId, UUID ticketId);
+
     /** Admitted (OK/OVERRIDE) scans of the event by devices other than {@code deviceId} with seq > cursor, by seq. */
     List<Scan.Used> usedSince(UUID org, int eventId, UUID deviceId, long cursor, int limit);
 

@@ -61,6 +61,9 @@ class FanMeApiTest extends IntegrationTest {
                 .andExpect(jsonPath("$.display_name").value("Félix"))
                 .andExpect(jsonPath("$.locale").value("en"));
         me(token).andExpect(jsonPath("$.display_name").value("Félix")).andExpect(jsonPath("$.locale").value("en"));
+        // Arabic script (04 §Holder names, lot-4 Q66).
+        patchMe(token, "{\"display_name\": \"يزيد عقل\"}").andExpect(status().isOk())
+                .andExpect(jsonPath("$.display_name").value("يزيد عقل"));
         // "" clears an optional text field (04 conventions).
         patchMe(token, "{\"display_name\": \"\"}").andExpect(status().isOk()).andExpect(jsonPath("$.display_name").isEmpty());
     }
@@ -69,7 +72,7 @@ class FanMeApiTest extends IntegrationTest {
     void badValuesAre422AndChangeNothing() throws Exception {
         String token = fanToken(randomPhone());
         patchMe(token, "{\"display_name\": \"Yazid Aqel\"}").andExpect(status().isOk());
-        for (String bad : List.of("يزيد", "Y", "Yazid 3", "   ")) {
+        for (String bad : List.of("Yazid عقل", "Y", "Yazid 3", "   ")) {
             patchMe(token, "{\"display_name\": \"%s\", \"locale\": \"ar\"}".formatted(bad))
                     .andExpect(status().isUnprocessableContent())
                     .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
