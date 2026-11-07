@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_scanner/features/scan/result_view.dart';
 import 'package:jomhor_scanner/features/scan/scan_controller.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
+import 'package:jomhor_scanner/features/sync/sync_line.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -82,6 +83,7 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
               child: ResultView(
                 outcome: state.outcome,
                 topLine: topLine,
+                unsynced: desk?.unsynced,
                 onNext: ref.read(scanControllerProvider.notifier).dismiss,
               ),
             ),
@@ -127,7 +129,9 @@ class _Scanning extends StatelessWidget {
                 ),
                 const SizedBox(width: JomhorSpace.s),
                 Expanded(child: Text(topLine, style: JomhorType.label)),
-                Text(l.scanUnsynced(desk.unsynced), style: muted),
+                Flexible(
+                  child: SyncLine(unsynced: desk.unsynced, color: JomhorColors.textMuted),
+                ),
               ],
             ),
             const SizedBox(height: JomhorSpace.l),

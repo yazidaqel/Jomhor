@@ -39,8 +39,13 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String scanUnsynced(int count) {
-    return '$count للمزامنة';
+  String scanSyncOnline(int count) {
+    return 'متصل · $count للمزامنة';
+  }
+
+  @override
+  String scanSyncOffline(int count) {
+    return 'غير متصل · $count للمزامنة';
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:jomhor_core/jomhor_core.dart';
 import 'package:jomhor_scanner/core/event_time.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
+import 'package:jomhor_scanner/features/sync/sync_line.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
 
@@ -72,10 +73,13 @@ String? resultReason(AppLocalizations l, ScanOutcome o) {
 /// "Validé hors ligne en {ms} ms · {time}", and "Scanner le suivant" pinned at the bottom. White ink, dark on
 /// amber. [outcome] null = the scan could not be written.
 class ResultView extends StatelessWidget {
-  const new({required this.outcome, required this.topLine, required this.onNext, super.key});
+  const new({required this.outcome, required this.topLine, required this.onNext, this.unsynced, super.key});
 
   final ScanOutcome? outcome;
   final String topLine;
+
+  /// Shown with online/offline at the right of the top line; null hides it.
+  final int? unsynced;
   final VoidCallback onNext;
 
   @override
@@ -114,7 +118,17 @@ class ResultView extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(topLine, style: JomhorType.label.copyWith(color: ink)),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(topLine, style: JomhorType.label.copyWith(color: ink)),
+                              ),
+                              if (unsynced case final n?)
+                                Flexible(
+                                  child: SyncLine(unsynced: n, color: ink),
+                                ),
+                            ],
+                          ),
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xl),
                             child: _Body(

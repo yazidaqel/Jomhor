@@ -89,11 +89,12 @@ class GateClient {
   final Future<void> Function()? onRevoked;
 
   /// [decode] replaces the JSON decoding of the response bytes (the manifest decodes, verifies and parses in a
-  /// background isolate). It must return the decoded JSON, at least `server_time` and the 04 error fields.
+  /// background isolate; a large sync reply decodes there too). It must return the decoded JSON, at least `server_time` and the 04 error fields.
   Future<Object?> get(String path, {Map<String, String>? query, BodyDecoder? decode}) =>
       _send('GET', path, query: query, decode: decode);
 
-  Future<Object?> post(String path, {Object? body}) => _send('POST', path, body: body);
+  Future<Object?> post(String path, {Object? body, BodyDecoder? decode}) =>
+      _send('POST', path, body: body, decode: decode);
 
   /// Returns the decoded JSON body (null when empty, e.g. 204). Throws [GateApiError] on a non-2xx status or
   /// a network failure. On `DEVICE_CLOCK_SKEW` the offset is fixed from `details.server_time`, and the

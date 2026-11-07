@@ -71,8 +71,10 @@ class EventController extends Notifier<EventState> {
   }
 
   /// At or after `manifest_available_at` (or asked for: the server then says when), when there is none yet,
-  /// K_e is missing, or the server has a newer one.
+  /// K_e is missing, or the server has a newer one. Never for a CLOSED event: the sync loop wipes it.
   bool _manifestDue(ConfigData c, Assignment a, {required bool force}) =>
+      a.status != 'CLOSED' &&
+      c.eventStatus != 'CLOSED' &&
       (force || ref.read(serverClockProvider).nowMs() >= a.manifestAvailableAt) &&
       (c.manifestVersion == 0 || ref.read(eventKeyProvider) == null || (a.manifestVersion ?? 0) > c.manifestVersion);
 

@@ -42,7 +42,10 @@ class EventScreen extends ConsumerWidget {
           assignment: current,
         ),
         const SizedBox(height: JomhorSpace.l),
-        if (state.stage case final stage?) ...[
+        // Closed: the sync loop drains, wipes and acks on its own; nothing to load.
+        if (config.eventStatus == 'CLOSED')
+          Text(l.eventClosed, style: JomhorType.body)
+        else if (state.stage case final stage?) ...[
           LinearProgressIndicator(value: (stage.index + 1) / ManifestStage.values.length),
           const SizedBox(height: JomhorSpace.s),
           Text(switch (stage) {

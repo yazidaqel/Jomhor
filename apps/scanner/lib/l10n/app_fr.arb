@@ -41,9 +41,18 @@
       }
     }
   },
-  "scanUnsynced": "{count} à synchroniser",
-  "@scanUnsynced": {
-    "description": "Scan rows not yet acked by the server.",
+  "scanSyncOnline": "EN LIGNE · {count} à synchroniser",
+  "@scanSyncOnline": {
+    "description": "Top line, right: the last sync round reached the server; scan rows not yet acked.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "scanSyncOffline": "HORS LIGNE · {count} à synchroniser",
+  "@scanSyncOffline": {
+    "description": "Top line, right: no sync since start, or the last round failed; validation goes on offline.",
     "placeholders": {
       "count": {
         "type": "int"

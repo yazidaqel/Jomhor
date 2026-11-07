@@ -156,7 +156,10 @@ jobs:
       - if: steps.present.outputs.yes == 'true'
         run: flutter analyze --fatal-infos
       - if: steps.present.outputs.yes == 'true'
-        run: flutter test
+        run: flutter test -x benchmark
+      # Timing gates (p95 < 50 ms) run alone so other test files don't load the runner.
+      - if: steps.present.outputs.yes == 'true'
+        run: flutter test -t benchmark -j 1
 
   shop:
     needs: changes

@@ -99,7 +99,7 @@ Sync loop (off the scan path: Drift runs in its own isolate and the loop never b
 3. Device marks rows synced, merges the remote used-set into its local one, and pulls the manifest delta if its version is behind.
 4. On failure: exponential backoff from 2 s to 60 s, never drops rows. Rows survive app restarts; the local log is only truncated after the server closes the event.
 
-Duplicate resolution on the server: the canonical entry for a ticket is the admitted (OK/OVERRIDE) scan with the earliest device\_time; later admitted scans for the same ticket and direction are **reported** as `DUPLICATE_LATE`. Scans are never updated. Both the device clock and the server receive time are stored, so clock drift is visible rather than hidden.
+Duplicate resolution on the server: the canonical entry for a ticket is the admitted (OK/OVERRIDE) scan with the earliest device\_time (tie: lowest scan\_id; a device that merges remote admits keeps its local row on an exact tie, so its screen may show the other gate in that rare case); later admitted scans for the same ticket and direction are **reported** as `DUPLICATE_LATE`. Scans are never updated. Both the device clock and the server receive time are stored, so clock drift is visible rather than hidden.
 
 Clocks: devices sync time from the server at every sync and at enrolment; drift = abs(server offset); above 20 s the app refuses event mode until the device clock is fixed. The offset is applied to every timestamp and slot.
 

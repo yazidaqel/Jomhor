@@ -65,4 +65,5 @@ create index idx_scans_unsynced on scans (synced) where synced = 0;
 -- only after its signature verified. A delta is applied in one transaction, then the row count is checked.
 -- Sync marks synced=1 only for acked scan_ids. A remote used row keeps the earliest first_at.
 -- On CLOSED: push every unsynced row, then delete manifest_tickets, used, zones, gates and synced scans,
--- wipe K_e, reset config.event_id, POST closed-ack. On REVOKED: delete everything and wipe K_e.
+-- wipe K_e, POST closed-ack, then reset config.event_id (kept until the ack succeeds, so a lost ack is resent).
+-- On REVOKED: delete everything and wipe K_e.

@@ -39,8 +39,13 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String scanUnsynced(int count) {
-    return '$count à synchroniser';
+  String scanSyncOnline(int count) {
+    return 'EN LIGNE · $count à synchroniser';
+  }
+
+  @override
+  String scanSyncOffline(int count) {
+    return 'HORS LIGNE · $count à synchroniser';
   }
 
   @override

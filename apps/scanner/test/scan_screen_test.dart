@@ -8,6 +8,7 @@ import 'package:jomhor_scanner/core/server_clock.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
 import 'package:jomhor_scanner/features/scan/scan_controller.dart';
 import 'package:jomhor_scanner/features/scan/scan_screen.dart';
+import 'package:jomhor_scanner/features/sync/sync_controller.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/app_theme.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
@@ -44,6 +45,16 @@ class _Loaded extends EventKeyHolder {
   EventKey? build() => EventKey(testKe);
 }
 
+/// The sync loop's state without the loop.
+class _Sync extends SyncController {
+  new({this.online});
+
+  final bool? online;
+
+  @override
+  SyncState build() => SyncState(online: online);
+}
+
 void main() {
   late ScannerDatabase db;
   late int deviceMs;
@@ -59,7 +70,7 @@ void main() {
     feedback = [];
   });
 
-  Future<void> pumpScan(WidgetTester tester, {bool eventMode = true}) async {
+  Future<void> pumpScan(WidgetTester tester, {bool eventMode = true, bool? online}) async {
     if (eventMode) {
       await tester.runAsync(
         () => seedEventMode(db, {
@@ -78,6 +89,7 @@ void main() {
           eventKeyProvider.overrideWith(_Loaded.new),
           monotonicMsProvider.overrideWithValue(() => mono),
           scanFeedbackProvider.overrideWithValue((r) async => feedback.add(r)),
+          syncControllerProvider.overrideWith(() => _Sync(online: online)),
         ],
         child: MaterialApp(
           theme: buildAppTheme(),
@@ -121,9 +133,22 @@ void main() {
   testWidgets('scanning: top line (gate, mode), unsynced count and counters', (tester) async {
     await pumpScan(tester);
     expect(find.text('PORTE N1 · Nord · ENTRÉE'), findsOneWidget);
-    expect(find.text('0 à synchroniser'), findsOneWidget);
+    expect(find.text('HORS LIGNE · 0 à synchroniser'), findsOneWidget);
     expect(find.text('ENTRÉS ICI'), findsOneWidget);
     expect(find.text('0 / min'), findsOneWidget);
+    await done(tester);
+  });
+
+  testWidgets('online: the top line says EN LIGNE with its icon (never colour only)', (tester) async {
+    await pumpScan(tester, online: true);
+    expect(find.text('EN LIGNE · 0 à synchroniser'), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_done_outlined), findsOneWidget);
+    await scanned(tester, staticToken(valid));
+    expect(
+      find.text('EN LIGNE · 1 à synchroniser'),
+      findsNWidgets(2),
+      reason: 'the result screen and the one under it',
+    );
     await done(tester);
   });
 
@@ -142,7 +167,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: JomhorMotion.greenAutoClearMs));
     await tester.pumpAndSettle();
     expect(find.text('VALIDE'), findsNothing);
-    expect(find.text('1 à synchroniser'), findsOneWidget);
+    expect(find.text('HORS LIGNE · 1 à synchroniser'), findsOneWidget);
     await done(tester);
   });
 

@@ -147,11 +147,17 @@ abstract class AppLocalizations {
   /// **'PORTE {code} · {name} · {mode}'**
   String scanTopLine(String code, String name, String mode);
 
-  /// Scan rows not yet acked by the server.
+  /// Top line, right: the last sync round reached the server; scan rows not yet acked.
   ///
   /// In fr, this message translates to:
-  /// **'{count} à synchroniser'**
-  String scanUnsynced(int count);
+  /// **'EN LIGNE · {count} à synchroniser'**
+  String scanSyncOnline(int count);
+
+  /// Top line, right: no sync since start, or the last round failed; validation goes on offline.
+  ///
+  /// In fr, this message translates to:
+  /// **'HORS LIGNE · {count} à synchroniser'**
+  String scanSyncOffline(int count);
 
   /// Under the camera viewfinder; PDA triggers type into the same screen.
   ///

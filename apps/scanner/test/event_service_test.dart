@@ -368,6 +368,20 @@ void main() {
       expect(await storage.read(key: EventKeyHolder.storageKey), isNull);
       expect(container.read(eventKeyProvider), isNull);
     });
+
+    test('the sync loop learning CLOSED during a download wins: nothing applied, no K_e stored', () async {
+      await seedActiveDevice(db);
+      gate.handler = (r) async {
+        await db.update(db.config).write(const ConfigCompanion(eventStatus: Value('CLOSED')));
+        return manifest(
+          envelope(manifestV1['payload']! as String, manifestV1['signature']! as String, eventKey: testEventKey),
+        );
+      };
+      final container = gateContainer(db, gate);
+      await expectLater(container.read(eventServiceProvider).download(), throwsA(isA<ManifestRejected>()));
+      expect(await db.select(db.manifestTickets).get(), isEmpty);
+      expect(await storage.read(key: EventKeyHolder.storageKey), isNull);
+    });
   });
 
   test('a failing revocation wipe still surfaces the original 403', () async {
@@ -466,6 +480,14 @@ void main() {
       final staff = await db.select(db.staff).get();
       expect(staff.map((s) => (s.staffId, s.role)), unorderedEquals([('s-1', 'GATE'), ('s-2', 'SUPERVISOR')]));
       expect(staff.first.pinVerifier, startsWith(r'pbkdf2-sha256$10000$'));
+    });
+
+    test('a stored CLOSED is never overwritten by an older /gate/events status', () async {
+      await seedActiveDevice(db);
+      await db.update(db.config).write(const ConfigCompanion(eventStatus: Value('CLOSED')));
+      gate.handler = (_) async => json(eventsBody()); // Still says ON_SALE.
+      await service().refresh();
+      expect((await db.readConfig()).eventStatus, 'CLOSED');
     });
 
     test('PENDING: 403 DEVICE_NOT_ACTIVE, nothing changes', () async {

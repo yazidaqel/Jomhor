@@ -125,7 +125,10 @@ class EventService {
               eventTitle: current == null ? const Value.absent() : Value(current.title),
               startsAt: current == null ? const Value.absent() : Value(current.startsAt),
               eventTimezone: current == null ? const Value.absent() : Value(current.timezone),
-              eventStatus: current == null ? const Value.absent() : Value(current.status),
+              // CLOSED is final: an older list (fetched before the close) never reopens the event.
+              eventStatus: current == null || config.eventStatus == 'CLOSED'
+                  ? const Value.absent()
+                  : Value(current.status),
             ),
           );
       // Unassigned before anything was downloaded: forget it so another assignment can be picked.
@@ -223,8 +226,10 @@ class EventService {
     return m;
   }
 
-  /// Same device and event as when the download started (a revocation wipe resets both).
-  static bool _same(ConfigData a, ConfigData b) => a.deviceId == b.deviceId && a.eventId == b.eventId;
+  /// Same device, event and event status as when the download started (a revocation wipe resets the first two;
+  /// the sync loop sets CLOSED before it wipes the event, so a download in flight cannot bring it back).
+  static bool _same(ConfigData a, ConfigData b) =>
+      a.deviceId == b.deviceId && a.eventId == b.eventId && a.eventStatus == b.eventStatus;
 
   /// Inside the write transaction: nothing is applied over a device that was wiped or switched meanwhile.
   Future<void> _guard(ConfigData started) async {

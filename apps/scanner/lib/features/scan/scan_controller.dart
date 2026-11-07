@@ -6,6 +6,7 @@ import 'package:jomhor_core/jomhor_core.dart';
 import 'package:jomhor_scanner/features/scan/scan_service.dart';
 import 'package:jomhor_scanner/features/scan/validator.dart' show uuidString;
 import 'package:jomhor_scanner/features/staff/staff_session.dart';
+import 'package:jomhor_scanner/features/sync/sync_controller.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
 
 bool isAdmitted(ScanResult r) => r == ScanResult.OK || r == ScanResult.OVERRIDE;
@@ -85,6 +86,8 @@ class ScanController extends Notifier<ScanState> {
   @override
   ScanState build() {
     final ticker = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(refresh()));
+    // After each sync round: the unsynced count moves.
+    ref.listen(syncControllerProvider, (_, _) => unawaited(refresh()));
     ref.onDispose(() {
       ticker.cancel();
       _clear?.cancel();
