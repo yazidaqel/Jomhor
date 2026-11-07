@@ -22,6 +22,12 @@ export type TicketView = {
   gate_codes: string[]
   /** 04: past = event `CLOSED` or `starts_at` more than 12 h ago (against `server_time`, not the shop's clock). */
   past: boolean
+  /** Lot 4: transfers close at this instant (null: the event has no cutoff, so they are closed). */
+  transfer_until: string | null
+  /** `server_time < transfer_until` when the list was read (the backend still decides: 409 TRANSFER_CLOSED). */
+  transfer_open: boolean
+  /** Set on a ticket this holder transferred away (status `CANCELLED`): W5 shows a muted "Transféré à …" row. */
+  transferred: { to_label: string; at: string } | null
 }
 
 /** Path-safe ticket id: tickets are UUIDs. */
@@ -45,6 +51,8 @@ export function toTickets(raw: unknown): TicketView[] {
     const venue = obj(e.venue)
     const zone = obj(t.zone)
     const starts_at = String(e.starts_at)
+    const transfer_until = strOrNull(t.transfer_until)
+    const x = obj(t.transferred)
     return {
       id: String(t.id),
       ticket_no: String(t.ticket_no),
@@ -61,6 +69,9 @@ export function toTickets(raw: unknown): TicketView[] {
       zone: { code: String(zone.code), name: String(zone.name) },
       gate_codes: Array.isArray(t.gate_codes) ? t.gate_codes.map(String) : [],
       past: e.status === 'CLOSED' || Date.parse(starts_at) + PAST_AFTER_MS <= now,
+      transfer_until,
+      transfer_open: transfer_until !== null && now < Date.parse(transfer_until),
+      transferred: typeof x.to_label === 'string' && typeof x.at === 'string' ? { to_label: x.to_label, at: x.at } : null,
     }
   })
 }

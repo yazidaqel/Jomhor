@@ -52,7 +52,20 @@ export default async function TicketsPage() {
       </section>
       <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-12 px-6 pt-10 pb-16">
         <PendingOrders copy={{ ticketsPage: d.ticketsPage, meta: d.meta }} />
-        <TicketList copy={{ ticketsPage: d.ticketsPage, errors: d.errors, meta: d.meta }} />
+        <TicketList
+          copy={{
+            ticketsPage: d.ticketsPage,
+            transfer: d.transfer,
+            errors: d.errors,
+            meta: d.meta,
+            holder: {
+              nameInvalid: d.checkout.nameInvalid,
+              namePlaceholder: d.checkout.namePlaceholder,
+              phoneInvalid: d.checkout.phoneInvalid,
+              phonePlaceholder: d.checkout.phonePlaceholder,
+            },
+          }}
+        />
       </div>
     </main>
   )

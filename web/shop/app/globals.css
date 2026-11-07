@@ -20,6 +20,14 @@
       transform: scale(0.6);
     }
   }
+  /* A transferred ticket leaves the wallet: the reverse of `rise` (DESIGN.md principle 6, Lot 4). */
+  --animate-leave: leave 420ms cubic-bezier(0.4, 0, 0.8, 0.4) both;
+  @keyframes leave {
+    to {
+      opacity: 0;
+      transform: translateY(-24px) scale(0.96);
+    }
+  }
 }
 
 /* Staggered entrance: `--i` (0, 1, 2…) on the element delays it by 70 ms per step, capped after 5 items. */

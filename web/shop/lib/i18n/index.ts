@@ -48,6 +48,9 @@ export function resolveLocale({ lang, cookie, acceptLanguage }: { lang?: string 
  */
 export const ltr = (s: string) => `\u2066${s}\u2069`
 
+/** First-strong isolate (U+2068 \u2026 U+2069) for a name inside text: an Arabic name in a French line, or the reverse. */
+export const isolate = (s: string) => `\u2068${s}\u2069`
+
 /** `"au {phone}"` + `{ phone: '+212…' }` → `"au +212…"`. Unknown placeholders stay as they are. */
 export const fmt = (s: string, vars: Record<string, string | number>) =>
   s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m))
