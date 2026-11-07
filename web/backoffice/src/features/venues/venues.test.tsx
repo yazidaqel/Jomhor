@@ -11,7 +11,7 @@ import type { Me, Role } from '@/features/auth/organizer'
 import { createQueryClient } from '@/lib/queryClient'
 import { session } from '@/lib/session'
 import { isVenueZone } from '@/lib/time'
-import type { VenueDetail } from './api'
+import { gateSchema, type VenueDetail } from './api'
 
 beforeAll(() => {
   // Radix needs these; jsdom does not implement them.
@@ -50,9 +50,9 @@ const venue = (): VenueDetail => ({
     { id: 4, code: 'SUD', name: 'Virage Sud', capacity: 15000, seated: false },
   ],
   gates: [
-    { id: 'g-1', code: 'P1', name: 'Porte 1', zone_ids: [1] },
-    { id: 'g-3', code: 'P3', name: 'Porte 3', zone_ids: [2, 3] },
-    { id: 'g-7', code: 'P7', name: 'Porte 7', zone_ids: [4] },
+    { id: 'g-1', code: 'P1', name: 'Porte 1', zone_ids: [1], directions: 'Boulevard Sidi Abderrahmane', latitude: 33.582811, longitude: -7.646848 },
+    { id: 'g-3', code: 'P3', name: 'Porte 3', zone_ids: [2, 3], directions: null, latitude: null, longitude: null },
+    { id: 'g-7', code: 'P7', name: 'Porte 7', zone_ids: [4], directions: null, latitude: null, longitude: null },
   ],
 })
 
@@ -516,4 +516,102 @@ it('venue time zone: a server VALIDATION_FAILED on timezone shows the time zone 
   await user.click(within(dialog).getByRole('button', { name: fr.common.save }))
   expect(await within(dialog).findByText(fr.venues.timezoneInvalid)).toBeTruthy()
   expect(zone.getAttribute('aria-invalid')).toBe('true')
+})
+
+it('gate schema: coordinates both or neither, at most 6 decimals, in range; sent as JSON numbers', () => {
+  const parse = (latitude: string, longitude: string, gate?: VenueDetail['gates'][number]) =>
+    gateSchema(i18n.t, gate).safeParse({ code: 'P1', name: 'Porte 1', directions: '', latitude, longitude })
+  const issues = (r: ReturnType<typeof parse>) => (r.success ? [] : r.error.issues.map((i) => [i.path.join('.'), i.message]))
+
+  expect(parse('', '').data).toEqual({ code: 'P1', name: 'Porte 1', directions: '' })
+  expect(parse(' 33.582811 ', '-7,646848').data).toEqual({ code: 'P1', name: 'Porte 1', directions: '', latitude: 33.582811, longitude: -7.646848 })
+  expect(JSON.stringify(parse('-90', '180.000000').data)).toContain('"latitude":-90,"longitude":180')
+  expect(issues(parse('33.5', ''))).toEqual([['longitude', fr.venues.gates.bothOrNeither]])
+  expect(issues(parse('', '-7.6'))).toEqual([['latitude', fr.venues.gates.bothOrNeither]])
+  expect(issues(parse('33.5828111', '-7.6'))).toEqual([['latitude', fr.venues.gates.latitudeInvalid]])
+  expect(issues(parse('33.5', '-7.6468481'))).toEqual([['longitude', fr.venues.gates.longitudeInvalid]])
+  for (const bad of ['90.000001', '-91', '1e1', '33.', '.5', 'abc', '33.5.1'])
+    expect(issues(parse(bad, '0'))).toEqual([['latitude', fr.venues.gates.latitudeInvalid]])
+  expect(issues(parse('0', '180.1'))).toEqual([['longitude', fr.venues.gates.longitudeInvalid]])
+  // Emptying both on a located gate clears it with the null pair; an unlocated gate sends nothing.
+  expect(parse('', '', venue().gates[0]).data).toEqual({ code: 'P1', name: 'Porte 1', directions: '', latitude: null, longitude: null })
+  expect(parse('', '', venue().gates[1]).data).toEqual({ code: 'P1', name: 'Porte 1', directions: '' })
+})
+
+it('gate row: directions (dir=auto) and a map link in a new tab only when located', async () => {
+  stubApi('ADMIN')
+  renderApp('/settings/venues/v-1')
+  const link = await screen.findByRole('link', { name: i18n.t('venues.gates.mapLabel', { code: 'P1' }) })
+  expect(link.getAttribute('href')).toBe('https://www.google.com/maps/search/?api=1&query=33.582811%2C-7.646848')
+  expect(link.getAttribute('target')).toBe('_blank')
+  expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+  expect(screen.getByText('Boulevard Sidi Abderrahmane').getAttribute('dir')).toBe('auto')
+  expect(screen.getAllByRole('link', { name: new RegExp(fr.venues.gates.map) })).toHaveLength(1)
+})
+
+it('gate edit: PATCH sends directions ("" clears them) and the coordinates as numbers', async () => {
+  const user = userEvent.setup()
+  const { calls } = stubApi('ADMIN', (c) => (c.method === 'PATCH' ? Response.json({ ...venue().gates[0], ...(c.body as object) }) : undefined))
+  renderApp('/settings/venues/v-1')
+  await user.click(await screen.findByRole('button', { name: i18n.t('venues.gates.editLabel', { code: 'P1' }) }))
+  const dialog = await screen.findByRole('dialog', { name: i18n.t('venues.gates.editTitle', { code: 'P1' }) })
+  const directions = within(dialog).getByLabelText(fr.venues.gates.directions)
+  expect(directions.tagName).toBe('TEXTAREA')
+  expect(directions.getAttribute('dir')).toBe('auto')
+  expect(within(dialog).getByLabelText(fr.venues.gates.latitude).getAttribute('aria-describedby')).toBe('gate-location-hint')
+  expect(within(dialog).getByLabelText(fr.venues.gates.longitude).getAttribute('aria-describedby')).toBe('gate-location-hint')
+  expect(within(dialog).getByLabelText(fr.venues.gates.latitude).getAttribute('inputmode')).toBe('text')
+  await user.clear(directions)
+  const latitude = within(dialog).getByLabelText(fr.venues.gates.latitude)
+  await user.clear(latitude)
+  await user.type(latitude, '33,5829')
+  await user.click(within(dialog).getByRole('button', { name: fr.common.save }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(writes(calls)).toEqual([
+    {
+      method: 'PATCH',
+      path: '/org/venues/v-1/gates/g-1',
+      org: 'org-a',
+      body: { code: 'P1', name: 'Porte 1', directions: '', latitude: 33.5829, longitude: -7.646848 },
+    },
+  ])
+})
+
+it('gate create: one coordinate alone is refused on the empty one; neither sends no coordinates', async () => {
+  const user = userEvent.setup()
+  const { calls } = stubApi('ADMIN', (c) => (c.method === 'POST' ? Response.json({ id: 'g-9', zone_ids: [], ...(c.body as object) }, { status: 201 }) : undefined))
+  renderApp('/settings/venues/v-1')
+  await user.click(await screen.findByRole('button', { name: fr.venues.gates.add }))
+  const dialog = await screen.findByRole('dialog', { name: fr.venues.gates.newTitle })
+  await user.type(within(dialog).getByLabelText(fr.venues.gates.code), 'p9')
+  await user.type(within(dialog).getByLabelText(fr.venues.name), 'Porte 9')
+  await user.type(within(dialog).getByLabelText(fr.venues.gates.directions), 'باب 9، شارع الحسن الثاني')
+  const longitude = within(dialog).getByLabelText(fr.venues.gates.longitude)
+  await user.type(longitude, '-7.6')
+  await user.click(within(dialog).getByRole('button', { name: fr.common.create }))
+  expect(await within(dialog).findByText(fr.venues.gates.bothOrNeither)).toBeTruthy()
+  expect(within(dialog).getByLabelText(fr.venues.gates.latitude).getAttribute('aria-invalid')).toBe('true')
+  expect(writes(calls)).toEqual([])
+
+  await user.clear(longitude)
+  await user.click(within(dialog).getByRole('button', { name: fr.common.create }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(writes(calls)).toEqual([
+    { method: 'POST', path: '/org/venues/v-1/gates', org: 'org-a', body: { code: 'P9', name: 'Porte 9', directions: 'باب 9، شارع الحسن الثاني' } },
+  ])
+})
+
+it('gate edit: emptying both coordinates of a located gate PATCHes the null pair', async () => {
+  const user = userEvent.setup()
+  const { calls } = stubApi('ADMIN', (c) => (c.method === 'PATCH' ? Response.json({ ...venue().gates[0], ...(c.body as object) }) : undefined))
+  renderApp('/settings/venues/v-1')
+  await user.click(await screen.findByRole('button', { name: i18n.t('venues.gates.editLabel', { code: 'P1' }) }))
+  const dialog = await screen.findByRole('dialog', { name: i18n.t('venues.gates.editTitle', { code: 'P1' }) })
+  await user.clear(within(dialog).getByLabelText(fr.venues.gates.latitude))
+  await user.clear(within(dialog).getByLabelText(fr.venues.gates.longitude))
+  await user.click(within(dialog).getByRole('button', { name: fr.common.save }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(writes(calls).map((c) => c.body)).toEqual([
+    { code: 'P1', name: 'Porte 1', directions: 'Boulevard Sidi Abderrahmane', latitude: null, longitude: null },
+  ])
 })

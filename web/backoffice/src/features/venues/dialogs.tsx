@@ -18,11 +18,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { useOrgMutation } from '@/features/auth/organizer'
 import { path } from '@/lib/api'
 import { integerInput } from '@/lib/forms'
 import { DEFAULT_ZONE, isVenueZone } from '@/lib/time'
-import { showApiError, useVenueMutation, venueErrorKey, type Gate, type Venue, type Zone } from './api'
+import { gateSchema, showApiError, useVenueMutation, venueErrorKey, type Gate, type Venue, type Zone } from './api'
 
 /** Open state of a dialog, owned by the page so the dialog outlives the table row it acts on. */
 export type DialogProps = { open: boolean; onOpenChange: (open: boolean) => void; fallbackFocus?: RefObject<HTMLElement | null> }
@@ -70,33 +71,41 @@ function TextField(props: {
   hint?: string
   error?: string
   registration: UseFormRegisterReturn
-  inputMode?: 'numeric'
+  inputMode?: 'numeric' | 'text'
   upper?: boolean
   list?: string
+  /** A textarea, `dir="auto"` (free text may be Arabic). */
+  multiline?: boolean
+  /** Id of a description shared with other fields. */
+  describedBy?: string
 }) {
   const { id, error, registration } = props
-  const described = [props.hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ')
+  const described = [props.hint && `${id}-hint`, props.describedBy, error && `${id}-error`].filter(Boolean).join(' ')
+  const aria = { 'aria-invalid': !!error, 'aria-describedby': described || undefined }
   return (
     <Field data-invalid={!!error}>
       <FieldLabel htmlFor={id}>{props.label}</FieldLabel>
-      <Input
-        id={id}
-        inputMode={props.inputMode}
-        list={props.list}
-        autoCapitalize={props.upper ? 'characters' : undefined}
-        aria-invalid={!!error}
-        aria-describedby={described || undefined}
-        {...registration}
-        onChange={(e) => {
-          if (props.upper) {
-            // Codes are typed in capitals; the caret stays where it was.
-            const { selectionStart, selectionEnd } = e.target
-            e.target.value = e.target.value.toUpperCase()
-            e.target.setSelectionRange(selectionStart, selectionEnd)
-          }
-          return registration.onChange(e)
-        }}
-      />
+      {props.multiline ? (
+        <Textarea id={id} dir="auto" rows={3} {...aria} {...registration} />
+      ) : (
+        <Input
+          id={id}
+          inputMode={props.inputMode}
+          list={props.list}
+          autoCapitalize={props.upper ? 'characters' : undefined}
+          {...aria}
+          {...registration}
+          onChange={(e) => {
+            if (props.upper) {
+              // Codes are typed in capitals; the caret stays where it was.
+              const { selectionStart, selectionEnd } = e.target
+              e.target.value = e.target.value.toUpperCase()
+              e.target.setSelectionRange(selectionStart, selectionEnd)
+            }
+            return registration.onChange(e)
+          }}
+        />
+      )}
       {props.hint && <FieldDescription id={`${id}-hint`}>{props.hint}</FieldDescription>}
       {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
     </Field>
@@ -305,11 +314,17 @@ export function GateDialog({ venueId, gate, ...dialog }: DialogProps & { venueId
 
 function GateForm({ venueId, gate, onDone }: { venueId: string; gate?: Gate; onDone: () => void }) {
   const { t } = useTranslation()
-  const schema = z.object({
-    code: z.string().trim().min(1, t('venues.zones.codeRequired')),
-    name: z.string().trim().min(1, t('venues.nameRequired')),
+  const schema = gateSchema(t, gate)
+  const form = useForm({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      code: gate?.code ?? '',
+      name: gate?.name ?? '',
+      directions: gate?.directions ?? '',
+      latitude: gate?.latitude == null ? '' : String(gate.latitude),
+      longitude: gate?.longitude == null ? '' : String(gate.longitude),
+    },
   })
-  const form = useForm({ resolver: zodResolver(schema), defaultValues: { code: gate?.code ?? '', name: gate?.name ?? '' } })
   const gates = path('org', 'venues', venueId, 'gates')
   const save = useVenueMutation((body: z.output<typeof schema>, send) =>
     send(gate ? { method: 'PATCH', path: `${gates}${path(gate.id)}`, body } : { method: 'POST', path: gates, body }),
@@ -327,6 +342,33 @@ function GateForm({ venueId, gate, onDone }: { venueId: string; gate?: Gate; onD
           registration={form.register('code')}
         />
         <TextField id="gate-name" label={t('venues.name')} error={errors.name?.message} registration={form.register('name')} />
+        <TextField
+          id="gate-directions"
+          label={t('venues.gates.directions')}
+          hint={t('venues.gates.directionsHint')}
+          multiline
+          error={errors.directions?.message}
+          registration={form.register('directions')}
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <TextField
+            id="gate-latitude"
+            label={t('venues.gates.latitude')}
+            inputMode="text" // the iOS decimal pad has no minus sign; Moroccan longitudes are negative
+            describedBy="gate-location-hint"
+            error={errors.latitude?.message}
+            registration={form.register('latitude')}
+          />
+          <TextField
+            id="gate-longitude"
+            label={t('venues.gates.longitude')}
+            inputMode="text" // the iOS decimal pad has no minus sign; Moroccan longitudes are negative
+            describedBy="gate-location-hint"
+            error={errors.longitude?.message}
+            registration={form.register('longitude')}
+          />
+        </div>
+        <FieldDescription id="gate-location-hint">{t('venues.gates.locationHint')}</FieldDescription>
         <Footer pending={save.isPending} submit={t(gate ? 'common.save' : 'common.create')} rootError={errors.root?.message} />
       </FieldGroup>
     </form>
