@@ -3,7 +3,8 @@ import { notFound, redirect } from 'next/navigation'
 import { ApiError } from '@/lib/api'
 import { eventSlug, getEvent } from '@/lib/events'
 import { currentSession } from '@/lib/http'
-import { defaultLocale, fmt, getDictionary } from '@/lib/i18n'
+import { fmt } from '@/lib/i18n'
+import { getI18n } from '@/lib/i18n/server'
 import { formatDh } from '@/lib/money'
 import type { OnlineMethod } from '@/lib/order-client'
 import { getOrder, loginUrl, orderNo, SAFE_ID, type OrderView } from '@/lib/orders'
@@ -12,9 +13,10 @@ import { Crest } from '../../../brand'
 import { CashDetails } from './CashDetails'
 import { OrderStatus } from './OrderStatus'
 
-const d = getDictionary(defaultLocale)
-
-export const metadata: Metadata = { title: d.orderPage.metaTitle, robots: { index: false } }
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getI18n()
+  return { title: d.orderPage.metaTitle, robots: { index: false } }
+}
 
 /**
  * W4 · `/orders/{id}`: where the gateway's `/return` lands (WEB) and where a cash code is shown (Lot 3). SSR of the
@@ -34,7 +36,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     if (e instanceof ApiError && e.status === 404) notFound()
     throw e
   }
-  const e = await getEvent(order.event_id)
+  const [e, { d }] = await Promise.all([getEvent(order.event_id), getI18n()])
   const places = order.items.reduce((n, i) => n + i.qty, 0)
   const labels = order.items.flatMap((i) => i.labels)
   const when = e && `${formatDateTime(e.starts_at, e.timezone, d.meta.intl)} · ${e.venue.name}`
@@ -101,7 +103,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           {labels.map((label, n) => (
             <li key={n} className="flex justify-between gap-3">
               <span>{fmt(d.orderPage.ticket, { n: n + 1 })}</span>
-              <span>{label}</span>
+              <bdi>{label}</bdi>
             </li>
           ))}
         </ul>

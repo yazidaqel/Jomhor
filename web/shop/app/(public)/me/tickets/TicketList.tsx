@@ -152,7 +152,7 @@ function TicketCard({ t, copy, now, i }: { t: TicketView; copy: Copy; now: numbe
         <dl className="flex items-end justify-between gap-3 px-5 pt-4">
           <div className="flex min-w-0 flex-col gap-1">
             <dt className={label}>{t.seat_label ? c.seat : c.holder}</dt>
-            <dd className="truncate text-[15px] font-semibold">{t.seat_label ?? t.holder_label ?? '-'}</dd>
+            <dd className="truncate text-[15px] font-semibold"><bdi>{t.seat_label ?? t.holder_label ?? '-'}</bdi></dd>
           </div>
           <div className="flex flex-col items-end gap-1 text-end">
             <dt className={label}>{c.number}</dt>
@@ -163,7 +163,7 @@ function TicketCard({ t, copy, now, i }: { t: TicketView; copy: Copy; now: numbe
         </dl>
         {t.seat_label && t.holder_label && (
           <p className="px-5 pt-2 text-sm text-ticket-muted">
-            {c.holder} · <span className="font-semibold text-ticket-ink">{t.holder_label}</span>
+            {c.holder} · <bdi className="font-semibold text-ticket-ink">{t.holder_label}</bdi>
           </p>
         )}
 

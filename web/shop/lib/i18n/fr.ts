@@ -26,6 +26,7 @@ export const fr = {
     signedIn: 'Connecté',
     logout: 'Se déconnecter',
     logoutFailed: 'Déconnexion impossible pour le moment. Réessaie.',
+    language: 'Langue',
   },
   footer: {
     poweredBy: 'Propulsé par Jomhor · جمهور',
@@ -118,7 +119,7 @@ export const fr = {
     you: 'toi',
     name: 'Nom et prénom',
     namePlaceholder: 'Yazid Aqel',
-    nameInvalid: 'Écris un nom de 2 à 60 lettres latines (accents, espace, apostrophe, point et tiret acceptés).',
+    nameInvalid: 'Lettres latines, ou lettres arabes de base comme sur la CIN (sans ڭ, گ, پ, ڤ), sans mélanger les deux : 2 à 60 caractères. Espace et tiret acceptés ; en latin, aussi apostrophe et point.',
     phone: 'Numéro WhatsApp (facultatif)',
     phonePlaceholder: '06 12 34 56 78',
     phoneHint: "Le billet ira à ce numéro, dans le compte de cette personne. Tu ne le verras pas dans tes billets.",

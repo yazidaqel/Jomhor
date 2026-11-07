@@ -7,6 +7,7 @@ import { formatDateTime } from '@/lib/time'
 import tokens from '@/lib/tokens'
 import { kicker } from '../../sale'
 
+// FR whatever the reader's locale: crawlers send no cookie, and the default OG font has no Arabic glyphs.
 const d = getDictionary(defaultLocale)
 const c = tokens.color
 

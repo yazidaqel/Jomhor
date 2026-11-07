@@ -149,12 +149,12 @@ export function CheckoutForm(props: {
           style={{ '--i': i } as React.CSSProperties}
           className="flex flex-col gap-3 rounded-card border border-border bg-surface p-5 transition-colors duration-200 focus-within:border-border-muted motion-safe:animate-rise stagger"
         >
-          <legend className="float-left mb-1 flex items-center gap-2.5 font-display text-h2 uppercase">
+          <legend className="float-start mb-1 flex items-center gap-2.5 font-display text-h2 uppercase">
             <TicketIcon className="size-5 text-accent" />
             {fmt(c.ticket, { n: i + 1 })}
             {i === 0 && <span className="font-body text-body-small font-normal normal-case text-text-muted">{c.you}</span>}
           </legend>
-          <div className="clear-left">
+          <div className="clear-start">
             <label htmlFor={`name-${i}`} className={label}>
               {c.name}
             </label>
@@ -162,6 +162,7 @@ export function CheckoutForm(props: {
               id={`name-${i}`}
               value={row.name}
               onChange={(e) => set(i, 'name', e.target.value)}
+              dir="auto"
               autoComplete={i === 0 ? 'name' : 'off'}
               placeholder={c.namePlaceholder}
               aria-invalid={!!rowErrors[i]?.name}
@@ -251,7 +252,7 @@ export function CheckoutForm(props: {
         </p>
       )}
       <fieldset className="flex flex-col gap-2.5 rounded-card border border-border bg-surface p-5">
-        <legend className="float-left mb-1 font-display text-h2 uppercase">{c.methodTitle}</legend>
+        <legend className="float-start mb-1 font-display text-h2 uppercase">{c.methodTitle}</legend>
         {PAY_METHODS.filter((m) => props.methods.includes(m) || (m === 'CASH_AGENCY' && props.cashLate)).map((m) => {
           const off = !usable.includes(m)
           const Icon = ICONS[m]
@@ -265,7 +266,7 @@ export function CheckoutForm(props: {
           return (
             <label
               key={m}
-              className={`clear-left flex min-h-touch-min items-center gap-3 rounded-control border-2 bg-ground px-4 py-3 transition-colors duration-200 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
+              className={`clear-start flex min-h-touch-min items-center gap-3 rounded-control border-2 bg-ground px-4 py-3 transition-colors duration-200 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
                 off ? 'cursor-not-allowed border-border text-text-muted' : m === method ? 'cursor-pointer border-accent' : 'cursor-pointer border-border hover:border-border-muted'
               }`}
             >
