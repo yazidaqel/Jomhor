@@ -8,6 +8,7 @@ import 'package:jomhor_scanner/features/event/event_controller.dart';
 import 'package:jomhor_scanner/features/event/event_service.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
+import 'package:jomhor_scanner/ui/brand.dart';
 
 /// Événement (DESIGN Lot 2 adjustments): the assignment, manifest download progress, drift check result.
 class EventScreen extends ConsumerWidget {
@@ -97,7 +98,7 @@ class EventScreen extends ConsumerWidget {
       ],
     ];
     return Scaffold(
-      appBar: AppBar(title: Text(l.eventTitle)),
+      appBar: brandAppBar(l.eventTitle),
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.all(JomhorSpace.xxl), children: children),
       ),

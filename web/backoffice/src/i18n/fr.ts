@@ -1,6 +1,7 @@
 export const fr = {
   app: {
     name: 'Jomhor',
+    pageTitle: 'Jomhor · {{page}}',
   },
   nav: {
     label: 'Navigation',
@@ -25,7 +26,6 @@ export const fr = {
     },
   },
   shell: {
-    organizerSpace: 'Espace organisateur',
     toggleSidebar: 'Afficher ou masquer le menu',
     skipToContent: 'Aller au contenu',
     notifications: 'Notifications',

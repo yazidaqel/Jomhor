@@ -9,6 +9,7 @@ import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/brand.dart';
 
 import 'helpers.dart';
 
@@ -69,8 +70,10 @@ void main() {
       ]),
     );
     expect(find.text('PROCHAIN MATCH · DOMICILE'), findsOneWidget);
-    // Club from tokens.json (top bar + home side of the hero), opponent from metadata.
-    expect(find.text(JomhorClub.name.toUpperCase()), findsNWidgets(2));
+    // The top bar is Jomhor's; the club (tokens.json) is content only: the home side of the hero. Opponent from
+    // metadata.
+    expect(find.descendant(of: find.byType(BrandBar), matching: find.byType(JomhorLockup)), findsOneWidget);
+    expect(find.text(JomhorClub.name.toUpperCase()), findsOneWidget);
     expect(find.text('RAPID OUED'), findsOneWidget);
     expect(find.text('CHAMPIONNAT · JOURNÉE 11'), findsNothing); // the hero shows it in sentence case
     expect(find.text('Championnat · Journée 11'), findsOneWidget);

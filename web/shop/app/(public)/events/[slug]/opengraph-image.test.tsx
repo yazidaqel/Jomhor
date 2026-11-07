@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { renderToString } from 'react-dom/server'
 import { getAccessFallbackHTTPStatus } from 'next/dist/client/components/http-access-fallback/http-access-fallback'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -30,6 +31,13 @@ afterEach(() => {
 })
 
 const image = (slug: string) => OpenGraphImage({ params: Promise.resolve({ slug }) })
+
+it('carries the Jomhor lockup, the design/logo file as is', async () => {
+  fetchMock.mockImplementation(async () => json(200, rawEvent()))
+  const res = (await image('12-atlas-fc-vs-rapid-oued')) as unknown as { element: React.ReactElement }
+  const lockup = readFileSync(new URL('../../../../../../design/logo/jomhor-lockup-dark.svg', import.meta.url)).toString('base64')
+  expect(renderToString(res.element)).toContain(`src="data:image/svg+xml;base64,${lockup}"`)
+})
 
 it('draws crest, club, competition, title, and the date in the venue zone', async () => {
   fetchMock.mockImplementation(async () => json(200, rawEvent()))

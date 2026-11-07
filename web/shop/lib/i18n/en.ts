@@ -16,7 +16,7 @@ export const en: Dict = {
     home: 'See events',
   },
   header: {
-    shop: '{club} · Tickets',
+    shop: '{club} tickets',
     nav: 'Main navigation',
     events: 'Matches',
     tickets: 'My tickets',
@@ -29,7 +29,8 @@ export const en: Dict = {
     language: 'Language',
   },
   footer: {
-    poweredBy: 'Powered by Jomhor · جمهور',
+    /** BRAND.md tagline, beside the lockup (never inside it). */
+    tagline: 'Jomhor. The 12th man.',
   },
   notFound: {
     metaTitle: 'Page not found',

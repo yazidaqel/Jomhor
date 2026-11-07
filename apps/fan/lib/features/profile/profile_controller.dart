@@ -6,6 +6,7 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/features/auth/auth_repository.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// The Profil tab: the signed-in fan (`GET /fan/me`) and the name edit. Logout is [Session.logout].
 class Profile extends AsyncNotifier<FanUser> {
@@ -59,3 +60,9 @@ String? initials(String? displayName) {
       .map((w) => String.fromCharCode(w.runes.first).toUpperCase())
       .join(startsRtl(words.first) ? '\u200C' : '');
 }
+
+/// The app version, read from the platform once (empty until then, and where it cannot be read).
+final appVersionProvider = FutureProvider<String>((ref) async {
+  final info = await PackageInfo.fromPlatform();
+  return '${info.version} (${info.buildNumber})';
+});

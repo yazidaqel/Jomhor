@@ -1,6 +1,10 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Barlow_Condensed, Cairo, IBM_Plex_Sans_Arabic, Inter } from 'next/font/google'
-import { shopName } from '@/lib/club'
+import tokens from '@/lib/tokens'
+import appleIcon from '../../../design/logo/apple-touch-icon-180.png'
+import favicon32 from '../../../design/logo/favicon-32.png'
+import favicon64 from '../../../design/logo/favicon-64.png'
+import markIcon from '../../../design/logo/jomhor-mark-dark.svg'
 import { dirOf } from '@/lib/i18n'
 import { getI18n } from '@/lib/i18n/server'
 import { ErrorCopy } from './error-copy'
@@ -20,16 +24,29 @@ const arBody = IBM_Plex_Sans_Arabic({ weight: ['400', '500', '600', '700'], subs
  */
 const arabic = (latin: { style: { fontFamily: string } }, arVar: string) => `${latin.style.fontFamily.split(',')[0]}, var(${arVar})`
 
-/** Read per request: `SHOP_ORIGIN` makes canonical and Open Graph URLs absolute (unset at build time). */
+/**
+ * Read per request: `SHOP_ORIGIN` makes canonical and Open Graph URLs absolute (unset at build time).
+ * Titles read "… · Jomhor"; icons are design/logo files as is; the default OG image is ./opengraph-image.tsx.
+ */
 export async function generateMetadata(): Promise<Metadata> {
   const { d } = await getI18n()
   const origin = process.env.SHOP_ORIGIN
   return {
-    title: { default: shopName(d), template: `%s · ${shopName(d)}` },
+    title: { default: d.app.name, template: `%s · ${d.app.name}` },
     ...(URL.canParse(origin ?? '') && { metadataBase: new URL(origin!) }),
-    openGraph: { siteName: shopName(d), locale: d.meta.og, type: 'website' },
+    openGraph: { siteName: d.app.name, locale: d.meta.og, type: 'website' },
+    icons: {
+      icon: [
+        { url: markIcon.src, type: 'image/svg+xml' },
+        { url: favicon32.src, sizes: '32x32', type: 'image/png' },
+        { url: favicon64.src, sizes: '64x64', type: 'image/png' },
+      ],
+      apple: { url: appleIcon.src, sizes: '180x180', type: 'image/png' },
+    },
   }
 }
+
+export const viewport: Viewport = { themeColor: tokens.color.ground }
 
 /** `<html lang dir>` from the request's locale (plan Q65: `?lang=`, cookie, Accept-Language, FR). */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

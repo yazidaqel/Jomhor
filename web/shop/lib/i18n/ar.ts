@@ -18,7 +18,7 @@ export const ar: Dict = {
     home: 'شوف الأحداث',
   },
   header: {
-    shop: '{club} · التذاكر',
+    shop: 'تذاكر {club}',
     nav: 'التنقل الرئيسي',
     events: 'الماتشات',
     tickets: 'التذاكر ديالي',
@@ -31,7 +31,8 @@ export const ar: Dict = {
     language: 'اللغة',
   },
   footer: {
-    poweredBy: 'بتقنية Jomhor · جمهور',
+    /** BRAND.md tagline, beside the lockup (never inside it). */
+    tagline: 'جمهور. الرجل الثاني عشر.',
   },
   notFound: {
     metaTitle: 'الصفحة ما كايناش',

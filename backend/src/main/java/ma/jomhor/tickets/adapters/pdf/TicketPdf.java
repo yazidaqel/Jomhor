@@ -8,16 +8,20 @@ import com.google.zxing.qrcode.encoder.Encoder;
 import com.ibm.icu.text.ArabicShaping;
 import com.ibm.icu.text.ArabicShapingException;
 import com.ibm.icu.text.Bidi;
+import java.awt.Color;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.MatchResult;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import ma.jomhor.common.HolderNames;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -28,6 +32,7 @@ import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.util.Matrix;
 
 /**
  * The printable ticket (docs/04-api.md GET /fan/tickets/{id}/pdf): an A4 page with the details and a dashed
@@ -35,6 +40,7 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
  * ticket number under it. Holder label only: no full name, no phone. Latin lines use the standard fonts (WinAnsi);
  * a line with Arabic script is shaped (ICU ArabicShaping), put in visual order (ICU Bidi) and drawn with the embedded
  * IBM Plex Sans Arabic (OFL, resources/fonts), subset. The fixed labels stay French (04 §Holder names, PDF).
+ * The header carries the Jomhor lockup (design/BRAND.md, PDF ticket), drawn as vector paths from its SVG.
  */
 public final class TicketPdf {
 
@@ -56,8 +62,15 @@ public final class TicketPdf {
     private static final float GREY = 0.42f;
 
     private static final Pattern ARABIC = Pattern.compile("\\p{IsArabic}");
-    private static final byte[] ARABIC_REGULAR = font("IBMPlexSansArabic-Regular.ttf");
-    private static final byte[] ARABIC_BOLD = font("IBMPlexSansArabic-Bold.ttf");
+    private static final byte[] ARABIC_REGULAR = resource("/fonts/IBMPlexSansArabic-Regular.ttf");
+    private static final byte[] ARABIC_BOLD = resource("/fonts/IBMPlexSansArabic-Bold.ttf");
+    /** design/logo/jomhor-lockup-light.svg copied as is: ink J and wordmark outlines, the amber twelfth dot. */
+    private static final String LOCKUP =
+            new String(resource("/logo/jomhor-lockup-light.svg"), StandardCharsets.UTF_8);
+    /** SVG units to points: the drawn lockup is ~123 pt wide, over the 120 px minimum (BRAND.md). */
+    private static final float LOCKUP_SCALE = 0.3f;
+    private static final Pattern SVG_ELEMENT = Pattern.compile("<(g|circle|path)\\s([^>]*)>|</g>");
+    private static final Pattern SVG_TOKEN = Pattern.compile("[A-Za-z]|-?[\\d.]+");
     /** First-strong isolate and its end: the holder label keeps its own direction inside the French line. */
     private static final String FSI = Character.toString(0x2068);
     private static final String PDI = Character.toString(0x2069);
@@ -71,10 +84,10 @@ public final class TicketPdf {
 
     private TicketPdf() {}
 
-    private static byte[] font(String file) {
-        try (var in = TicketPdf.class.getResourceAsStream("/fonts/" + file)) {
+    private static byte[] resource(String path) {
+        try (var in = TicketPdf.class.getResourceAsStream(path)) {
             if (in == null) {
-                throw new IllegalStateException("Font missing: " + file);
+                throw new IllegalStateException("Resource missing: " + path);
             }
             return in.readAllBytes();
         } catch (IOException e) {
@@ -103,6 +116,9 @@ public final class TicketPdf {
             float left = 56;
             float width = pageW - 2 * left;
             try (PDPageContentStream s = new PDPageContentStream(doc, page)) {
+                // The SVG's top-left corner; its own margins (one dot and more) are the lockup's clear space, and
+                // its drawn left edge lines up with the text. Above "BILLET": nothing below it moved.
+                lockup(s, left - 8.5f, pageH - 24);
                 float y = pageH - 72;
                 text(s, regular, 10, left, y, "BILLET", width, GREY);
                 y -= 30;
@@ -164,6 +180,113 @@ public final class TicketPdf {
             return out.toByteArray();
         } catch (IOException e) {
             throw new UncheckedIOException("Ticket PDF not rendered", e);
+        }
+    }
+
+    /**
+     * The lockup SVG at {@link #LOCKUP_SCALE}, top-left corner at (x, top). Reads only what the file uses: nested
+     * {@code <g transform="translate(..) scale(..)">}, filled circles, filled paths in absolute M L H V C Z.
+     */
+    private static void lockup(PDPageContentStream s, float x, float top) throws IOException {
+        s.saveGraphicsState();
+        s.transform(new Matrix(LOCKUP_SCALE, 0, 0, -LOCKUP_SCALE, x, top)); // SVG y runs down
+        Matcher e = SVG_ELEMENT.matcher(LOCKUP);
+        while (e.find()) {
+            String attrs = e.group(2);
+            if (e.group(1) == null) {
+                s.restoreGraphicsState();
+            } else if (e.group(1).equals("g")) {
+                float[] t = numbers(attr(attrs, "transform")); // translate(tx,ty) [scale(k)]
+                float k = t.length > 2 ? t[2] : 1;
+                s.saveGraphicsState();
+                s.transform(new Matrix(k, 0, 0, k, t[0], t[1]));
+            } else {
+                s.setNonStrokingColor(new Color(Integer.parseInt(attr(attrs, "fill").substring(1), 16)));
+                if (e.group(1).equals("circle")) {
+                    circle(s, numbers(attr(attrs, "cx"))[0], numbers(attr(attrs, "cy"))[0],
+                            numbers(attr(attrs, "r"))[0]);
+                } else {
+                    path(s, attr(attrs, "d"));
+                }
+                s.fill();
+            }
+        }
+        s.restoreGraphicsState();
+    }
+
+    private static String attr(String attrs, String name) {
+        Matcher m = Pattern.compile("(?:^|\\s)" + name + "=\"([^\"]*)\"").matcher(attrs);
+        if (!m.find()) {
+            throw new IllegalStateException("Lockup SVG: no " + name);
+        }
+        return m.group(1);
+    }
+
+    private static float[] numbers(String text) {
+        List<String> n = SVG_TOKEN.matcher(text).results().map(MatchResult::group)
+                .filter(t -> !Character.isLetter(t.charAt(0))).toList();
+        float[] out = new float[n.size()];
+        for (int i = 0; i < out.length; i++) {
+            out[i] = Float.parseFloat(n.get(i));
+        }
+        return out;
+    }
+
+    private static void circle(PDPageContentStream s, float cx, float cy, float r) throws IOException {
+        float k = 0.5523f * r; // four cubic arcs
+        s.moveTo(cx + r, cy);
+        s.curveTo(cx + r, cy + k, cx + k, cy + r, cx, cy + r);
+        s.curveTo(cx - k, cy + r, cx - r, cy + k, cx - r, cy);
+        s.curveTo(cx - r, cy - k, cx - k, cy - r, cx, cy - r);
+        s.curveTo(cx + k, cy - r, cx + r, cy - k, cx + r, cy);
+        s.closePath();
+    }
+
+    private static void path(PDPageContentStream s, String d) throws IOException {
+        List<String> t = SVG_TOKEN.matcher(d).results().map(MatchResult::group).toList();
+        char cmd = 'M';
+        float x = 0;
+        float y = 0;
+        for (int i = 0; i < t.size(); ) {
+            if (Character.isLetter(t.get(i).charAt(0))) {
+                cmd = t.get(i++).charAt(0);
+            }
+            switch (cmd) {
+                case 'M', 'L' -> {
+                    x = Float.parseFloat(t.get(i++));
+                    y = Float.parseFloat(t.get(i++));
+                    if (cmd == 'M') {
+                        s.moveTo(x, y);
+                        cmd = 'L'; // further pairs after M are line-tos
+                    } else {
+                        s.lineTo(x, y);
+                    }
+                }
+                case 'H' -> {
+                    x = Float.parseFloat(t.get(i++));
+                    s.lineTo(x, y);
+                }
+                case 'V' -> {
+                    y = Float.parseFloat(t.get(i++));
+                    s.lineTo(x, y);
+                }
+                case 'C' -> {
+                    float[] c = new float[6];
+                    for (int j = 0; j < 6; j++) {
+                        c[j] = Float.parseFloat(t.get(i++));
+                    }
+                    s.curveTo(c[0], c[1], c[2], c[3], c[4], c[5]);
+                    x = c[4];
+                    y = c[5];
+                }
+                case 'Z' -> {
+                    if (i < t.size() && !Character.isLetter(t.get(i).charAt(0))) {
+                        throw new IllegalStateException("Lockup SVG: number after Z");
+                    }
+                    s.closePath();
+                }
+                default -> throw new IllegalStateException("Lockup SVG: path command " + cmd);
+            }
         }
     }
 

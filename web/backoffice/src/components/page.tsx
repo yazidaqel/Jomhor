@@ -64,7 +64,7 @@ export function BrandEmpty({ title, description, action, className }: { title: s
     <Empty className={cn('gap-5 md:p-10', className)}>
       <EmptyHeader>
         <EmptyMedia>
-          <img src="/jomhor-mark.svg" alt="" className="size-12 rounded-xl shadow-sm" />
+          <img src="/jomhor-mark-dark.svg" alt="" className="size-12 rounded-xl" />
         </EmptyMedia>
         <EmptyTitle className="text-base font-semibold">{title}</EmptyTitle>
         <EmptyDescription>{description}</EmptyDescription>

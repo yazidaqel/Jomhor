@@ -35,6 +35,8 @@ class ProfileScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const BrandBar(),
+              const SizedBox(height: JomhorSpace.s),
               Text(l.navProfile, style: JomhorType.h1.copyWith(fontSize: 34)),
               const SizedBox(height: JomhorSpace.xl),
               switch (me) {
@@ -74,12 +76,36 @@ class ProfileScreen extends ConsumerWidget {
               const Entrance(index: 2, child: _LostPhone()),
               const SizedBox(height: JomhorSpace.xxl),
               const Entrance(index: 3, child: _Logout()),
-              const SizedBox(height: JomhorSpace.xxl),
-              const PoweredBy(),
+              const SizedBox(height: JomhorSpace.xxl * 2),
+              const _Footer(),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The Jomhor lockup and the app version, at the foot of Profil.
+class _Footer extends ConsumerWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final version = ref.watch(appVersionProvider).value;
+    return Column(
+      children: [
+        const JomhorLockup(height: 30),
+        if (version != null) ...[
+          const SizedBox(height: JomhorSpace.xs),
+          Text(
+            l.profileVersion(l.ltr(version)),
+            key: const Key('profile.version'),
+            style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
+          ),
+        ],
+      ],
     );
   }
 }

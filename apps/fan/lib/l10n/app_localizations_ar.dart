@@ -747,7 +747,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get ticketOpen => 'حل التذكرة';
 
   @override
-  String get poweredBy => 'بقوة جمهور';
+  String get brandTagline => 'جمهور. الرجل الثاني عشر.';
+
+  @override
+  String profileVersion(String version) {
+    return 'النسخة $version';
+  }
 
   @override
   String get transferAction => 'حول';

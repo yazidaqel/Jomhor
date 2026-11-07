@@ -6,6 +6,7 @@ import 'package:jomhor_scanner/features/staff/pin_pad.dart';
 import 'package:jomhor_scanner/features/staff/staff_session.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
 import 'package:jomhor_scanner/theme/tokens.g.dart';
+import 'package:jomhor_scanner/ui/brand.dart';
 
 /// Déverrouillage (DESIGN Lot 2 adjustments): pick a name, then the 4-digit PIN on a pad of >= 44 px keys.
 /// Works offline: the PIN is checked on the device (plan lot-2 Q31).
@@ -37,7 +38,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     final l = AppLocalizations.of(context);
     final staff = _staff;
     return Scaffold(
-      appBar: AppBar(title: Text(l.unlockTitle)),
+      appBar: brandAppBar(l.unlockTitle),
       body: SafeArea(
         child: staff == null
             ? _names(l)

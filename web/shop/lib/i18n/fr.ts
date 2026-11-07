@@ -16,7 +16,7 @@ export const fr = {
     home: 'Voir les événements',
   },
   header: {
-    shop: '{club} · Billetterie',
+    shop: 'Billetterie {club}',
     nav: 'Navigation principale',
     events: 'Matchs',
     tickets: 'Mes billets',
@@ -29,7 +29,8 @@ export const fr = {
     language: 'Langue',
   },
   footer: {
-    poweredBy: 'Propulsé par Jomhor · جمهور',
+    /** BRAND.md tagline, beside the lockup (never inside it). */
+    tagline: 'Jomhor. Le 12e homme.',
   },
   notFound: {
     metaTitle: 'Page introuvable',

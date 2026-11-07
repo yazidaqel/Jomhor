@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 
 export async function generateMetadata(): Promise<Metadata> {
   const { d } = await getI18n()
-  return { title: { absolute: shopName(d) }, description: fmt(d.home.description, { club: club.name }), alternates: { canonical: '/' } }
+  return { title: shopName(d), description: fmt(d.home.description, { club: club.name }), alternates: { canonical: '/' } }
 }
 
 /** W1 · Événements. */

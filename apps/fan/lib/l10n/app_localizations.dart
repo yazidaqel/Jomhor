@@ -1341,11 +1341,17 @@ abstract class AppLocalizations {
   /// **'Ouvrir le billet'**
   String get ticketOpen;
 
-  /// No description provided for @poweredBy.
+  /// design/BRAND.md tagline, under the large lockup of the login; never inside the lockup.
   ///
   /// In fr, this message translates to:
-  /// **'Propulsé par Jomhor'**
-  String get poweredBy;
+  /// **'Jomhor. Le 12e homme.'**
+  String get brandTagline;
+
+  /// Profil footer, under the lockup.
+  ///
+  /// In fr, this message translates to:
+  /// **'Version {version}'**
+  String profileVersion(String version);
 
   /// Screen 5 action: opens screen 8, the transfer sheet.
   ///

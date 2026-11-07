@@ -9,6 +9,8 @@ import 'package:jomhor_scanner/core/device_key.dart';
 import 'package:jomhor_scanner/core/gate/gate_client.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
 import 'package:jomhor_scanner/l10n/app_localizations.dart';
+import 'package:jomhor_scanner/theme/tokens.g.dart';
+import 'package:jomhor_scanner/ui/brand.dart';
 
 import 'helpers.dart';
 
@@ -68,6 +70,8 @@ void main() {
     final db = await pumpApp(tester, const Locale('fr', 'MA'));
     expect(find.text('Enrôlement'), findsOneWidget);
     expect(find.text('Appareil non enrôlé'), findsOneWidget);
+    // The Jomhor lockup at the start of the top bar (left in FR).
+    expect(tester.getRect(find.byType(JomhorLockup)).left, lessThanOrEqualTo(JomhorSpace.l));
 
     await tester.runAsync(
       () => db.update(db.config).write(const ConfigCompanion(deviceId: Value('d-1'), deviceStatus: Value('PENDING'))),
@@ -83,6 +87,9 @@ void main() {
     var db = await pumpApp(tester, const Locale('ar', 'MA'));
     expect(tester.widget<Text>(find.text('الجهاز غير مسجل')), isNotNull);
     expect(Directionality.of(tester.element(find.text('الجهاز غير مسجل'))), TextDirection.rtl);
+    // The lockup sits at the start, the right side in AR (a picture: not mirrored).
+    final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    expect(width - tester.getRect(find.byType(JomhorLockup)).right, lessThanOrEqualTo(JomhorSpace.l));
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.runAsync(db.close);
 

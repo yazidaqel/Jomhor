@@ -734,7 +734,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get ticketOpen => 'Ouvrir le billet';
 
   @override
-  String get poweredBy => 'Propulsé par Jomhor';
+  String get brandTagline => 'Jomhor. Le 12e homme.';
+
+  @override
+  String profileVersion(String version) {
+    return 'Version $version';
+  }
 
   @override
   String get transferAction => 'Transférer';

@@ -145,7 +145,7 @@ class _CashStrip extends ConsumerWidget {
   }
 }
 
-/// The club of this build (tokens.json `club`) and the fan's avatar (Profil). The bell (notifications) is Lot 4.
+/// The Jomhor lockup ([BrandBar]) and the fan's avatar (Profil). The bell (notifications) is Lot 4.
 class _TopBar extends StatelessWidget {
   const new({required this.initials});
 
@@ -154,27 +154,20 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return Row(
-      children: [
-        const Crest(initial: JomhorClub.crestInitial),
-        const SizedBox(width: 10),
-        const Expanded(
-          child: Text(JomhorClub.name, style: JomhorType.h2, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-        IconButton(
-          key: const Key('home.profile'),
-          tooltip: l.homeOpenProfile,
-          onPressed: () => context.go('/profile'),
-          icon: switch (initials) {
-            final i? => Text(
-              i,
-              textScaler: TextScaler.noScaling,
-              style: JomhorType.cta.copyWith(fontSize: 14, color: JomhorColors.text),
-            ),
-            null => const Icon(Icons.person_outline_rounded, size: 20),
-          },
-        ),
-      ],
+    return BrandBar(
+      trailing: IconButton(
+        key: const Key('home.profile'),
+        tooltip: l.homeOpenProfile,
+        onPressed: () => context.go('/profile'),
+        icon: switch (initials) {
+          final i? => Text(
+            i,
+            textScaler: TextScaler.noScaling,
+            style: JomhorType.cta.copyWith(fontSize: 14, color: JomhorColors.text),
+          ),
+          null => const Icon(Icons.person_outline_rounded, size: 20),
+        },
+      ),
     );
   }
 }

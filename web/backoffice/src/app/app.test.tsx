@@ -407,3 +407,30 @@ it('"Bientôt" items stay focusable but inert (aria-disabled), they are not link
   expect(soon).toHaveProperty('disabled', false)
   expect(nav.queryByRole('link', { name: new RegExp(fr.nav.invitations) })).toBeNull()
 })
+
+it('Jomhor brand: large lockup and "Jomhor · Connexion" on the login page', () => {
+  stubApi()
+  renderApp('/login')
+  const logos = screen.getAllByRole('img', { name: fr.app.name })
+  expect(logos.map((i) => i.getAttribute('src'))).toEqual(['/jomhor-lockup-dark.svg', '/jomhor-lockup-light.svg'])
+  expect(document.title).toBe(`Jomhor · ${fr.login.title}`)
+})
+
+it('Jomhor brand: the sidebar shows the lockup (the mark in icon mode); the club is the organizer name only', async () => {
+  session.start('tok-1', FUTURE)
+  stubApi((path) => (path === '/org/events' ? Response.json([]) : new Response(null, { status: 404 })))
+  renderApp('/events')
+  await screen.findByRole('heading', { name: fr.events.title })
+
+  // jsdom applies no Tailwind: both images are "visible" here; the classes decide which one shows.
+  const [lockup, mark] = screen.getAllByRole('img', { name: fr.app.name })
+  const brand = lockup!.closest('a')!
+  expect(mark!.closest('a')).toBe(brand)
+  expect(lockup!.getAttribute('src')).toBe('/jomhor-lockup-light.svg')
+  expect(lockup!.className).toContain('group-data-[collapsible=icon]:hidden')
+  expect(mark!.getAttribute('src')).toBe('/jomhor-mark-dark.svg')
+  expect(mark!.className).toMatch(/^hidden .*group-data-\[collapsible=icon\]:block/)
+  expect(document.title).toBe(`Jomhor · ${fr.nav.events}`)
+  expect(screen.getByRole('combobox', { name: fr.shell.organizer }).textContent).toContain('Atlas FC')
+  expect(brand.textContent).not.toContain('Atlas')
+})
