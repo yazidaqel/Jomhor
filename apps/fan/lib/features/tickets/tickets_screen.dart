@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
+import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/motion.dart';
+import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Billets tab: held tickets, upcoming then past. Saved tickets show at once (and offline); pull to refresh.
 class TicketsScreen extends ConsumerWidget {
@@ -22,12 +26,7 @@ class TicketsScreen extends ConsumerWidget {
 
     final List<Widget> body;
     if (snapshot == null) {
-      body = [
-        if (state?.error case final error?)
-          ErrorPanel(error: error, onRetry: refresh)
-        else
-          const Center(child: CircularProgressIndicator()),
-      ];
+      body = [if (state?.error case final error?) ErrorPanel(error: error, onRetry: refresh) else const SkeletonList()];
     } else {
       final now = snapshot.clock.now();
       final upcoming = [
@@ -38,40 +37,49 @@ class TicketsScreen extends ConsumerWidget {
         for (final t in snapshot.tickets)
           if (t.isPast(now)) t,
       ];
+      var i = 0;
       body = [
         if (state!.error != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: JomhorSpace.m),
-            child: Text(
-              l.ticketsOffline,
-              key: const Key('tickets.offline'),
-              style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+            padding: const EdgeInsets.only(bottom: JomhorSpace.l),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: InfoChip(l.ticketsOffline, key: const Key('tickets.offline'), icon: Icons.cloud_off_rounded),
             ),
           ),
-        if (snapshot.tickets.isEmpty) ...[
-          Text(l.ticketsEmpty, style: const TextStyle(color: JomhorColors.textSecondary)),
-          const SizedBox(height: JomhorSpace.l),
-          OutlinedButton(onPressed: () => context.go('/'), child: Text(l.ticketsBrowse)),
-        ],
+        if (snapshot.tickets.isEmpty)
+          StatePanel(
+            title: l.ticketsEmptyTitle,
+            message: l.ticketsEmpty,
+            action: FilledButton(onPressed: () => context.go('/'), child: Text(l.ticketsBrowse)),
+          ),
         for (final (title, list) in [(l.ticketsUpcoming, upcoming), (l.ticketsPast, past)])
           if (list.isNotEmpty) ...[
             const SizedBox(height: JomhorSpace.s),
             Text(title, style: JomhorType.h2),
             const SizedBox(height: JomhorSpace.m),
-            for (final t in list) _TicketRow(ticket: t),
+            for (final t in list)
+              Entrance(
+                index: i++,
+                child: _TicketRow(ticket: t, past: t.isPast(now)),
+              ),
+            const SizedBox(height: JomhorSpace.m),
           ],
       ];
     }
 
     return SafeArea(
+      bottom: false,
       child: RefreshIndicator(
+        color: JomhorColors.accent,
+        backgroundColor: JomhorColors.surface,
         onRefresh: refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.m, JomhorSpace.xl, JomhorSpace.xxl),
+          padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, JomhorSpace.xxl),
           children: [
-            Text(l.ticketsTitle, style: JomhorType.h1),
-            const SizedBox(height: JomhorSpace.l),
+            Text(l.ticketsTitle, style: JomhorType.h1.copyWith(fontSize: 34)),
+            const SizedBox(height: JomhorSpace.xl),
             ...body,
           ],
         ),
@@ -81,9 +89,10 @@ class TicketsScreen extends ConsumerWidget {
 }
 
 class _TicketRow extends StatelessWidget {
-  const new({required this.ticket});
+  const new({required this.ticket, required this.past});
 
   final FanTicket ticket;
+  final bool past;
 
   @override
   Widget build(BuildContext context) {
@@ -92,55 +101,47 @@ class _TicketRow extends StatelessWidget {
     final e = t.event;
     final (day, month) = venueDayMonth(e.startsAt, e.timezone, l.localeName);
     return Padding(
-      padding: const EdgeInsets.only(bottom: JomhorSpace.s),
-      child: Material(
-        color: JomhorColors.surface,
-        shape: const RoundedRectangleBorder(
-          side: BorderSide(color: JomhorColors.border),
-          borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => context.push('/tickets/${t.id}'),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: JomhorSpace.m, horizontal: JomhorSpace.l),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 48,
-                  child: Column(
-                    children: [
-                      Text(day, style: JomhorType.h2),
-                      Text(month, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
-                    ],
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TapCard(
+        onTap: () => context.push('/tickets/${t.id}', extra: PassOrigin.list.name),
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 14, JomhorSpace.l, 14),
+        child: Row(
+          children: [
+            DateBadge(day: day, month: month, highlight: t.hasQr, past: past),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(e.title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(
+                    l.ticketRowFacts(t.zone.name, t.ticketNo),
+                    style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
                   ),
-                ),
-                const SizedBox(width: JomhorSpace.m),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(e.title, style: JomhorType.body),
-                      Text(
-                        l.ticketRowFacts(t.zone.name, t.ticketNo),
-                        style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
-                      ),
-                    ],
-                  ),
-                ),
-                if (t.hasQr)
-                  const Icon(Icons.qr_code_2, color: JomhorColors.accent)
-                else
-                  Flexible(
-                    child: Text(
+                  if (!t.hasQr) ...[
+                    const SizedBox(height: 2),
+                    Text(
                       ticketStatusText(l, t),
-                      textAlign: TextAlign.end,
-                      style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
+                      style: JomhorType.caption.copyWith(color: JomhorColors.textSecondary, fontSize: 12),
                     ),
-                  ),
-              ],
+                  ],
+                ],
+              ),
             ),
-          ),
+            const SizedBox(width: JomhorSpace.m),
+            Semantics(
+              label: l.ticketOpen,
+              child: Hero(
+                tag: passHeroTag(PassOrigin.list, t.id),
+                flightShuttleBuilder: passFlight,
+                child: Opacity(
+                  opacity: past ? 0.5 : 1,
+                  child: MiniPass(width: 36, dimmed: !t.hasQr),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -9,6 +9,7 @@ import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/motion.dart';
 
 /// After the card page (or the `jomhor-fan://orders/{id}` deep link): waits for PAID, then the
 /// success card slides in. The ticket itself is FL-7 (Billets).
@@ -23,9 +24,8 @@ class OrderScreen extends ConsumerWidget {
     final status = ref.watch(orderStatusProvider(orderId));
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: JomhorColors.ground,
         leading: CloseButton(onPressed: () => context.go('/')),
-        title: Text(l.payTitle, style: JomhorType.h2),
+        title: Text(l.payTitle),
       ),
       body: SafeArea(
         child: Padding(
@@ -140,7 +140,7 @@ class _Paid extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return TweenAnimationBuilder<Offset>(
       tween: Tween(begin: const Offset(0, 0.4), end: Offset.zero),
-      duration: const Duration(milliseconds: JomhorMotion.ticketFlip),
+      duration: motionOf(context, JomhorMotion.ticketFlip),
       curve: Curves.easeOutCubic,
       builder: (context, offset, child) => FractionalTranslation(translation: offset, child: child),
       child: Card(
@@ -151,7 +151,24 @@ class _Paid extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.check_circle_outline, size: 64, color: JomhorColors.successText),
+              Center(
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.4, end: 1),
+                  duration: motionOf(context, JomhorMotion.ticketFlip),
+                  curve: Curves.easeOutBack,
+                  builder: (context, s, child) => Transform.scale(scale: s, child: child),
+                  child: Container(
+                    width: 88,
+                    height: 88,
+                    decoration: const BoxDecoration(
+                      color: JomhorColors.successBg,
+                      shape: BoxShape.circle,
+                      border: Border.fromBorderSide(BorderSide(color: JomhorColors.success, width: 2)),
+                    ),
+                    child: const Icon(Icons.check_rounded, size: 48, color: JomhorColors.successText),
+                  ),
+                ),
+              ),
               const SizedBox(height: JomhorSpace.m),
               Text(l.orderPaidTitle, style: JomhorType.h1, textAlign: TextAlign.center),
               const SizedBox(height: JomhorSpace.s),

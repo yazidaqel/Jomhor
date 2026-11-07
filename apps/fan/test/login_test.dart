@@ -114,11 +114,19 @@ void main() {
 
   testWidgets('a 401 on any authenticated call clears the token and routes to login', (tester) async {
     final tokens = MemoryTokenStore('jwt-revoked');
-    final container = await pumpJomhor(tester, backend: backend(), tokens: tokens);
+    // Revoked after launch: the Accueil greeting's /fan/me at start still succeeds.
+    var revoked = false;
+    final me = json({'id': 'u1', 'phone': '+212612345678', 'display_name': null, 'locale': 'fr'});
+    final container = await pumpJomhor(
+      tester,
+      backend: (r) => (revoked ? backend() : backend(me: me))(r),
+      tokens: tokens,
+    );
     await tester.tap(find.text('Billets'));
     await tester.pumpAndSettle();
     expect(find.byType(LoginScreen), findsNothing);
 
+    revoked = true;
     await expectLater(container.read(apiClientProvider).get('/fan/me'), throwsA(isA<ApiError>()));
     await tester.pumpAndSettle();
     expect(tokens.token, isNull);

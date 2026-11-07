@@ -7,6 +7,10 @@ import 'package:jomhor_fan/features/auth/auth_repository.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/brand.dart';
+import 'package:jomhor_fan/ui/motion.dart';
+import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Profil tab (Lot 1): name (editable), phone (read-only), language (FR only), logout. Logout stays usable when
 /// `/fan/me` cannot be read (offline).
@@ -19,48 +23,110 @@ class ProfileScreen extends ConsumerWidget {
     final me = ref.watch(profileProvider);
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(JomhorSpace.xl),
-          children: [
-            Text(l.navProfile, style: JomhorType.h1),
-            const SizedBox(height: JomhorSpace.l),
-            switch (me) {
-              AsyncData(:final value) => _Identity(user: value),
-              AsyncError(:final error) => ErrorPanel(error: error, onRetry: () => ref.invalidate(profileProvider)),
-              _ => const Padding(
-                padding: EdgeInsets.all(JomhorSpace.xl),
-                child: Center(child: CircularProgressIndicator()),
+        bottom: false,
+        // Short page: built whole (not lazily), so logout is there even under a tall error panel.
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, JomhorSpace.xxl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(l.navProfile, style: JomhorType.h1.copyWith(fontSize: 34)),
+              const SizedBox(height: JomhorSpace.xl),
+              switch (me) {
+                AsyncData(:final value) => Entrance(child: _Identity(user: value)),
+                AsyncError(:final error) => ErrorPanel(error: error, onRetry: () => ref.invalidate(profileProvider)),
+                _ => const _IdentitySkeleton(),
+              },
+              const SizedBox(height: JomhorSpace.xxl),
+              Entrance(
+                index: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SectionLabel(l.profileLanguage),
+                    _Group(
+                      children: [
+                        ListTile(
+                          key: const Key('profile.lang.fr'),
+                          title: Text(l.languageFr),
+                          trailing: const Icon(Icons.check_rounded, color: JomhorColors.accent),
+                          selected: true,
+                        ),
+                        // Lot 4: AR (RTL) and EN copy.
+                        for (final name in [l.languageAr, l.languageEn])
+                          ListTile(
+                            enabled: false,
+                            title: Text(name),
+                            trailing: Text(
+                              l.chipSoon,
+                              style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            },
-            const SizedBox(height: JomhorSpace.l),
-            _Section(l.profileLanguage),
-            ListTile(
-              key: const Key('profile.lang.fr'),
-              title: Text(l.languageFr),
-              trailing: const Icon(Icons.check, color: JomhorColors.accent),
-              selected: true,
-            ),
-            // Lot 4: AR (RTL) and EN copy.
-            for (final name in [l.languageAr, l.languageEn])
-              ListTile(enabled: false, title: Text(name), trailing: Text(l.chipSoon)),
-            const SizedBox(height: JomhorSpace.xxl),
-            const _Logout(),
-          ],
+              const SizedBox(height: JomhorSpace.xxl),
+              const Entrance(index: 2, child: _Logout()),
+              const SizedBox(height: JomhorSpace.xxl),
+              const PoweredBy(),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _Section extends StatelessWidget {
-  const new(this.title);
+/// Rows in one card, with hairlines between them (settings group).
+class _Group extends StatelessWidget {
+  const new({required this.children});
 
-  final String title;
+  final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: JomhorSpace.xs),
-    child: Text(title.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.textMuted)),
+  Widget build(BuildContext context) => Card(
+    shape: const RoundedRectangleBorder(
+      side: BorderSide(color: JomhorColors.border),
+      borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.control)),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      children: [
+        for (final (i, child) in children.indexed) ...[
+          if (i > 0) const Divider(indent: JomhorSpace.l, endIndent: JomhorSpace.l),
+          child,
+        ],
+      ],
+    ),
+  );
+}
+
+class _IdentitySkeleton extends StatelessWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: AppLocalizations.of(context).loading,
+    child: const ExcludeSemantics(
+      child: Row(
+        children: [
+          Skeleton(height: 72, width: 72, radius: JomhorRadius.pill),
+          SizedBox(width: JomhorSpace.l),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FractionallySizedBox(widthFactor: 0.6, child: Skeleton(height: 22)),
+                SizedBox(height: JomhorSpace.s),
+                FractionallySizedBox(widthFactor: 0.45, child: Skeleton(height: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
   );
 }
 
@@ -110,60 +176,132 @@ class _IdentityState extends ConsumerState<_Identity> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Section(l.profileName),
-        if (!_editing)
-          ListTile(
-            title: Text(
-              name ?? l.profileNameEmpty,
-              key: const Key('profile.name'),
-              style: name == null ? const TextStyle(color: JomhorColors.textMuted) : null,
+        Container(
+          padding: const EdgeInsets.all(JomhorSpace.xl),
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: AlignmentDirectional.topStart,
+              end: AlignmentDirectional.bottomEnd,
+              colors: [JomhorColors.surface2, JomhorColors.surface],
             ),
-            trailing: IconButton(
-              key: const Key('profile.editName'),
-              tooltip: l.profileEditName,
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: _edit,
-            ),
-          )
-        else ...[
-          TextField(
-            key: const Key('profile.nameField'),
-            controller: _name,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            autofillHints: const [AutofillHints.name],
-            decoration: InputDecoration(labelText: l.holderNameLabel, errorText: _error, errorMaxLines: 3),
-            onSubmitted: _saving ? null : (_) => _save(),
+            border: Border.fromBorderSide(BorderSide(color: JomhorColors.border)),
+            borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.card)),
           ),
-          const SizedBox(height: JomhorSpace.s),
-          Row(
+          child: Row(
             children: [
+              _Avatar(initials: initials(name)),
+              const SizedBox(width: JomhorSpace.l),
               Expanded(
-                child: OutlinedButton(
-                  onPressed: _saving ? null : () => setState(() => _editing = false),
-                  child: Text(l.cancel),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name ?? l.profileNameEmpty,
+                      key: const Key('profile.name'),
+                      semanticsLabel: l.dotPair(l.profileName, name ?? l.profileNameEmpty),
+                      style: name == null
+                          ? JomhorType.body.copyWith(color: JomhorColors.textMuted)
+                          : JomhorType.h2.copyWith(fontSize: 24),
+                    ),
+                    const SizedBox(height: JomhorSpace.xs),
+                    // Read-only: the phone is the login. An E.164 number reads left to right in every locale.
+                    Text(
+                      widget.user.phone,
+                      key: const Key('profile.phone'),
+                      semanticsLabel: l.dotPair(l.profilePhone, widget.user.phone),
+                      textDirection: TextDirection.ltr,
+                      style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: JomhorSpace.s),
-              Expanded(
-                child: FilledButton(
-                  key: const Key('profile.saveName'),
-                  onPressed: _saving ? null : _save,
-                  child: Text(l.save),
+              if (!_editing)
+                IconButton(
+                  key: const Key('profile.editName'),
+                  tooltip: l.profileEditName,
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  onPressed: _edit,
                 ),
-              ),
             ],
           ),
-        ],
-        const SizedBox(height: JomhorSpace.l),
-        _Section(l.profilePhone),
-        ListTile(
-          // Read-only: the phone is the login. An E.164 number reads left to right in every locale.
-          title: Text(widget.user.phone, key: const Key('profile.phone'), textDirection: TextDirection.ltr),
+        ),
+        AnimatedSize(
+          duration: motionOf(context, JomhorMotion.base),
+          curve: Curves.easeOut,
+          alignment: AlignmentDirectional.topCenter,
+          child: !_editing
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.only(top: JomhorSpace.l),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        key: const Key('profile.nameField'),
+                        controller: _name,
+                        autofocus: true,
+                        textCapitalization: TextCapitalization.words,
+                        autofillHints: const [AutofillHints.name],
+                        decoration: InputDecoration(
+                          labelText: l.holderNameLabel,
+                          errorText: _error,
+                          errorMaxLines: 3,
+                          prefixIcon: const Icon(Icons.badge_outlined),
+                        ),
+                        onSubmitted: _saving ? null : (_) => _save(),
+                      ),
+                      const SizedBox(height: JomhorSpace.m),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _saving ? null : () => setState(() => _editing = false),
+                              child: Text(l.cancel),
+                            ),
+                          ),
+                          const SizedBox(width: JomhorSpace.s),
+                          Expanded(
+                            child: FilledButton(
+                              key: const Key('profile.saveName'),
+                              onPressed: _saving ? null : _save,
+                              child: Text(l.save),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
         ),
       ],
     );
   }
+}
+
+/// The fan's initials on an accent disc (or a person glyph without a name).
+class _Avatar extends StatelessWidget {
+  const new({required this.initials});
+
+  final String? initials;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 64,
+    height: 64,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: JomhorColors.accent,
+      boxShadow: [BoxShadow(color: JomhorColors.accent.withValues(alpha: 0.3), blurRadius: 24)],
+    ),
+    child: initials == null
+        ? const Icon(Icons.person_rounded, color: JomhorColors.onAccent, size: 32)
+        : Text(
+            initials!,
+            textScaler: TextScaler.noScaling,
+            style: JomhorType.number.copyWith(color: JomhorColors.onAccent, fontSize: 28),
+          ),
+  );
 }
 
 class _Logout extends ConsumerStatefulWidget {
@@ -189,6 +327,7 @@ class _LogoutState extends ConsumerState<_Logout> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.cancel)),
           FilledButton(
             key: const Key('profile.logoutConfirm'),
+            style: FilledButton.styleFrom(minimumSize: const Size(JomhorSize.touchMin, 48)),
             onPressed: () => Navigator.pop(context, true),
             child: Text(l.profileLogoutConfirm),
           ),
@@ -208,20 +347,17 @@ class _LogoutState extends ConsumerState<_Logout> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: JomhorSize.ctaHeight,
-          child: OutlinedButton.icon(
-            key: const Key('profile.logout'),
-            onPressed: _leaving ? null : () => _logout(all: false),
-            icon: const Icon(Icons.logout),
-            label: Text(l.profileLogout),
-          ),
+        OutlinedButton.icon(
+          key: const Key('profile.logout'),
+          onPressed: _leaving ? null : () => _logout(all: false),
+          icon: const Icon(Icons.logout_rounded, size: 20),
+          label: Text(l.profileLogout),
         ),
-        const SizedBox(height: JomhorSpace.s),
+        const SizedBox(height: JomhorSpace.xs),
         TextButton(
           key: const Key('profile.logoutAll'),
           onPressed: _leaving ? null : () => _logout(all: true),
-          child: Text(l.profileLogoutAll),
+          child: Text(l.profileLogoutAll, textAlign: TextAlign.center),
         ),
       ],
     );

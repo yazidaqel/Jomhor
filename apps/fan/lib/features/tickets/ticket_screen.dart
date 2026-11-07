@@ -1,15 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:jomhor_core/jomhor_core.dart' show slotAt;
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
+import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/brand.dart';
+import 'package:jomhor_fan/ui/motion.dart';
+import 'package:jomhor_fan/ui/skeleton.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -29,9 +36,12 @@ String gatesText(AppLocalizations l, FanTicket t) => t.gateCodes.join(l.listSepa
 /// Screen 5 · Mon billet (DESIGN.md + Lot 1 adjustments). Reads the saved tickets only, so it works in airplane
 /// mode; its one network call is the WhatsApp re-send, on a tap. Full brightness and screen kept awake while shown.
 class TicketScreen extends ConsumerStatefulWidget {
-  const new({required this.id, super.key});
+  const new({required this.id, this.origin, super.key});
 
   final String id;
+
+  /// The card the fan tapped, for the hero flight; null for a deep link or the matchday auto-open.
+  final PassOrigin? origin;
 
   @override
   ConsumerState<TicketScreen> createState() => _TicketScreenState();
@@ -41,6 +51,9 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
   PageController? _pages;
   var _page = 0;
   Timer? _tick;
+
+  /// QR slot of the last tick: a change is a new code, felt as a haptic tick.
+  int? _slot;
 
   @override
   void initState() {
@@ -56,9 +69,18 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
     final ms = now == null ? 0 : now.millisecondsSinceEpoch % 1000;
     _tick = Timer(Duration(milliseconds: 1000 - ms), () {
       if (!mounted) return;
+      _tickHaptic();
       setState(() {});
       _schedule();
     });
+  }
+
+  void _tickHaptic() {
+    final snapshot = ref.read(ticketsProvider).value?.snapshot;
+    final shows = snapshot?.tickets.any((t) => t.id == widget.id && t.hasQr) ?? false;
+    final slot = shows ? slotAt(snapshot!.clock.now()) : null;
+    if (slot != null && _slot != null && slot != _slot) unawaited(HapticFeedback.selectionClick());
+    _slot = slot;
   }
 
   @override
@@ -97,18 +119,16 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
       return Scaffold(
         body: SafeArea(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(onClose: _close, matchday: false),
               Expanded(
-                child: Center(
-                  child: tickets.isLoading && snapshot == null
-                      ? const CircularProgressIndicator()
-                      : Padding(
-                          padding: const EdgeInsets.all(JomhorSpace.xl),
-                          child: Text(l.ticketNotFound, textAlign: TextAlign.center),
-                        ),
-                ),
+                child: tickets.isLoading && snapshot == null
+                    ? const Padding(
+                        padding: EdgeInsets.all(JomhorSpace.xl),
+                        child: Skeleton(height: 560, radius: JomhorRadius.cardLarge),
+                      )
+                    : Center(child: StatePanel(message: l.ticketNotFound)),
               ),
             ],
           ),
@@ -120,28 +140,55 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
     final pages = _pages ??= PageController(initialPage: _page = group.indexOf(ticket));
     final shown = group[_page.clamp(0, group.length - 1)];
     final now = snapshot.clock.now();
+    final matchday = isMatchday(shown, now);
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _Header(onClose: _close, matchday: isMatchday(shown, now)),
-            Expanded(
-              child: PageView(
-                controller: pages,
-                onPageChanged: (i) => setState(() => _page = i),
-                children: [
-                  for (final t in group)
-                    SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.xl, vertical: JomhorSpace.s),
-                      child: _TicketCard(ticket: t, now: now),
-                    ),
-                ],
-              ),
+      body: Stack(
+        children: [
+          // Matchday mode: the stadium light comes on behind the pass.
+          PositionedDirectional(
+            top: -170,
+            start: -150,
+            child: AnimatedOpacity(
+              opacity: matchday ? 1 : 0,
+              duration: motionOf(context, JomhorMotion.ticketFlip),
+              child: const AccentGlow(size: 480, opacity: 0.26),
             ),
-            if (group.length > 1) _Dots(count: group.length, current: _page),
-            _WhatsApp(ticket: shown),
-          ],
-        ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                _Header(onClose: _close, matchday: matchday),
+                Expanded(
+                  child: PageView(
+                    controller: pages,
+                    onPageChanged: (i) => setState(() => _page = i),
+                    children: [
+                      for (final t in group)
+                        SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(
+                            JomhorSpace.xl,
+                            JomhorSpace.s,
+                            JomhorSpace.xl,
+                            JomhorSpace.l,
+                          ),
+                          child: switch (widget.origin) {
+                            final origin? when t.id == widget.id && !reduceMotion(context) => Hero(
+                              tag: passHeroTag(origin, t.id),
+                              flightShuttleBuilder: passFlight,
+                              child: _TicketCard(ticket: t, now: now, matchday: matchday),
+                            ),
+                            _ => _TicketCard(ticket: t, now: now, matchday: matchday),
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                if (group.length > 1) _Dots(count: group.length, current: _page),
+                _WhatsApp(ticket: shown),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -157,31 +204,54 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.s, JomhorSpace.xl, JomhorSpace.s),
+      padding: const EdgeInsets.fromLTRB(JomhorSpace.l, JomhorSpace.s, JomhorSpace.l, JomhorSpace.s),
       child: Row(
         children: [
-          IconButton(onPressed: onClose, tooltip: l.close, style: _circle, icon: const Icon(Icons.close)),
+          IconButton(onPressed: onClose, tooltip: l.close, icon: const Icon(Icons.close_rounded, size: 20)),
           Expanded(
-            child: matchday
-                ? Text(
-                    l.ticketMatchday.toUpperCase(),
-                    textAlign: TextAlign.center,
-                    style: JomhorType.label.copyWith(color: JomhorColors.accent),
-                  )
-                : const SizedBox.shrink(),
+            child: AnimatedSwitcher(
+              duration: motionOf(context, JomhorMotion.base),
+              child: matchday
+                  ? Row(
+                      key: const Key('ticket.matchday'),
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox.square(
+                          dimension: 8,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(color: JomhorColors.accent, shape: BoxShape.circle),
+                          ),
+                        ),
+                        const SizedBox(width: JomhorSpace.s),
+                        Flexible(
+                          child: Text(
+                            l.ticketMatchday.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: JomhorType.label.copyWith(color: JomhorColors.accent),
+                          ),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
           ),
           // Not a control: says the brightness is forced to max while the ticket is shown.
           Tooltip(
             message: l.ticketBrightness,
             child: Container(
-              width: JomhorSize.touchMin,
-              height: JomhorSize.touchMin,
-              decoration: const BoxDecoration(
-                color: JomhorColors.surface,
-                shape: BoxShape.circle,
-                border: Border.fromBorderSide(BorderSide(color: JomhorColors.border)),
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              child: Container(
+                width: JomhorSize.touchMin,
+                height: JomhorSize.touchMin,
+                decoration: const BoxDecoration(
+                  color: JomhorColors.surface,
+                  shape: BoxShape.circle,
+                  border: Border.fromBorderSide(BorderSide(color: JomhorColors.border)),
+                ),
+                child: const Icon(Icons.light_mode_outlined, size: 20),
               ),
-              child: const Icon(Icons.brightness_high_outlined, size: 20),
             ),
           ),
         ],
@@ -190,19 +260,14 @@ class _Header extends StatelessWidget {
   }
 }
 
-final ButtonStyle _circle = IconButton.styleFrom(
-  backgroundColor: JomhorColors.surface,
-  side: const BorderSide(color: JomhorColors.border),
-  fixedSize: const Size.square(JomhorSize.touchMin),
-);
-
 class _TicketCard extends StatelessWidget {
-  const new({required this.ticket, required this.now});
+  const new({required this.ticket, required this.now, required this.matchday});
 
   final FanTicket ticket;
 
   /// Server time of this frame.
   final DateTime now;
+  final bool matchday;
 
   @override
   Widget build(BuildContext context) {
@@ -210,23 +275,46 @@ class _TicketCard extends StatelessWidget {
     final t = ticket;
     final e = t.event;
     final label = factsLine(l, e.facts);
-    const muted = TextStyle(fontSize: 11, color: JomhorColors.ticketMuted, letterSpacing: 1);
-    const value = TextStyle(fontSize: 22, fontWeight: FontWeight.w700, height: 1, color: JomhorColors.ticketInk);
+    const muted = TextStyle(
+      fontFamily: JomhorFonts.body,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: JomhorColors.ticketMuted,
+      letterSpacing: 1.2,
+    );
+    final value = JomhorType.h2.copyWith(fontSize: 26, height: 1, color: JomhorColors.ticketInk);
+    const strong = TextStyle(
+      fontFamily: JomhorFonts.body,
+      fontWeight: FontWeight.w600,
+      fontSize: 15,
+      color: JomhorColors.ticketInk,
+    );
 
     Widget fact(String name, String text, [String? caption]) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(name.toUpperCase(), style: muted),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(text, style: value),
-        if (caption != null) Text(caption, style: muted.copyWith(letterSpacing: 0)),
+        if (caption != null) ...[
+          const SizedBox(height: 2),
+          Text(caption, style: muted.copyWith(letterSpacing: 0, fontWeight: FontWeight.w500)),
+        ],
       ],
     );
 
-    return DecoratedBox(
-      decoration: const BoxDecoration(
+    return AnimatedContainer(
+      duration: motionOf(context, JomhorMotion.ticketFlip),
+      decoration: BoxDecoration(
         color: JomhorColors.ticketPaper,
-        borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.cardLarge)),
+        borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.cardLarge)),
+        boxShadow: [
+          BoxShadow(
+            color: matchday ? JomhorColors.accent.withValues(alpha: 0.5) : JomhorColors.ground.withValues(alpha: 0),
+            blurRadius: 36,
+            spreadRadius: 2,
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.cardLarge)),
@@ -239,23 +327,29 @@ class _TicketCard extends StatelessWidget {
               ColoredBox(
                 color: JomhorColors.accent,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 18, JomhorSpace.xl, 14),
+                  padding: const EdgeInsetsDirectional.fromSTEB(JomhorSpace.xl, 18, JomhorSpace.l, JomhorSpace.l),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (label != null)
+                            if (label != null) ...[
                               Text(
                                 label.toUpperCase(),
                                 style: JomhorType.caption.copyWith(
-                                  color: JomhorColors.onAccent.withValues(alpha: 0.7),
+                                  color: JomhorColors.onAccent.withValues(alpha: 0.72),
                                   letterSpacing: 1.5,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            Text(e.title.toUpperCase(), style: JomhorType.h1.copyWith(color: JomhorColors.onAccent)),
+                              const SizedBox(height: 6),
+                            ],
+                            Text(
+                              e.title.toUpperCase(),
+                              style: JomhorType.hero.copyWith(fontSize: 29, color: JomhorColors.onAccent),
+                            ),
                           ],
                         ),
                       ),
@@ -267,7 +361,8 @@ class _TicketCard extends StatelessWidget {
                         decoration: const BoxDecoration(color: JomhorColors.ground, shape: BoxShape.circle),
                         child: Text(
                           JomhorClub.crestInitial,
-                          style: JomhorType.h2.copyWith(color: JomhorColors.accent, fontWeight: FontWeight.w800),
+                          textScaler: TextScaler.noScaling,
+                          style: JomhorType.number.copyWith(color: JomhorColors.accent, fontSize: 24),
                         ),
                       ),
                     ],
@@ -275,15 +370,16 @@ class _TicketCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, 0),
+                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 18, JomhorSpace.xl, 0),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: fact(l.ticketZone, t.zone.name)),
+                    Expanded(flex: 4, child: fact(l.ticketZone, t.zone.name)),
                     const SizedBox(width: JomhorSpace.m),
-                    Expanded(child: fact(l.ticketGates(t.gateCodes.length), gatesText(l, t))),
+                    Expanded(flex: 2, child: fact(l.ticketGates(t.gateCodes.length), gatesText(l, t))),
                     const SizedBox(width: JomhorSpace.m),
                     Expanded(
+                      flex: 3,
                       child: fact(
                         e.facts is FootballFacts ? l.ticketKickoff : l.ticketStart,
                         venueClock(e.startsAt, e.timezone, l.localeName),
@@ -294,7 +390,7 @@ class _TicketCard extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.m, JomhorSpace.xl, 0),
+                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, JomhorSpace.xs),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -304,40 +400,60 @@ class _TicketCard extends StatelessWidget {
                         children: [
                           if (t.holderLabel case final holder?) ...[
                             Text(l.ticketHolder.toUpperCase(), style: muted),
-                            Text(holder, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                            const SizedBox(height: 4),
+                            Text(holder, style: strong),
                           ],
                           if (t.seatLabel case final seat?) ...[
+                            const SizedBox(height: JomhorSpace.s),
                             Text(l.ticketSeat.toUpperCase(), style: muted),
-                            Text(seat, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                            const SizedBox(height: 4),
+                            Text(seat, style: strong),
                           ],
                         ],
                       ),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(l.ticketNumber.toUpperCase(), style: muted),
-                        Text(
-                          t.ticketNo,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, letterSpacing: 1),
-                        ),
-                      ],
+                    const SizedBox(width: JomhorSpace.m),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(l.ticketNumber.toUpperCase(), style: muted),
+                          const SizedBox(height: 4),
+                          Text(
+                            t.ticketNo,
+                            textDirection: TextDirection.ltr,
+                            textAlign: TextAlign.end,
+                            style: JomhorType.h2.copyWith(
+                              fontSize: 20,
+                              color: JomhorColors.ticketInk,
+                              letterSpacing: 1.5,
+                              height: 1.05,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
               const _Perforation(),
               Padding(
-                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 6, JomhorSpace.xl, 18),
+                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.xs, JomhorSpace.xl, JomhorSpace.xl),
                 child: t.hasQr
                     ? RotatingQr(ticket: t, now: now)
                     : Padding(
                         padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xxl),
-                        child: Text(
-                          ticketStatusText(l, t),
-                          key: const Key('ticket.status'),
-                          textAlign: TextAlign.center,
-                          style: JomhorType.h2.copyWith(color: JomhorColors.ticketInk),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.qr_code_2_rounded, size: 56, color: JomhorColors.ticketRule),
+                            const SizedBox(height: JomhorSpace.m),
+                            Text(
+                              ticketStatusText(l, t),
+                              key: const Key('ticket.status'),
+                              textAlign: TextAlign.center,
+                              style: JomhorType.h2.copyWith(color: JomhorColors.ticketInk),
+                            ),
+                          ],
                         ),
                       ),
               ),
@@ -403,36 +519,76 @@ class RotatingQr extends StatelessWidget {
     final left = secondsToNextSlot(now);
     // DESIGN.md §Accessibility: the QR scales down to 160 px with large text so the card does not clip.
     final size = MediaQuery.textScalerOf(context).scale(1) > 1.15 ? 160.0 : 200.0;
+    const tabular = [FontFeature.tabularFigures()];
     return Column(
       children: [
-        TicketQr(data: ticket.rotatingToken(now)!, size: size, label: l.ticketQrLabel(ticket.ticketNo)),
-        const SizedBox(height: JomhorSpace.s),
+        // Nothing moves over the QR (DESIGN.md principle 6); it repaints alone each second.
+        RepaintBoundary(
+          child: TicketQr(data: ticket.rotatingToken(now)!, size: size, label: l.ticketQrLabel(ticket.ticketNo)),
+        ),
+        const SizedBox(height: 14),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SizedBox(
-              width: 120,
-              child: LinearProgressIndicator(
-                value: left / JomhorMotion.qrRotationSeconds,
-                minHeight: 4,
-                borderRadius: const BorderRadius.all(Radius.circular(2)),
-                color: JomhorColors.accent,
-                backgroundColor: JomhorColors.ticketRule,
+            RepaintBoundary(
+              child: SizedBox(
+                width: 120,
+                height: 5,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: JomhorColors.ticketRule,
+                    borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.pill)),
+                  ),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: AnimatedFractionallySizedBox(
+                      key: const Key('ticket.progress'),
+                      duration: motionOf(context, 300),
+                      curve: Curves.easeOut,
+                      widthFactor: left / JomhorMotion.qrRotationSeconds,
+                      heightFactor: 1,
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [JomhorColors.accent, JomhorColors.accentHover]),
+                          borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.pill)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: JomhorSpace.s),
-            Text(l.ticketNextCode(left), style: const TextStyle(fontSize: 12, color: JomhorColors.ticketMuted)),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                l.ticketNextCode(left),
+                style: const TextStyle(
+                  fontFamily: JomhorFonts.body,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: JomhorColors.ticketMuted,
+                  fontFeatures: tabular,
+                ),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: JomhorSpace.s),
+        const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.wifi_off, size: 14, color: JomhorColors.success),
+            const Icon(Icons.check_rounded, size: 16, color: JomhorColors.success),
             const SizedBox(width: 6),
-            Text(
-              l.ticketWorksOffline,
-              style: const TextStyle(fontSize: 12, color: JomhorColors.success, fontWeight: FontWeight.w600),
+            Flexible(
+              child: Text(
+                l.ticketWorksOffline,
+                style: const TextStyle(
+                  fontFamily: JomhorFonts.body,
+                  fontSize: 12,
+                  color: JomhorColors.success,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         ),
@@ -470,17 +626,19 @@ class _Dots extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: JomhorSpace.s),
+    padding: const EdgeInsets.only(top: JomhorSpace.xs),
     child: Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         for (var i = 0; i < count; i++)
-          Container(
-            width: 8,
+          AnimatedContainer(
+            duration: motionOf(context, JomhorMotion.base),
+            curve: Curves.easeOut,
+            width: i == current ? 22 : 8,
             height: 8,
             margin: const EdgeInsets.symmetric(horizontal: 3),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
               color: i == current ? JomhorColors.accent : JomhorColors.borderMuted,
             ),
           ),
@@ -529,18 +687,23 @@ class _WhatsAppState extends ConsumerState<_WhatsApp> {
       padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.m, JomhorSpace.xl, JomhorSpace.l),
       child: Column(
         children: [
-          SizedBox(
-            height: 56,
-            width: double.infinity,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
             child: OutlinedButton.icon(
               key: const Key('ticket.whatsapp'),
               onPressed: valid && !_sending ? _send : null,
-              icon: const Icon(Icons.send_outlined),
+              icon: _sending
+                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.send_rounded, size: 20),
               label: Text(l.ticketWhatsApp),
             ),
           ),
-          const SizedBox(height: JomhorSpace.xs),
-          Text(l.ticketWhatsAppHint, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
+          const SizedBox(height: JomhorSpace.s),
+          Text(
+            l.ticketWhatsAppHint,
+            textAlign: TextAlign.center,
+            style: JomhorType.caption.copyWith(color: JomhorColors.textMuted, fontSize: 12),
+          ),
         ],
       ),
     );

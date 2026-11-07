@@ -1082,6 +1082,60 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Ce téléphone est déconnecté, mais tes autres appareils n\'ont pas pu l\'être (pas de réseau). Reconnecte-toi et réessaie.'**
   String get profileLogoutAllFailed;
+
+  /// No description provided for @loading.
+  ///
+  /// In fr, this message translates to:
+  /// **'Chargement'**
+  String get loading;
+
+  /// Accueil greeting with the fan first name (from display_name).
+  ///
+  /// In fr, this message translates to:
+  /// **'Salut {name}'**
+  String homeGreeting(String name);
+
+  /// No description provided for @homeGreetingNoName.
+  ///
+  /// In fr, this message translates to:
+  /// **'Salut'**
+  String get homeGreetingNoName;
+
+  /// No description provided for @homeGreetingGuest.
+  ///
+  /// In fr, this message translates to:
+  /// **'Bienvenue'**
+  String get homeGreetingGuest;
+
+  /// No description provided for @homeEmptyTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rien au programme'**
+  String get homeEmptyTitle;
+
+  /// No description provided for @homeOpenProfile.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mon profil'**
+  String get homeOpenProfile;
+
+  /// No description provided for @ticketsEmptyTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Pas encore de billet'**
+  String get ticketsEmptyTitle;
+
+  /// No description provided for @ticketOpen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ouvrir le billet'**
+  String get ticketOpen;
+
+  /// No description provided for @poweredBy.
+  ///
+  /// In fr, this message translates to:
+  /// **'Propulsé par Jomhor'**
+  String get poweredBy;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -12,6 +12,8 @@ import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 4 · Paiement: named holders, summary, card. "Payer" holds the places (POST /fan/orders, with the
 /// holders the contract requires) and opens the card page; the 8-min countdown starts with the hold.
@@ -25,12 +27,13 @@ class CheckoutScreen extends ConsumerWidget {
     final l = AppLocalizations.of(context);
     final detail = ref.watch(eventDetailProvider(args.eventId));
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: JomhorColors.ground,
-        title: Text(l.payTitle, style: JomhorType.h2),
-      ),
+      appBar: AppBar(title: Text(l.payTitle)),
       body: detail.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => ListView(
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(JomhorSpace.xl),
+          children: const [SkeletonList(rows: 4)],
+        ),
         error: (e, _) => Center(
           child: ErrorPanel(error: e, onRetry: () => ref.invalidate(eventDetailProvider(args.eventId))),
         ),
@@ -145,28 +148,20 @@ class _FormState extends ConsumerState<_Form> {
             padding: const EdgeInsets.all(JomhorSpace.xl),
             children: [
               if (state.left case final left?)
-                Container(
+                InfoBanner(
                   key: const Key('checkout.hold'),
-                  padding: const EdgeInsets.all(JomhorSpace.m),
-                  decoration: const BoxDecoration(
-                    color: JomhorColors.successBg,
-                    border: Border.fromBorderSide(BorderSide(color: JomhorColors.success)),
-                    borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.chip)),
-                  ),
-                  child: Text(
-                    l.holdLeft(_mmss(left)),
-                    style: JomhorType.body.copyWith(color: JomhorColors.successText),
-                  ),
+                  text: l.holdLeft(_mmss(left)),
+                  success: true,
+                  icon: Icons.timer_outlined,
                 ),
               if (state.phase == CheckoutPhase.busy)
-                Container(
-                  key: const Key('checkout.busy'),
-                  padding: const EdgeInsets.all(JomhorSpace.m),
-                  decoration: const BoxDecoration(
-                    color: JomhorColors.surface2,
-                    borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.chip)),
+                Padding(
+                  padding: const EdgeInsets.only(top: JomhorSpace.s),
+                  child: InfoBanner(
+                    key: const Key('checkout.busy'),
+                    text: l.busyRetry(state.retryIn ?? 0),
+                    icon: Icons.hourglass_top_rounded,
                   ),
-                  child: Text(l.busyRetry(state.retryIn ?? 0), style: JomhorType.body),
                 ),
               const SizedBox(height: JomhorSpace.l),
               Card(
@@ -183,11 +178,14 @@ class _FormState extends ConsumerState<_Form> {
                 ),
               ),
               const SizedBox(height: JomhorSpace.xl),
-              Text(l.holdersTitle.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.textMuted)),
-              const SizedBox(height: JomhorSpace.m),
+              SectionLabel(l.holdersTitle),
+              const SizedBox(height: JomhorSpace.xs),
               for (var i = 0; i < args.qty; i++) ...[
-                Text(i == 0 ? l.holderMe : l.holderN(i + 1), style: JomhorType.body),
-                const SizedBox(height: JomhorSpace.xs),
+                Text(
+                  i == 0 ? l.holderMe : l.holderN(i + 1),
+                  style: JomhorType.body.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: JomhorSpace.s),
                 TextField(
                   key: Key('holder.$i.name'),
                   controller: _names[i],
@@ -197,9 +195,11 @@ class _FormState extends ConsumerState<_Form> {
                   decoration: InputDecoration(
                     labelText: l.holderNameLabel,
                     errorText: state.badNames.contains(i) ? l.holderNameError : null,
+                    prefixIcon: const Icon(Icons.badge_outlined),
                   ),
                 ),
-                if (i > 0)
+                if (i > 0) ...[
+                  const SizedBox(height: JomhorSpace.s),
                   TextField(
                     key: Key('holder.$i.phone'),
                     controller: _phones[i],
@@ -210,8 +210,10 @@ class _FormState extends ConsumerState<_Form> {
                       helperText: l.holderPhoneHelp,
                       helperMaxLines: 2,
                       errorText: state.badPhones.contains(i) ? l.holderPhoneError : null,
+                      prefixIcon: const Icon(Icons.chat_outlined),
                     ),
                   ),
+                ],
                 const SizedBox(height: JomhorSpace.l),
               ],
               if (_hasFriendPhone) ...[
@@ -231,8 +233,8 @@ class _FormState extends ConsumerState<_Form> {
                 ),
                 const SizedBox(height: JomhorSpace.l),
               ],
-              Text(l.methodTitle.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.textMuted)),
-              const SizedBox(height: JomhorSpace.m),
+              SectionLabel(l.methodTitle),
+              const SizedBox(height: JomhorSpace.xs),
               // Lot 1: card only (cash and wallet in Lot 3).
               Container(
                 padding: const EdgeInsets.all(JomhorSpace.l),
@@ -243,11 +245,13 @@ class _FormState extends ConsumerState<_Form> {
                 ),
                 child: Row(
                   children: [
+                    const Icon(Icons.radio_button_checked_rounded, color: JomhorColors.accent),
+                    const SizedBox(width: JomhorSpace.m),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(l.methodCard, style: JomhorType.body),
+                          Text(l.methodCard, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
                           Text(l.methodCardHint, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
                         ],
                       ),

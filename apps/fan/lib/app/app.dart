@@ -64,6 +64,7 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
       if (!next.isLoading) _openMatchday(next.value?.snapshot);
     });
     return MaterialApp.router(
+      debugShowCheckedModeBanner: false,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       theme: buildAppTheme(),
       // FR first: an unsupported device locale resolves to FR.

@@ -16,9 +16,12 @@ Live canvas: https://claude.ai/artifact/RZdBe8HCqJUDBhB61S55mt
 6. Motion means something: ticket slides into the wallet after purchase; card flips to
    gate directions; green "You're in" when the scan syncs. Beyond those, only quiet
    affordances: a one-time entrance on first paint (fade/rise, at most 420 ms, short
-   stagger, capped after 5 items), a hover lift on clickable cards, a cross-fade between pages,
-   a quick selection mark (`motion.base`). No decorative loops (progress indicators excepted),
-   no parallax. All of it off under reduced motion.
+   stagger, capped after 5 items), a hover lift on clickable cards, a cross-fade between pages
+   (web and Android; iOS keeps its native slide and swipe-back), a quick selection mark
+   (`motion.base`). Fan app specifics: the pass flies from its card into screen 5, countdown
+   digits roll when they change, the paid check settles in once, a haptic tick marks each QR
+   rotation (nothing moves over the QR itself). No decorative loops (progress indicators
+   excepted), no parallax. All of it off under reduced motion.
 7. FR first, AR with true RTL mirroring (leading icons flip, numbers stay LTR), EN.
 
 ## Components

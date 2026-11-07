@@ -11,6 +11,10 @@ import 'package:jomhor_fan/features/events/sale_copy.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/brand.dart';
+import 'package:jomhor_fan/ui/motion.dart';
+import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 2 · Match: header, rules banner, zone rows, sticky "Choisir ma zone".
 class EventScreen extends ConsumerWidget {
@@ -26,12 +30,21 @@ class EventScreen extends ConsumerWidget {
 
     return Scaffold(
       body: detail.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => SafeArea(
+          child: ListView(
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(JomhorSpace.xl),
+            children: const [SkeletonList(hero: true, rows: 4)],
+          ),
+        ),
         error: (e, _) => SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              BackButton(onPressed: () => _back(context)),
+              Padding(
+                padding: const EdgeInsets.all(JomhorSpace.l),
+                child: BackButton(onPressed: () => _back(context)),
+              ),
               Expanded(
                 child: Center(
                   child: ErrorPanel(error: e, onRetry: () => ref.invalidate(eventDetailProvider(id))),
@@ -73,45 +86,61 @@ class _Body extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       children: [
-        // Header block.
-        ColoredBox(
-          color: JomhorColors.surface,
-          child: SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(JomhorSpace.s, 0, JomhorSpace.xl, JomhorSpace.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  BackButton(onPressed: () => _back(context)),
-                  Padding(
-                    padding: const EdgeInsets.only(left: JomhorSpace.m),
+        // Header block: the club light in the corner, the title big.
+        DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [JomhorColors.surface2, JomhorColors.surface],
+            ),
+            border: Border(bottom: BorderSide(color: JomhorColors.border)),
+          ),
+          child: ClipRect(
+            child: Stack(
+              children: [
+                const PositionedDirectional(bottom: -170, start: -130, child: AccentGlow(size: 380, opacity: 0.2)),
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(JomhorSpace.l, JomhorSpace.s, JomhorSpace.xl, JomhorSpace.xxl),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (facts != null)
-                          Text(facts.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.accent)),
-                        const SizedBox(height: JomhorSpace.s),
-                        Text(e.title.toUpperCase(), style: JomhorType.h1),
-                        const SizedBox(height: JomhorSpace.m),
-                        Wrap(
-                          spacing: JomhorSpace.s,
-                          runSpacing: JomhorSpace.s,
-                          children: [
-                            _Chip(
-                              l.dotPair(
-                                venueDate(e.startsAt, e.timezone, l.localeName),
-                                venueClock(e.startsAt, e.timezone, l.localeName),
+                        BackButton(onPressed: () => _back(context)),
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(start: JomhorSpace.xs, top: JomhorSpace.m),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (facts != null) ...[
+                                Text(facts.toUpperCase(), style: JomhorType.label.copyWith(color: JomhorColors.accent)),
+                                const SizedBox(height: JomhorSpace.s),
+                              ],
+                              Entrance(child: Text(e.title.toUpperCase(), style: JomhorType.hero)),
+                              const SizedBox(height: JomhorSpace.l),
+                              Wrap(
+                                spacing: JomhorSpace.s,
+                                runSpacing: JomhorSpace.s,
+                                children: [
+                                  InfoChip(
+                                    l.dotPair(
+                                      venueDate(e.startsAt, e.timezone, l.localeName),
+                                      venueClock(e.startsAt, e.timezone, l.localeName),
+                                    ),
+                                    icon: Icons.calendar_today_outlined,
+                                  ),
+                                  InfoChip(e.venueName, icon: Icons.place_outlined),
+                                ],
                               ),
-                            ),
-                            _Chip(e.venueName),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -120,30 +149,20 @@ class _Body extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                key: const Key('event.rules'),
-                padding: const EdgeInsets.all(JomhorSpace.m),
-                decoration: BoxDecoration(
-                  color: open ? JomhorColors.successBg : JomhorColors.surface2,
-                  border: Border.all(color: open ? JomhorColors.success : JomhorColors.border),
-                  borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.chip)),
-                ),
-                child: Text(
-                  rulesLabel(l, e, now),
-                  style: JomhorType.bodySmall.copyWith(
-                    color: open ? JomhorColors.successText : JomhorColors.textSecondary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: JomhorSpace.xl),
+              InfoBanner(key: const Key('event.rules'), text: rulesLabel(l, e, now), success: open),
+              const SizedBox(height: JomhorSpace.xxl),
               Text(l.zonesTitle, style: JomhorType.h2),
               const SizedBox(height: JomhorSpace.m),
-              for (final (i, z) in detail.zones.indexed) ZoneRow(zone: z, index: i),
+              for (final (i, z) in detail.zones.indexed)
+                Entrance(
+                  index: i + 1,
+                  child: ZoneRow(zone: z, index: i),
+                ),
               const SizedBox(height: JomhorSpace.m),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.info_outline, size: JomhorSize.navIcon, color: JomhorColors.textMuted),
+                  const Icon(Icons.info_outline_rounded, size: 18, color: JomhorColors.textMuted),
                   const SizedBox(width: JomhorSpace.s),
                   Expanded(
                     child: Text(l.paymentHint, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
@@ -156,22 +175,6 @@ class _Body extends StatelessWidget {
       ],
     );
   }
-}
-
-class _Chip extends StatelessWidget {
-  const new(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(vertical: JomhorSpace.s, horizontal: JomhorSpace.m),
-    decoration: const BoxDecoration(
-      color: JomhorColors.surface2,
-      borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.chip)),
-    ),
-    child: Text(text, style: JomhorType.bodySmall),
-  );
 }
 
 class _Footer extends StatelessWidget {
@@ -202,7 +205,7 @@ class _Footer extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(l.footerFrom, style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
-                    Text(formatDh(price), style: JomhorType.h2),
+                    Text(formatDh(price), style: JomhorType.h1),
                   ],
                 ),
                 const SizedBox(width: JomhorSpace.l),
