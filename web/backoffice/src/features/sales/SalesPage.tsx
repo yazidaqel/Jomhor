@@ -1,20 +1,21 @@
 import type { ReactNode } from 'react'
-import { Banknote, Hourglass, Ticket, type LucideIcon } from 'lucide-react'
+import { Banknote, Hourglass, Ticket } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link, Navigate, useParams } from 'react-router'
-import { BrandEmpty, ErrorNotice, LoadingRows, PageHeader, STICKY_TABLE } from '@/components/page'
+import { Navigate, useParams } from 'react-router'
+import { ErrorNotice, PageHeader } from '@/components/page'
 import { FillBar } from '@/components/fill-bar'
+import { Kpi } from '@/components/kpi'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useEvent, useEvents } from '@/features/events/api'
+import { useEvent } from '@/features/events/api'
+import { EventPicker } from '@/features/events/EventPicker'
 import { StatusBadge } from '@/features/events/EventsPage'
 import { fr } from '@/i18n/fr'
 import { ApiError } from '@/lib/api'
 import { formatDh } from '@/lib/money'
 import { percent } from '@/lib/percent'
 import { formatDateTime } from '@/lib/time'
-import { cn } from '@/lib/utils'
 import { useSales, type EventSales } from './api'
 
 type Reason = keyof typeof fr.sales.refunds.reasons
@@ -33,75 +34,10 @@ function Section({ title, description, children }: { title: string; description?
   )
 }
 
-function Kpi({ icon: Icon, label, value, hint, children }: { icon: LucideIcon; label: string; value: string; hint: string; children?: ReactNode }) {
-  return (
-    <Card className="gap-2 py-5">
-      <CardContent className="flex flex-col gap-2 px-5">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium text-muted-foreground">{label}</span>
-          <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
-            <Icon className="size-4 text-foreground/70" aria-hidden="true" />
-          </span>
-        </div>
-        <div className="text-2xl leading-tight font-semibold tracking-tight tabular-nums md:text-[1.75rem]">{value}</div>
-        {children}
-        <div className="text-xs text-muted-foreground">{hint}</div>
-      </CardContent>
-    </Card>
-  )
-}
-
 /** Sidebar "Ventes": the organizer's events, each opening its B3 page. */
 export function SalesIndexPage() {
-  const { t, i18n } = useTranslation()
-  const events = useEvents()
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader title={t('sales.title')} description={t('sales.indexDescription')} />
-      <Card className={cn('gap-0 overflow-hidden py-0', STICKY_TABLE)}>
-        {events.isPending ? (
-          <LoadingRows className="p-5" />
-        ) : events.isError ? (
-          <ErrorNotice error={events.error} onRetry={() => void events.refetch()} />
-        ) : events.data.length === 0 ? (
-          <BrandEmpty title={t('events.emptyTitle')} description={t('sales.noEvents')} />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>{t('events.columns.title')}</TableHead>
-                <TableHead>{t('events.columns.startsAt')}</TableHead>
-                <TableHead>{t('events.columns.status')}</TableHead>
-                <TableHead className="text-right">{t('events.columns.sold')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {events.data.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      to={`/events/${encodeURIComponent(e.id)}/sales`}
-                      className="rounded-sm outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                    >
-                      {e.title}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{formatDateTime(e.starts_at, i18n.language, e.venue.timezone)}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={e.status} />
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    <div>{t('events.soldOfQuota', { sold: e.sold, quota: e.quota })}</div>
-                    <FillBar paid={e.sold} quota={e.quota} className="mt-1.5 ml-auto w-24" />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
-    </div>
-  )
+  const { t } = useTranslation()
+  return <EventPicker title={t('sales.title')} description={t('sales.indexDescription')} empty={t('sales.noEvents')} to={(id) => `/events/${encodeURIComponent(id)}/sales`} />
 }
 
 /** B3 Ventes: `/events/:id/sales`. ADMIN, OPS and FINANCE (the shell's roles); a 403 shows the FORBIDDEN copy. */
@@ -170,14 +106,19 @@ function SalesBody({ sales, zone }: { sales: EventSales; zone: string }) {
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Kpi icon={Ticket} label={t('sales.kpi.paid')} value={t('events.soldOfQuota', { sold: sales.paid, quota: sales.quota })} hint={t('sales.kpi.paidHint')}>
+        <Kpi index={0} icon={Ticket} label={t('sales.kpi.paid')} value={t('events.soldOfQuota', { sold: sales.paid, quota: sales.quota })}>
           <div className="flex items-center gap-3">
             <FillBar paid={sales.paid} held={sales.held} quota={sales.quota} />
-            <span className="shrink-0 text-xs font-medium tabular-nums">{percent(sales.paid, sales.quota, i18n.language)}</span>
+            <span className="shrink-0 font-medium text-foreground tabular-nums">{percent(sales.paid, sales.quota, i18n.language)}</span>
           </div>
+          <span>{t('sales.kpi.paidHint')}</span>
         </Kpi>
-        <Kpi icon={Hourglass} label={t('sales.kpi.held')} value={n(sales.held)} hint={t('sales.kpi.heldHint')} />
-        <Kpi icon={Banknote} label={t('sales.kpi.revenue')} value={dh(sales.revenue_mad)} hint={t('sales.kpi.revenueHint')} />
+        <Kpi index={1} icon={Hourglass} label={t('sales.kpi.held')} value={n(sales.held)}>
+          {t('sales.kpi.heldHint')}
+        </Kpi>
+        <Kpi index={2} icon={Banknote} label={t('sales.kpi.revenue')} value={dh(sales.revenue_mad)}>
+          {t('sales.kpi.revenueHint')}
+        </Kpi>
       </div>
 
       <Section title={t('sales.zones.title')}>

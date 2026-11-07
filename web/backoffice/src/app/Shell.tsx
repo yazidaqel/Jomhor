@@ -54,11 +54,11 @@ import { session, useSelectedOrganizerId, useSessionToken } from '@/lib/session'
 // GATE and SUPERVISOR staff get 403 on every /org call (04-api §Organizer): not offered here.
 const BACKOFFICE_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'FINANCE']
 
-type Section = 'overview' | 'events' | 'sales' | 'venues' | 'devices'
-type NavKey = Section | 'liveGates' | 'invitations' | 'finance' | 'crm'
+type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices'
+type NavKey = Section | 'invitations' | 'finance' | 'crm'
 // no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others).
 type NavItem = { key: NavKey; icon: LucideIcon; to?: string; roles?: readonly Role[] }
-// Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Appareils in Lot 2.
+// Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Portes en direct and Appareils in Lot 2.
 const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: NavItem[] }[] = [
   {
     group: 'manage',
@@ -71,7 +71,7 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
   {
     group: 'matchday',
     items: [
-      { key: 'liveGates', icon: RadioTower },
+      { key: 'liveGates', icon: RadioTower, to: '/live' },
       { key: 'devices', icon: Smartphone, to: '/devices', roles: ['ADMIN', 'OPS'] },
     ],
   },
@@ -86,19 +86,21 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
   { group: 'settings', items: [{ key: 'venues', icon: MapPin, to: '/settings/venues' }] },
 ]
 
-/** `/events/:id/sales` lives under Événements in the URL but under Ventes in the sidebar. */
+/** `/events/:id/sales` and `/events/:id/live` live under Événements in the URL but under Ventes / Portes en direct in the sidebar. */
 const section = (pathname: string): Section | null =>
   pathname === '/'
     ? 'overview'
     : /^\/(sales|events\/[^/]+\/sales)\/?$/.test(pathname)
       ? 'sales'
-      : pathname.startsWith('/events')
-        ? 'events'
-        : pathname.startsWith('/settings/venues')
-          ? 'venues'
-          : pathname.startsWith('/devices')
-            ? 'devices'
-            : null
+      : /^\/(live|events\/[^/]+\/live)\/?$/.test(pathname)
+        ? 'liveGates'
+        : pathname.startsWith('/events')
+          ? 'events'
+          : pathname.startsWith('/settings/venues')
+            ? 'venues'
+            : pathname.startsWith('/devices')
+              ? 'devices'
+              : null
 
 const initials = (name: string) =>
   name

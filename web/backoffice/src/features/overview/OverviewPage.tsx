@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ArrowRight, CalendarDays, ChartNoAxesColumn, ChevronRight, Banknote, Hourglass, MapPin, Plus, Tags, Ticket, Trophy, type LucideIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { BrandEmpty, ErrorNotice, PageHeader } from '@/components/page'
 import { FillBar } from '@/components/fill-bar'
+import { Kpi } from '@/components/kpi'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,27 +15,16 @@ import { useSales, type EventSales } from '@/features/sales/api'
 import { formatDh } from '@/lib/money'
 import { percent } from '@/lib/percent'
 import { dateParts, formatDateTime, formatLongDateTime, formatTime } from '@/lib/time'
+import { RISE } from '@/lib/motion'
 import { cn } from '@/lib/utils'
+import { useNow } from '@/lib/useNow'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 const eventPath = (id: number) => `/events/${encodeURIComponent(id)}`
-// DESIGN §6: one-time entrance (fade + rise, 420 ms max), 60 ms stagger capped after 5 items; off under reduced motion.
-const RISE = 'animate-in fade-in-0 slide-in-from-bottom-2 duration-[420ms] ease-out fill-mode-backwards motion-reduce:animate-none'
-const stagger = (i: number) => ({ animationDelay: `${Math.min(i, 5) * 60}ms` })
 // Hover lift on clickable rows (DESIGN §6).
 const LIFT = 'transition-[background-color,transform] duration-200 hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:translate-y-0'
-
-/** The clock, re-read every `ms`: drives the countdown and the greeting. */
-function useNow(ms: number) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), ms)
-    return () => clearInterval(id)
-  }, [ms])
-  return now
-}
 
 /** Aperçu, the landing page: the next event (live first), its sales, what comes after, and shortcuts. */
 export function OverviewPage() {
@@ -334,23 +324,6 @@ function PaidRing({ paid, quota }: { paid: number; quota: number }) {
         <span className="mt-1 hidden text-xs font-medium tabular-nums lg:block">{t('overview.zones.value', { paid, quota })}</span>
       </div>
     </div>
-  )
-}
-
-function Kpi({ index, icon: Icon, label, value, children }: { index: number; icon: LucideIcon; label: string; value: string; children: ReactNode }) {
-  return (
-    <Card className={cn('gap-2 py-5', RISE)} style={stagger(index)}>
-      <CardContent className="flex flex-col gap-2 px-5">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium text-muted-foreground">{label}</span>
-          <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
-            <Icon className="size-4 text-foreground/70" aria-hidden="true" />
-          </span>
-        </div>
-        <div className="text-[1.75rem] leading-none font-semibold tracking-tight tabular-nums">{value}</div>
-        <div className="flex flex-col gap-2 text-xs text-muted-foreground">{children}</div>
-      </CardContent>
-    </Card>
   )
 }
 

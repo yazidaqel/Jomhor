@@ -88,3 +88,10 @@ export function dateParts(iso: string, locale: string, zone: string) {
   const parts = new Intl.DateTimeFormat(locale, { timeZone: zone, day: 'numeric', month: 'short' }).formatToParts(Date.parse(iso))
   return { day: parts.find((p) => p.type === 'day')?.value ?? '', month: parts.find((p) => p.type === 'month')?.value ?? '' }
 }
+
+/** `ms` ago as `il y a 9 s` / `il y a 6 min` / `il y a 2 h` (a negative age, from clock drift, reads as 0 s). */
+export function formatAgo(ms: number, locale: string) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  const f = new Intl.RelativeTimeFormat(locale, { style: 'short' })
+  return s < 60 ? f.format(-s, 'second') : s < 3600 ? f.format(-Math.floor(s / 60), 'minute') : f.format(-Math.floor(s / 3600), 'hour')
+}
