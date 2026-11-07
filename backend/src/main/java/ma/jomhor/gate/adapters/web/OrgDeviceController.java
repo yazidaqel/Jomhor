@@ -3,11 +3,9 @@ package ma.jomhor.gate.adapters.web;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import ma.jomhor.common.web.ApiException;
 import ma.jomhor.gate.application.DeviceService;
 import ma.jomhor.gate.domain.Device;
 import ma.jomhor.tenancy.domain.OrgContext;
-import ma.jomhor.tenancy.domain.StaffRole;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -42,32 +40,24 @@ class OrgDeviceController {
     @PostMapping("/org/devices/enrol-codes")
     @ResponseStatus(HttpStatus.CREATED)
     EnrolCodeDto enrolCode(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org) {
-        var code = devices.enrolCode(adminOrOps(org).organizerId());
+        var code = devices.enrolCode(org.adminOrOps().organizerId());
         return new EnrolCodeDto(code.code(), code.expiresAt());
     }
 
     @GetMapping("/org/devices")
     List<DeviceDto> list(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org) {
-        return devices.list(adminOrOps(org).organizerId()).stream().map(DeviceDto::of).toList();
+        return devices.list(org.adminOrOps().organizerId()).stream().map(DeviceDto::of).toList();
     }
 
     @PostMapping("/org/devices/{id}/approve")
     DeviceDto approve(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id) {
-        adminOrOps(org);
+        org.adminOrOps();
         return DeviceDto.of(devices.approve(org.organizerId(), org.userId(), id));
     }
 
     @PostMapping("/org/devices/{id}/revoke")
     DeviceDto revoke(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id) {
-        adminOrOps(org);
+        org.adminOrOps();
         return DeviceDto.of(devices.revoke(org.organizerId(), org.userId(), id));
-    }
-
-    /** The interceptor lets FINANCE read every /org GET; devices are ADMIN/OPS only (04 §Organizer, Lot 2). */
-    private static OrgContext adminOrOps(OrgContext org) {
-        if (org.role() != StaffRole.ADMIN && org.role() != StaffRole.OPS) {
-            throw new ApiException("FORBIDDEN", HttpStatus.FORBIDDEN, "Forbidden");
-        }
-        return org;
     }
 }

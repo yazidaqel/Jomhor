@@ -12,12 +12,13 @@ import java.util.Base64;
 import java.util.List;
 import java.util.stream.Stream;
 import ma.jomhor.gate.domain.DeviceSignature;
+import ma.jomhor.tenancy.domain.Pins;
 import org.junit.jupiter.api.Test;
 
 /**
  * docs/04-api.md §Gate vectors, the contract with {@code apps/scanner}: {@code signing} (the string a device signs and
- * its body hash) and {@code fingerprints}. BE-18 adds {@code pins}, BE-19 {@code manifest}. Same rules as
- * TokenVectorsTest: writes {@code docs/gate-vectors.json} when absent or with {@code -Djomhor.writeVectors=true},
+ * its body hash), {@code fingerprints} and {@code pins} (verifiers with fixed salts, so PBKDF2 gives fixed bytes);
+ * BE-19 adds {@code manifest}. Same rules as TokenVectorsTest: writes {@code docs/gate-vectors.json} when absent or with {@code -Djomhor.writeVectors=true},
  * otherwise fails when the committed file differs; on CI a missing file fails.
  *
  * <p>ECDSA signatures are randomized, so the file holds no device signature: {@link #fixedSignatureVerifies()} checks
@@ -26,6 +27,17 @@ import org.junit.jupiter.api.Test;
 class GateVectorsTest {
 
     record Signing(String method, String path, long time, String body) {}
+
+    /** {@code pin} typed on the device, checked against the verifier of {@code setPin} with a fixed salt. */
+    record Pin(String pin, String setPin, byte[] salt) {
+        String verifier() {
+            return Pins.verifier(setPin, salt);
+        }
+
+        boolean ok() {
+            return Pins.matches(pin, verifier());
+        }
+    }
 
     /** Two P-256 SubjectPublicKeyInfo (DER, base64url) generated once with OpenSSL. */
     static final String KEY_A = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEywbQayvKJf7EE3eixozLL2IL9ybXy-BliZa3mnRDoHYjTh3g40a5V"
@@ -48,6 +60,21 @@ class GateVectorsTest {
 
     static final List<String> FINGERPRINT_KEYS = List.of(KEY_A, KEY_B);
 
+    static final byte[] SALT_1 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    static final byte[] SALT_2 = "jomhor-pin-salt!".getBytes(StandardCharsets.US_ASCII);
+    static final byte[] SALT_3 = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+
+    /** Right PIN, PIN + 1, leading zeros, a 3-digit prefix and the edges 0000 / 9999. */
+    static final List<Pin> PINS = List.of(
+            new Pin("4821", "4821", SALT_1),
+            new Pin("4822", "4821", SALT_1),
+            new Pin("0000", "0000", SALT_2),
+            new Pin("0001", "0000", SALT_2),
+            new Pin("000", "0000", SALT_2),
+            new Pin("9999", "9999", SALT_3),
+            new Pin("0042", "0042", SALT_3),
+            new Pin("4200", "0042", SALT_3));
+
     /** OpenSSL ({@code dgst -sha256 -sign}, key A) over the canonical string of SIGNING[2]. */
     static final String OPENSSL_SIGNATURE = "MEUCIQC-YJMS5mKKOVt7qmChmEPp2jt_SZuuHsJCTRtOwv6DcwIgOertJIdcCt9X5IKHaXTQ"
             + "LBihJdn2l4po2u2uu-E5Ipc";
@@ -62,6 +89,13 @@ class GateVectorsTest {
                 .isEqualTo("a606465d0455b90547c2d2d8bcd618e8f0431375985e16b8eceeec95d9814cb1");
         assertThat(DeviceSignature.fingerprint(der(KEY_A))).isEqualTo("602F 0D53");
         assertThat(DeviceSignature.fingerprint(der(KEY_B))).isEqualTo("E5DE C776");
+        // hashlib.pbkdf2_hmac('sha256', pin, salt, 10000, 32), base64url without padding
+        assertThat(Pins.verifier("4821", SALT_1))
+                .isEqualTo("pbkdf2-sha256$10000$AAECAwQFBgcICQoLDA0ODw$ai3UbCeDBT5nKdEHXGutZKoXwZELT3vm4xIneno6vN8");
+        assertThat(Pins.verifier("0000", SALT_2))
+                .isEqualTo("pbkdf2-sha256$10000$am9taG9yLXBpbi1zYWx0IQ$Ovfiz4Ysoon92BXSLNgGbKdO0IZMkYM6cTMO1jhRAO8");
+        assertThat(Pins.verifier("9999", SALT_3))
+                .isEqualTo("pbkdf2-sha256$10000$_____________________w$_ShV_xRB2zwz5Xp0_RpxXoPdojduU2gM1wj66ir_DoM");
         assertThat(canonical(SIGNING.get(1))).isEqualTo("JMH-GATE-1\nGET\n/v1/gate/events/12/manifest?since=3\n"
                 + "1793995200123\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     }
@@ -100,6 +134,20 @@ class GateVectorsTest {
         byte[] trailing = java.util.Arrays.copyOf(der(KEY_A), der(KEY_A).length + 1);
         assertThat(DeviceSignature.p256(trailing)).isEmpty();
         assertThat(DeviceSignature.p256(new byte[] {0x30, 0x00})).isEmpty();
+    }
+
+    @Test
+    void pinVerifiersAcceptTheirPinOnly() {
+        assertThat(PINS.stream().map(Pin::ok).toList()).containsExactly(true, false, true, false, false, true, true, false);
+        String v = Pins.verifier("4821");
+        assertThat(v).isNotEqualTo(Pins.verifier("4821")); // random salt
+        assertThat(Pins.matches("4821", v)).isTrue();
+        for (String bad : List.of("", "pbkdf2-sha256$10000$AAECAwQFBgcICQoLDA0ODw", v.replace("$10000$", "$1000$"),
+                v.replace("pbkdf2-sha256", "pbkdf2-sha1"), v + "$", v.substring(0, v.length() - 2) + "!!")) {
+            assertThat(Pins.matches("4821", bad)).as(bad).isFalse();
+        }
+        assertThat(Pins.matches("4821", null)).isFalse();
+        assertThat(Pins.newPin()).matches("[0-9]{4}");
     }
 
     @Test
@@ -146,6 +194,15 @@ class GateVectorsTest {
                     .append("      \"public_key\": ").append(str(key)).append(",\n")
                     .append("      \"fingerprint\": ").append(str(DeviceSignature.fingerprint(der(key)))).append("\n")
                     .append(i == FINGERPRINT_KEYS.size() - 1 ? "    }\n" : "    },\n");
+        }
+        s.append("  ],\n  \"pins\": [\n");
+        for (int i = 0; i < PINS.size(); i++) {
+            Pin p = PINS.get(i);
+            s.append("    {\n")
+                    .append("      \"pin\": ").append(str(p.pin())).append(",\n")
+                    .append("      \"verifier\": ").append(str(p.verifier())).append(",\n")
+                    .append("      \"ok\": ").append(p.ok()).append("\n")
+                    .append(i == PINS.size() - 1 ? "    }\n" : "    },\n");
         }
         return s.append("  ]\n}\n").toString();
     }

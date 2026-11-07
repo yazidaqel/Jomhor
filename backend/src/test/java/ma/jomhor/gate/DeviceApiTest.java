@@ -1,7 +1,6 @@
 package ma.jomhor.gate;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.anEmptyMap;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
@@ -22,7 +21,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import ma.jomhor.catalog.OrgApiTest;
 import ma.jomhor.gate.application.GateDevice;
 import ma.jomhor.gate.domain.DeviceSignature;
 import org.junit.jupiter.api.Test;
@@ -30,14 +28,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
-import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,7 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Keystore. A test-only /gate/test/echo route shows what a request that passed the filter carries.
  */
 @Import(DeviceApiTest.Echo.class)
-class DeviceApiTest extends OrgApiTest {
+class DeviceApiTest extends GateApiTest {
 
     @TestConfiguration
     static class Echo {
@@ -72,101 +68,8 @@ class DeviceApiTest extends OrgApiTest {
     static final String TEST_MANIFEST_PUBLIC_KEY = "9657JB-9nYlMlNMM2AYY8UzKMLcbfTkI3UKd6SDuEDc";
     static final String ECHO = "/v1/gate/test/echo";
 
-    record Req(String method, String path, long time, String body) {
-        static Req now(String method, String path, String body) {
-            return new Req(method, path, System.currentTimeMillis(), body);
-        }
-
-        Req time(long t) {
-            return new Req(method, path, t, body);
-        }
-    }
-
-    record Dev(KeyPair key, UUID id) {}
-
     @Autowired
     JwtEncoder jwtEncoder;
-
-    // ---------- helpers ----------
-
-    static KeyPair newKey() throws Exception {
-        var g = KeyPairGenerator.getInstance("EC");
-        g.initialize(new ECGenParameterSpec("secp256r1"));
-        return g.generateKeyPair();
-    }
-
-    static String b64(byte[] bytes) {
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    }
-
-    static String sign(KeyPair key, Req r) throws Exception {
-        var s = Signature.getInstance("SHA256withECDSA");
-        s.initSign(key.getPrivate());
-        s.update(DeviceSignature.canonical(r.method(), r.path(), r.time(), r.body().getBytes(StandardCharsets.UTF_8))
-                .getBytes(StandardCharsets.UTF_8));
-        return b64(s.sign());
-    }
-
-    /** Sends {@code sent} with the signature of {@code signed} (the same request unless a test tampers with it). */
-    ResultActions send(KeyPair key, UUID deviceId, Req signed, Req sent) throws Exception {
-        var b = request(HttpMethod.valueOf(sent.method()), URI.create(sent.path())).contextPath("/v1")
-                .header("X-Device-Time", String.valueOf(sent.time()))
-                .header("X-Device-Signature", sign(key, signed));
-        if (deviceId != null) {
-            b.header("X-Device-Id", deviceId.toString());
-        }
-        if (!sent.body().isEmpty()) {
-            b.contentType(MediaType.APPLICATION_JSON).content(sent.body().getBytes(StandardCharsets.UTF_8));
-        }
-        return mvc.perform(b);
-    }
-
-    ResultActions send(Dev d, Req r) throws Exception {
-        return send(d.key(), d.id(), r, r);
-    }
-
-    static String enrolBody(KeyPair key, String label, String code) {
-        return "{\"public_key\": \"%s\", \"label\": \"%s\", \"enrol_code\": \"%s\"}"
-                .formatted(b64(key.getPublic().getEncoded()), label, code);
-    }
-
-    static Req enrolReq(KeyPair key, String label, String code) {
-        return Req.now("POST", "/v1/gate/devices/enrol", enrolBody(key, label, code));
-    }
-
-    ResultActions enrol(KeyPair key, String label, String code) throws Exception {
-        Req r = enrolReq(key, label, code);
-        return send(key, null, r, r);
-    }
-
-    String enrolCode(Caller c) throws Exception {
-        return JsonPath.read(body(call(c, post("/org/devices/enrol-codes")).andExpect(status().isCreated())),
-                "$.enrol_code");
-    }
-
-    Dev pending(Caller c, String label) throws Exception {
-        KeyPair key = newKey();
-        String json = body(enrol(key, label, enrolCode(c)).andExpect(status().isCreated()));
-        return new Dev(key, UUID.fromString(JsonPath.read(json, "$.device_id")));
-    }
-
-    Dev active(Caller c) throws Exception {
-        Dev d = pending(c, "PDA " + UUID.randomUUID().toString().substring(0, 4));
-        call(c, post("/org/devices/" + d.id() + "/approve")).andExpect(status().isOk());
-        return d;
-    }
-
-    int audits(String action, UUID target) {
-        return jdbc.sql("select count(*) from audit_log where action = ? and target = ?")
-                .params(action, target.toString()).query(Integer.class).single();
-    }
-
-    static void assertUnauthorized(ResultActions r) throws Exception {
-        r.andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
-                .andExpect(jsonPath("$.message").value("Unauthorized"))
-                .andExpect(jsonPath("$.details").value(anEmptyMap()));
-    }
 
     // ---------- enrolment ----------
 

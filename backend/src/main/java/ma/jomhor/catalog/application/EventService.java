@@ -76,6 +76,7 @@ public class EventService {
      */
     @Transactional
     public Event create(UUID org, EventInput in) {
+        checkReentry(in.reentryPolicy());
         String metadata = metadata(in.eventType(), in.metadata());
         checkDoors(in.doorsOpenAt(), in.startsAt());
         checkSaleStart(in.saleStartsAt(), in.startsAt());
@@ -128,6 +129,7 @@ public class EventService {
         if (in.eventType() != null && in.eventType() != e.eventType()) {
             throw invalid("event_type", "is fixed after create");
         }
+        checkReentry(in.reentryPolicy());
         Instant startsAt = or(in.startsAt(), e.startsAt());
         Instant doors = or(in.doorsOpenAt(), e.doorsOpenAt());
         checkDoors(doors, startsAt);
@@ -311,6 +313,16 @@ public class EventService {
     private static void checkSaleStart(Instant saleStartsAt, Instant startsAt) {
         if (saleStartsAt != null && !saleStartsAt.isBefore(startsAt.minus(REFUND_FREEZE))) {
             throw invalid("sale_starts_at", "must be before starts_at - 60 min");
+        }
+    }
+
+    /** Re-entry is not built (plan lot-2 Q33): ONE_EXIT → 422 on reentry_policy, details.reason NOT_SUPPORTED. */
+    private static void checkReentry(Event.ReentryPolicy policy) {
+        if (policy == Event.ReentryPolicy.ONE_EXIT) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("reason", "NOT_SUPPORTED");
+            details.put("fields", Map.of("reentry_policy", "ONE_EXIT is not supported yet"));
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
         }
     }
 

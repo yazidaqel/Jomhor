@@ -50,5 +50,47 @@
       "public_key": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEmwzt5JOrpjgxUkhG5_CThvrvGwPznd-ZebY8UpTKGbxwKXMlFTpIMUdG9FxuGDX9aMceJxWYs5dT3tfLRL6CPg",
       "fingerprint": "E5DE C776"
     }
+  ],
+  "pins": [
+    {
+      "pin": "4821",
+      "verifier": "pbkdf2-sha256$10000$AAECAwQFBgcICQoLDA0ODw$ai3UbCeDBT5nKdEHXGutZKoXwZELT3vm4xIneno6vN8",
+      "ok": true
+    },
+    {
+      "pin": "4822",
+      "verifier": "pbkdf2-sha256$10000$AAECAwQFBgcICQoLDA0ODw$ai3UbCeDBT5nKdEHXGutZKoXwZELT3vm4xIneno6vN8",
+      "ok": false
+    },
+    {
+      "pin": "0000",
+      "verifier": "pbkdf2-sha256$10000$am9taG9yLXBpbi1zYWx0IQ$Ovfiz4Ysoon92BXSLNgGbKdO0IZMkYM6cTMO1jhRAO8",
+      "ok": true
+    },
+    {
+      "pin": "0001",
+      "verifier": "pbkdf2-sha256$10000$am9taG9yLXBpbi1zYWx0IQ$Ovfiz4Ysoon92BXSLNgGbKdO0IZMkYM6cTMO1jhRAO8",
+      "ok": false
+    },
+    {
+      "pin": "000",
+      "verifier": "pbkdf2-sha256$10000$am9taG9yLXBpbi1zYWx0IQ$Ovfiz4Ysoon92BXSLNgGbKdO0IZMkYM6cTMO1jhRAO8",
+      "ok": false
+    },
+    {
+      "pin": "9999",
+      "verifier": "pbkdf2-sha256$10000$_____________________w$_ShV_xRB2zwz5Xp0_RpxXoPdojduU2gM1wj66ir_DoM",
+      "ok": true
+    },
+    {
+      "pin": "0042",
+      "verifier": "pbkdf2-sha256$10000$_____________________w$MlqVzB5NjnQ0It_Ne2kCkmHpxUlYHlcrJPM5EHPCyUU",
+      "ok": true
+    },
+    {
+      "pin": "4200",
+      "verifier": "pbkdf2-sha256$10000$_____________________w$MlqVzB5NjnQ0It_Ne2kCkmHpxUlYHlcrJPM5EHPCyUU",
+      "ok": false
+    }
   ]
 }

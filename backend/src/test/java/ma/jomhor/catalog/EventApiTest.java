@@ -60,7 +60,7 @@ class EventApiTest extends OrgApiTest {
         String json = body(create(a, """
                 {"venue_id": "%s", "event_type": "FOOTBALL_MATCH", "title": " ATLAS FC – Raja ",
                  "starts_at": "2099-05-01T19:00:00Z", "doors_open_at": "2099-05-01T17:00:00Z",
-                 "sale_starts_at": "2099-04-01T10:00:00Z", "reentry_policy": "ONE_EXIT", "per_account_limit": 6,
+                 "sale_starts_at": "2099-04-01T10:00:00Z", "reentry_policy": "NONE", "per_account_limit": 6,
                  "metadata": {"opponent": "Raja", "competition": "Botola Pro", "matchday": 12, "tv": "Arryadia"}}
                 """.formatted(venueId))
                 .andExpect(status().isCreated())
@@ -74,7 +74,7 @@ class EventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.sale_starts_at").value("2099-04-01T10:00:00Z"))
                 .andExpect(jsonPath("$.status").value("DRAFT"))
                 .andExpect(jsonPath("$.refund_cutoff_at").isEmpty())
-                .andExpect(jsonPath("$.reentry_policy").value("ONE_EXIT"))
+                .andExpect(jsonPath("$.reentry_policy").value("NONE"))
                 .andExpect(jsonPath("$.per_account_limit").value(6))
                 .andExpect(jsonPath("$.metadata.opponent").value("Raja"))
                 .andExpect(jsonPath("$.metadata.matchday").value(12))
@@ -253,14 +253,41 @@ class EventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.refund_cutoff_at").isEmpty())); // DRAFT: set on publish only
         assertKeys(json, "$", EVENT_KEYS);
 
-        call(a, patch("/org/events/" + id), "{\"reentry_policy\": \"ONE_EXIT\", \"metadata\": null}")
+        call(a, patch("/org/events/" + id), "{\"reentry_policy\": \"NONE\", \"metadata\": null}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Derby"))
-                .andExpect(jsonPath("$.reentry_policy").value("ONE_EXIT"))
+                .andExpect(jsonPath("$.reentry_policy").value("NONE"))
                 .andExpect(jsonPath("$.metadata.opponent").value("Wydad"));
         // venue_id and event_type may be sent unchanged
         call(a, patch("/org/events/" + id), "{\"venue_id\": \"%s\", \"event_type\": \"FOOTBALL_MATCH\"}".formatted(venueId))
                 .andExpect(status().isOk());
+    }
+
+    /** Lot 2: re-entry is not built (plan lot-2 Q33). */
+    @Test
+    void oneExitIsRefusedOnCreateAndPatch() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        String json = body(create(a, """
+                {"venue_id": "%s", "event_type": "FOOTBALL_MATCH", "title": "Match", "starts_at": "2099-05-01T19:00:00Z",
+                 "reentry_policy": "ONE_EXIT"}
+                """.formatted(venueId))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.details.reason").value("NOT_SUPPORTED"))
+                .andExpect(jsonPath("$.details.fields.reentry_policy").isString()));
+        assertKeys(json, "$.details", "reason", "fields");
+        assertThat(jdbc.sql("select count(*) from events e join venues v on v.id = e.venue_id where v.id = ?::uuid")
+                .param(venueId).query(Integer.class).single()).isZero();
+
+        int id = event(a, venueId);
+        call(a, patch("/org/events/" + id), "{\"reentry_policy\": \"ONE_EXIT\", \"title\": \"Derby\"}")
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.details.reason").value("NOT_SUPPORTED"))
+                .andExpect(jsonPath("$.details.fields.reentry_policy").isString());
+        call(a, get("/org/events/" + id)).andExpect(jsonPath("$.reentry_policy").value("NONE"))
+                .andExpect(jsonPath("$.title").value("Match"));
     }
 
     @Test
