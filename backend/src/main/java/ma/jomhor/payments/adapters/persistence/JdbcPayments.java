@@ -87,6 +87,25 @@ class JdbcPayments implements Payments, PendingPayments {
                 .param("org", org).param("code", payCode).query(JdbcPayments::payment).optional();
     }
 
+    // A system read across organizers (pay_code is unique forever), like find(paymentId).
+    @Override
+    public Optional<Payment> findCode(String payCode) {
+        return jdbc.sql("select " + COLUMNS + " from payments where pay_code = :code")
+                .param("code", payCode).query(JdbcPayments::payment).optional();
+    }
+
+    @Override
+    public Optional<Payment> lockCode(String payCode) {
+        return jdbc.sql("select " + COLUMNS + " from payments where pay_code = :code for update")
+                .param("code", payCode).query(JdbcPayments::payment).optional();
+    }
+
+    @Override
+    public Optional<UUID> withRef(String provider, String providerRef) {
+        return jdbc.sql("select id from payments where provider = :provider and provider_ref = :ref")
+                .param("provider", provider).param("ref", providerRef).query(UUID.class).optional();
+    }
+
     @Override
     public void collect(UUID org, UUID paymentId, UUID sessionId) {
         jdbc.sql("""
@@ -129,13 +148,15 @@ class JdbcPayments implements Payments, PendingPayments {
     }
 
     @Override
-    public void complete(UUID org, UUID paymentId, Payment.Status status, String providerRef, String callbackJson) {
+    public void complete(UUID org, UUID paymentId, Payment.Status status, String provider, String providerRef,
+                         String callbackJson) {
         jdbc.sql("""
-                        update payments set status = cast(:status as payment_status), provider_ref = :ref,
+                        update payments set status = cast(:status as payment_status), provider = :provider, provider_ref = :ref,
                           callback = cast(:callback as jsonb), completed_at = now()
                         where organizer_id = :org and id = :id and status = 'PENDING'
                         """)
-                .param("org", org).param("id", paymentId).param("status", status.name()).param("ref", providerRef)
+                .param("org", org).param("id", paymentId).param("status", status.name()).param("provider", provider)
+                .param("ref", providerRef)
                 .param("callback", callbackJson).update();
     }
 

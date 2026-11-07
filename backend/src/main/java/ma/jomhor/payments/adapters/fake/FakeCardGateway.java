@@ -64,7 +64,8 @@ public class FakeCardGateway implements CardGateway {
         String amount = p.get("amount_mad");
         String ref = p.get("provider_ref");
         String signature = p.get("signature");
-        if (id == null || outcome == null || amount == null || ref == null || signature == null) {
+        if (id == null || outcome == null || amount == null || ref == null || signature == null
+                || (id + outcome + amount + ref).indexOf('|') >= 0) { // '|' joins the signed fields: never inside one
             return CallbackVerdict.rejected();
         }
         byte[] expected = sign(id, outcome, amount, ref).getBytes(StandardCharsets.UTF_8);

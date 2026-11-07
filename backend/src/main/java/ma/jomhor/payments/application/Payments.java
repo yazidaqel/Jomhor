@@ -28,6 +28,15 @@ public interface Payments {
     /** Like findCode, and locks the row until the end of the transaction. */
     Optional<Payment> lockCode(UUID org, String payCode);
 
+    /** By code alone (codes are unique across organizers): a cash network's callback and terminal carry no organizer. */
+    Optional<Payment> findCode(String payCode);
+
+    /** Like findCode(payCode), and locks the row until the end of the transaction. */
+    Optional<Payment> lockCode(String payCode);
+
+    /** The payment that already carries this provider reference, if any (unique per provider). */
+    Optional<UUID> withRef(String provider, String providerRef);
+
     /** A PENDING code collected at a till: SUCCEEDED, provider POS, the session, completed_at. */
     void collect(UUID org, UUID paymentId, UUID sessionId);
 
@@ -43,6 +52,10 @@ public interface Payments {
     /** Sets redirected_at the first time the hosted page of a PENDING attempt is opened (plan P38). */
     void markRedirected(UUID org, UUID paymentId);
 
-    /** PENDING → SUCCEEDED or FAILED, with the gateway's reference and the verified callback (no card data). */
-    void complete(UUID org, UUID paymentId, Payment.Status status, String providerRef, String callbackJson);
+    /**
+     * PENDING → SUCCEEDED or FAILED, with the provider that answered (a cash code: the network that collected it), its
+     * reference and the verified callback (no card data).
+     */
+    void complete(UUID org, UUID paymentId, Payment.Status status, String provider, String providerRef,
+                  String callbackJson);
 }

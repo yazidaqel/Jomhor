@@ -155,6 +155,14 @@ public class PosService {
     }
 
     /**
+     * The simulated network terminal's lookup: by code alone (a network serves every organizer; codes are unique
+     * across them). The caller shows the event title and amount only (04 §Cash codes Reveals).
+     */
+    public Optional<Lookup> networkLookup(String code) {
+        return CashCode.normalise(code).flatMap(payments::findCode).map(p -> lookup(p.organizerId(), p.payCode()));
+    }
+
+    /**
      * 04 POST /org/pos/codes/{code}/collect. Needs the caller's open session. Under the code payment's lock, then
      * the order's: collected by this session already → the same answer; not payable → 409 CODE_NOT_PAYABLE with the
      * order status (or EXPIRED once the hold has passed, database clock); {@code amountMad} ≠ total → 422. Else the

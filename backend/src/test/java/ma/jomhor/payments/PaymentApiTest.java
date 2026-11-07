@@ -379,7 +379,8 @@ class PaymentApiTest extends PaymentTest {
         tampered.put("amount_mad", "1");
         Map<String, String> unsigned = new HashMap<>(approve(p, total(orderId)));
         unsigned.remove("signature");
-        for (var fields : List.of(forged, tampered, unsigned, Map.<String, String>of())) {
+        Map<String, String> piped = signed(p, "APPROVED", total(orderId), "FAKE-a|b"); // signed, but '|' inside a field
+        for (var fields : List.of(forged, tampered, unsigned, piped, Map.<String, String>of())) {
             callback(fields).andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
                     .andExpect(jsonPath("$.message").value("Invalid callback"))

@@ -214,7 +214,7 @@ class CashOrderApiTest extends PaymentTest {
                 dbInstant("select refund_cutoff_at from events where id = ?", cash.eventId()).minus(Duration.ofHours(2)));
     }
 
-    /** Until BE-24 no wallet provider exists: 409 NOT_CONFIGURED, after the order checks, and nothing written. */
+    /** payments.wallet.provider unset (prod until Q47): 409 NOT_CONFIGURED, after the order checks, nothing written. */
     @Test
     void walletIsNotConfiguredYet() throws Exception {
         Sale s = cashSale(10);

@@ -102,4 +102,9 @@ class PaymentController {
     ResponseEntity<String> callback(@PathVariable String provider, @RequestParam Map<String, String> params) {
         return payments.callback(provider, new HttpCallback(params));
     }
+
+    @PostMapping("/payments/cash/{network}/callback")
+    ResponseEntity<String> cashCallback(@PathVariable String network, @RequestParam Map<String, String> params) {
+        return payments.cashCallback(network, new HttpCallback(params));
+    }
 }
