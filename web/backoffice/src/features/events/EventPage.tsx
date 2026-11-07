@@ -127,7 +127,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
   const onSaved = (e: EventDetail) => {
     if (event) {
       form.reset(toForm(e)) // nothing dirty any more, before `values` follows the new server copy
-      toast.success(t('events.saved'))
+      toast.success(t('events.saved'), { id: 'event-saved' }) // a second save replaces the toast
     }
     queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
     if (!event) void navigate(`/events/${encodeURIComponent(e.id)}`)

@@ -87,7 +87,7 @@ export function DevicesTab({ event }: { event: EventDetail }) {
         onSuccess: (saved) => {
           queryClient.setQueryData(['org', organizerId, 'devices', 'events', String(event.id)], saved)
           setEdits({})
-          toast.success(t('events.devices.saved'))
+          toast.success(t('events.devices.saved'), { id: 'devices-saved' })
         },
       },
     )
