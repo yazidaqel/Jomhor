@@ -10,7 +10,7 @@ import ma.jomhor.gate.domain.Assignment;
 /** device_assignments (with the devices, scans and manifests reads they need). Every method takes the organizer. */
 public interface Assignments {
 
-    /** Serializes assignment writes of one event until the transaction ends. */
+    /** The gate event lock (common EventLock), exclusive: assignment PUTs, scan ingestion and close. */
     void lockEvent(UUID org, int eventId);
 
     /** The same lock in shared mode (manifest downloads): they run together, never beside a PUT, ingestion or close. */
@@ -31,4 +31,7 @@ public interface Assignments {
     void replace(UUID org, int eventId, Map<UUID, UUID> gateByDevice);
 
     List<Assignment.OfDevice> ofDevice(UUID org, UUID deviceId);
+
+    /** closed_ack_at = now() unless already set (04 POST /gate/events/{id}/closed-ack is idempotent). */
+    void ackClosed(UUID org, UUID deviceId, int eventId);
 }

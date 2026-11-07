@@ -5,12 +5,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -73,6 +75,11 @@ public class TicketService {
     /** Gate manifest build: every ticket of the event with id, zone, status and initials only (no name, no phone). */
     public List<Ticket.ManifestRow> manifestRows(UUID org, int eventId) {
         return tickets.manifestRows(org, eventId);
+    }
+
+    /** Gate scan ingestion: the ids among {@code ticketIds} of tickets of the event (any status). */
+    public Set<UUID> ofEvent(UUID org, int eventId, Collection<UUID> ticketIds) {
+        return ticketIds.isEmpty() ? Set.of() : tickets.ofEvent(org, eventId, ticketIds);
     }
 
     /** The order's tickets this user holds (04: a friend's ticket is never listed to the buyer). */

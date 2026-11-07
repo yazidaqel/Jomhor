@@ -1,5 +1,6 @@
 package ma.jomhor.common;
 
+import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -18,6 +19,24 @@ public class AuditLog {
     public void staff(UUID organizerId, UUID userId, String action, String target) {
         jdbc.sql("insert into audit_log (organizer_id, actor_type, actor_id, action, target) values (?, 'STAFF', ?, ?, ?)")
                 .params(organizerId, userId, action, target).update();
+    }
+
+    /** One audit row: {@code payloadJson} is a JSON object and must never hold a secret. */
+    public record Entry(String target, String payloadJson) {}
+
+    /** A gate device's actions, one statement: actor_type DEVICE, actor_id = the device id. */
+    public void device(UUID organizerId, UUID deviceId, String action, List<Entry> entries) {
+        if (entries.isEmpty()) {
+            return;
+        }
+        jdbc.sql("""
+                        insert into audit_log (organizer_id, actor_type, actor_id, action, target, payload)
+                        select ?, 'DEVICE', ?, ?, e.target, e.payload::jsonb
+                        from unnest(?::text[], ?::text[]) with ordinality as e(target, payload, n) order by e.n
+                        """)
+                .params(organizerId, deviceId, action, entries.stream().map(Entry::target).toArray(String[]::new),
+                        entries.stream().map(Entry::payloadJson).toArray(String[]::new))
+                .update();
     }
 
     /** A system action (no actor); {@code payloadJson} is a JSON object and must never hold a secret. */

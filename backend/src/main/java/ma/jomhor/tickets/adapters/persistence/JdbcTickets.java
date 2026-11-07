@@ -2,8 +2,11 @@ package ma.jomhor.tickets.adapters.persistence;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.tickets.application.Tickets;
 import ma.jomhor.tickets.domain.Ticket;
@@ -79,6 +82,13 @@ class JdbcTickets implements Tickets {
                 .query((rs, n) -> new Ticket.ManifestRow(rs.getObject("id", UUID.class), rs.getInt("zone_id"),
                         Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_initials")))
                 .list();
+    }
+
+    @Override
+    public Set<UUID> ofEvent(UUID org, int eventId, Collection<UUID> ticketIds) {
+        return new HashSet<>(jdbc.sql("select id from tickets where organizer_id = :org and event_id = :event and id = any(:ids)")
+                .param("org", org).param("event", eventId).param("ids", ticketIds.toArray(UUID[]::new))
+                .query(UUID.class).list());
     }
 
     @Override

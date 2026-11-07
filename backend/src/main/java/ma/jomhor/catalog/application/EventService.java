@@ -18,6 +18,7 @@ import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
 import ma.jomhor.catalog.domain.Event.Status;
 import ma.jomhor.common.AuditLog;
+import ma.jomhor.common.EventLock;
 import ma.jomhor.common.web.ApiException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
@@ -58,12 +59,14 @@ public class EventService {
     private final Events events;
     private final KeyEncryptor keys;
     private final AuditLog audit;
+    private final EventLock gateLock;
     private final SecureRandom random = new SecureRandom();
 
-    public EventService(Events events, KeyEncryptor keys, AuditLog audit) {
+    public EventService(Events events, KeyEncryptor keys, AuditLog audit, EventLock gateLock) {
         this.events = events;
         this.keys = keys;
         this.audit = audit;
+        this.gateLock = gateLock;
     }
 
     public List<Event.Summary> list(UUID org, Status status, Instant from) {
@@ -165,6 +168,29 @@ public class EventService {
         Event published = events.update(org, e.withStatus(Status.ON_SALE, e.startsAt().minus(REFUND_FREEZE)));
         audit.staff(org, userId, "event.publish", String.valueOf(eventId));
         return published;
+    }
+
+    /**
+     * POST /org/events/{id}/close (plan lot-2 Q37): ON_SALE/GATES_OPEN and now >= starts_at → CLOSED, else 409
+     * EVENT_NOT_EDITABLE with details.reason NOT_OPEN (DRAFT or CLOSED; checked first) or NOT_STARTED (+ starts_at). Under the gate event lock (exclusive, like assignment PUTs and scan ingestion), so a PUT
+     * or a batch sees the event either before the close or after it, never in between. 404 before taking it.
+     */
+    @Transactional
+    public Event close(UUID org, UUID userId, int eventId) {
+        get(org, eventId);
+        gateLock.exclusive(eventId);
+        Event e = events.lock(org, eventId).orElseThrow(notFound("Event"));
+        if (e.status() != Status.ON_SALE && e.status() != Status.GATES_OPEN) {
+            throw new ApiException("EVENT_NOT_EDITABLE", HttpStatus.CONFLICT, "Event is not open",
+                    Map.of("reason", "NOT_OPEN"));
+        }
+        if (events.now().isBefore(e.startsAt())) { // database clock, like the other time rules
+            throw new ApiException("EVENT_NOT_EDITABLE", HttpStatus.CONFLICT, "Event has not started yet",
+                    Map.of("reason", "NOT_STARTED", "starts_at", e.startsAt()));
+        }
+        Event closed = events.update(org, e.withStatus(Status.CLOSED, e.refundCutoffAt()));
+        audit.staff(org, userId, "event.close", String.valueOf(eventId));
+        return closed;
     }
 
     // ---------- public (GET /fan/events*, no token) ----------

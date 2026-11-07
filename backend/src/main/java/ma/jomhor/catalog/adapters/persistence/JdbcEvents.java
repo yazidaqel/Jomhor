@@ -105,6 +105,11 @@ class JdbcEvents implements Events {
     // takes for key share on the event) isn't blocked. With for update, an order holding a price row and an
     // organizer holding the event while writing that price row deadlock.
     @Override
+    public Instant now() {
+        return jdbc.sql("select now()").query(OffsetDateTime.class).single().toInstant();
+    }
+
+    @Override
     public Optional<Event> lock(UUID org, int eventId) {
         return jdbc.sql("select " + EVENT_COLUMNS + " from events where organizer_id = :org and id = :id for no key update")
                 .param("org", org).param("id", eventId).query(JdbcEvents::event).optional();

@@ -335,6 +335,16 @@ create index on scans (event_id, ticket_id, device_time);   -- canonical admitte
 create index on scans (event_id, seq);                      -- used_since
 create index on scans (event_id, gate_id, device_time);     -- live dashboard per gate
 
+-- The database refuses any change to scans (V12), even a statement that touches no row.
+create function scans_append_only() returns trigger language plpgsql as $$
+begin
+  raise exception 'scans is append-only: % refused', tg_op using errcode = 'restrict_violation';
+end
+$$;
+
+create trigger scans_append_only before update or delete or truncate on scans
+  for each statement execute function scans_append_only();
+
 -- Append-only: no UPDATE or DELETE on scans, ever. Canonical admitted scan per (ticket_id, direction): the OK or
 -- OVERRIDE row with the earliest device_time (tie: lowest scan_id). Later OK/OVERRIDE rows are reported as
 -- DUPLICATE_LATE (derived, never stored). Ingestion holds pg_advisory_xact_lock per event, so seq commits in

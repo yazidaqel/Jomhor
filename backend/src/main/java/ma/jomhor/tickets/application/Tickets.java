@@ -1,8 +1,10 @@
 package ma.jomhor.tickets.application;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.tickets.domain.Ticket;
 
@@ -29,6 +31,9 @@ public interface Tickets {
 
     /** Every ticket of the event (any status), by id: id, zone, status and initials only. */
     List<Ticket.ManifestRow> manifestRows(UUID org, int eventId);
+
+    /** The ids among {@code ticketIds} of tickets of the event (any status). */
+    Set<UUID> ofEvent(UUID org, int eventId, Collection<UUID> ticketIds);
 
     /** The database clock (now()), so "past" agrees with every other time rule. */
     Instant now();

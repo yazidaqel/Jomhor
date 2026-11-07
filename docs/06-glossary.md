@@ -35,6 +35,8 @@
 | EXPIRED_SLOT | CODE EXPIRÉ | amber | Rotating QR outside ±1 slot; ask fan to refresh |
 | OVERRIDE | DÉROGATION | blue | Supervisor let the person in; reason logged |
 
+Override reasons (`override_reason`, B5 and CSV labels): `ID_CHECKED` Identité vérifiée · `DEVICE_FAULT` Panne d'appareil · `DAMAGED_TICKET` Billet abîmé · `OTHER` Autre motif.
+
 ## Order statuses
 
 RESERVED (8 min hold) → PAID · AWAITING_CASH (cash code issued, 24 h) → PAID · EXPIRED ·

@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
 /**
- * docs/04-api.md §Organizer: /org/events*, /org/events/{id}/prices*, /org/events/{id}/publish. Responses are
+ * docs/04-api.md §Organizer: /org/events*, /org/events/{id}/prices*, /org/events/{id}/publish, /close. Responses are
  * the DTO records below, built field by field: never the domain record, so K_e can't ride along.
  */
 @RestController
@@ -124,6 +124,12 @@ class EventController {
     @PostMapping("/org/events/{id}/publish")
     EventDto publish(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable int id) {
         return EventDto.of(events.publish(org.organizerId(), org.userId(), id));
+    }
+
+    @PostMapping("/org/events/{id}/close")
+    EventDto close(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable int id) {
+        org.adminOrOps();
+        return EventDto.of(events.close(org.organizerId(), org.userId(), id));
     }
 
     // ---------- prices ----------
