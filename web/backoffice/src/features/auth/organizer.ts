@@ -28,7 +28,7 @@ export function useOrganizer(): Membership {
  * organizer as X-Organizer-Id, so two organizers' data never share a cache entry.
  * Use this (and `useOrganizer().organizer_id` in mutations) for every /org/* call except /org/me.
  */
-export function useOrgQuery<T>(key: readonly unknown[], path: string, options?: Pick<UseQueryOptions<T>, 'refetchInterval'>) {
+export function useOrgQuery<T>(key: readonly unknown[], path: string, options?: Pick<UseQueryOptions<T>, 'refetchInterval' | 'enabled' | 'gcTime' | 'refetchOnWindowFocus' | 'refetchOnReconnect' | 'retry'>) {
   const { organizer_id: organizerId } = useOrganizer()
   return useQuery({
     queryKey: ['org', organizerId, ...key],

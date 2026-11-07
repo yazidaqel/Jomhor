@@ -529,8 +529,8 @@ const VENUE_DETAIL: VenueDetail = {
 }
 // By zone_id then name, as the API lists them.
 const PRICES: Price[] = [
-  { id: 'p-1', zone_id: 1, name: 'Plein tarif', price_mad: 20000, quota: 3000, sold: 10 },
-  { id: 'p-2', zone_id: 2, name: 'Abonnés', price_mad: 5050, quota: 18000, sold: 0 },
+  { id: 'p-1', zone_id: 1, zone: { code: 'HONNEUR', name: 'Tribune d’honneur' }, name: 'Plein tarif', price_mad: 20000, quota: 3000, sold: 10 },
+  { id: 'p-2', zone_id: 2, zone: { code: 'NORD', name: 'Tribune Nord' }, name: 'Abonnés', price_mad: 5050, quota: 18000, sold: 0 },
 ]
 
 /** stubApi plus the venue detail, prices (kept in state) and publish; event 1 is kept in state too. `handler` answers first. */

@@ -11,6 +11,7 @@ import {
   MapPin,
   RadioTower,
   Smartphone,
+  Store,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -54,7 +55,7 @@ import { session, useSelectedOrganizerId, useSessionToken } from '@/lib/session'
 // GATE and SUPERVISOR staff get 403 on every /org call (04-api §Organizer): not offered here.
 const BACKOFFICE_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'FINANCE']
 
-type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices'
+type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices' | 'pos'
 type NavKey = Section | 'invitations' | 'finance' | 'crm'
 // no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others).
 type NavItem = { key: NavKey; icon: LucideIcon; to?: string; roles?: readonly Role[] }
@@ -73,6 +74,8 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
     items: [
       { key: 'liveGates', icon: RadioTower, to: '/live' },
       { key: 'devices', icon: Smartphone, to: '/devices', roles: ['ADMIN', 'OPS'] },
+      // Lot 3 (B11). The CASHIER shell, which shows only this entry, comes with BO-13b.
+      { key: 'pos', icon: Store, to: '/pos', roles: ['ADMIN', 'OPS'] },
     ],
   },
   {
@@ -100,7 +103,9 @@ const section = (pathname: string): Section | null =>
             ? 'venues'
             : pathname.startsWith('/devices')
               ? 'devices'
-              : null
+              : pathname.startsWith('/pos')
+                ? 'pos'
+                : null
 
 const initials = (name: string) =>
   name
@@ -275,7 +280,8 @@ function OrganizerSwitcher({ memberships, current, onSwitch }: { memberships: Me
   )
 }
 
-export function Shell() {
+/** `bare`: the same session and organizer checks without the chrome (sidebar, top bar), for the POS print view. */
+export function Shell({ bare = false }: { bare?: boolean }) {
   const { t } = useTranslation()
   const token = useSessionToken()
   const selectedId = useSelectedOrganizerId()
@@ -288,7 +294,8 @@ export function Shell() {
   // No valid session (never signed in, expired, logout, or a 401 cleared it): back to login, then here.
   if (!token) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   if (me.isPending) return <Splash />
-  if (me.isError) return <Notice title={t(errorKey(me.error))} logout onRetry={() => void me.refetch()} />
+  // Only when nothing was ever loaded: a failed background refetch keeps the page (and the print view) mounted.
+  if (!me.data) return <Notice title={t(errorKey(me.error))} logout onRetry={() => void me.refetch()} />
 
   const { user } = me.data
   const memberships = me.data.memberships.filter((m) => BACKOFFICE_ROLES.includes(m.role))
@@ -300,6 +307,13 @@ export function Shell() {
     queryClient.removeQueries({ queryKey: ['org', current.organizer_id] })
     session.selectOrganizer(id)
   }
+
+  if (bare)
+    return (
+      <OrganizerContext value={current} key={current.organizer_id}>
+        <Outlet />
+      </OrganizerContext>
+    )
 
   return (
     // DESIGN §Back-office: 240 px grouped sidebar, icons only from 768 to 1023 px, a sheet below 768 px (closes on

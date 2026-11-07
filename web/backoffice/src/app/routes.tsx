@@ -7,12 +7,16 @@ import { EventsPage } from '@/features/events/EventsPage'
 import { LiveIndexPage, LivePage } from '@/features/live/LivePage'
 import { ReconciliationPage } from '@/features/reconciliation/ReconciliationPage'
 import { OverviewPage } from '@/features/overview/OverviewPage'
+import { PosPage } from '@/features/pos/PosPage'
+import { PrintPage } from '@/features/pos/PrintPage'
 import { SalesIndexPage, SalesPage } from '@/features/sales/SalesPage'
 import { VenuePage } from '@/features/venues/VenuePage'
 import { VenuesPage } from '@/features/venues/VenuesPage'
 
 export const routes: RouteObject[] = [
   { path: 'login', element: <LoginPage /> },
+  // POS slips print without the shell chrome. Role gating and the CASHIER shell: BO-13b.
+  { element: <Shell bare />, children: [{ path: 'pos/print/:orderId', element: <PrintPage /> }] },
   {
     element: <Shell />,
     children: [
@@ -26,6 +30,7 @@ export const routes: RouteObject[] = [
       { path: 'sales', element: <SalesIndexPage /> },
       { path: 'live', element: <LiveIndexPage /> },
       { path: 'devices', element: <DevicesPage /> },
+      { path: 'pos', element: <PosPage /> },
       { path: 'settings/venues', element: <VenuesPage /> },
       { path: 'settings/venues/:id', element: <VenuePage /> },
       { path: '*', element: <Navigate to="/" replace /> },
