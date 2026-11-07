@@ -104,7 +104,7 @@ function DoneDialog(props: { eventId: string; refund: Refund; method: string; op
   const onSubmit = form.handleSubmit(({ reference }) =>
     done.mutateAsync({ id: refund.id, reference }).then(
       () => {
-        toast.success(t('sales.refunds.tickets.done.toast', vars))
+        toast.success(t('sales.refunds.tickets.done.toast', vars), { id: `refund-done-${refund.id}` })
         props.onOpenChange(false)
       },
       (e: unknown) => showFormError(e, form, t),

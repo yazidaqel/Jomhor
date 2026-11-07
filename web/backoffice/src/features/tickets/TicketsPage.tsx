@@ -269,7 +269,7 @@ function TicketActionDialog({ kind, ticket, eventId, open, onOpenChange }: Actio
   const onSubmit = form.handleSubmit(({ reason }) =>
     run.mutateAsync({ kind, id: ticket.id, reason }).then(
       () => {
-        toast.success(t(`tickets.actions.${kind}.done`, vars))
+        toast.success(t(`tickets.actions.${kind}.done`, vars), { id: `ticket-${kind}-${ticket.id}` })
         onOpenChange(false)
       },
       (e: unknown) => showFormError(e, form, t),

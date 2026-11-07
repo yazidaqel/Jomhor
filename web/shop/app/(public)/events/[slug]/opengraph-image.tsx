@@ -32,7 +32,6 @@ export default async function OpenGraphImage({ params }: { params: Promise<{ slu
           </div>
           <div style={{ fontSize: 40, fontWeight: 700 }}>{club.name}</div>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element -- Satori draws <img>, not next/image */}
         <img src={await logoDataUrl('jomhor-lockup-dark.svg')} alt="" width={231} height={56} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

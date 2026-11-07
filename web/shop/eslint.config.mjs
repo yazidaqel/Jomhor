@@ -17,6 +17,9 @@ export default defineConfig([
     extends: [js.configs.recommended, tseslint.configs.recommended, reactHooks.configs.flat.recommended, nextPlugin.configs['core-web-vitals']],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
+  // OG images are drawn by Satori, which takes a plain <img>, never next/image. The rule matches these files on some
+  // platforms only (CI saw an unused disable directive, Windows a warning), so it is off here rather than per line.
+  { files: ['**/opengraph-image.tsx'], rules: { '@next/next/no-img-element': 'off' } },
   // No hard-coded user-visible strings: JSX text, strings in JSX expressions and text-bearing attributes come from
   // the dictionary (lib/i18n).
   {
