@@ -6,6 +6,9 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/clock.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
+import 'package:jomhor_fan/features/clubs/club.dart';
+import 'package:jomhor_fan/features/clubs/clubs_repository.dart';
+import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
@@ -19,8 +22,8 @@ import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
-/// Screen 1 · Accueil: greeting, the pending cash code strip, next event hero, the "Mon billet" strip (saved
-/// tickets) and the calendar.
+/// Screen 1 · Accueil: greeting, the club chips, the pending cash code strip, next event hero, the "Mon billet"
+/// strip (saved tickets) and the calendar.
 class HomeScreen extends ConsumerWidget {
   const new({super.key});
 
@@ -31,6 +34,7 @@ class HomeScreen extends ConsumerWidget {
     final now = ref.watch(clockProvider).value ?? ref.read(nowProvider)();
     // The name for the greeting: the Profil tab's `/fan/me`, read once per session (shared with that tab).
     final name = ref.watch(sessionProvider) ? ref.watch(profileProvider).value?.displayName : null;
+    final view = ref.watch(homeViewProvider).value;
 
     return SafeArea(
       bottom: false,
@@ -39,6 +43,8 @@ class HomeScreen extends ConsumerWidget {
         backgroundColor: JomhorColors.surface,
         onRefresh: () {
           ref.invalidate(pendingCashProvider);
+          // A failed directory read stays until invalidated: retry it with the events.
+          if (ref.read(clubsProvider).hasError) ref.invalidate(clubsProvider);
           return ref.refresh(upcomingEventsProvider.future);
         },
         child: ListView(
@@ -60,20 +66,26 @@ class HomeScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: JomhorSpace.l),
+            if (view != null) ...[_ChipRow(view: view), const SizedBox(height: JomhorSpace.l)],
             const _CashStrip(),
             ...events.when(
               // Without the hero (offline on matchday, say) the strip still leads to the ticket.
               loading: () => [const MyTicketStrip(), const SkeletonList(hero: true)],
               error: (e, _) => [
                 const MyTicketStrip(),
-                ErrorPanel(error: e, onRetry: () => ref.invalidate(upcomingEventsProvider)),
+                ErrorPanel(
+                  error: e,
+                  onRetry: () => ref
+                    ..invalidate(clubsProvider)
+                    ..invalidate(upcomingEventsProvider),
+                ),
               ],
               data: (list) => list.isEmpty
-                  ? [const MyTicketStrip(), StatePanel(title: l.homeEmptyTitle, message: l.homeEmpty)]
+                  ? [const MyTicketStrip(), _Empty(view: view)]
                   : [
                       Entrance(
                         index: 2,
-                        child: _Hero(event: list.first, now: now),
+                        child: _Hero(event: list.first, now: now, view: view),
                       ),
                       const Entrance(index: 3, child: MyTicketStrip()),
                       if (list.length > 1) ...[
@@ -83,7 +95,7 @@ class HomeScreen extends ConsumerWidget {
                         for (final (i, e) in list.skip(1).take(3).indexed)
                           Entrance(
                             index: 5 + i,
-                            child: _CalendarRow(event: e, now: now),
+                            child: _CalendarRow(event: e, now: now, view: view),
                           ),
                       ],
                     ],
@@ -91,6 +103,172 @@ class HomeScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The club chips (DESIGN.md §Multi-club adjustments): `Mes clubs` (when following), one per followed club, `Tout`.
+/// Scrolls sideways and starts at the reading start (the right in AR). The choice is remembered on the phone.
+class _ChipRow extends ConsumerWidget {
+  const new({required this.view});
+
+  final HomeView view;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final chips = [
+      if (view.followed.isNotEmpty) (chipMine, l.myClubs, null),
+      for (final c in view.followed) (c.id, l.isolate(c.name), c),
+      (chipAll, l.chipAll, null),
+    ];
+    return SizedBox(
+      height: JomhorSize.touchMin,
+      child: ListView.separated(
+        key: const Key('home.chips'),
+        scrollDirection: Axis.horizontal,
+        itemCount: chips.length,
+        separatorBuilder: (_, _) => const SizedBox(width: JomhorSpace.s),
+        itemBuilder: (context, i) {
+          final (chip, label, club) = chips[i];
+          return _Chip(
+            key: Key('home.chip.$chip'),
+            label: label,
+            club: club,
+            selected: chip == view.chip,
+            onTap: () => ref.read(followsProvider.notifier).choose(chip),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A pill, 36 high in a 44 target: accent when selected, else surface + border.
+class _Chip extends StatelessWidget {
+  const new({required this.label, required this.selected, required this.onTap, this.club, super.key});
+
+  final String label;
+  final Club? club;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Center(
+        child: AnimatedContainer(
+          duration: motionOf(context, JomhorMotion.base),
+          height: 36,
+          padding: EdgeInsetsDirectional.only(start: club == null ? 14 : JomhorSpace.s, end: 14),
+          decoration: BoxDecoration(
+            color: selected ? JomhorColors.accent : JomhorColors.surface,
+            border: Border.all(color: selected ? JomhorColors.accent : JomhorColors.border),
+            borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (club case final c?) ...[Crest(name: c.name, url: c.crestUrl, size: 20), const SizedBox(width: 6)],
+              ConstrainedBox(
+                // ponytail: the API has no short name; a long club name is cut here.
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: JomhorType.bodySmall.copyWith(
+                    color: selected ? JomhorColors.onAccent : JomhorColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// No event: in `Tout`, "Rien au programme"; for followed clubs, "Pas de match à venir" (sports clubs) or
+/// "Pas d'événement à venir", and "Voir tout" → `Tout`.
+class _Empty extends ConsumerWidget {
+  const new({required this.view});
+
+  final HomeView? view;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final v = view;
+    if (v == null || v.chip == chipAll) return StatePanel(title: l.homeEmptyTitle, message: l.homeEmpty);
+    final clubs = v.chip == chipMine ? v.followed : v.followed.where((c) => c.id == v.chip);
+    return StatePanel(
+      key: const Key('home.emptyClub'),
+      message: clubs.every((c) => c.sportsClub) ? l.homeNoMatch : l.homeNoEvent,
+      action: TextButton(
+        key: const Key('home.seeAll'),
+        onPressed: () => ref.read(followsProvider.notifier).choose(chipAll),
+        child: Text(l.homeSeeAll),
+      ),
+    );
+  }
+}
+
+/// The club line of an Accueil card. In `Tout`, it ends with "Suivre" for a club the fan does not follow (a tap
+/// follows it, `Tout` stays selected) and "Suivi" for one they follow.
+class _CardClubLine extends ConsumerWidget {
+  const new({required this.event, required this.view});
+
+  final FanEvent event;
+  final HomeView? view;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final club = event.organizer;
+    final followed = ref.watch(followsProvider.select((f) => f.ids.contains(club.id)));
+    return ClubLine(
+      name: club.name,
+      crestUrl: club.crestUrl,
+      trailing: switch ((view?.chip == chipAll, followed)) {
+        (false, _) => null,
+        (true, true) => Padding(
+          key: Key('home.following.${event.id}'),
+          padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.m),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_rounded, size: 14, color: JomhorColors.accent),
+              const SizedBox(width: JomhorSpace.xs),
+              Text(
+                l.clubFollowing,
+                style: JomhorType.caption.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: JomhorColors.accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+        (true, false) => TextButton(
+          key: Key('home.follow.${event.id}'),
+          onPressed: () => ref.read(followsProvider.notifier).follow(club.id),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(JomhorSize.touchMin, JomhorSize.touchMin),
+            padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.m),
+            foregroundColor: JomhorColors.accent,
+            textStyle: JomhorType.caption.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          child: Text(l.clubFollow),
+        ),
+      },
     );
   }
 }
@@ -173,10 +351,11 @@ class _TopBar extends StatelessWidget {
 }
 
 class _Hero extends StatelessWidget {
-  const new({required this.event, required this.now});
+  const new({required this.event, required this.now, required this.view});
 
   final FanEvent event;
   final DateTime now;
+  final HomeView? view;
 
   @override
   Widget build(BuildContext context) {
@@ -211,13 +390,15 @@ class _Hero extends StatelessWidget {
                   (football ? l.heroLabelMatch : l.heroLabelEvent).toUpperCase(),
                   style: JomhorType.label.copyWith(color: JomhorColors.accent).tracked(context),
                 ),
-                const SizedBox(height: JomhorSpace.l),
+                const SizedBox(height: JomhorSpace.s),
+                _CardClubLine(event: e, view: view),
+                const SizedBox(height: JomhorSpace.m),
                 if (e.facts case FootballFacts(:final opponent?))
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Expanded(
-                        child: _Team(initial: JomhorClub.crestInitial, name: JomhorClub.name, home: true),
+                      Expanded(
+                        child: _Team(name: e.organizer.name, crestUrl: e.organizer.crestUrl, home: true),
                       ),
                       Padding(
                         padding: const EdgeInsets.only(top: 14),
@@ -226,9 +407,7 @@ class _Hero extends StatelessWidget {
                           style: JomhorType.hero.copyWith(fontSize: 34, color: JomhorColors.textMuted),
                         ),
                       ),
-                      Expanded(
-                        child: _Team(initial: opponent.isEmpty ? '' : opponent[0], name: opponent, home: false),
-                      ),
+                      Expanded(child: _Team(name: opponent, home: false)),
                     ],
                   )
                 else
@@ -306,17 +485,21 @@ class _PitchLines extends CustomPainter {
   bool shouldRepaint(_PitchLines oldDelegate) => false;
 }
 
+/// One side of a match: the club's crest (home), or the opponent's stand-in on paper (metadata has no crest).
 class _Team extends StatelessWidget {
-  const new({required this.initial, required this.name, required this.home});
+  const new({required this.name, required this.home, this.crestUrl});
 
-  final String initial;
   final String name;
+  final String? crestUrl;
   final bool home;
 
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Crest(initial: initial, size: 68, home: home, glow: home),
+      if (home)
+        Crest(name: name, url: crestUrl, size: 68, glow: true)
+      else
+        Crest(name: name, size: 68, disc: JomhorColors.ticketPaper), // ink: onAccent = ticket ink
       const SizedBox(height: JomhorSpace.m),
       Text(
         name.toUpperCase(),
@@ -330,10 +513,11 @@ class _Team extends StatelessWidget {
 }
 
 class _CalendarRow extends StatelessWidget {
-  const new({required this.event, required this.now});
+  const new({required this.event, required this.now, required this.view});
 
   final FanEvent event;
   final DateTime now;
+  final HomeView? view;
 
   @override
   Widget build(BuildContext context) {
@@ -355,6 +539,7 @@ class _CalendarRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _CardClubLine(event: e, view: view),
                   Text(rowTitle(e), style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(

@@ -83,9 +83,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get errorNetwork => 'Pas de connexion. Vérifie ton réseau et réessaie.';
 
   @override
-  String get errorMissingOrganizer => 'Application mal configurée : aucun club défini (ORGANIZER_ID).';
-
-  @override
   String get errorGeneric => 'Un problème est survenu. Réessaie dans un instant.';
 
   @override
@@ -878,4 +875,57 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get lostPhoneFailed => 'Certains billets n\'ont pas reçu de nouveau QR. Vérifie tes billets.';
+
+  @override
+  String get myClubs => 'Mes clubs';
+
+  @override
+  String get chipAll => 'Tout';
+
+  @override
+  String get clubsTitle => 'Tes clubs';
+
+  @override
+  String get clubsIntro => 'Suis tes clubs pour voir leurs matchs en premier. Tu changes quand tu veux.';
+
+  @override
+  String get clubsSearch => 'Chercher un club';
+
+  @override
+  String get clubsNoResult => 'Aucun club ne correspond.';
+
+  @override
+  String get clubFollow => 'Suivre';
+
+  @override
+  String get clubFollowing => 'Suivi';
+
+  @override
+  String get clubsContinue => 'Continuer';
+
+  @override
+  String get clubsSeeAll => 'Tout voir';
+
+  @override
+  String get clubsDone => 'Terminé';
+
+  @override
+  String clubKind(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'SPORTS_CLUB': 'Club sportif',
+      'PROMOTER': 'Organisateur',
+      'VENUE': 'Salle',
+      'other': 'Organisateur',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoMatch => 'Pas de match à venir';
+
+  @override
+  String get homeNoEvent => 'Pas d\'événement à venir';
+
+  @override
+  String get homeSeeAll => 'Voir tout';
 }

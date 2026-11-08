@@ -115,6 +115,13 @@ public abstract class IntegrationTest {
         return jdbc.sql("insert into organizers (name) values (?) returning id").param(name).query(UUID.class).single();
     }
 
+    /** Lists the organizer under a fresh slug (docs/04-api.md §Club directory); returns the slug. */
+    protected String listed(UUID organizerId) {
+        String slug = "t-" + UUID.randomUUID().toString().substring(24);
+        jdbc.sql("update organizers set slug = ? where id = ?").params(slug, organizerId).update();
+        return slug;
+    }
+
     /** Creates (or reuses) the user for this phone and gives it a staff row; returns the user id. */
     protected UUID staff(UUID organizerId, String phone, String role, boolean active) {
         jdbc.sql("insert into users (phone_e164) values (?) on conflict do nothing").param(phone).update();

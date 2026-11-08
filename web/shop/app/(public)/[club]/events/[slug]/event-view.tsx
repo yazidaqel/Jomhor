@@ -3,10 +3,11 @@ import { ViewTransition } from 'react'
 import { saleState, type ShopEventDetail } from '@/lib/events'
 import { fmt, type Dict } from '@/lib/i18n'
 import { countdown, formatDateTime, formatTime } from '@/lib/time'
-import { Crest, Watermark } from '../../../brand'
-import { BackIcon, CalendarIcon, CardIcon, PinIcon, QrIcon, TicketIcon } from '../../../icons'
-import { CountdownTiles } from '../../countdown'
-import { kicker, SaleChip, saleLabel } from '../../sale'
+import { Watermark } from '../../../../brand'
+import { BackIcon, CalendarIcon, CardIcon, PinIcon, QrIcon, TicketIcon } from '../../../../icons'
+import { CountdownTiles } from '../../../countdown'
+import { ClubLine } from '../../../event-list'
+import { kicker, SaleChip, saleLabel } from '../../../sale'
 import { ZonePicker } from './ZonePicker'
 
 const chip = 'flex items-center gap-2 rounded-chip border border-border bg-ground px-3 py-2 text-sm'
@@ -24,7 +25,7 @@ export function EventView({ e, now, d }: { e: ShopEventDetail; now: number; d: D
       <section className="relative isolate overflow-hidden border-b border-border bg-surface">
         <div aria-hidden="true" className="bg-crowd absolute inset-0 -z-10" />
         <div aria-hidden="true" className="absolute -top-40 -end-40 -z-10 size-[420px] glow opacity-[0.2] md:-top-64 md:size-[680px]" />
-        <Watermark />
+        <Watermark club={e.organizer} />
         <div className="mx-auto max-w-[1180px] px-6 pt-6 pb-12 md:pb-16">
           <Link
             href="/"
@@ -35,8 +36,8 @@ export function EventView({ e, now, d }: { e: ShopEventDetail; now: number; d: D
           </Link>
           <div className="mt-4 flex flex-wrap items-end justify-between gap-8 md:mt-8">
             <div className="flex min-w-0 flex-[1_1_560px] flex-col gap-4">
-              <div className={`flex items-center gap-3 ${rise}`}>
-                <Crest size="md" />
+              <div className={`flex flex-col gap-2 ${rise}`}>
+                <ClubLine e={e} d={d} link />
                 <p className="text-label uppercase text-accent">{label || d.home.featured}</p>
               </div>
               <ViewTransition name={`event-title-${e.id}`} share="morph" default="none">

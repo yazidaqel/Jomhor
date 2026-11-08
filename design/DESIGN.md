@@ -7,8 +7,9 @@ Live canvas: https://claude.ai/artifact/RZdBe8HCqJUDBhB61S55mt
 ## Principles
 
 1. The ticket is the hero. Every screen exists to get the fan to the ticket in one tap.
-2. Club identity, not generic ticketing: the organizer's `accent` colour and crest skin
-   the app; the layout never changes per club.
+2. Jomhor identity, clubs as content: the app and the shop are always Jomhor (ink + amber, `BRAND.md`).
+   A club appears as its crest and name on its events, tickets, chips and club page; colours and layout
+   never change per club.
 3. Dark by default (stadiums at night, phone held up at a gate). Light surfaces are
    reserved for the ticket itself, so it reads as a physical object.
 4. One-thumb: primary CTA pinned to the bottom, 54 px tall, full width.
@@ -63,6 +64,7 @@ Icons: 1.8 px stroke, round caps, 20–22 px. No emoji anywhere.
 | 8 | Transférer | — | sheet on `/tickets/:id` | Screen 5 action |
 | 9 | Groupe | — | `/orders/:id` (split variant) | After a split order; push / link for members |
 | 10 | Notifications | — | `/inbox` | Bell on screen 1 |
+| 11 | Clubs | — | `/clubs` | First launch (skippable); Profil → Mes clubs |
 
 Not mocked yet (Lot 1/4): OTP login, wallet list, transfer flow, order status (cash
 code), membership, profile, gate map. Follow the same components.
@@ -140,19 +142,20 @@ code), membership, profile, gate map. Follow the same components.
 
 ## Web shop (Next.js, SSR)
 
-Same identity as the fan app (dark ground, club accent, condensed display face). Public,
-indexable, every event page shareable on WhatsApp with an OG image (crest, title, date).
+Same identity as the fan app (dark ground, Jomhor amber accent, condensed display face). Public,
+indexable, every event page shareable on WhatsApp with an OG image (club crest + name, title, date).
 Container 1180 px, 24 px gutters, stacks at phone width (zones grid → 1 column, summary
 card moves under the zones, CTA becomes sticky bottom bar).
 
 | # | Page | Mockup | Route | Rendering |
 | --- | --- | --- | --- | --- |
-| W1 | Événements (liste) | — | `/` | SSR, revalidate 60 s |
-| W2 | Page événement | `ShopEvent` | `/events/[slug]` | SSR; zone grid + summary card are client components |
+| W1 | Événements (liste) | — | `/` (`?club=mine\|all\|<slug>`) | SSR per request; backend reads cached 60 s (one per club + one for Tout) |
+| W2 | Page événement | `ShopEvent` | `/[club]/events/[slug]` (`/events/[slug]` → 308) | SSR; zone grid + summary card are client components |
 | W3 | Paiement | — (same as app screen 4, two-column) | `/orders/[id]/pay` | Client; Payzone redirect |
 | W4 | Commande · code cash | `ShopOrderStatus` | `/orders/[id]` | SSR + polling; status updates without reload |
 | W5 | Mes billets | — | `/me/tickets` | Client, OTP login; PDF download; "Ouvrir dans l'app" deep link |
 | W6 | Billet PDF | — | `/api/tickets/[id]/pdf` (proxy, `no-store`) | Server-generated A4 + wallet-size, static QR |
+| W7 | Club | — | `/[club]` | SSR per request; backend reads cached 60 s |
 
 W2 details: header (crest + club name, nav Matchs / Abonnements / Mes billets / Aide,
 language switch, Se connecter); hero with competition label (fallback "À l'affiche"), 64–80 px uppercase title,
@@ -307,11 +310,31 @@ Screens that carry the founder's "wow" bar (inside principles 3, 6 and 7 and `BR
 
 Under reduced motion, every Lot 4 motion is off (instant states). There are no decorative loops, no parallax, and no gradients or shadows on the brand mark.
 
+## Multi-club adjustments
+
+These override the screen specs above (see `docs/plans/multi-club.md`).
+
+| Where | Change |
+| --- | --- |
+| Crest stand-in | When a club has no `crest_url` (or it fails to load): the club name's first letter on a disc, as the Lot 1 stand-in. Real crests are drawn as supplied, never recoloured, never on an accent disc. |
+| 11 Clubs (picker) | Lockup, title "Tes clubs", one line "Suis tes clubs pour voir leurs matchs en premier. Tu changes quand tu veux." 2-column grid of club cards (surface, radius 24, crest 56, name display 18, kind as caption). Each card has "Suivre" (outlined chip), which becomes "Suivi" (accent chip with a check, `motion.base`). Search field above the grid when there are more than 8 clubs (by name, accent-insensitive). First launch: primary CTA "Continuer" (enabled from 1 follow) and text button "Tout voir". From Profil: back chevron and "Terminé". |
+| Screen 1 chip row | Under the greeting, above the hero: horizontally scrollable, RTL-aware, 8 px gap, pill chips (36 px, 44 px touch target). Order: `Mes clubs` (only when following), one chip per followed club (crest 20 + short name), `Tout`. Selected chip = accent bg + onAccent text; others = surface + border + textSecondary. Default: `Mes clubs` when following, else `Tout`. The chosen chip is remembered on the device. |
+| Screen 1 cards | The hero and calendar rows carry a club line above the title: crest 20 + club name (caption, textSecondary). In `Tout`, an unfollowed club's line ends with a small "Suivre" text button (accent, 44 px target), which becomes "Suivi". Empty chip: state panel "Pas de match à venir" ("Pas d'événement à venir" when the club isn't a sports club) + text button "Voir tout" → `Tout`. |
+| Billets, "Mon billet" strip, screen 5 | Each ticket row and the strip show the club line (crest 20 + name). The screen 5 band crest is the ticket's club. Every ticket the fan holds is listed, whatever they follow. |
+| Profil | Row "Mes clubs" ({n}) → screen 11. |
+| 7 Club (Lot 4) | One member card per followed club, swiped in follow order; no follows → "Choisis tes clubs" → screen 11. |
+| 10 Notifications (Lot 4) | One inbox across clubs; each row starts with the club line. |
+| Shop header (all pages) | Jomhor lockup + "Billetterie" (no club name). |
+| W1 `/` | The screen 1 chip row as links (`/?club=mine`, `/?club=<slug>`, `/?club=all`; the selected one has `aria-current="page"`); event cards with the club line; "Suivre" is a small form button in `Tout`. Under the list, a "Clubs" strip: crest 56 + name per listed club, scrolling sideways on phones, wrapping on desktop, each → `/<slug>`. |
+| W7 `/<slug>` | Header block: crest 64, club name (h1, uppercase display), "Suivre" / "Suivi". Then the club's events as W1 cards, or the screen 1 empty state with "Voir tout" → `/?club=all`. OG image: crest stand-in + club name + lockup. |
+| W2 | The club line above the title links to `/<slug>`. |
+
 ## Theming per organizer
 
-`accent`, `onAccent`, crest asset, display font (optional) come from
-`organizers.settings.theme`. Everything else is fixed. Zone colours are assigned per
-venue (`zoneA/B/C` palette, extendable).
+None: Jomhor is not white-label (`BRAND.md`). `organizers.settings.theme` is not read by the fan app, the shop or
+the scanner. A club supplies its name and a crest (`settings.crest_url`, served from Jomhor's asset host, see
+`docs/04-api.md` §Club directory); without a crest, clients draw the stand-in. Zone colours are assigned per venue
+(`zoneA/B/C` palette, extendable).
 
 ## Accessibility
 

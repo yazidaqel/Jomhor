@@ -16,8 +16,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * The dev profile end to end, on its own Postgres (the dev seed must not reach the shared test container): the seed
- * and DevSeeder give three demo events and the demo fan's three tickets, a second run (a restart) adds nothing, the
- * scanner staff PINs match, and the fixed OTP logs in a fan and a cashier (a wrong code still fails).
+ * and DevSeeder give two clubs, ATLAS FC's three demo events and Olympique Tensift's one, the demo fan's tickets of
+ * both clubs, a second run (a restart) adds nothing and moves the on-sale events with the clock, GET /fan/events lists
+ * both clubs, the scanner staff PINs match, and the fixed OTP logs in a fan and a cashier (a wrong code still fails).
  */
 class DevSeederTest {
 
@@ -32,8 +33,11 @@ class DevSeederTest {
                     "--spring.datasource.username=" + pg.getUsername(),
                     "--spring.datasource.password=" + pg.getPassword(),
                     "--jomhor.dev.fixed-otp=123456")) {
-                ctx.getBean(DevSeeder.class).run(null); // a restart
                 var jdbc = ctx.getBean(JdbcClient.class);
+                // the clock moved on: the restart puts the Tensift event back at now + 6 days
+                jdbc.sql("update events set starts_at = starts_at + interval '30 days' where organizer_id = ?")
+                        .param(DevSeeder.TENSIFT).update();
+                ctx.getBean(DevSeeder.class).run(null); // a restart
 
                 assertThat(jdbc.sql("""
                                 select status::text || ' ' || (starts_at > now() + interval '9 days')::text
@@ -42,15 +46,30 @@ class DevSeederTest {
                         .param(DevSeeder.ORG).query(String.class).list())
                         .containsExactly("ON_SALE true false", "ON_SALE false true", "CLOSED false false");
                 assertThat(jdbc.sql("""
-                                select count(*) from tickets t join users u on u.id = t.holder_user_id
-                                where u.phone_e164 = ? and t.status = 'VALID'""")
-                        .param(DevSeeder.FAN_PHONE).query(Integer.class).single()).isEqualTo(3);
+                                select title || ' ' || status::text || ' '
+                                    || (starts_at between now() + interval '5 days 23 hours' and now() + interval '6 days')::text
+                                from events where organizer_id = ?""")
+                        .param(DevSeeder.TENSIFT).query(String.class).list())
+                        .containsExactly("Olympique Tensift vs Union Rif ON_SALE true");
+                assertThat(jdbc.sql("""
+                                select o.slug || ' ' || count(*) from tickets t join users u on u.id = t.holder_user_id
+                                join organizers o on o.id = t.organizer_id
+                                where u.phone_e164 = ? and t.status = 'VALID' group by o.slug order by o.slug""")
+                        .param(DevSeeder.FAN_PHONE).query(String.class).list())
+                        .containsExactly("atlas-fc 3", "olympique-tensift 1");
                 List<String> pins = jdbc.sql("select pin_hash from staff where role in ('GATE', 'SUPERVISOR') order by role")
                         .query(String.class).list();
                 assertThat(Pins.matches("1234", pins.get(0))).isTrue();
                 assertThat(Pins.matches("5678", pins.get(1))).isTrue();
 
                 String api = "http://localhost:" + ctx.getEnvironment().getProperty("local.server.port") + "/v1";
+                String tout;
+                try (var http = HttpClient.newHttpClient()) {
+                    tout = http.send(HttpRequest.newBuilder(URI.create(api + "/fan/events")).build(),
+                            HttpResponse.BodyHandlers.ofString()).body();
+                }
+                assertThat(tout).contains("\"slug\":\"atlas-fc\"").contains("\"slug\":\"olympique-tensift\"")
+                        .contains("ATLAS FC vs Rapid Oued").contains("Olympique Tensift vs Union Rif");
                 assertThat(post(api + "/fan/auth/otp", "{\"phone\": \"+212600000011\"}").statusCode()).isEqualTo(202);
                 assertThat(post(api + "/fan/auth/verify", "{\"phone\": \"+212600000011\", \"code\": \"123456\"}")
                         .body()).contains("\"token\"");

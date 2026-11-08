@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { Zone } from '@/lib/events'
 import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
-import { ArrowIcon, CheckIcon } from '../../../icons'
+import { ArrowIcon, CheckIcon } from '../../../../icons'
 
 type Copy = Pick<Dict, 'event' | 'order' | 'meta'>
 

@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { eventSlug, getEvent, getEvents, parseEventId, saleState, slugify } from './events'
-import { json, NOW, ORG, rawEvent, rawListRow, SECRETS } from './events.fixture'
+import { json, NOW, ORG, ORG2, rawEvent, rawListRow, rawOrganizer, SECRETS, tensiftRow } from './events.fixture'
 
 const fetchMock = vi.fn<typeof fetch>()
 beforeEach(() => {
   vi.stubEnv('API_BASE_URL', 'http://backend.test/v1')
-  vi.stubEnv('ORGANIZER_ID', ORG)
   vi.stubGlobal('fetch', fetchMock)
 })
 afterEach(() => {
@@ -59,17 +58,68 @@ it.each<[string, Record<string, unknown>, string]>([
   expect(saleState({ ...rawEvent(), ...over } as never, at('2026-02-01T12:00:00Z'))).toBe(state)
 })
 
-it('getEvents reads this organizer, without Authorization, cached 60 s', async () => {
-  fetchMock.mockResolvedValue(json(200, [rawListRow()]))
+it('Tout: one read of /fan/events with no organizer, without Authorization, cached 60 s', async () => {
+  fetchMock.mockResolvedValue(json(200, [rawListRow(), tensiftRow()]))
 
-  const events = await getEvents(NOW)
+  const events = await getEvents('all', NOW)
+
+  expect(events.map((e) => e.id)).toEqual([12, 21])
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  const [url, init] = fetchMock.mock.calls[0]!
+  expect(url).toBe('http://backend.test/v1/fan/events')
+  expect(new Headers(init!.headers).has('authorization')).toBe(false)
+  expect(init).toMatchObject({ next: { revalidate: 60 } })
+  expect(init!.cache).toBeUndefined()
+})
+
+it('one club: ?organizer=<id>, cached 60 s; rows of another organizer are dropped', async () => {
+  fetchMock.mockResolvedValue(json(200, [rawListRow(), tensiftRow()]))
+
+  const events = await getEvents([ORG], NOW)
 
   expect(events.map((e) => e.id)).toEqual([12])
   const [url, init] = fetchMock.mock.calls[0]!
   expect(url).toBe(`http://backend.test/v1/fan/events?organizer=${ORG}`)
-  expect(new Headers(init!.headers).has('authorization')).toBe(false)
   expect(init).toMatchObject({ next: { revalidate: 60 } })
-  expect(init!.cache).toBeUndefined()
+})
+
+it('Mes clubs: one cached read per club (never one per combination), merged by (starts_at, id), at most 50', async () => {
+  const atlas = Array.from({ length: 40 }, (_, i) => rawListRow({ id: 100 + i, starts_at: `2026-02-${String(10 + (i % 15)).padStart(2, '0')}T19:00:00Z` }))
+  const tensift = Array.from({ length: 30 }, (_, i) => tensiftRow({ id: 200 + i, starts_at: `2026-02-${String(10 + (i % 15)).padStart(2, '0')}T19:00:00Z` }))
+  fetchMock.mockImplementation(async (url) => json(200, String(url).endsWith(ORG) ? atlas : tensift))
+
+  const events = await getEvents([ORG, ORG2], NOW)
+
+  expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual([`http://backend.test/v1/fan/events?organizer=${ORG}`, `http://backend.test/v1/fan/events?organizer=${ORG2}`])
+  for (const [, init] of fetchMock.mock.calls) expect(init).toMatchObject({ next: { revalidate: 60 } })
+  expect(events).toHaveLength(50)
+  const keys = events.map((e) => [Date.parse(e.starts_at), e.id] as const)
+  expect(keys).toEqual([...keys].sort((a, b) => a[0] - b[0] || a[1] - b[1]))
+  expect(new Set(events.map((e) => e.organizer.slug))).toEqual(new Set(['atlas-fc', 'olympique-tensift']))
+})
+
+it('no club → no read', async () => {
+  expect(await getEvents([], NOW)).toEqual([])
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('organizer keeps slug, name and crest_url only; a non-https crest is dropped', async () => {
+  fetchMock.mockResolvedValue(json(200, [rawListRow(), rawListRow({ id: 13, organizer: rawOrganizer({ crest_url: 'https://assets.jomhor.ma/crests/atlas-fc.svg' }) }), rawListRow({ id: 14, organizer: rawOrganizer({ crest_url: 'http://evil.test/x.svg' }) })]))
+
+  const events = await getEvents('all', NOW)
+
+  expect(events.map((e) => e.organizer)).toEqual([
+    { slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null },
+    { slug: 'atlas-fc', name: 'ATLAS FC', crest_url: 'https://assets.jomhor.ma/crests/atlas-fc.svg' },
+    { slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null },
+  ])
+  const text = JSON.stringify(events)
+  for (const x of SECRETS) expect(text).not.toContain(x)
+})
+
+it('a row of an unlisted club (slug null: no shop URL) is left out of lists', async () => {
+  fetchMock.mockResolvedValue(json(200, [rawListRow(), rawListRow({ id: 13, organizer: rawOrganizer({ slug: null }) })]))
+  expect((await getEvents([ORG], NOW)).map((e) => e.id)).toEqual([12])
 })
 
 it('getEvent maps field by field: nothing outside the contract survives', async () => {
@@ -79,19 +129,21 @@ it('getEvent maps field by field: nothing outside the contract survives', async 
 
   const text = JSON.stringify(e)
   for (const s of SECRETS) expect(text).not.toContain(s)
-  expect(e).toMatchObject({ id: 12, competition: 'Championnat', matchday: 11, per_account_limit: 4 })
+  expect(e).toMatchObject({ id: 12, organizer_id: ORG, organizer: { slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null }, competition: 'Championnat', matchday: 11, per_account_limit: 4 })
   expect(e!.zones[0]!.prices[0]).toEqual({ price_category_id: 'pc-tribune', name: 'Tribune', price_mad: 12050, remaining: 30 })
   const [url, init] = fetchMock.mock.calls[0]!
   expect(url).toBe('http://backend.test/v1/fan/events/12')
   expect(init).toMatchObject({ next: { revalidate: 15 } })
 })
 
-it.each([
-  ['unknown or DRAFT (404)', json(404, { code: 'NOT_FOUND', message: '', details: {} })],
-  ["another organizer's event", json(200, rawEvent({ organizer_id: 'someone-else' }))],
-])('getEvent → null for %s', async (_, res) => {
-  fetchMock.mockResolvedValue(res)
+it('getEvent → null for an unknown or DRAFT event (404)', async () => {
+  fetchMock.mockResolvedValue(json(404, { code: 'NOT_FOUND', message: '', details: {} }))
   expect(await getEvent(12, NOW)).toBeNull()
+})
+
+it("getEvent returns any club's event, an unlisted one included (the page checks the URL's club)", async () => {
+  fetchMock.mockResolvedValue(json(200, rawEvent({ organizer_id: ORG2, organizer: rawOrganizer({ slug: null, name: 'Club X' }) })))
+  expect((await getEvent(12, NOW))!.organizer).toEqual({ slug: null, name: 'Club X', crest_url: null })
 })
 
 it('getEvent lets other backend errors through', async () => {
@@ -99,10 +151,6 @@ it('getEvent lets other backend errors through', async () => {
   await expect(getEvent(12, NOW)).rejects.toMatchObject({ status: 500 })
 })
 
-it('getEvents drops rows of another organizer', async () => {
-  fetchMock.mockResolvedValue(json(200, [rawListRow(), rawListRow({ id: 13, organizer_id: 'someone-else' })]))
-  expect((await getEvents(NOW)).map((e) => e.id)).toEqual([12])
-})
 
 const opened = (secondsAgo: number) => new Date(NOW - secondsAgo * 1000).toISOString()
 
@@ -136,7 +184,7 @@ it('the list is re-read the same way when one row contradicts its sale window', 
   fetchMock
     .mockResolvedValueOnce(json(200, [rawListRow({ on_sale: false, sale_starts_at: opened(20) })]))
     .mockResolvedValueOnce(json(200, [rawListRow()]))
-  expect((await getEvents(NOW))[0]!.on_sale).toBe(true)
+  expect((await getEvents([ORG], NOW))[0]!.on_sale).toBe(true)
   expect(fetchMock).toHaveBeenCalledTimes(2)
 })
 

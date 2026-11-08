@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.tenancy.domain.CashPoint;
 import ma.jomhor.tenancy.domain.Membership;
+import ma.jomhor.tenancy.domain.Organizer;
 import ma.jomhor.tenancy.domain.StaffMember;
 import ma.jomhor.tenancy.domain.StaffRole;
 import ma.jomhor.tenancy.domain.User;
@@ -51,4 +52,10 @@ public interface Accounts {
 
     /** organizers.settings.cash_points: object entries with a name, in order; anything else is skipped. */
     List<CashPoint> cashPoints(UUID organizerId);
+
+    /** Organizers with a slug (the club directory), by name then id. */
+    List<Organizer> listedOrganizers();
+
+    /** The listed organizer with this slug; empty if none. */
+    Optional<Organizer> listedOrganizer(String slug);
 }

@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { ViewTransition } from 'react'
-import { shopName } from '@/lib/club'
 import { getI18n } from '@/lib/i18n/server'
 import { Lockup } from '../brand'
 import { AccountMenu } from './AccountMenu'
@@ -15,12 +14,12 @@ export default async function PublicLayout({ children }: { children: React.React
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-30 border-b border-border bg-ground/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between gap-4 px-5 sm:px-6">
-          {/* Jomhor first (BRAND.md: not white-label); the club is the secondary line, from sm. */}
+          {/* Jomhor first (BRAND.md: not white-label), then "Billetterie" from sm; clubs appear as content only. */}
           <Link href="/" className="group flex min-h-touch-min min-w-0 items-center gap-4">
             <Lockup height={32} label={d.app.name} className="transition-opacity duration-200 group-hover:opacity-85" />
             <span aria-hidden="true" className="h-6 w-px shrink-0 bg-border max-sm:hidden" />
             <span className="truncate text-sm font-medium text-text-secondary transition-colors duration-200 group-hover:text-text max-sm:sr-only">
-              {shopName(d)}
+              {d.header.shop}
             </span>
           </Link>
           <nav aria-label={d.header.nav} className="flex items-center gap-1 text-sm">

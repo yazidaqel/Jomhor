@@ -403,18 +403,18 @@ class _TicketCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: JomhorSpace.m),
-                      Container(
-                        width: JomhorSize.touchMin,
-                        height: JomhorSize.touchMin,
-                        alignment: Alignment.center,
-                        decoration: const BoxDecoration(color: JomhorColors.ground, shape: BoxShape.circle),
-                        child: Text(
-                          JomhorClub.crestInitial,
-                          textScaler: TextScaler.noScaling,
-                          style: JomhorType.number.copyWith(color: JomhorColors.accent, fontSize: 24),
+                      // The ticket's club (a cache saved before multi-club has none: no crest then).
+                      if (e.organizer case final club?) ...[
+                        const SizedBox(width: JomhorSpace.m),
+                        Crest(
+                          key: const Key('ticket.crest'),
+                          name: club.name,
+                          url: club.crestUrl,
+                          size: JomhorSize.touchMin,
+                          disc: JomhorColors.ground,
+                          ink: JomhorColors.accent,
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

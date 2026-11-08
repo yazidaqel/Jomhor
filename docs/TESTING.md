@@ -52,8 +52,11 @@ Les horaires se recalent à chaque démarrage :
 - **ATLAS FC vs Sporting Anfa** : coup d'envoi dans 75 min, portes ouvertes. Sert au scanner et au jour de match.
   Les transferts y sont déjà fermés (ils ferment 1 h 30 avant).
 - **ATLAS FC vs Union Rif** : match passé.
+- **Olympique Tensift vs Union Rif** : deuxième club de démo (Stade Tensift, Marrakech), en vente, coup d'envoi
+  dans 6 jours.
 
-Yassine (06 00 00 00 10) a un billet Honneur pour chacun des trois matchs.
+Yassine (06 00 00 00 10) a un billet Honneur pour chacun des trois matchs d'ATLAS FC, et un billet pour le match
+d'Olympique Tensift : 4 billets sur 2 clubs.
 
 ## Scénarios
 
@@ -119,6 +122,20 @@ Back-office → **Billets** → recherchez `06 00 00 00 10` :
 - **Bloquer** un billet : il passe en BLOQUÉ et le scanner le refuse.
 - **Rembourser** un billet : il apparaît dans la liste des remboursements à faire. Finance le marque **Fait**.
 
+### 9. Clubs suivis
+
+Boutique, `http://localhost:3000/` :
+
+1. Sans club suivi, l'onglet **Tout** est choisi : les matchs des deux clubs, chacun avec l'écusson et le nom du club.
+2. **Suivre** sur une carte ATLAS FC : la carte affiche **Suivi**, vous restez sur **Tout**, et les onglets
+   **Mes clubs** et **ATLAS FC** apparaissent. **Mes clubs** ne montre qu'ATLAS FC. Ça marche aussi avec JavaScript
+   désactivé.
+3. La bande **Clubs** en bas mène à `/atlas-fc` et `/olympique-tensift`, la page de chaque club.
+4. Un ancien lien `/events/…` redirige vers `/atlas-fc/events/…`.
+5. **Mes billets** (06 00 00 00 10) montre les billets des deux clubs, chacun avec son club.
+
+L'appli et la boutique restent Jomhor (logo, couleurs) : le club n'apparaît que par son écusson et son nom.
+
 ## Applications mobiles
 
 Les deux fichiers APK sont construits pour ce PC (`http://10.95.9.122:8090/v1`). Si l'IP du PC change, demandez une
@@ -139,9 +156,12 @@ Si le téléphone n'arrive pas à joindre le PC, autorisez le port 8090 dans le 
 
 ### Appli supporter
 
-1. Connexion 06 00 00 00 10, code 123456.
-2. **Billets** : le billet Sporting Anfa affiche un QR qui tourne, et il s'affiche aussi en mode avion.
-3. Essayez le transfert : maintenez le bouton jusqu'au bout. Le billet glisse hors du portefeuille.
+1. Premier lancement : l'écran **Tes clubs** s'ouvre. Suivez un club puis **Continuer**, ou **Tout voir**. Sur
+   l'accueil, les onglets **Mes clubs**, un par club suivi, et **Tout** changent la liste. **Profil** → **Mes clubs**
+   rouvre l'écran.
+2. Connexion 06 00 00 00 10, code 123456.
+3. **Billets** : le billet Sporting Anfa affiche un QR qui tourne, et il s'affiche aussi en mode avion.
+4. Essayez le transfert : maintenez le bouton jusqu'au bout. Le billet glisse hors du portefeuille.
 
 ### Appli scanner, jour de match (Sporting Anfa)
 

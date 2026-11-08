@@ -14,6 +14,7 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
+import 'package:jomhor_fan/ui/brand.dart';
 
 import 'helpers.dart';
 
@@ -35,6 +36,7 @@ Map<String, Object?> ticketJson({
   String startsAt = '2027-03-13T19:00:00Z',
   String? eventStatus,
   bool withKey = true,
+  bool withOrganizer = true,
 }) => {
   'id': id,
   'ticket_no': id.substring(id.length - 8).toUpperCase().replaceRange(4, 4, ' '),
@@ -51,6 +53,7 @@ Map<String, Object?> ticketJson({
     'timezone': 'Africa/Casablanca',
     'venue': {'name': "Stade de l'Atlas", 'city': 'Rabat'},
     'metadata': {'opponent': 'Rapid Oued', 'competition': 'Championnat', 'matchday': 11},
+    if (withOrganizer) 'organizer': {...organizerBlock(clubJson()), 'id': testOrganizer},
   },
   'zone': {'id': 3, 'code': 'N', 'name': 'Nord'},
   'gate_codes': ['4'],
@@ -228,6 +231,90 @@ void main() {
       await tester.pumpAndSettle();
       expect(location(c), '/tickets/$ticketId');
       expect(find.text('MODE JOUR DE MATCH'), findsNothing);
+    });
+  });
+
+  group('multi-club wallet (FL-25)', () {
+    /// A ticket of Olympique Tensift, as `/fan/tickets` sends it (`event.organizer` with its id).
+    Map<String, Object?> tensiftTicket() {
+      final t = ticketJson(id: otherId, startsAt: '2027-03-20T19:00:00Z');
+      return {
+        ...t,
+        'event': {
+          ...t['event']! as Map<String, Object?>,
+          'id': 8,
+          'title': 'Olympique Tensift vs Union Rif',
+          'organizer': {...organizerBlock(tensiftJson), 'id': otherOrganizer},
+        },
+      };
+    }
+
+    testWidgets('Billets rows and the Accueil strip show crest + club name, whatever the fan follows', (tester) async {
+      seedCache([ticketJson(), tensiftTicket()]);
+      final c = await pumpJomhor(
+        tester,
+        backend: offline,
+        tokens: MemoryTokenStore('jwt'),
+        clock: TestClock(slotStart),
+        keepSecureStorage: true,
+      );
+      final strip = find.byKey(const Key('home.myTicket'));
+      expect(find.descendant(of: strip, matching: find.widgetWithText(ClubLine, 'Atlas FC')), findsOneWidget);
+      c.read(routerProvider).go('/tickets');
+      await tester.pumpAndSettle();
+      for (final name in ['Atlas FC', 'Olympique Tensift']) {
+        expect(
+          find.descendant(of: find.widgetWithText(ClubLine, name), matching: find.byType(Crest)),
+          findsOneWidget,
+          reason: name,
+        );
+      }
+    });
+
+    testWidgets('a ticket cache saved before multi-club (no `organizer`) still opens, with no club line', (
+      tester,
+    ) async {
+      seedCache([ticketJson(withOrganizer: false)]);
+      final c = await pumpJomhor(tester, backend: offline, tokens: MemoryTokenStore('jwt'), keepSecureStorage: true);
+      c.read(routerProvider).go('/tickets');
+      await tester.pumpAndSettle();
+      expect(find.text('Atlas FC vs Rapid Oued'), findsOneWidget);
+      expect(find.byType(ClubLine), findsNothing);
+      await openTicket(tester, c);
+      expect(find.byType(TicketQr), findsOneWidget);
+      expect(find.byKey(const Key('ticket.crest')), findsNothing);
+    });
+
+    testWidgets('a malformed `organizer` block never breaks the offline wallet: no club line', (tester) async {
+      final t = ticketJson();
+      seedCache([
+        {
+          ...t,
+          'event': {...t['event']! as Map<String, Object?>, 'organizer': <String, Object?>{}},
+        },
+      ]);
+      final c = await pumpJomhor(tester, backend: offline, tokens: MemoryTokenStore('jwt'), keepSecureStorage: true);
+      c.read(routerProvider).go('/tickets');
+      await tester.pumpAndSettle();
+      expect(find.text('Atlas FC vs Rapid Oued'), findsOneWidget);
+      expect(find.byType(ClubLine), findsNothing);
+      expect(
+        FanTicket.fromJson({
+          ...t,
+          'event': {
+            ...t['event']! as Map<String, Object?>,
+            'organizer': {'id': 1},
+          },
+        }).event.organizer,
+        isNull,
+      );
+    });
+
+    testWidgets("screen 5's band carries the ticket's club, not a build-time one", (tester) async {
+      seedCache([tensiftTicket()]);
+      final c = await pumpJomhor(tester, backend: offline, tokens: MemoryTokenStore('jwt'), keepSecureStorage: true);
+      await openTicket(tester, c, otherId);
+      expect(find.descendant(of: find.byKey(const Key('ticket.crest')), matching: find.text('O')), findsOneWidget);
     });
   });
 

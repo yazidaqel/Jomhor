@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 class MigrationsTest extends IntegrationTest {
@@ -16,10 +17,27 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV16Apply() {
+    void v1ToV17Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
-                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16");
+                .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+                        "17");
+    }
+
+    @Test
+    void organizerSlugCheckUniqueAndNullable() {
+        for (String bad : new String[] {"Atlas", "atlas--fc", "-atlas", "atlas-", "a", "a".repeat(41), "orders", "mine",
+                "ar", "all", "events", "atlas_fc", "atlas fc"}) {
+            assertThatThrownBy(() -> jdbcTemplate.update("insert into organizers (name, slug) values ('X', ?)", bad))
+                    .as(bad)
+                    .isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessageContaining("organizers_slug");
+        }
+        String ok = "t-" + UUID.randomUUID().toString().substring(24) + "-" + "9".repeat(20); // 2..40, digits ok
+        jdbcTemplate.update("insert into organizers (name, slug) values ('X', ?)", ok);
+        assertThatThrownBy(() -> jdbcTemplate.update("insert into organizers (name, slug) values ('Y', ?)", ok))
+                .isInstanceOf(DuplicateKeyException.class);
+        jdbcTemplate.update("insert into organizers (name) values ('No slug 1'), ('No slug 2')"); // nulls coexist
     }
 
     @Test

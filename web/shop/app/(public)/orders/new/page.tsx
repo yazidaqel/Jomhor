@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { api, ApiError } from '@/lib/api'
-import { eventSlug, getEvent, saleState } from '@/lib/events'
+import { eventPath } from '@/lib/clubs'
+import { getEvent, saleState } from '@/lib/events'
 import { currentSession } from '@/lib/http'
 import { fmt } from '@/lib/i18n'
 import { getI18n } from '@/lib/i18n/server'
@@ -36,7 +37,8 @@ export default async function CheckoutPage({ searchParams }: Props) {
   const { d } = await getI18n()
   // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
   const now = Date.now()
-  if (saleState(e, now) !== 'ON_SALE' || price.remaining === 0) redirect(`/events/${eventSlug(e)}`)
+  const back = eventPath(e)
+  if (saleState(e, now) !== 'ON_SALE' || price.remaining === 0) redirect(back ?? '/')
   let me: { display_name?: unknown }
   try {
     me = await api('/fan/me', { token })
@@ -96,7 +98,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
           {d.checkout.summary}
         </h2>
         <div className="flex items-center gap-3 rounded-control bg-ground p-3">
-          <Crest size="md" />
+          <Crest club={e.organizer} size={44} />
           <div className="flex min-w-0 flex-col">
             <p className="font-display text-xl font-bold uppercase leading-tight">{e.title}</p>
             <p className="text-body-small text-text-muted">{when}</p>
@@ -116,9 +118,11 @@ export default async function CheckoutPage({ searchParams }: Props) {
           <span className="font-semibold">{d.checkout.total}</span>
           <span className="font-display text-[34px] font-extrabold leading-none">{formatDh(total)}</span>
         </p>
-        <Link href={`/events/${eventSlug(e)}`} className="flex min-h-touch-min items-center text-body-small font-semibold text-accent hover:underline">
-          {d.checkout.back}
-        </Link>
+        {back && (
+          <Link href={back} className="flex min-h-touch-min items-center text-body-small font-semibold text-accent hover:underline">
+            {d.checkout.back}
+          </Link>
+        )}
       </aside>
     </main>
   )

@@ -38,17 +38,23 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
      * A non-DRAFT event as the public sees it (GET /fan/events*): no key, no quota or sold. {@code onSale},
      * {@code soldOut} and {@code fromPriceMad} come from the list query (database clock); the detail recomputes them from its price rows ({@link #withStock}).
      */
-    public record Listing(int id, UUID organizerId, Status status, Type eventType, String title, Instant startsAt,
-                          Instant doorsOpenAt, String timezone, String venueName, String venueCity, String metadata,
-                          Instant saleStartsAt, Instant salesCloseAt, boolean onSale, boolean soldOut,
+    public record Listing(int id, UUID organizerId, Organizer organizer, Status status, Type eventType, String title,
+                          Instant startsAt, Instant doorsOpenAt, String timezone, String venueName, String venueCity,
+                          String metadata, Instant saleStartsAt, Instant salesCloseAt, boolean onSale, boolean soldOut,
                           Long fromPriceMad, int perAccountLimit) {
 
         public Listing withStock(boolean newSoldOut, Long newFromPriceMad) {
-            return new Listing(id, organizerId, status, eventType, title, startsAt, doorsOpenAt, timezone, venueName,
-                    venueCity, metadata, saleStartsAt, salesCloseAt, onSale, newSoldOut, newFromPriceMad,
+            return new Listing(id, organizerId, organizer, status, eventType, title, startsAt, doorsOpenAt, timezone,
+                    venueName, venueCity, metadata, saleStartsAt, salesCloseAt, onSale, newSoldOut, newFromPriceMad,
                     perAccountLimit);
         }
     }
+
+    /**
+     * The event's organizer as fans see it (docs/04-api.md §Club directory): {@code slug} null = unlisted,
+     * {@code crestUrl} already through {@link ma.jomhor.common.Crests}. Its id is {@link Listing#organizerId()}.
+     */
+    public record Organizer(String slug, String name, String crestUrl) {}
 
     /** A zone of a public event with its gate codes (ascending) and the event's prices on it. */
     public record ZoneListing(int id, String code, String name, boolean seated, List<String> gateCodes,

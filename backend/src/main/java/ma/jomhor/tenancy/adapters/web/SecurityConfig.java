@@ -47,7 +47,7 @@ import tools.jackson.databind.json.JsonMapper;
  * the audience is what separates them); /fan/auth/** and /org/auth/** are open. Everything else is
  * closed except /payments/** (gateway-facing, verified per provider) and /gate/** (scanners: no token, every request
  * is checked by the gate module's device-signature filter, 04 §Gate auth). 401/403 bodies use the 04 shape.
- * GET /fan/events and GET /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
+ * GET /fan/organizers, /fan/organizers/{slug}, /fan/events and /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
  * server, so an Authorization header sent there is ignored rather than checked, and without the default
  * no-store cache headers (04: public reads carry no cache headers; the authenticated chains keep them).
  * A fan token is accepted only if its {@code sid} names an active fan_sessions row of its subject (one primary-key
@@ -75,12 +75,13 @@ class SecurityConfig {
         return decoder(AuthService.ENROL, jwt -> OAuth2TokenValidatorResult.success());
     }
 
-    /** Exactly the two public reads; anything else under /fan (other methods, deeper paths) falls to fanChain. */
+    /** Exactly the four public reads; anything else under /fan (other methods, deeper paths) falls to fanChain. */
     @Bean
     @Order(0)
     SecurityFilterChain publicFanChain(HttpSecurity http) {
         return stateless(http)
-                .securityMatchers(m -> m.requestMatchers(HttpMethod.GET, "/fan/events", "/fan/events/{id}"))
+                .securityMatchers(m -> m.requestMatchers(HttpMethod.GET,
+                        "/fan/organizers", "/fan/organizers/{slug}", "/fan/events", "/fan/events/{id}"))
                 .headers(h -> h.cacheControl(c -> c.disable()))
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
                 .build();

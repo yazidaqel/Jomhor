@@ -231,12 +231,6 @@ abstract class AppLocalizations {
   /// **'Pas de connexion. Vérifie ton réseau et réessaie.'**
   String get errorNetwork;
 
-  /// No description provided for @errorMissingOrganizer.
-  ///
-  /// In fr, this message translates to:
-  /// **'Application mal configurée : aucun club défini (ORGANIZER_ID).'**
-  String get errorMissingOrganizer;
-
   /// No description provided for @errorGeneric.
   ///
   /// In fr, this message translates to:
@@ -1574,6 +1568,96 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Certains billets n\'ont pas reçu de nouveau QR. Vérifie tes billets.'**
   String get lostPhoneFailed;
+
+  /// Accueil chip (followed clubs) and Profil row → screen 11 picker.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mes clubs'**
+  String get myClubs;
+
+  /// Accueil chip: events of every listed club.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tout'**
+  String get chipAll;
+
+  /// Screen 11 (club picker) title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tes clubs'**
+  String get clubsTitle;
+
+  /// No description provided for @clubsIntro.
+  ///
+  /// In fr, this message translates to:
+  /// **'Suis tes clubs pour voir leurs matchs en premier. Tu changes quand tu veux.'**
+  String get clubsIntro;
+
+  /// Picker search field, shown above 8 clubs.
+  ///
+  /// In fr, this message translates to:
+  /// **'Chercher un club'**
+  String get clubsSearch;
+
+  /// No description provided for @clubsNoResult.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun club ne correspond.'**
+  String get clubsNoResult;
+
+  /// Outlined chip on a club card; text button on an Accueil card club line.
+  ///
+  /// In fr, this message translates to:
+  /// **'Suivre'**
+  String get clubFollow;
+
+  /// Accent chip with a check: the fan follows this club.
+  ///
+  /// In fr, this message translates to:
+  /// **'Suivi'**
+  String get clubFollowing;
+
+  /// Picker on first launch: primary CTA, enabled from one follow.
+  ///
+  /// In fr, this message translates to:
+  /// **'Continuer'**
+  String get clubsContinue;
+
+  /// Picker on first launch: skip, Accueil opens on Tout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tout voir'**
+  String get clubsSeeAll;
+
+  /// Picker opened from Profil: closes it.
+  ///
+  /// In fr, this message translates to:
+  /// **'Terminé'**
+  String get clubsDone;
+
+  /// Caption under a club name in the picker (organizers.kind).
+  ///
+  /// In fr, this message translates to:
+  /// **'{kind, select, SPORTS_CLUB{Club sportif} PROMOTER{Organisateur} VENUE{Salle} other{Organisateur}}'**
+  String clubKind(String kind);
+
+  /// Accueil, a club chip with no event, the club(s) being sports clubs.
+  ///
+  /// In fr, this message translates to:
+  /// **'Pas de match à venir'**
+  String get homeNoMatch;
+
+  /// Accueil, a club chip with no event, any other kind of organizer.
+  ///
+  /// In fr, this message translates to:
+  /// **'Pas d\'événement à venir'**
+  String get homeNoEvent;
+
+  /// Accueil empty club chip → the Tout chip.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voir tout'**
+  String get homeSeeAll;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

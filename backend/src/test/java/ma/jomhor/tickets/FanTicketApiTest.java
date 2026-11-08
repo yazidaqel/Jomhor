@@ -31,7 +31,8 @@ class FanTicketApiTest extends PaymentTest {
             {"id", "ticket_no", "status", "holder_label", "seat_label", "event", "zone", "gate_codes", "transfer_until",
             "transferred"};
     private static final String[] EVENT_KEYS =
-            {"id", "title", "event_type", "status", "starts_at", "doors_open_at", "timezone", "venue", "metadata"};
+            {"id", "title", "event_type", "status", "starts_at", "doors_open_at", "timezone", "venue", "metadata",
+            "organizer"};
 
     @Autowired
     EventService events;
@@ -116,6 +117,20 @@ class FanTicketApiTest extends PaymentTest {
         assertThat(JsonPath.<String>read(json, "$.tickets[0].zone.name")).isEqualTo("Zone NORD");
         assertThat(JsonPath.<List<String>>read(json, "$.tickets[0].gate_codes")).containsExactly("P1", "P2");
         assertThat(JsonPath.<Map<String, Object>>read(json, "$.tickets[0].event.metadata")).isEmpty();
+        // Multi-club: the event's organizer with its id; unlisted (no slug), and the ticket is listed all the same.
+        assertKeys(json, "$.tickets[0].event.organizer", "id", "slug", "name", "crest_url");
+        assertThat(JsonPath.<String>read(json, "$.tickets[0].event.organizer.id")).isEqualTo(s.org().org().toString());
+        assertThat(JsonPath.<String>read(json, "$.tickets[0].event.organizer.slug")).isNull();
+        assertThat(JsonPath.<String>read(json, "$.tickets[0].event.organizer.name")).startsWith("Org ");
+        assertThat(JsonPath.<String>read(json, "$.tickets[0].event.organizer.crest_url")).isNull();
+        String slug = listed(s.org().org());
+        jdbc.sql("update organizers set settings = '{\"crest_url\": \"https://assets.jomhor.ma/crests/x.svg\", "
+                + "\"SECRET\": \"do-not-leak\"}'::jsonb where id = ?").param(s.org().org()).update();
+        String listedJson = tickets(buyer, "");
+        assertThat(JsonPath.<String>read(listedJson, "$.tickets[0].event.organizer.slug")).isEqualTo(slug);
+        assertThat(JsonPath.<String>read(listedJson, "$.tickets[0].event.organizer.crest_url"))
+                .isEqualTo("https://assets.jomhor.ma/crests/x.svg");
+        assertThat(listedJson).doesNotContain("SECRET").doesNotContain("do-not-leak");
         // Nothing of the friend's: no name, phone, ticket or account.
         UUID friendTicket = jdbc.sql("select t.id from tickets t join users u on u.id = t.holder_user_id"
                 + " where u.phone_e164 = ?").param(friendPhone).query(UUID.class).single();

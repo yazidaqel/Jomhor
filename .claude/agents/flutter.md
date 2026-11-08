@@ -27,7 +27,7 @@ Scanner (normative: `docs/02-gate-validation-and-data-model.md`, schema `docs/05
 
 Fan app: the rotating QR (v2, 30 s slot) works fully offline with K_t on the device. No PII in
 any QR. Screens follow `design/DESIGN.md`, `design/tokens.json` and the mockups in
-`design/mockups/html/`. The club accent comes from the organizer theme, never hard-coded.
+`design/mockups/html/`. Colours are Jomhor's (design/tokens.json), never a club's; a club shows only as crest + name content (docs/04-api.md §Club directory).
 
 Before reporting done: `flutter analyze` clean and `flutter test` passes in each package you
 touched. Report files changed, tests run with results, and anything pending on `backend`.

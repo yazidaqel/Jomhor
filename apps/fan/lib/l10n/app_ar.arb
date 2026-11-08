@@ -25,7 +25,6 @@
   "errorValidation": "راجع المعلومات اللي دخلتي.",
   "errorNotFound": "ما لقيناهش. يمكن تحيد.",
   "errorNetwork": "ما كاينش الأنترنيت. شوف الريزو ديالك وعاود جرب.",
-  "errorMissingOrganizer": "التطبيق ما مضبوطش: ما كاين حتى فريق (ORGANIZER_ID).",
   "errorGeneric": "وقع شي مشكل. عاود جرب من دابا شوية.",
 
   "heroLabelMatch": "الماتش الجاي · فدارنا",
@@ -256,5 +255,21 @@
   "lostPhoneNone": "حتى تذكرة جاية ما تقدر تاخد QR جديد.",
   "lostPhoneConfirm": "QR جداد",
   "lostPhoneDone": "{count, plural, =1{QR جديد واجد لتذكرة وحدة.} =2{QR جداد واجدين لجوج تذاكر.} few{QR جداد واجدين ل {count} تذاكر.} other{QR جداد واجدين ل {count} تذكرة.}}",
-  "lostPhoneFailed": "شي تذاكر ما خداوش QR جديد. شوف التذاكر ديالك."
+  "lostPhoneFailed": "شي تذاكر ما خداوش QR جديد. شوف التذاكر ديالك.",
+
+  "myClubs": "فرقي",
+  "chipAll": "كلشي",
+  "clubsTitle": "فرقك",
+  "clubsIntro": "تابع فرقك باش تشوف الماتشات ديالهم هوما الأولين. تقدر تبدل وقتما بغيتي.",
+  "clubsSearch": "قلّب على فريق",
+  "clubsNoResult": "ما لقينا حتى فريق.",
+  "clubFollow": "تابع",
+  "clubFollowing": "متابَع",
+  "clubsContinue": "كمّل",
+  "clubsSeeAll": "شوف كلشي",
+  "clubsDone": "ساليت",
+  "clubKind": "{kind, select, SPORTS_CLUB{فريق رياضي} PROMOTER{منظم} VENUE{قاعة} other{منظم}}",
+  "homeNoMatch": "ما كاين حتى ماتش جاي",
+  "homeNoEvent": "ما كاين حتى حدث جاي",
+  "homeSeeAll": "شوف كلشي"
 }

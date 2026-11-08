@@ -20,7 +20,8 @@ import 'transfer_test.dart' show openTicketJson, transferredJson;
 /// and mid-hold on its confirm step, and the "Transféré à" row in Billets (DESIGN.md Lot 4, AR / RTL); the login and
 /// the top bar with the Jomhor lockup (design/BRAND.md). Next to the
 /// pictures, the rules the pictures show are asserted: right to left, Western digits only, codes and prices in
-/// left-to-right isolates. Recorded on Linux with the docker command at the top of goldens.dart.
+/// left-to-right isolates. Multi-club (FL-23..25): screen 11, the club chips on screen 1, the club line on tickets.
+/// Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -65,8 +66,16 @@ void main() {
       await phone(tester);
       final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
       Future<http.Response> backend(http.Request r) async => switch ((r.method, r.url.path)) {
+        ('GET', '/v1/fan/organizers') => json([clubJson(), tensiftJson]),
         ('GET', '/v1/fan/events') => json([
           eventJson(),
+          eventJson(
+            id: 3,
+            title: 'Olympique Tensift vs Union Rif',
+            startsAt: '2027-03-20T19:00:00Z',
+            metadata: {'opponent': 'Union Rif', 'competition': 'Championnat', 'matchday': 12},
+            club: tensiftJson,
+          ),
           eventJson(
             id: 2,
             title: 'Atlas FC vs Union Sahel',
@@ -91,7 +100,11 @@ void main() {
         clock: clock,
         locale: Locale(locale),
         overrides: [initialLocaleProvider.overrideWithValue(locale)],
+        follows: (ids: const [testOrganizer, otherOrganizer], seen: true, chip: null),
       );
+      // Mes clubs · Atlas FC · Olympique Tensift · Tout, Mes clubs selected (DESIGN.md §Multi-club adjustments).
+      expect(find.byKey(const Key('home.chip.mine')), findsOneWidget);
+      expect(find.byKey(const Key('home.chip.$otherOrganizer')), findsOneWidget);
       if (locale == 'ar') {
         expectArabicRules(tester);
         expect(find.text('الماتش الجاي · فدارنا'), findsOneWidget);
@@ -126,6 +139,31 @@ void main() {
       await expectLater(find.byKey(const Key('topbar')), matchesGoldenFile('goldens/$locale-topbar.png'));
     });
 
+    testWidgets('$locale · screen 11 Tes clubs (first launch, one club followed)', (tester) async {
+      await phone(tester);
+      final c = await pumpJomhor(
+        tester,
+        backend: (r) async => r.url.path == '/v1/fan/organizers'
+            ? json([
+                clubJson(),
+                tensiftJson,
+                clubJson(id: 'org-3', slug: 'grand-theatre', name: 'Grand Théâtre', kind: 'VENUE'),
+              ])
+            : json(<Object?>[]),
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+        follows: (ids: const [otherOrganizer], seen: false, chip: null),
+      );
+      expect(c.read(routerProvider).state.uri.path, '/clubs');
+      expect(tester.widget<FilledButton>(find.byKey(const Key('clubs.continue'))).onPressed, isNotNull);
+      if (locale == 'ar') {
+        expectArabicRules(tester);
+        expect(find.text('فرقك'), findsOneWidget);
+      }
+      expectLockupAtStart(tester, find.byType(CustomScrollView));
+      await snap('$locale-11-clubs');
+    });
+
     testWidgets('$locale · login', (tester) async {
       await phone(tester);
       final c = await pumpJomhor(
@@ -137,7 +175,7 @@ void main() {
       c.read(routerProvider).go('/login');
       await tester.pumpAndSettle();
       expect(find.text(locale == 'ar' ? 'جمهور. الرجل الثاني عشر.' : 'Jomhor. Le 12e homme.'), findsOneWidget);
-      expect(find.text(JomhorClub.name), findsNothing); // The club is content, not the app's identity.
+      expect(find.textContaining('Atlas'), findsNothing); // The club is content, not the app's identity.
       if (locale == 'ar') expectArabicRules(tester);
       expectLockupAtStart(tester, find.byType(ListView));
       await snap('$locale-login');

@@ -35,13 +35,6 @@ abstract final class JomhorColors {
   static const Color ticketRule = Color(0xFFD6DAE3);
 }
 
-abstract final class JomhorClub {
-  static const String name = 'ATLAS FC';
-  static const String shortName = 'ATLAS';
-  static const String crestInitial = 'A';
-  static const String? crest = null;
-}
-
 abstract final class JomhorFonts {
   static const String display = 'Barlow Condensed';
   static const String body = 'Inter';

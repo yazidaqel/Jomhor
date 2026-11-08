@@ -21,19 +21,25 @@ const render = async () => {
 // Vite inlines the design/logo SVGs as data URLs: the mark (viewBox 120 x 120), then the wordmark (347 x 120).
 const LOCKUP = /<span role="img" aria-label="Jomhor" dir="ltr"[^>]*><img [^>]*viewBox=&#x27;0%200%20120%20120[^>]*><img [^>]*viewBox=&#x27;0%200%20347%20120[^>]*><\/span>/
 
-it('header: the Jomhor lockup at the start (mark then wordmark), the club as secondary text, no crest', async () => {
+// Multi-club: the header names no club (plan Q80); clubs are content on their own pages.
+const shopLine = (header: string) => /<span [^>]*>([^<]*)<\/span><\/a>/.exec(header)?.[1]
+
+it('header: the Jomhor lockup at the start (mark then wordmark), then "Billetterie", no club, no crest', async () => {
   const { header } = await render()
   expect(header).toMatch(LOCKUP)
-  expect(header.search(LOCKUP)).toBeLessThan(header.indexOf('Billetterie ATLAS FC'))
-  expect(header.indexOf('Billetterie ATLAS FC')).toBeLessThan(header.indexOf('<nav'))
+  expect(shopLine(header)).toBe('Billetterie')
+  expect(header.search(LOCKUP)).toBeLessThan(header.indexOf('>Billetterie<'))
+  expect(header.indexOf('>Billetterie<')).toBeLessThan(header.indexOf('<nav'))
+  expect(header).not.toContain('ATLAS')
   expect(header).not.toContain('bg-accent')
 })
 
-it('AR: the lockup stays first and LTR (never mirrored); the club line is in Arabic', async () => {
+it('AR: the lockup stays first and LTR (never mirrored); "Billetterie" in Arabic', async () => {
   locale = 'ar'
   const { header } = await render()
   expect(header.search(LOCKUP)).toBeGreaterThan(-1)
-  expect(header.search(LOCKUP)).toBeLessThan(header.indexOf('تذاكر ATLAS FC'))
+  expect(shopLine(header)).toBe('تذاكر')
+  expect(header.search(LOCKUP)).toBeLessThan(header.indexOf('>تذاكر<'))
 })
 
 it('footer: lockup + tagline', async () => {

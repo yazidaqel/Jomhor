@@ -28,7 +28,7 @@ Read, in this order, before writing code:
   `packages/core`). Riverpod for state, Drift (SQLite) on the scanner, `flutter_secure_storage`
   + Android Keystore for keys.
 - Web shop: Next.js 16 (App Router, TypeScript, server-rendered event pages for SEO and
-  shareable links), Tailwind, same design tokens as the fan app (dark, club accent).
+  shareable links), Tailwind, same design tokens as the fan app (dark, Jomhor amber accent; clubs only as crest + name content).
 - Back-office: React 19, TypeScript, Vite, shadcn/ui (light neutral theme), TanStack Query.
 - Infra: AWS eu-west-3. Secrets never in the repo.
 

@@ -84,5 +84,43 @@ insert into staff (id, organizer_id, name, role, pin_hash) values
    'pbkdf2-sha256$10000$EBESExQVFhcYGRobHB0eHw$Wzdm_KJN_gc6hqVgmslgQuahKrWpsf0rtnBoe55hD6I')
 on conflict do nothing;
 
+-- ---------- multi-club (plan multi-club Q76) ----------
+-- ATLAS FC is listed (docs/04-api.md §Club directory); a slug set by hand on a dev database is left alone.
+update organizers set slug = 'atlas-fc' where id = 'a7a5fc00-0000-4000-8000-000000000001' and slug is null;
+
+-- Second demo club, listed, no crest (clients draw the stand-in, plan Q72). The dev admin is ADMIN there too.
+insert into organizers (id, name, kind, slug) values
+  ('a7a5fc00-0000-4000-8000-000000000002', 'Olympique Tensift', 'SPORTS_CLUB', 'olympique-tensift')
+on conflict do nothing;
+
+insert into staff (id, organizer_id, user_id, name, role) values
+  ('a7a5fc00-0000-4000-8000-000000000211', 'a7a5fc00-0000-4000-8000-000000000002',
+   'a7a5fc00-0000-4000-8000-000000000101', 'Admin Dev', 'ADMIN')
+on conflict do nothing;
+
+insert into venues (id, organizer_id, name, city, capacity, timezone) values
+  ('a7a5fc00-0000-4000-8000-000000000302', 'a7a5fc00-0000-4000-8000-000000000002',
+   'Stade Tensift', 'Marrakech', 25000, 'Africa/Casablanca')
+on conflict do nothing;
+
+insert into zones (organizer_id, venue_id, code, name, capacity, seated) values
+  ('a7a5fc00-0000-4000-8000-000000000002', 'a7a5fc00-0000-4000-8000-000000000302', 'NORD',    'Nord',    10000, false),
+  ('a7a5fc00-0000-4000-8000-000000000002', 'a7a5fc00-0000-4000-8000-000000000302', 'SUD',     'Sud',     10000, false),
+  ('a7a5fc00-0000-4000-8000-000000000002', 'a7a5fc00-0000-4000-8000-000000000302', 'HONNEUR', 'Honneur',  4000, true)
+on conflict do nothing;
+
+insert into gates (id, organizer_id, venue_id, code, name) values
+  ('a7a5fc00-0000-4000-8000-000000000411', 'a7a5fc00-0000-4000-8000-000000000002', 'a7a5fc00-0000-4000-8000-000000000302', 'P1', 'Porte 1'),
+  ('a7a5fc00-0000-4000-8000-000000000412', 'a7a5fc00-0000-4000-8000-000000000002', 'a7a5fc00-0000-4000-8000-000000000302', 'P2', 'Porte 2'),
+  ('a7a5fc00-0000-4000-8000-000000000413', 'a7a5fc00-0000-4000-8000-000000000002', 'a7a5fc00-0000-4000-8000-000000000302', 'P3', 'Porte 3')
+on conflict do nothing;
+
+insert into gate_zones (organizer_id, gate_id, zone_id)
+select g.organizer_id, g.id, z.id
+from (values ('P1', 'HONNEUR'), ('P2', 'NORD'), ('P3', 'SUD')) as m(gate_code, zone_code)
+join gates g on g.venue_id = 'a7a5fc00-0000-4000-8000-000000000302' and g.code = m.gate_code
+join zones z on z.venue_id = 'a7a5fc00-0000-4000-8000-000000000302' and z.code = m.zone_code
+on conflict do nothing;
+
 -- Events, prices and the demo fan's tickets need K_e (encrypted in Java) and keep their times relative to now:
 -- DevSeeder writes them at every dev startup.

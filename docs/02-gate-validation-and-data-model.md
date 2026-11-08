@@ -115,7 +115,7 @@ Server (PostgreSQL):
 
 | Table | Purpose | Key columns |
 | --- | --- | --- |
-| organizers | Tenant (club, promoter, venue operator) | id, name, kind (SPORTS\_CLUB, PROMOTER, VENUE, OTHER), settings jsonb |
+| organizers | Tenant (club, promoter, venue operator) | id, name, kind (SPORTS\_CLUB, PROMOTER, VENUE, OTHER), settings jsonb, slug (public handle; null = unlisted) |
 | venues | Stadium, hall, open-air site | id, organizer\_id, name, capacity |
 | zones | Tribune / sector / standing area | id, organizer\_id, venue\_id, code, name, capacity |
 | gates | Physical entrance | id, organizer\_id, venue\_id, code, name, directions, latitude, longitude (fan app only, never in the manifest) |
@@ -141,7 +141,7 @@ Server (PostgreSQL):
 | fan\_sessions | Revocable fan login sessions (platform-wide) | id (JWT sid), user\_id, expires\_at, revoked\_at |
 | ticket\_deliveries | WhatsApp delivery outbox | id, organizer\_id, ticket\_id, status (PENDING, SENT, FAILED), attempts, next\_attempt\_at |
 | memberships | A fan who joined an organizer's club (free); loyalty computed on read | id, organizer\_id, user\_id, number (per organizer, never reused), joined\_at, left\_at, marketing\_push, marketing\_whatsapp |
-| push\_tokens | FCM tokens of the organizer's fan app | id, organizer\_id, user\_id, session\_id, token, platform (android, ios), updated\_at |
+| push\_tokens | FCM tokens of the Jomhor fan app (platform identity, every club) | id, user\_id, session\_id, token, platform (android, ios), updated\_at |
 | campaigns | Push or WhatsApp campaign | id, organizer\_id, channel (PUSH, WHATSAPP), audience (MEMBERS, EVENT\_HOLDERS), event\_id, title, body, status (DRAFT, SCHEDULED, SENDING, SENT, CANCELLED), scheduled\_at, created\_by, started\_at, finished\_at |
 | fan\_messages | Push and WhatsApp outbox other than ticket PDFs | id, organizer\_id, user\_id, channel, kind (TICKET\_RECEIVED, SPLIT\_INVITE, PAY\_CODE, ORDER\_PAID, CAMPAIGN), campaign\_id, order\_id, ticket\_id, status, attempts, next\_attempt\_at, last\_error |
 

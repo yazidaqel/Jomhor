@@ -1,12 +1,12 @@
 import { ImageResponse } from 'next/og'
 import { notFound } from 'next/navigation'
-import { club } from '@/lib/club'
-import { getEvent, parseEventId } from '@/lib/events'
+import { eventAt } from '@/lib/clubs'
 import { defaultLocale, getDictionary } from '@/lib/i18n'
 import { logoDataUrl } from '@/lib/logo'
 import { formatDateTime } from '@/lib/time'
 import tokens from '@/lib/tokens'
-import { kicker } from '../../sale'
+import { initialOf } from '../../../../brand'
+import { kicker } from '../../../sale'
 
 // FR whatever the reader's locale: crawlers send no cookie, and the default OG font has no Arabic glyphs.
 const d = getDictionary(defaultLocale)
@@ -17,20 +17,24 @@ export const contentType = 'image/png'
 export const alt = d.event.ogAlt
 
 // ponytail: default OG font (no Barlow/Inter files bundled); add the TTFs to ImageResponse `fonts` if the look matters.
-/** WhatsApp / social preview: crest + club, the Jomhor lockup at the end, competition, title, date in the venue's zone, venue. */
-export default async function OpenGraphImage({ params }: { params: Promise<{ slug: string }> }) {
-  const id = parseEventId((await params).slug)
-  const e = id === null ? null : await getEvent(id)
-  if (!e) notFound()
+// ponytail: the crest stand-in only, never `crest_url` (no server-side crest fetch, plan §5); Satori fetch from the
+// crest host once real crests exist (Q72).
+/**
+ * WhatsApp / social preview: the club (stand-in + name), the Jomhor lockup at the end, competition, title, date in the
+ * venue's zone, venue. Same 404s as the page (another club's URL included).
+ */
+export default async function OpenGraphImage({ params }: { params: Promise<{ club: string; slug: string }> }) {
+  const { club, slug } = await params
+  const { e } = (await eventAt(club, slug)) ?? notFound()
   const label = kicker(d, e)
   return new ImageResponse(
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 72, background: c.ground, color: c.text }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{ width: 88, height: 88, borderRadius: 44, background: c.accent, color: c.onAccent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 52, fontWeight: 800 }}>
-            {club.crestInitial}
+            {initialOf(e.organizer.name)}
           </div>
-          <div style={{ fontSize: 40, fontWeight: 700 }}>{club.name}</div>
+          <div style={{ fontSize: 40, fontWeight: 700 }}>{e.organizer.name}</div>
         </div>
         <img src={await logoDataUrl('jomhor-lockup-dark.svg')} alt="" width={231} height={56} />
       </div>

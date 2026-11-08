@@ -70,12 +70,12 @@ public interface Events {
 
     /**
      * Public (GET /fan/events): ON_SALE or GATES_OPEN events with starts_at >= {@code from} (null = the database
-     * clock), by starts_at, at most {@code limit}. {@code org} null = every organizer: public data, and each row
-     * carries its organizer_id.
+     * clock), by starts_at then id, at most {@code limit}. {@code orgs} = those organizers, listed or not; empty =
+     * every listed organizer (slug set). Public data: each row carries its organizer.
      */
-    List<Event.Listing> listings(UUID org, Instant from, int limit);
+    List<Event.Listing> listings(List<UUID> orgs, Instant from, int limit);
 
-    /** Public (GET /fan/events/{id}): the event by id alone, any status but DRAFT. */
+    /** Public (GET /fan/events/{id}): the event by id alone, any status but DRAFT, listed organizer or not (P68). */
     Optional<Event.Listing> listing(int eventId);
 
     /** Zones of the event's venue that have at least one of its price categories, by id, prices by name. */

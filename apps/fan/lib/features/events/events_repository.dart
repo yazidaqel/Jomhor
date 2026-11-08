@@ -3,28 +3,21 @@ import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
-import 'package:jomhor_fan/app/config.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/clock.dart';
+import 'package:jomhor_fan/features/clubs/clubs_repository.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 
-/// Client-side code: the build has no `ORGANIZER_ID`, so there is no club to list.
-const missingOrganizer = 'MISSING_ORGANIZER_ID';
-
-/// Overridden in tests.
-final organizerIdProvider = Provider<String>((ref) => AppConfig.organizerId);
-
 class EventsRepository {
-  new(this._api, this._organizerId, this._now);
+  new(this._api, this._now);
 
   final ApiClient _api;
-  final String _organizerId;
   final DateTime Function() _now;
 
-  /// Upcoming events of this build's club, by `starts_at` (public: no token sent).
-  Future<List<FanEvent>> upcoming() async {
-    _requireOrganizer();
-    final res = await _api.getPublicResponse('/fan/events', query: {'organizer': _organizerId});
+  /// Upcoming events by `starts_at` (public: no token sent). [organizers] null = every listed club (`Tout`), else
+  /// those clubs (`organizer` repeated).
+  Future<List<FanEvent>> upcoming(List<String>? organizers) async {
+    final res = await _api.getPublicResponse('/fan/events', query: {'organizer': ?organizers});
     // Server time from the `Date` header: a fast or slow device clock does not move the opening.
     final fetchedAt = res.date ?? _now();
     return [
@@ -32,26 +25,15 @@ class EventsRepository {
     ];
   }
 
-  /// One event of this build's club; another organizer's event reads as NOT_FOUND.
+  /// One event, of any club (listed or not).
   Future<EventDetail> detail(int id) async {
-    _requireOrganizer();
     final res = await _api.getPublicResponse('/fan/events/$id');
-    final detail = EventDetail.fromJson(res.body! as Map<String, Object?>, fetchedAt: res.date ?? _now());
-    if (detail.event.organizerId != _organizerId) {
-      throw const ApiError(status: 404, code: 'NOT_FOUND', message: 'Event of another organizer');
-    }
-    return detail;
-  }
-
-  void _requireOrganizer() {
-    if (_organizerId.isEmpty) {
-      throw const ApiError(status: 0, code: missingOrganizer, message: 'ORGANIZER_ID is not set');
-    }
+    return EventDetail.fromJson(res.body! as Map<String, Object?>, fetchedAt: res.date ?? _now());
   }
 }
 
 final eventsRepositoryProvider = Provider<EventsRepository>(
-  (ref) => EventsRepository(ref.watch(apiClientProvider), ref.watch(organizerIdProvider), ref.watch(nowProvider)),
+  (ref) => EventsRepository(ref.watch(apiClientProvider), ref.watch(nowProvider)),
 );
 
 final _random = Random();
@@ -75,7 +57,8 @@ void _refetchAtOpenings(Ref ref, Iterable<FanEvent> events) {
 }
 
 final FutureProvider<List<FanEvent>> upcomingEventsProvider = FutureProvider.autoDispose<List<FanEvent>>((ref) async {
-  final events = await ref.watch(eventsRepositoryProvider).upcoming();
+  final organizers = organizersOf(await ref.watch(homeViewProvider.future));
+  final events = await ref.watch(eventsRepositoryProvider).upcoming(organizers);
   _refetchAtOpenings(ref, events);
   return events;
 });

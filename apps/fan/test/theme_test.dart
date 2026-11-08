@@ -21,11 +21,6 @@ void main() {
     expect(theme.scaffoldBackgroundColor, hex('ground'));
   });
 
-  test('the club identity comes from tokens.json', () {
-    final club = tokens['club']! as Map<String, Object?>;
-    expect((JomhorClub.name, JomhorClub.crestInitial), (club['name'], club['crestInitial']));
-  });
-
   test('tokens.g.dart matches tokens.json (else run `dart run tool/gen_tokens.dart`)', () {
     expect(File(outputPath).readAsStringSync(), generateTokens(tokens));
   });
@@ -40,11 +35,16 @@ void main() {
     expect(JomhorBrand.amber, const Color(0xFFF5B700));
   });
 
-  test('another club accent in tokens.json changes the generated accent', () {
+  test('another accent in tokens.json changes the generated accent', () {
     final other = {
       ...tokens,
       'color': {...color, 'accent': '#C8102E'},
     };
     expect(generateTokens(other), contains('static const Color accent = Color(0xFFC8102E);'));
+  });
+
+  test('no build-time club identity: the club is content from the API (design/BRAND.md)', () {
+    expect(tokens.containsKey('club'), isFalse);
+    expect(File(outputPath).readAsStringSync(), isNot(contains('JomhorClub')));
   });
 }

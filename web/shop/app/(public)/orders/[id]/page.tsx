@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { ApiError } from '@/lib/api'
-import { eventSlug, getEvent } from '@/lib/events'
+import { eventPath } from '@/lib/clubs'
+import { getEvent } from '@/lib/events'
 import { currentSession } from '@/lib/http'
 import { fmt } from '@/lib/i18n'
 import { getI18n } from '@/lib/i18n/server'
@@ -59,7 +60,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           now={Date.now()}
           places={places}
           timezone={e?.timezone ?? null}
-          eventHref={e && `/events/${eventSlug(e)}`}
+          eventHref={e && eventPath(e)}
           methods={online}
           copy={{ orderPage: d.orderPage, errors: d.errors, meta: d.meta, steps: d.steps }}
         >
@@ -80,7 +81,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </div>
         {e && (
           <div className="flex items-center gap-3 rounded-control bg-ground p-3">
-            <Crest size="md" />
+            <Crest club={e.organizer} size={44} />
             <div className="flex min-w-0 flex-col">
               <p className="font-display text-xl font-bold uppercase leading-tight">{e.title}</p>
               <p className="text-body-small text-text-muted">{when}</p>
