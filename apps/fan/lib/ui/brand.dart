@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 
 /// The Jomhor mark (design/logo/jomhor-mark-transparent.svg): eleven white dots draw the J, the twelfth, amber and
 /// bigger, ends the hook. Always Jomhor's colours, never the club's; on an amber ground all twelve dots are ink
@@ -115,34 +117,93 @@ class _BrandPainter extends CustomPainter {
   bool shouldRepaint(_BrandPainter old) => old.onAmber != onAmber || old.lockup != lockup;
 }
 
-/// Club crest stand-in (tokens.json `club.crest` is null): a disc with the initial. Home = the club accent,
-/// away = paper. [glow] adds the accent halo of the home side in the hero.
+/// A club's crest (docs/04-api.md §Club directory): the `crest_url` image as supplied, never recoloured; with no
+/// url, or when it fails to load (offline wallet included), the stand-in: the name's first letter on a disc, in
+/// Jomhor tokens only ([disc] and [ink]: the accent disc by default, paper for the away side of a match).
 class Crest extends StatelessWidget {
-  const new({required this.initial, this.size = 36, this.home = true, this.glow = false, super.key});
+  const new({
+    required this.name,
+    this.url,
+    this.size = 36,
+    this.disc = JomhorColors.accent,
+    this.ink = JomhorColors.onAccent,
+    this.glow = false,
+    super.key,
+  });
 
-  final String initial;
+  final String name;
+  final String? url;
   final double size;
-  final bool home;
+  final Color disc;
+  final Color ink;
+
+  /// The accent halo of the home side in the hero.
   final bool glow;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      color: home ? JomhorColors.accent : JomhorColors.ticketPaper,
-      boxShadow: glow ? [BoxShadow(color: JomhorColors.accent.withValues(alpha: 0.4), blurRadius: size * 0.7)] : null,
-    ),
-    child: Text(
-      initial.toUpperCase(),
-      textScaler: TextScaler.noScaling, // Sized by the disc, not by the text scale.
-      style: JomhorType.number.copyWith(
-        fontSize: size * 0.48,
-        color: home ? JomhorColors.onAccent : JomhorColors.ticketInk,
+  Widget build(BuildContext context) {
+    final standIn = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: disc,
+        boxShadow: glow ? [BoxShadow(color: JomhorColors.accent.withValues(alpha: 0.4), blurRadius: size * 0.7)] : null,
       ),
-    ),
+      child: Text(
+        crestInitial(name),
+        textScaler: TextScaler.noScaling, // Sized by the disc, not by the text scale.
+        style: JomhorType.number.copyWith(fontSize: size * 0.48, color: ink, height: 1.2),
+      ),
+    );
+    // Next to the club's name everywhere: decoration for screen readers.
+    return ExcludeSemantics(
+      child: switch (url) {
+        final url? => Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => standIn,
+        ),
+        null => standIn,
+      },
+    );
+  }
+}
+
+final _firstLetter = RegExp(r'\p{L}', unicode: true);
+
+/// The stand-in letter: the first letter of [name], uppercased ('Olympique Tensift' -> 'O'; an Arabic name keeps
+/// its first Arabic letter).
+String crestInitial(String name) => (_firstLetter.firstMatch(name)?[0] ?? '').toUpperCase();
+
+/// The club line of event cards and tickets (DESIGN.md §Multi-club adjustments): crest 20 + the club name in
+/// caption, in a bidi isolate of its own direction; [trailing] at the end ("Suivre" on Accueil).
+class ClubLine extends StatelessWidget {
+  const new({required this.name, this.crestUrl, this.trailing, this.color = JomhorColors.textSecondary, super.key});
+
+  final String name;
+  final String? crestUrl;
+  final Widget? trailing;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Crest(name: name, url: crestUrl, size: 20),
+      const SizedBox(width: JomhorSpace.s),
+      Flexible(
+        child: Text(
+          AppLocalizations.of(context).isolate(name),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: JomhorType.caption.copyWith(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
+      ?trailing,
+    ],
   );
 }
 

@@ -17,7 +17,6 @@ $Root = Split-Path $PSScriptRoot -Parent
 $StateDir = Join-Path $PSScriptRoot '.dev'
 $StateFile = Join-Path $StateDir 'state.json'
 $Compose = @('compose', '-p', 'jomhor-dev', '-f', (Join-Path $Root 'backend\compose.yaml'))
-$OrganizerId = 'a7a5fc00-0000-4000-8000-000000000001'
 $FixedOtp = '123456'
 
 function Test-PortBusy([int]$Port) {
@@ -126,7 +125,6 @@ foreach ($app in 'shop', 'backoffice') {
 # Shop: talks to the backend on localhost (the backend trusts X-Forwarded-For from loopback only); no proxy in front.
 $env:API_BASE_URL = "http://localhost:$apiPort/v1"
 $env:API_PUBLIC_URL = $publicBase
-$env:ORGANIZER_ID = $OrganizerId
 $env:SHOP_ORIGIN = "http://localhost:$shopPort"
 $env:TRUSTED_PROXY_HOPS = '0'
 $shop = Start-Logged 'shop' 'npm.cmd' @('run', 'dev', '--', '-p', "$shopPort") (Join-Path $Root 'web\shop')
@@ -139,7 +137,7 @@ $bo = Start-Logged 'backoffice' 'npm.cmd' @('run', 'dev', '--', '--port', "$boPo
 
 try {
     # The demo events exist once DevSeeder has run (after the web server is up).
-    Wait-Url 'backend' "http://localhost:$apiPort/v1/fan/events?organizer=$OrganizerId" 'Rapid Oued' 300 `
+    Wait-Url 'backend' "http://localhost:$apiPort/v1/fan/events" 'Rapid Oued' 300 `
         (Join-Path $StateDir 'backend.log')
     Wait-Url 'shop' "http://localhost:$shopPort/" '' 180 (Join-Path $StateDir 'shop.log')
     Wait-Url 'back-office' "http://localhost:$boPort/" '' 60 (Join-Path $StateDir 'backoffice.log')

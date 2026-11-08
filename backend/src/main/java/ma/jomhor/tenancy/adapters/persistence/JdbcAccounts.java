@@ -5,9 +5,11 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import ma.jomhor.common.Crests;
 import ma.jomhor.tenancy.application.Accounts;
 import ma.jomhor.tenancy.domain.CashPoint;
 import ma.jomhor.tenancy.domain.Membership;
+import ma.jomhor.tenancy.domain.Organizer;
 import ma.jomhor.tenancy.domain.StaffMember;
 import ma.jomhor.tenancy.domain.StaffRole;
 import ma.jomhor.tenancy.domain.User;
@@ -23,10 +25,16 @@ class JdbcAccounts implements Accounts {
     /** The rows PATCH /org/staff/{id} may change. */
     private static final String MANAGED_ROLES = "role in ('GATE', 'SUPERVISOR', 'CASHIER')";
 
-    private final JdbcClient jdbc;
+    /** Only the crest leaves settings (04 §Club directory: nothing else of settings reaches fans). */
+    private static final String ORGANIZER_COLUMNS =
+            "id, slug, name, kind::text as kind, settings ->> 'crest_url' as crest_url";
 
-    JdbcAccounts(JdbcClient jdbc) {
+    private final JdbcClient jdbc;
+    private final Crests crests;
+
+    JdbcAccounts(JdbcClient jdbc, Crests crests) {
         this.jdbc = jdbc;
+        this.crests = crests;
     }
 
     @Override
@@ -51,6 +59,19 @@ class JdbcAccounts implements Accounts {
                 .param(organizerId)
                 .query((rs, n) -> new CashPoint(rs.getString("name"), rs.getString("address"), rs.getString("hours")))
                 .list();
+    }
+
+    // Platform reads of the organizers table itself (public directory), not of a tenant table.
+    @Override
+    public List<Organizer> listedOrganizers() {
+        return jdbc.sql("select " + ORGANIZER_COLUMNS + " from organizers where slug is not null order by name, id")
+                .query((rs, n) -> organizer(rs)).list();
+    }
+
+    @Override
+    public Optional<Organizer> listedOrganizer(String slug) {
+        return jdbc.sql("select " + ORGANIZER_COLUMNS + " from organizers where slug = ?")
+                .param(slug).query((rs, n) -> organizer(rs)).optional();
     }
 
     @Override
@@ -146,6 +167,11 @@ class JdbcAccounts implements Accounts {
         return jdbc.sql("select " + STAFF_COLUMNS + " from staff where organizer_id = ? and active and "
                         + SCANNER_ROLES + " and pin_hash is not null order by name, id")
                 .param(organizerId).query(JdbcAccounts::staffMember).list();
+    }
+
+    private Organizer organizer(ResultSet rs) throws SQLException {
+        return new Organizer(rs.getObject("id", UUID.class), rs.getString("slug"), rs.getString("name"),
+                rs.getString("kind"), crests.url(rs.getString("crest_url")));
     }
 
     private static StaffMember staffMember(ResultSet rs, int n) throws SQLException {

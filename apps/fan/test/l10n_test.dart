@@ -35,6 +35,26 @@ void main() {
     expect(ar.navTickets, 'تذاكري');
   });
 
+  test('multi-club copy: chips, picker, empty states by kind (DESIGN.md §Multi-club adjustments)', () {
+    final en = lookupAppLocalizations(const Locale('en'));
+    expect((fr.myClubs, ar.myClubs, en.myClubs), ('Mes clubs', 'فرقي', 'My clubs'));
+    expect((fr.chipAll, ar.chipAll, en.chipAll), ('Tout', 'كلشي', 'All'));
+    expect(
+      (fr.clubFollow, fr.clubFollowing, fr.clubsSeeAll, fr.clubsDone),
+      ('Suivre', 'Suivi', 'Tout voir', 'Terminé'),
+    );
+    expect(
+      (fr.homeNoMatch, fr.homeNoEvent, fr.homeSeeAll),
+      ('Pas de match à venir', "Pas d'événement à venir", 'Voir tout'),
+    );
+    expect(
+      (fr.clubKind('SPORTS_CLUB'), fr.clubKind('VENUE'), fr.clubKind('OTHER')),
+      ('Club sportif', 'Salle', 'Organisateur'),
+    );
+    expect(ar.clubKind('SPORTS_CLUB'), 'فريق رياضي');
+    expect(arb('fr').containsKey('errorMissingOrganizer'), isFalse); // no build-time club any more
+  });
+
   test('list separators per locale: Arabic uses the Arabic comma', () {
     expect(fr.listSeparator, ', ');
     expect(ar.listSeparator, '، ');

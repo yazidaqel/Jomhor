@@ -8,6 +8,7 @@ import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
 /// Screen 1 "Mon billet" strip: the next upcoming ticket from the saved tickets; nothing when there is none.
@@ -49,6 +50,8 @@ class MyTicketStrip extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (e.organizer case final club?)
+                            ClubLine(name: club.name, crestUrl: club.crestUrl, color: JomhorColors.successText),
                           Text(
                             l.myTicketTitle(
                               factsLine(l, e.facts) ?? e.title,

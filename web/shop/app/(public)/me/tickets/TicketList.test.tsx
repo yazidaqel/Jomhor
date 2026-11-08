@@ -27,7 +27,14 @@ const ticket = (id: string, over: Partial<TicketView> = {}): TicketView => ({
   status: 'VALID',
   holder_label: 'Yazid A.',
   seat_label: null,
-  event: { title: `Match ${id}`, status: 'ON_SALE', starts_at: '2026-02-07T19:00:00Z', timezone: 'Africa/Casablanca', venue: { name: 'Stade', city: 'Rabat' } },
+  event: {
+    title: `Match ${id}`,
+    status: 'ON_SALE',
+    starts_at: '2026-02-07T19:00:00Z',
+    timezone: 'Africa/Casablanca',
+    venue: { name: 'Stade', city: 'Rabat' },
+    organizer: { slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null },
+  },
   zone: { code: 'NORD', name: 'Tribune Nord' },
   gate_codes: ['P10', 'P4'],
   past: false,
@@ -90,6 +97,24 @@ it('upcoming then past; a PDF link only for VALID tickets', async () => {
   expect(first.querySelector('dl')!.textContent).toContain(`${d.ticketsPage.kickoff}20:00`)
   expect(first.textContent).toContain('P10 · P4')
   expect(first.textContent).toContain(ticket('t-up-valid').ticket_no)
+})
+
+it('every ticket row carries its club line (crest stand-in + name), whatever the club', async () => {
+  const tensift = { slug: 'olympique-tensift', name: 'Olympique Tensift', crest_url: null }
+  fetchMock.mockResolvedValue(json(200, { tickets: [ticket('t-a'), ticket('t-b', { event: { ...ticket('t-b').event, organizer: tensift } })] }))
+  await show()
+  const lines = [...el.querySelectorAll('article [data-club-line]')].map((p) => [p.querySelector('[aria-hidden]')!.textContent, p.textContent])
+  expect(lines).toEqual([
+    ['A', 'AATLAS FC'],
+    ['O', 'OOlympique Tensift'],
+  ])
+})
+
+it('a ticket without an organizer (older cached answer) shows no club line', async () => {
+  fetchMock.mockResolvedValue(json(200, { tickets: [ticket('t-a', { event: { ...ticket('t-a').event, organizer: null } })] }))
+  await show()
+  expect(el.querySelector('[data-club-line]')).toBeNull()
+  expect(el.querySelector('article h3')!.textContent).toBe('Match t-a')
 })
 
 it('an upcoming VALID ticket counts down to the start, measured when the list loaded', async () => {

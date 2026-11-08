@@ -1,7 +1,6 @@
 import Image from 'next/image'
 import mark from '../../../design/logo/jomhor-mark-transparent.svg'
 import wordmark from '../../../design/logo/jomhor-wordmark-dark.svg'
-import { club } from '@/lib/club'
 
 /**
  * The Jomhor 12-dot J, the file from design/logo as is (BRAND.md: never redrawn, recoloured or put in a shape).
@@ -26,27 +25,42 @@ export function Lockup({ height, label, className = '' }: { height: number; labe
   )
 }
 
-/** The club crest: design/tokens.json `club` (initial on accent until a crest asset lands, Q23). */
-export function Crest({ size, className = '' }: { size: 'sm' | 'md' | 'lg'; className?: string }) {
-  const s = { sm: 'size-8 text-lg', md: 'size-11 text-[22px]', lg: 'size-16 text-[32px]' }[size]
+/** A club as drawn: its name and crest (04 §Club directory). Never a colour: the chrome stays Jomhor. */
+export type CrestOf = { name: string; crest_url: string | null }
+
+/** The crest stand-in's letter: the name's first character, uppercased (`Olympique Tensift` → `O`, `الرجاء` → `ا`). */
+export const initialOf = (name: string) => (Array.from(name.trim())[0] ?? '').toUpperCase()
+
+/**
+ * The club crest, decorative (the club name is always written next to it). `crest_url` set → the image as supplied
+ * (never recoloured, never on a disc), loaded by the browser from Jomhor's crest host: `unoptimized`, so the shop never
+ * fetches it and needs no `remotePatterns`. Null → the stand-in: the name's first letter on a disc (DESIGN.md
+ * §Multi-club), in Jomhor tokens (`standIn` picks which: amber by default, ink on an amber ticket band).
+ * ponytail: no fallback when the image fails to load (needs a client island); add one when real crests exist (Q72).
+ */
+export function Crest({ club, size, standIn = 'bg-accent text-on-accent', className = '' }: { club: CrestOf; size: number; standIn?: string; className?: string }) {
+  if (club.crest_url) {
+    return <Image src={club.crest_url} alt="" width={size} height={size} unoptimized className={`shrink-0 object-contain ${className}`} />
+  }
   return (
     <span
       aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center rounded-pill bg-accent font-display font-extrabold text-on-accent ${s} ${className}`}
+      style={{ width: size, height: size, fontSize: Math.round(size / 2) }}
+      className={`flex shrink-0 items-center justify-center rounded-pill font-display leading-none font-extrabold ${standIn} ${className}`}
     >
-      {club.crestInitial}
+      {initialOf(club.name)}
     </span>
   )
 }
 
-/** The crest, stadium-sized and faint, behind a hero (wide screens only). The parent is `relative isolate`. */
-export function Watermark() {
+/** The club's initial, stadium-sized and faint, behind a hero (wide screens only). The parent is `relative isolate`. */
+export function Watermark({ club }: { club: CrestOf }) {
   return (
     <span
       aria-hidden="true"
       className="pointer-events-none absolute -end-6 -bottom-28 -z-10 font-display text-[460px] leading-none font-extrabold text-text opacity-[0.04] select-none max-lg:hidden"
     >
-      {club.crestInitial}
+      {initialOf(club.name)}
     </span>
   )
 }

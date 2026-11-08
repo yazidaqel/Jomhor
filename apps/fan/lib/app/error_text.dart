@@ -1,6 +1,5 @@
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/features/auth/login_controller.dart';
-import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 
@@ -17,7 +16,6 @@ String errorText(AppLocalizations l, String code) => switch (code) {
   'ORDER_EXPIRED' => l.errorOrderExpired,
   'ORDER_NOT_PAYABLE' => l.errorOrderNotPayable,
   ApiError.network => l.errorNetwork,
-  missingOrganizer => l.errorMissingOrganizer,
   _ => l.errorGeneric,
 };
 

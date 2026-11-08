@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -27,11 +28,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Contract: public GET /fan/events and GET /fan/events/{id} (docs/04-api.md §Fan, plan P1): no token, exact field
- * lists, window flags on the database clock, remaining instead of sold/quota, never a key.
+ * lists, window flags on the database clock, remaining instead of sold/quota, never a key. Multi-club (§Club
+ * directory): no organizer = listed organizers only, organizer may repeat, each row carries its organizer block.
  */
 class FanEventApiTest extends OrgApiTest {
 
-    private static final String[] EVENT_KEYS = {"id", "organizer_id", "status", "event_type", "title", "starts_at",
+    private static final String[] EVENT_KEYS = {"id", "organizer_id", "organizer", "status", "event_type", "title", "starts_at",
             "doors_open_at", "timezone", "venue", "metadata", "sale_starts_at", "sales_close_at", "on_sale", "sold_out",
             "from_price_mad", "per_account_limit"};
     private static final Pattern JSON_KEY = Pattern.compile("\"([A-Za-z_]+)\"\\s*:");
@@ -153,6 +155,8 @@ class FanEventApiTest extends OrgApiTest {
         int other = event(b, bVenue, "2160-02-15T19:00:00Z");
         priced(b, other, zone(b, bVenue, "SUD"), "Plein", 3000, 10);
         publish(b, other);
+        String aSlug = listed(a.org());
+        listed(b.org());
 
         String json = body(list(a.org().toString(), "2160-01-01T00:00:00Z").andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].id").value(contains(feb, march, gatesOpen)))
@@ -176,16 +180,31 @@ class FanEventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$[2].on_sale").value(false))); // GATES_OPEN: listed, not on sale
         assertKeys(json, "$[0]", EVENT_KEYS);
         assertKeys(json, "$[0].venue", "name", "city");
+        assertKeys(json, "$[0].organizer", "slug", "name", "crest_url");
+        assertThat(JsonPath.<String>read(json, "$[0].organizer.slug")).isEqualTo(aSlug);
+        assertThat(JsonPath.<String>read(json, "$[0].organizer.name")).startsWith("Org ");
+        assertThat(JsonPath.<String>read(json, "$[0].organizer.crest_url")).isNull();
         assertNoSecretOrCount(json);
 
         list(a.org().toString(), "2160-02-02T00:00:00Z").andExpect(jsonPath("$[*].id").value(contains(march, gatesOpen)));
-        list(null, "2160-01-01T00:00:00Z").andExpect(jsonPath("$[*].id").value(contains(feb, other, march, gatesOpen)));
+        // listed events of other tests sit after 2160 (shared database): only the head is this test's
+        assertThat(ids(list(null, "2160-01-01T00:00:00Z"))).startsWith(feb, other, march, gatesOpen);
         list(UUID.randomUUID().toString(), null).andExpect(status().isOk()).andExpect(jsonPath("$", empty()));
         // from defaults to now: an event that already started drops out
         jdbc.sql("update events set starts_at = now() - interval '1 minute' where id = ?").param(feb).update();
         list(a.org().toString(), null).andExpect(jsonPath("$[*].id").value(contains(march, gatesOpen)));
         list(null, "tomorrow").andExpect(status().isBadRequest());
-        list("not-a-uuid", null).andExpect(status().isBadRequest());
+        list("not-a-uuid", null).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        mvc.perform(get("/fan/events").param("organizer", a.org().toString(), "not-a-uuid"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        // an empty value beside others binds as null: malformed too, never a 500
+        mvc.perform(get("/fan/events").param("organizer", a.org().toString(), ""))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        mvc.perform(get("/fan/events").param("organizer", a.org() + ","))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        // ?organizer= alone = absent: "Tout"
+        assertThat(ids(mvc.perform(get("/fan/events").param("organizer", "").param("from", "2160-01-01T00:00:00Z"))))
+                .startsWith(other, march, gatesOpen);
         mvc.perform(get("/fan/events/" + draft)).andExpect(status().isNotFound());
     }
 
@@ -204,6 +223,97 @@ class FanEventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$[49].title").value("E50"))
                 .andExpect(jsonPath("$[0].sold_out").value(true)) // no category: nothing remains
                 .andExpect(jsonPath("$[0].from_price_mad").isEmpty());
+    }
+
+    // ---------- multi-club ----------
+
+    private int published(Caller c, String venueId, String startsAt) throws Exception {
+        int id = event(c, venueId, startsAt);
+        priced(c, id, zone(c, venueId, "Z" + id), "Plein", 5000, 10);
+        publish(c, id);
+        return id;
+    }
+
+    private static List<Integer> ids(ResultActions r) throws Exception {
+        return JsonPath.read(body(r.andExpect(status().isOk())), "$[*].id");
+    }
+
+    @Test
+    void toutIsListedOnlyAndOrganizerRepeats() throws Exception {
+        Caller a = admin();
+        Caller b = admin();
+        Caller c = admin(); // unlisted
+        Caller d = admin(); // listed, never asked for by name
+        String av = venue(a, "A");
+        String bv = venue(b, "B");
+        String cv = venue(c, "C");
+        String dv = venue(d, "D");
+        int unlisted = published(c, cv, "2161-01-01T19:00:00Z");
+        int b1 = published(b, bv, "2161-01-02T19:00:00Z");
+        int a1 = published(a, av, "2161-01-03T19:00:00Z");
+        int d1 = published(d, dv, "2161-01-04T19:00:00Z");
+        int a2 = published(a, av, "2161-01-05T19:00:00Z"); // same kickoff: by id
+        int b2 = published(b, bv, "2161-01-05T19:00:00Z");
+        String aSlug = listed(a.org());
+        listed(b.org());
+        listed(d.org());
+        jdbc.sql("update organizers set settings = '{\"crest_url\": \"https://assets.jomhor.ma/crests/a.svg\", "
+                + "\"cash_points\": [{\"name\": \"Guichet secret\"}]}'::jsonb where id = ?").param(a.org()).update();
+
+        String from = "2161-01-01T00:00:00Z";
+        String tout = body(list(null, from).andExpect(status().isOk()));
+        assertThat(JsonPath.<List<Integer>>read(tout, "$[*].id")).startsWith(b1, a1, d1, a2, b2).doesNotContain(unlisted);
+        assertThat(JsonPath.<String>read(tout, "$[1].organizer.slug")).isEqualTo(aSlug);
+        assertThat(JsonPath.<String>read(tout, "$[1].organizer.crest_url"))
+                .isEqualTo("https://assets.jomhor.ma/crests/a.svg");
+        assertKeys(tout, "$[1].organizer", "slug", "name", "crest_url");
+        assertThat(tout).doesNotContain("Guichet secret").doesNotContain("cash_points");
+
+        assertThat(ids(mvc.perform(get("/fan/events").param("organizer", a.org().toString(), b.org().toString())
+                .param("from", from)))).containsExactly(b1, a1, a2, b2);
+
+        String explicit = body(list(c.org().toString(), from).andExpect(status().isOk()));
+        assertThat(JsonPath.<List<Integer>>read(explicit, "$[*].id")).containsExactly(unlisted);
+        assertThat(JsonPath.<String>read(explicit, "$[0].organizer.slug")).isNull();
+        assertThat(JsonPath.<String>read(explicit, "$[0].organizer.name")).startsWith("Org ");
+
+        // listing only hides: the detail of an unlisted organizer's event still answers
+        mvc.perform(get("/fan/events/" + unlisted)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.organizer.slug").isEmpty())
+                .andExpect(jsonPath("$.organizer_id").value(c.org().toString()));
+    }
+
+    @Test
+    void atMost50AcrossClubs() throws Exception {
+        Caller a = admin();
+        Caller b = admin();
+        // An unlisted club with 60 events before the listed ones in the same window: "Tout" filters inside the
+        // limit, so these never take the 50 places.
+        Caller hidden = admin();
+        jdbc.sql("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc, status, refund_cutoff_at)
+                select ?, ?::uuid, 'H' || i, timestamptz '2162-01-01' + i * interval '1 minute', '\\x00'::bytea,
+                       'ON_SALE', timestamptz '2162-01-01' + i * interval '1 minute' - interval '60 minutes'
+                from generate_series(1, 60) i
+                """).params(hidden.org(), venue(hidden, "Stade")).update();
+        for (Caller c : List.of(a, b)) {
+            listed(c.org());
+            jdbc.sql("""
+                    insert into events (organizer_id, venue_id, title, starts_at, event_key_enc, status, refund_cutoff_at)
+                    select ?, ?::uuid, cast(? as text) || i, timestamptz '2162-01-01' + (2 * i + ?) * interval '1 hour',
+                           '\\x00'::bytea, 'ON_SALE',
+                           timestamptz '2162-01-01' + (2 * i + ?) * interval '1 hour' - interval '60 minutes'
+                    from generate_series(1, 30) i
+                    """).params(c.org(), venue(c, "Stade"), c == a ? "A" : "B", c == a ? 0 : 1, c == a ? 0 : 1).update();
+        }
+        for (var r : List.of(list(null, "2162-01-01T00:00:00Z"),
+                mvc.perform(get("/fan/events").param("organizer", a.org().toString(), b.org().toString())
+                        .param("from", "2162-01-01T00:00:00Z")))) {
+            r.andExpect(jsonPath("$.length()").value(50))
+                    .andExpect(jsonPath("$[0].title").value("A1"))
+                    .andExpect(jsonPath("$[1].title").value("B1"))
+                    .andExpect(jsonPath("$[49].title").value("B25"));
+        }
     }
 
     // ---------- detail ----------

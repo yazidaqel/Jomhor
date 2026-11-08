@@ -2,6 +2,7 @@
 // Hand-written: a few read-only shapes, no copyWith or unions needed, and nothing to keep in sync.
 
 import 'package:jomhor_fan/features/checkout/order.dart';
+import 'package:jomhor_fan/features/clubs/club.dart';
 
 /// The sale state shown on screens 1 and 2. [opening]: the opening time has passed on this device
 /// but the data was read before it, so we wait for a fresh read (same as the web shop's OPENING).
@@ -11,6 +12,7 @@ class FanEvent {
   new({
     required this.id,
     required this.organizerId,
+    required this.organizer,
     required this.fetchedAt,
     required this.eventType,
     required this.title,
@@ -35,6 +37,7 @@ class FanEvent {
     return FanEvent(
       id: j['id']! as int,
       organizerId: j['organizer_id']! as String,
+      organizer: Club.fromJson(j['organizer']! as Map<String, Object?>, id: j['organizer_id']! as String),
       fetchedAt: fetchedAt,
       status: j['status'] as String?,
       eventType: j['event_type']! as String,
@@ -56,6 +59,9 @@ class FanEvent {
 
   final int id;
   final String organizerId;
+
+  /// The club: crest and name (docs/04-api.md §Club directory).
+  final Club organizer;
   final DateTime fetchedAt;
 
   /// `ON_SALE` / `GATES_OPEN` / `CLOSED` once the backend sends it (BE-8); optional until then.

@@ -4,7 +4,7 @@ import { getURLFromRedirectError } from 'next/dist/client/components/redirect'
 import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { getDictionary, ltr } from '@/lib/i18n'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { json, NOW, ORG, rawEvent } from '@/lib/events.fixture'
+import { json, NOW, rawEvent } from '@/lib/events.fixture'
 import { safeNext } from '@/lib/next-path'
 import OrderPage from './[id]/page'
 import CheckoutPage from './new/page'
@@ -40,7 +40,6 @@ beforeEach(() => {
   session = TOKEN
   locale = undefined
   vi.stubEnv('API_BASE_URL', 'http://backend.test/v1')
-  vi.stubEnv('ORGANIZER_ID', ORG)
   vi.stubGlobal('fetch', fetchMock)
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
@@ -110,7 +109,7 @@ it('W3 with a revoked session (/fan/me 401) → login', async () => {
 it('W3 for a price that is not on sale any more → the event page', async () => {
   backend({ '/fan/events/12': () => json(200, rawEvent()), '/fan/me': ME })
   const e = await thrown(checkout({ event: '12', price: 'pc-sud', qty: '1' })) // remaining 0
-  expect(getURLFromRedirectError(e as never)).toBe('/events/12-atlas-fc-vs-rapid-oued')
+  expect(getURLFromRedirectError(e as never)).toBe('/atlas-fc/events/12-atlas-fc-vs-rapid-oued')
 })
 
 it('W3 renders one row per place, ticket 1 prefilled from /fan/me, phone only from ticket 2, integer total', async () => {
@@ -192,7 +191,7 @@ it('/orders/[id] once EXPIRED: back to the event, no pay button', async () => {
   backend({ [`/fan/orders/${ORDER_ID}`]: ORDER({ status: 'EXPIRED' }), '/fan/events/12': () => json(200, rawEvent()) })
   const h = renderToString(await orderPage(ORDER_ID))
   expect(h).toContain('Réservation expirée')
-  expect(h).toContain('href="/events/12-atlas-fc-vs-rapid-oued"')
+  expect(h).toContain('href="/atlas-fc/events/12-atlas-fc-vs-rapid-oued"')
   expect(h).not.toContain('Payer à nouveau')
 })
 
@@ -317,7 +316,7 @@ it('W4 cash order once EXPIRED: "Code expiré", places released, back to the eve
   const h = renderToString(await orderPage(ORDER_ID))
   expect(h).toContain('Code expiré')
   expect(h).toContain('les places ont été libérées')
-  expect(h).toContain('href="/events/12-atlas-fc-vs-rapid-oued"')
+  expect(h).toContain('href="/atlas-fc/events/12-atlas-fc-vs-rapid-oued"')
   expect(h).not.toContain('JMH')
   expect(buttons(h)).toEqual([])
 })

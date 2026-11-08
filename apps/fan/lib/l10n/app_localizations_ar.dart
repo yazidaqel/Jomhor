@@ -83,9 +83,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get errorNetwork => 'ما كاينش الأنترنيت. شوف الريزو ديالك وعاود جرب.';
 
   @override
-  String get errorMissingOrganizer => 'التطبيق ما مضبوطش: ما كاين حتى فريق (ORGANIZER_ID).';
-
-  @override
   String get errorGeneric => 'وقع شي مشكل. عاود جرب من دابا شوية.';
 
   @override
@@ -892,4 +889,57 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get lostPhoneFailed => 'شي تذاكر ما خداوش QR جديد. شوف التذاكر ديالك.';
+
+  @override
+  String get myClubs => 'فرقي';
+
+  @override
+  String get chipAll => 'كلشي';
+
+  @override
+  String get clubsTitle => 'فرقك';
+
+  @override
+  String get clubsIntro => 'تابع فرقك باش تشوف الماتشات ديالهم هوما الأولين. تقدر تبدل وقتما بغيتي.';
+
+  @override
+  String get clubsSearch => 'قلّب على فريق';
+
+  @override
+  String get clubsNoResult => 'ما لقينا حتى فريق.';
+
+  @override
+  String get clubFollow => 'تابع';
+
+  @override
+  String get clubFollowing => 'متابَع';
+
+  @override
+  String get clubsContinue => 'كمّل';
+
+  @override
+  String get clubsSeeAll => 'شوف كلشي';
+
+  @override
+  String get clubsDone => 'ساليت';
+
+  @override
+  String clubKind(String kind) {
+    String _temp0 = intl.Intl.selectLogic(kind, {
+      'SPORTS_CLUB': 'فريق رياضي',
+      'PROMOTER': 'منظم',
+      'VENUE': 'قاعة',
+      'other': 'منظم',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoMatch => 'ما كاين حتى ماتش جاي';
+
+  @override
+  String get homeNoEvent => 'ما كاين حتى حدث جاي';
+
+  @override
+  String get homeSeeAll => 'شوف كلشي';
 }

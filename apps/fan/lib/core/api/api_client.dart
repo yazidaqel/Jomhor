@@ -47,8 +47,10 @@ DateTime? _date(String? header) {
 }
 
 /// JSON client for the fan API. [get], [post] and [patch] send `Authorization: Bearer` when a
-/// token is stored. Public endpoints (`GET /fan/events*`, `POST /fan/auth/*`) go through [getPublic]
-/// and [postPublic], which never do; [get] and [post] refuse those paths.
+/// token is stored. Public endpoints (`GET /fan/events*`, `GET /fan/organizers*`, `POST /fan/auth/*`) go through
+/// [getPublic] and [postPublic], which never do; [get] and [post] refuse those paths.
+///
+/// A query value is a String, or an `Iterable<String>` for a repeated parameter (`?organizer=a&organizer=b`).
 class ApiClient {
   new({
     required this.baseUrl,
@@ -70,20 +72,22 @@ class ApiClient {
   /// A 401 without a token (e.g. `OTP_INVALID` on verify) does not call it.
   final Future<void> Function(String token)? onUnauthorized;
 
-  Future<Object?> get(String path, {Map<String, String>? query}) => _body(getResponse(path, query: query));
+  Future<Object?> get(String path, {Map<String, Object>? query}) => _body(getResponse(path, query: query));
 
   /// [get] plus the server's `Date` header (e.g. to tell whether a hold is still running on server time).
-  Future<ApiResponse> getResponse(String path, {Map<String, String>? query}) {
+  Future<ApiResponse> getResponse(String path, {Map<String, Object>? query}) {
     // A public read through the authenticated path would leak the token to a public, cacheable URL.
-    if (path.startsWith('/fan/events')) throw ArgumentError.value(path, 'path', 'public endpoint: use getPublic');
+    if (path.startsWith('/fan/events') || path.startsWith('/fan/organizers')) {
+      throw ArgumentError.value(path, 'path', 'public endpoint: use getPublic');
+    }
     return _send('GET', path, query: query, auth: true);
   }
 
   /// For public endpoints: never sends the session token.
-  Future<Object?> getPublic(String path, {Map<String, String>? query}) => _body(getPublicResponse(path, query: query));
+  Future<Object?> getPublic(String path, {Map<String, Object>? query}) => _body(getPublicResponse(path, query: query));
 
   /// [getPublic] plus the server's `Date` header, for reads whose meaning depends on server time.
-  Future<ApiResponse> getPublicResponse(String path, {Map<String, String>? query}) =>
+  Future<ApiResponse> getPublicResponse(String path, {Map<String, Object>? query}) =>
       _send('GET', path, query: query, auth: false);
 
   Future<Object?> post(String path, {Object? body}) {
@@ -110,10 +114,12 @@ class ApiClient {
     String method,
     String path, {
     required bool auth,
-    Map<String, String>? query,
+    Map<String, Object>? query,
     Object? body,
   }) async {
-    final request = http.Request(method, Uri.parse('$baseUrl$path').replace(queryParameters: query))
+    // An empty map would still write a bare `?` (`/fan/events?`): no query at all then.
+    final uri = Uri.parse('$baseUrl$path');
+    final request = http.Request(method, query == null || query.isEmpty ? uri : uri.replace(queryParameters: query))
       ..headers['Accept'] = 'application/json';
     final token = auth ? await _tokens.read() : null;
     if (token != null) request.headers['Authorization'] = 'Bearer $token';

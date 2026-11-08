@@ -103,6 +103,7 @@ void main() {
       keepSecureStorage: true,
     );
     await tester.ensureVisible(find.byKey(const Key('home.myTicket')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('home.myTicket')));
     await tester.pumpAndSettle();
     expect(tester.widget<TicketScreen>(find.byType(TicketScreen)).origin, PassOrigin.home);

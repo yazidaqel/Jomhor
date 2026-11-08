@@ -118,6 +118,8 @@ class _Body extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              ClubLine(name: e.organizer.name, crestUrl: e.organizer.crestUrl),
+                              const SizedBox(height: JomhorSpace.m),
                               if (facts != null) ...[
                                 Text(
                                   facts.toUpperCase(),

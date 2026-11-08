@@ -15,6 +15,7 @@ import ma.jomhor.catalog.application.Events;
 import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
+import ma.jomhor.common.Crests;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -38,9 +39,11 @@ class JdbcEvents implements Events {
                and z.organizer_id = price_categories.organizer_id) as zone_code""";
 
     private final JdbcClient jdbc;
+    private final Crests crests;
 
-    JdbcEvents(JdbcClient jdbc) {
+    JdbcEvents(JdbcClient jdbc, Crests crests) {
         this.jdbc = jdbc;
+        this.crests = crests;
     }
 
     @Override
@@ -243,37 +246,42 @@ class JdbcEvents implements Events {
     }
 
     // Public reads. on_sale mirrors forSale's OPEN; remaining = quota - sold, never sold or quota themselves.
+    // Of organizers only slug, name and the crest (04 §Club directory); o.id is its key, so grouping by it is enough.
     private static final String LISTING = """
-            select e.id, e.organizer_id, e.status, e.event_type, e.title, e.starts_at, e.doors_open_at, v.timezone,
-                   v.name as venue_name, v.city as venue_city, e.metadata::text as metadata, e.sale_starts_at,
+            select e.id, e.organizer_id, o.slug as organizer_slug, o.name as organizer_name,
+                   o.settings ->> 'crest_url' as organizer_crest_url, e.status, e.event_type, e.title, e.starts_at,
+                   e.doors_open_at, v.timezone, v.name as venue_name, v.city as venue_city, e.metadata::text as metadata, e.sale_starts_at,
                    e.refund_cutoff_at, e.per_account_limit,
                    coalesce(e.status = 'ON_SALE' and now() >= coalesce(e.sale_starts_at, '-infinity')
                             and now() < e.refund_cutoff_at, false) as on_sale,
                    coalesce(bool_and(pc.sold >= pc.quota), true) as sold_out,
                    min(pc.price_mad) filter (where pc.sold < pc.quota) as from_price_mad
             from events e
+            join organizers o on o.id = e.organizer_id
             join venues v on v.id = e.venue_id and v.organizer_id = e.organizer_id
             left join price_categories pc on pc.event_id = e.id and pc.organizer_id = e.organizer_id
             """;
 
+    // The organizer filter is one of two fixed fragments; the ids are bound as one uuid[] parameter. Listed-only is
+    // inside the query, so the limit counts listed events only.
     @Override
-    public List<Event.Listing> listings(UUID org, Instant from, int limit) {
-        return jdbc.sql(LISTING + """
-                        where e.status in ('ON_SALE', 'GATES_OPEN')
-                          and (cast(:org as uuid) is null or e.organizer_id = cast(:org as uuid))
+    public List<Event.Listing> listings(List<UUID> orgs, Instant from, int limit) {
+        return jdbc.sql(LISTING + "where e.status in ('ON_SALE', 'GATES_OPEN') and "
+                        + (orgs.isEmpty() ? "o.slug is not null" : "e.organizer_id = any(cast(:orgs as uuid[]))") + """
                           and e.starts_at >= coalesce(cast(:from as timestamptz), now())
-                        group by e.id, v.id
+                        group by e.id, v.id, o.id
                         order by e.starts_at, e.id
                         limit :limit
                         """)
-                .param("org", org).param("from", ts(from)).param("limit", limit)
-                .query(JdbcEvents::listing).list();
+                .param("orgs", orgs.stream().map(UUID::toString).collect(Collectors.joining(",", "{", "}")))
+                .param("from", ts(from)).param("limit", limit)
+                .query((rs, n) -> listing(rs)).list();
     }
 
     @Override
     public Optional<Event.Listing> listing(int eventId) {
-        return jdbc.sql(LISTING + " where e.id = :id and e.status <> 'DRAFT' group by e.id, v.id")
-                .param("id", eventId).query(JdbcEvents::listing).optional();
+        return jdbc.sql(LISTING + " where e.id = :id and e.status <> 'DRAFT' group by e.id, v.id, o.id")
+                .param("id", eventId).query((rs, n) -> listing(rs)).optional();
     }
 
     @Override
@@ -344,8 +352,10 @@ class JdbcEvents implements Events {
                 rs.getInt("per_account_limit"), rs.getString("metadata"), instant(rs, "created_at"));
     }
 
-    private static Event.Listing listing(ResultSet rs, int n) throws SQLException {
+    private Event.Listing listing(ResultSet rs) throws SQLException {
         return new Event.Listing(rs.getInt("id"), rs.getObject("organizer_id", UUID.class),
+                new Event.Organizer(rs.getString("organizer_slug"), rs.getString("organizer_name"),
+                        crests.url(rs.getString("organizer_crest_url"))),
                 Event.Status.valueOf(rs.getString("status")), Event.Type.valueOf(rs.getString("event_type")), rs.getString("title"), instant(rs, "starts_at"),
                 instant(rs, "doors_open_at"), rs.getString("timezone"), rs.getString("venue_name"),
                 rs.getString("venue_city"), rs.getString("metadata"), instant(rs, "sale_starts_at"),

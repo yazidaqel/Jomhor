@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/features/auth/auth_repository.dart';
+import 'package:jomhor_fan/features/clubs/clubs_repository.dart';
+import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
@@ -73,9 +76,36 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: JomhorSpace.xxl),
-              const Entrance(index: 2, child: _LostPhone()),
+              Entrance(
+                index: 2,
+                child: _Group(
+                  children: [
+                    ListTile(
+                      key: const Key('profile.clubs'),
+                      leading: const Icon(Icons.shield_outlined),
+                      title: Text(l.myClubs),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            l.ltr(
+                              '${ref.watch(followedClubsProvider).value?.length ?? ref.watch(followsProvider).ids.length}',
+                            ),
+                            key: const Key('profile.clubs.count'),
+                            style: JomhorType.body.copyWith(color: JomhorColors.textMuted),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: JomhorColors.textMuted),
+                        ],
+                      ),
+                      onTap: () => context.push('/clubs'),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: JomhorSpace.xxl),
-              const Entrance(index: 3, child: _Logout()),
+              const Entrance(index: 3, child: _LostPhone()),
+              const SizedBox(height: JomhorSpace.xxl),
+              const Entrance(index: 4, child: _Logout()),
               const SizedBox(height: JomhorSpace.xxl * 2),
               const _Footer(),
             ],

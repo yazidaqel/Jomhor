@@ -38,6 +38,21 @@ void main() {
     expect(last.url.queryParameters, {'organizer': 'org-1'});
 
     expect(() => api.get('/fan/events/e1'), throwsArgumentError);
+    expect(() => api.get('/fan/organizers'), throwsArgumentError);
+  });
+
+  test('a list query value repeats the parameter (`Mes clubs`: organizer=a&organizer=b)', () async {
+    await client(null).getPublic(
+      '/fan/events',
+      query: {
+        'organizer': ['org-a', 'org-b'],
+      },
+    );
+    expect(last.url.query, 'organizer=org-a&organizer=org-b');
+
+    // `Tout`: an empty query map sends no query at all (`/fan/events`, never `/fan/events?`).
+    await client(null).getPublic('/fan/events', query: {});
+    expect((last.url.hasQuery, last.url.toString()), (false, 'https://api.test/v1/fan/events'));
   });
 
   test('encodes the body as UTF-8 JSON and decodes the response', () async {

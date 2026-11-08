@@ -122,6 +122,7 @@ class _TicketRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (e.organizer case final club?) ClubLine(name: club.name, crestUrl: club.crestUrl),
                   Text(e.title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
@@ -191,6 +192,8 @@ class _TransferredRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (ticket.event.organizer case final club?)
+                    ClubLine(name: club.name, crestUrl: club.crestUrl, color: JomhorColors.textMuted),
                   Text(
                     ticket.event.title,
                     style: JomhorType.body.copyWith(fontWeight: FontWeight.w600, color: JomhorColors.textSecondary),

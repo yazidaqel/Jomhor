@@ -1,14 +1,17 @@
-// Backend `/fan/events/{id}` bodies for tests. The SECRET_* and stray fields must never reach a mapped event, HTML or
-// client props.
+// Backend `/fan/events*` and `/fan/organizers*` bodies for tests. The SECRET_* and stray fields must never reach a
+// mapped event or club, HTML or client props.
 
 export const ORG = '0190f3a2-0000-7000-8000-000000000001'
+/** The second demo club (plan Q76). */
+export const ORG2 = '0190f3a2-0000-7000-8000-000000000002'
 export const NOW = Date.parse('2026-02-01T12:00:00Z')
-export const SECRETS = ['SECRET', 'event_key', 'k_e', 'k_t', '"key"', 'quota', 'sold"', 'internal_note']
+export const SECRETS = ['SECRET', 'event_key', 'k_e', 'k_t', '"key"', 'quota', 'sold"', 'internal_note', 'settings', 'theme', 'cash_points', '#E30613']
 
 export function rawEvent(over: Record<string, unknown> = {}) {
   return {
     id: 12,
     organizer_id: ORG,
+    organizer: rawOrganizer(),
     event_type: 'FOOTBALL_MATCH',
     title: 'ATLAS FC vs Rapid Oued',
     starts_at: '2026-02-07T19:00:00Z',
@@ -57,6 +60,37 @@ export function rawEvent(over: Record<string, unknown> = {}) {
     ...over,
   }
 }
+
+/** 04 §Club directory `organizer` block, plus fields the contract doesn't have (a backend bug must not leak them). */
+export function rawOrganizer(over: Record<string, unknown> = {}) {
+  return {
+    slug: 'atlas-fc',
+    name: 'ATLAS FC',
+    crest_url: null,
+    settings: { theme: { accent: '#E30613' }, cash_points: [{ name: 'SECRET-CASH' }] },
+    SECRET: 'SECRET-ORG',
+    ...over,
+  }
+}
+
+/** A `/fan/organizers` row: the directory shape plus stray fields. */
+export function rawClub(over: Record<string, unknown> = {}) {
+  return { id: ORG, kind: 'SPORTS_CLUB', ...rawOrganizer(), ...over }
+}
+
+export const TENSIFT = { id: ORG2, slug: 'olympique-tensift', name: 'Olympique Tensift' }
+
+/** An Olympique Tensift event list row. */
+export const tensiftRow = (over: Record<string, unknown> = {}) =>
+  rawListRow({
+    id: 21,
+    organizer_id: ORG2,
+    organizer: rawOrganizer({ slug: TENSIFT.slug, name: TENSIFT.name }),
+    title: 'Olympique Tensift vs Union Rif',
+    starts_at: '2026-02-05T19:00:00Z',
+    venue: { name: 'Stade Tensift', city: 'Marrakech' },
+    ...over,
+  })
 
 /** A list row (`GET /fan/events`): the detail without zones. */
 export function rawListRow(over: Record<string, unknown> = {}) {

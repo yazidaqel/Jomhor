@@ -20,14 +20,11 @@ export class ApiError extends Error {
   }
 }
 
-function env(name: 'API_BASE_URL' | 'ORGANIZER_ID'): string {
+function env(name: 'API_BASE_URL'): string {
   const v = process.env[name]
   if (!v) throw new Error(`${name} is not set`)
   return v
 }
-
-/** The club this shop sells for (`/fan/events?organizer=`). */
-export const organizerId = () => env('ORGANIZER_ID')
 
 /** A backend call that takes longer fails as 502 instead of holding the fan's request. */
 export const BACKEND_TIMEOUT_MS = 10_000

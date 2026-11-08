@@ -40,6 +40,7 @@ public class EventService {
     static final int METADATA_MAX_BYTES = 4096;
     static final int DEFAULT_PER_ACCOUNT_LIMIT = 4;
     /** docs/04-api.md GET /fan/events: at most 50. */
+    // ponytail: one page of 50 for "Tout" and "Mes clubs"; cursor paging on /fan/events when the directory outgrows it.
     static final int PUBLIC_LIST_MAX = 50;
 
     /**
@@ -198,9 +199,12 @@ public class EventService {
 
     // ---------- public (GET /fan/events*, no token) ----------
 
-    /** {@code organizer} null = every organizer; {@code from} null = now on the database clock. */
-    public List<Event.Listing> publicList(UUID organizer, Instant from) {
-        return events.listings(organizer, from, PUBLIC_LIST_MAX);
+    /**
+     * {@code organizers} empty = every listed organizer ("Tout"), else those, listed or not; {@code from} null = now on
+     * the database clock. Listing never filters {@link #publicEvent} (TicketService reads tickets through it, P68).
+     */
+    public List<Event.Listing> publicList(List<UUID> organizers, Instant from) {
+        return events.listings(organizers, from, PUBLIC_LIST_MAX);
     }
 
     /**

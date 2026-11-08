@@ -13,6 +13,7 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
 import 'package:jomhor_fan/core/clock.dart';
+import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
@@ -30,8 +31,31 @@ class MemoryTokenStore implements TokenStore {
   Future<void> clear() async => token = null;
 }
 
-/// The build's ORGANIZER_ID in tests; [eventJson] belongs to it.
+/// ATLAS FC, the club of [eventJson] by default; [otherOrganizer] is Olympique Tensift.
 const testOrganizer = '0b8e7a52-0000-4000-8000-000000000001';
+const otherOrganizer = '0b8e7a52-0000-4000-8000-000000000002';
+
+/// `/fan/organizers` rows (docs/04-api.md §Club directory).
+Map<String, Object?> clubJson({
+  String id = testOrganizer,
+  String slug = 'atlas-fc',
+  String name = 'Atlas FC',
+  String kind = 'SPORTS_CLUB',
+  String? crestUrl,
+}) => {'id': id, 'slug': slug, 'name': name, 'kind': kind, 'crest_url': crestUrl};
+
+final Map<String, Object?> tensiftJson = clubJson(
+  id: otherOrganizer,
+  slug: 'olympique-tensift',
+  name: 'Olympique Tensift',
+);
+
+/// The `organizer` block of an event (no id: `organizer_id` sits beside it).
+Map<String, Object?> organizerBlock(Map<String, Object?> club) => {
+  'slug': club['slug'],
+  'name': club['name'],
+  'crest_url': club['crest_url'],
+};
 
 /// JSON response helper for `MockClient` handlers.
 http.Response json(Object? body, [int status = 200]) =>
@@ -54,9 +78,11 @@ Map<String, Object?> eventJson({
   int perAccountLimit = 4,
   Map<String, Object?> metadata = const {'opponent': 'Rapid Oued', 'competition': 'Championnat', 'matchday': 11},
   List<Map<String, Object?>>? zones,
+  Map<String, Object?>? club,
 }) => {
   'id': id,
-  'organizer_id': testOrganizer,
+  'organizer_id': (club ?? clubJson())['id'],
+  'organizer': organizerBlock(club ?? clubJson()),
   'event_type': eventType,
   'title': title,
   'starts_at': startsAt,
@@ -100,12 +126,13 @@ class TestClock {
 }
 
 /// Pumps the whole app (FR unless [locale] says otherwise: the device language) with a fake backend and an empty in-memory secure storage (the ticket cache);
+/// [follows] is what `main` read from the phone: by default the picker was seen and no club is followed;
 /// [keepSecureStorage] keeps what a test put there with `FlutterSecureStorage.setMockInitialValues`. Returns the container to drive the router and providers.
 Future<ProviderContainer> pumpJomhor(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request request) backend,
   MemoryTokenStore? tokens,
-  String organizerId = testOrganizer,
+  FollowsState follows = (ids: const [], seen: true, chip: null),
   TestClock? clock,
   List<Override> overrides = const [],
   bool keepSecureStorage = false,
@@ -123,7 +150,7 @@ Future<ProviderContainer> pumpJomhor(
       httpClientProvider.overrideWithValue(MockClient(backend)),
       tokenStoreProvider.overrideWithValue(store),
       initialSignedInProvider.overrideWithValue(store.token != null),
-      organizerIdProvider.overrideWithValue(organizerId),
+      initialFollowsProvider.overrideWithValue(follows),
       nowProvider.overrideWithValue(() => time.now),
       jitterProvider.overrideWithValue((_) => Duration.zero),
       ...overrides,

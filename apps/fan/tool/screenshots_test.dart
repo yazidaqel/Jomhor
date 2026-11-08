@@ -41,6 +41,7 @@ Map<String, Object?> _ticket(String id, {String startsAt = '2027-03-13T19:00:00Z
       'timezone': 'Africa/Casablanca',
       'venue': {'name': "Stade de l'Atlas", 'city': 'Rabat'},
       'metadata': {'opponent': 'Rapid Oued', 'competition': 'Championnat', 'matchday': 11},
+      'organizer': {...organizerBlock(clubJson()), 'id': testOrganizer},
     },
     'zone': {'id': 3, 'code': 'N', 'name': 'Tribune Nord'},
     'gate_codes': ['4'],

@@ -1,5 +1,6 @@
 import 'server-only'
 import { api } from './api'
+import { toOrganizer, type Organizer } from './events'
 
 // Fan tickets (`GET /fan/tickets`, W5). The shop never sends `with_keys` (04 §Fan): it holds no ticket key. The answer
 // is still mapped field by field, so a `k_t` (or anything else) sent by mistake never reaches the browser.
@@ -17,6 +18,8 @@ export type TicketView = {
     starts_at: string
     timezone: string
     venue: { name: string; city: string | null }
+    /** Multi-club: the event's club (crest + name per row); null when the backend leaves it out. */
+    organizer: Organizer | null
   }
   zone: { code: string; name: string }
   gate_codes: string[]
@@ -65,6 +68,7 @@ export function toTickets(raw: unknown): TicketView[] {
         starts_at,
         timezone: String(e.timezone),
         venue: { name: String(venue.name), city: strOrNull(venue.city) },
+        organizer: typeof obj(e.organizer).name === 'string' ? toOrganizer(e.organizer) : null,
       },
       zone: { code: String(zone.code), name: String(zone.name) },
       gate_codes: Array.isArray(t.gate_codes) ? t.gate_codes.map(String) : [],

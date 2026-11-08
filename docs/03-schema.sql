@@ -5,7 +5,7 @@
 create extension if not exists pgcrypto;
 
 -- Tenant rule: every table carries organizer_id, except platform identity tables
--- organizers, users, otp_challenges, fan_sessions (one fan account across organizers).
+-- organizers, users, otp_challenges, fan_sessions, push_tokens (one fan account and one fan app across organizers).
 -- audit_log.organizer_id is nullable for SYSTEM actions.
 -- Every query on a tenant table filters by organizer_id (no composite FKs: app scoping
 -- is needed anyway to return 404 on foreign ids; tested per endpoint).
@@ -18,10 +18,19 @@ create table organizers (
   name          text not null,
   kind          organizer_kind not null default 'OTHER',
   settings      jsonb not null default '{}'::jsonb,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  slug          text unique                           -- public handle (jomhor.ma/{slug}); null = unlisted: not in /fan/organizers nor in "Tout"
+                constraint organizers_slug check (
+                  slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(slug) between 2 and 40
+                  and slug not in ('all', 'api', 'apple-icon', 'ar', 'club', 'clubs', 'en', 'events', 'favicon', 'fr',
+                                   'help', 'icon', 'legal', 'login', 'logout', 'manifest', 'me', 'mine',
+                                   'opengraph-image', 'orders', 'robots', 'sitemap', 'twitter-image'))
+                                                    -- reserved: web shop top-level paths, ?club= values, locale prefixes
 );
--- organizers.settings shape: {"theme": {"accent": "#F5B700", "on_accent": "#0B0F1A",
---   "crest_url": "...", "display_font": null}}
+-- organizers.settings shape: {"crest_url": "https://assets.jomhor.ma/crests/atlas-fc.svg"}
+--   the club crest: content only (design/BRAND.md, not white-label). Returned to fans only under the configured crest
+--   base URL (docs/04-api.md §Club directory), else null. Set by ops until a back-office editor exists.
+--   A Lot 0 "theme" object, if present, is never read by the fan app, the web shop or the scanner.
 --   "cash_points": [{"name": "Guichet Stade de l'Atlas", "address": "Porte 1", "hours": "Lun–Sam 10:00–19:00"}]
 --   where fans pay a cash code in person; shown on the cash order page. Set by ops until a back-office editor exists.
 --   "loyalty": {"tiers": [{"code": "T1", "name": {"fr": "Membre", "ar": "منخرط", "en": "Member"}, "min_events": 0},
@@ -346,10 +355,9 @@ create index on ticket_deliveries (ticket_id, created_at desc);   -- re-send lim
 create type message_channel as enum ('PUSH','WHATSAPP');
 create type message_kind    as enum ('TICKET_RECEIVED','SPLIT_INVITE','PAY_CODE','ORDER_PAID','CAMPAIGN');
 
-create table push_tokens (                            -- FCM registration tokens of the organizer's fan app
-  id            uuid primary key default gen_random_uuid(),
-  organizer_id  uuid not null references organizers(id),   -- the club app that registered it (its ORGANIZER_ID)
-  user_id       uuid not null references users(id),
+create table push_tokens (                            -- FCM registration tokens of the Jomhor fan app (one app, every club)
+  id            uuid primary key default gen_random_uuid(),   -- platform identity like fan_sessions: no organizer_id;
+  user_id       uuid not null references users(id),          -- per-club marketing consent is memberships.marketing_push
   session_id    uuid not null references fan_sessions(id), -- used only while this session is live; deleted when it is revoked
   token         text not null unique,
   platform      text not null check (platform in ('android','ios')),

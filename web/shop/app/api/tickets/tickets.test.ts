@@ -34,6 +34,7 @@ const EVENT = {
   timezone: 'Africa/Casablanca',
   venue: { name: "Stade de l'Atlas", city: 'Rabat', secret: 'SECRET-VENUE' },
   metadata: { competition: 'Championnat', internal_note: 'SECRET-META' },
+  organizer: { id: '0190f3a2-0000-7000-8000-000000000001', slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null, settings: { theme: 'SECRET-THEME' } },
 }
 const ticket = (over: Record<string, unknown> = {}) => ({
   id: TICKET_ID,
@@ -55,7 +56,7 @@ it('/api/tickets: Bearer from the cookie, no with_keys; the answer has no k_t ev
   expect(res.status).toBe(200)
   expect(res.headers.get('cache-control')).toBe('no-store')
   const text = await res.text()
-  for (const s of ['k_t', K_T, 'k_e', 'SECRET', 'key', 'metadata', TOKEN]) expect(text).not.toContain(s)
+  for (const s of ['k_t', K_T, 'k_e', 'SECRET', 'key', 'metadata', 'settings', TOKEN]) expect(text).not.toContain(s)
   const [url, init] = fetchMock.mock.calls[0]!
   expect(url).toBe('http://backend.test/v1/fan/tickets') // never ?with_keys
   expect(new Headers(init!.headers).get('authorization')).toBe(`Bearer ${TOKEN}`)
@@ -67,7 +68,14 @@ it('/api/tickets: Bearer from the cookie, no with_keys; the answer has no k_t ev
     status: 'VALID',
     holder_label: 'Yazid A.',
     seat_label: null,
-    event: { title: 'ATLAS FC vs Rapid Oued', status: 'ON_SALE', starts_at: '2026-02-07T19:00:00Z', timezone: 'Africa/Casablanca', venue: { name: "Stade de l'Atlas", city: 'Rabat' } },
+    event: {
+      title: 'ATLAS FC vs Rapid Oued',
+      status: 'ON_SALE',
+      starts_at: '2026-02-07T19:00:00Z',
+      timezone: 'Africa/Casablanca',
+      venue: { name: "Stade de l'Atlas", city: 'Rabat' },
+      organizer: { slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null },
+    },
     zone: { code: 'NORD', name: 'Tribune Nord' },
     gate_codes: ['P10', 'P4'],
     past: false,

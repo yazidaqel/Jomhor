@@ -8,8 +8,11 @@ import 'package:intl/intl.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
-import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/ui/brand.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'helpers.dart';
 
@@ -60,7 +63,9 @@ void main() {
     });
   });
 
-  testWidgets('home lists the next events by opponent, asks for this club, and never sends the token', (tester) async {
+  testWidgets('home lists the next events by opponent, asks for every listed club, and never sends the token', (
+    tester,
+  ) async {
     await pumpJomhor(
       tester,
       tokens: MemoryTokenStore('jwt'),
@@ -70,26 +75,21 @@ void main() {
       ]),
     );
     expect(find.text('PROCHAIN MATCH · DOMICILE'), findsOneWidget);
-    // The top bar is Jomhor's; the club (tokens.json) is content only: the home side of the hero. Opponent from
-    // metadata.
+    // The top bar is Jomhor's; the club (the event's `organizer`) is content only: the home side of the hero.
+    // Opponent from metadata.
     expect(find.descendant(of: find.byType(BrandBar), matching: find.byType(JomhorLockup)), findsOneWidget);
-    expect(find.text(JomhorClub.name.toUpperCase()), findsOneWidget);
+    expect(find.text('ATLAS FC'), findsOneWidget);
     expect(find.text('RAPID OUED'), findsOneWidget);
     expect(find.text('CHAMPIONNAT · JOURNÉE 11'), findsNothing); // the hero shows it in sentence case
     expect(find.text('Championnat · Journée 11'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Union Tanger'), 200); // the calendar sits under the hero
+    // The calendar sits under the hero (the page scrolls; the chip row is the inner, sideways scrollable).
+    await tester.scrollUntilVisible(find.text('Union Tanger'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('Union Tanger'), findsOneWidget);
     expect(find.text('Bientôt'), findsOneWidget);
 
     final list = requests.singleWhere((r) => r.url.path == '/v1/fan/events');
-    expect(list.url.queryParameters, {'organizer': testOrganizer});
+    expect(list.url.hasQuery, isFalse); // `Tout`: no follows, no `organizer`, not even a bare `?`
     expect(list.headers.containsKey('Authorization'), isFalse);
-  });
-
-  testWidgets('without ORGANIZER_ID the home refuses to load and says so', (tester) async {
-    await pumpJomhor(tester, organizerId: '', backend: backend([eventJson()]));
-    expect(find.text('Application mal configurée : aucun club défini (ORGANIZER_ID).'), findsOneWidget);
-    expect(requests, isEmpty);
   });
 
   testWidgets('a network failure shows the copy and retries on tap', (tester) async {
@@ -280,12 +280,14 @@ void main() {
     });
   });
 
-  testWidgets("another organizer's event reads as not found", (tester) async {
-    final other = {...eventJson(), 'organizer_id': 'another-club', 'zones': <Object?>[]};
+  testWidgets("any club's event opens, with its crest and name in the header (one app for every club)", (tester) async {
+    final other = {...eventJson(club: tensiftJson), 'zones': <Object?>[]};
     final container = await pumpJomhor(tester, backend: backend([], other));
     container.read(routerProvider).go('/events/1');
     await tester.pumpAndSettle();
-    expect(find.text('Introuvable. Il a peut-être été retiré.'), findsOneWidget);
+    expect(find.text('Introuvable. Il a peut-être été retiré.'), findsNothing);
+    expect(find.text('Olympique Tensift'), findsOneWidget);
+    expect(find.widgetWithText(ClubLine, 'Olympique Tensift'), findsOneWidget);
   });
 
   testWidgets('back from an error opened by deep link goes home', (tester) async {
@@ -295,5 +297,188 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(container.read(routerProvider).routerDelegate.currentConfiguration.uri.path, '/');
+  });
+
+  group('screen 1 · club chips (multi-club)', () {
+    setUp(() => SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty());
+
+    final kindClub = clubJson(id: 'org-venue', slug: 'grand-theatre', name: 'Grand Théâtre', kind: 'VENUE');
+
+    /// Events per organizer filter, like the backend: no `organizer` = every club's events.
+    Future<http.Response> Function(http.Request) clubsBackend(Map<String, List<Map<String, Object?>>> byClub) =>
+        (r) async {
+          requests.add(r);
+          return switch (r.url.path) {
+            '/v1/fan/organizers' => json([clubJson(), tensiftJson, kindClub]),
+            '/v1/fan/events' => json([
+              for (final MapEntry(:key, :value) in byClub.entries)
+                if (r.url.queryParametersAll['organizer']?.contains(key) ?? true) ...value,
+            ]),
+            _ => apiError(404, 'NOT_FOUND'),
+          };
+        };
+
+    final atlas = eventJson();
+    final tensift = eventJson(id: 2, startsAt: '2027-03-14T19:00:00Z', club: tensiftJson);
+    final both = {
+      testOrganizer: [atlas],
+      otherOrganizer: [tensift],
+    };
+
+    bool selected(WidgetTester tester, String chip) => tester
+        .widget<Semantics>(
+          find.descendant(of: find.byKey(Key('home.chip.$chip')), matching: find.byType(Semantics)).first,
+        )
+        .properties
+        .selected!;
+
+    /// The last `organizer` filter; null = no query at all (a bare `?` reads as an empty filter and fails).
+    List<String>? lastFilter() {
+      final url = requests.lastWhere((r) => r.url.path == '/v1/fan/events').url;
+      return url.hasQuery ? url.queryParametersAll['organizer'] ?? const [] : null;
+    }
+
+    testWidgets('no follows: only `Tout`, selected, and the request has no `organizer`', (tester) async {
+      await pumpJomhor(tester, backend: clubsBackend(both));
+      expect(find.byKey(const Key('home.chip.all')), findsOneWidget);
+      expect(find.byKey(const Key('home.chip.mine')), findsNothing);
+      expect(selected(tester, 'all'), isTrue);
+      expect(lastFilter(), isNull);
+      expect(requests.where((r) => r.url.path == '/v1/fan/organizers'), isEmpty); // no follows, no directory read
+    });
+
+    testWidgets('follows A, B: `Mes clubs · A · B · Tout`, `Mes clubs` by default with organizer=A&organizer=B', (
+      tester,
+    ) async {
+      await pumpJomhor(
+        tester,
+        backend: clubsBackend(both),
+        follows: (ids: const [testOrganizer, otherOrganizer], seen: true, chip: null),
+      );
+      final xs = [
+        for (final k in ['mine', testOrganizer, otherOrganizer, 'all'])
+          tester.getCenter(find.byKey(Key('home.chip.$k'))).dx,
+      ];
+      expect(xs, orderedEquals([...xs]..sort()));
+      expect(find.descendant(of: find.byKey(const Key('home.chip.mine')), matching: find.text('Mes clubs')), findsOne);
+      expect(selected(tester, 'mine'), isTrue);
+      expect(lastFilter(), [testOrganizer, otherOrganizer]);
+
+      // Chip A: organizer=A only; the choice is saved on the phone.
+      await tester.tap(find.byKey(const Key('home.chip.$testOrganizer')));
+      await tester.pumpAndSettle();
+      expect(selected(tester, testOrganizer), isTrue);
+      expect(lastFilter(), [testOrganizer]);
+      expect((await savedFollows(SharedPreferencesAsync())).chip, testOrganizer);
+
+      // `Tout`: no organizer.
+      await tester.tap(find.byKey(const Key('home.chip.all')));
+      await tester.pumpAndSettle();
+      expect(lastFilter(), isNull);
+    });
+
+    testWidgets('the chosen chip survives a restart; a remembered club no longer followed falls back to the default', (
+      tester,
+    ) async {
+      await pumpJomhor(
+        tester,
+        backend: clubsBackend(both),
+        follows: (ids: const [testOrganizer, otherOrganizer], seen: true, chip: otherOrganizer),
+      );
+      expect(selected(tester, otherOrganizer), isTrue);
+      expect(lastFilter(), [otherOrganizer]);
+
+      await pumpJomhor(
+        tester,
+        backend: clubsBackend(both),
+        follows: (ids: const [testOrganizer], seen: true, chip: otherOrganizer),
+      );
+      expect(selected(tester, 'mine'), isTrue);
+      expect(lastFilter(), [testOrganizer]);
+    });
+
+    testWidgets('in `Tout`, "Suivre" sits on unfollowed clubs, "Suivi" on followed ones; a tap keeps `Tout`', (
+      tester,
+    ) async {
+      await pumpJomhor(
+        tester,
+        backend: clubsBackend(both),
+        follows: (ids: const [testOrganizer], seen: true, chip: 'all'),
+      );
+      expect(find.byKey(const Key('home.follow.1')), findsNothing); // Atlas: followed
+      expect(find.descendant(of: find.byKey(const Key('home.following.1')), matching: find.text('Suivi')), findsOne);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('home.follow.2')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('home.follow.2')));
+      await tester.pumpAndSettle();
+      // The card turns to "Suivi" in place; `Tout` stays selected and the list is not re-filtered.
+      expect(find.byKey(const Key('home.follow.2')), findsNothing);
+      expect(find.descendant(of: find.byKey(const Key('home.following.2')), matching: find.text('Suivi')), findsOne);
+      expect(lastFilter(), isNull);
+      final saved = await savedFollows(SharedPreferencesAsync());
+      expect(saved.ids, [testOrganizer, otherOrganizer]);
+      expect(saved.chip, 'all');
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('home.chip.$otherOrganizer')),
+        -200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(selected(tester, 'all'), isTrue);
+      expect(selected(tester, 'mine'), isFalse); // `Mes clubs` and the new club's chip now sit in the row
+      expect(selected(tester, otherOrganizer), isFalse);
+    });
+
+    testWidgets('hero and calendar rows carry the club line: crest + organizer name', (tester) async {
+      await pumpJomhor(tester, backend: clubsBackend(both));
+      expect(find.widgetWithText(ClubLine, 'Atlas FC'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.widgetWithText(ClubLine, 'Olympique Tensift'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        find.descendant(of: find.widgetWithText(ClubLine, 'Olympique Tensift'), matching: find.byType(Crest)),
+        findsOneWidget,
+      );
+    });
+
+    for (final (kind, club, copy) in [
+      ('a sports club', otherOrganizer, 'Pas de match à venir'),
+      ('another kind', 'org-venue', "Pas d'événement à venir"),
+    ]) {
+      testWidgets('an empty club chip, $kind: "$copy" and "Voir tout" → `Tout`', (tester) async {
+        await pumpJomhor(
+          tester,
+          backend: clubsBackend({
+            testOrganizer: [atlas],
+          }),
+          follows: (ids: [testOrganizer, club], seen: true, chip: club),
+        );
+        expect(find.text(copy), findsOneWidget);
+        await tester.tap(find.byKey(const Key('home.seeAll')));
+        await tester.pumpAndSettle();
+        expect(selected(tester, 'all'), isTrue);
+        expect(lastFilter(), isNull);
+        expect(find.byKey(const Key('hero.cta')), findsOneWidget);
+      });
+    }
+
+    testWidgets('AR: the chip row starts at the right and club names sit in isolates', (tester) async {
+      await pumpJomhor(
+        tester,
+        backend: clubsBackend(both),
+        locale: const Locale('ar'),
+        follows: (ids: const [testOrganizer], seen: true, chip: null),
+      );
+      final mine = tester.getRect(find.byKey(const Key('home.chip.mine')));
+      final all = tester.getRect(find.byKey(const Key('home.chip.all')));
+      expect(mine.left, greaterThan(all.left));
+      expect(tester.view.physicalSize.width / tester.view.devicePixelRatio - mine.right, lessThan(40));
+      expect(find.text('فرقي'), findsOneWidget);
+      expect(find.text('\u2068Atlas FC\u2069'), findsWidgets);
+    });
   });
 }

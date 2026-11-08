@@ -46,8 +46,12 @@ class FanTicketController {
 
     record VenueDto(String name, String city) {}
 
+    /** 04 §Club directory: with id, since the ticket's event has no organizer_id beside it. */
+    record OrganizerDto(UUID id, String slug, String name, String crestUrl) {}
+
     record EventDto(int id, String title, Event.Type eventType, Event.Status status, Instant startsAt,
-                    Instant doorsOpenAt, String timezone, VenueDto venue, @JsonRawValue String metadata) {}
+                    Instant doorsOpenAt, String timezone, VenueDto venue, @JsonRawValue String metadata,
+                    OrganizerDto organizer) {}
 
     record ZoneDto(int id, String code, String name) {}
 
@@ -65,7 +69,9 @@ class FanTicketController {
             return new TicketDto(t.id(), TicketToken.ticketNo(t.id()), t.status(),
                     t.holderName() == null ? null : HolderNames.label(t.holderName()), t.seatLabel(),
                     new EventDto(e.id(), e.title(), e.eventType(), e.status(), e.startsAt(), e.doorsOpenAt(), e.timezone(),
-                            new VenueDto(e.venueName(), e.venueCity()), e.metadata()),
+                            new VenueDto(e.venueName(), e.venueCity()), e.metadata(),
+                            new OrganizerDto(e.organizerId(), e.organizer().slug(), e.organizer().name(),
+                                    e.organizer().crestUrl())),
                     new ZoneDto(z.id(), z.code(), z.name()), z.gateCodes(), h.transferUntil(),
                     t.transferred() == null ? null : new TransferredDto(
                             t.transferred().toName() == null ? null : HolderNames.label(t.transferred().toName()),

@@ -16,7 +16,7 @@ export const fr = {
     home: 'Voir les événements',
   },
   header: {
-    shop: 'Billetterie {club}',
+    shop: 'Billetterie',
     nav: 'Navigation principale',
     events: 'Matchs',
     tickets: 'Mes billets',
@@ -39,7 +39,7 @@ export const fr = {
     back: 'Voir les événements',
   },
   home: {
-    description: 'Billets officiels {club} : choisis ta zone et reçois tes billets dans l’app, en PDF et sur WhatsApp.',
+    description: 'Billets officiels de tes clubs : choisis ta zone et reçois tes billets dans l’app, en PDF et sur WhatsApp.',
     title: 'À venir',
     empty: "Aucun événement en vente pour l'instant. Reviens bientôt.",
     from: 'Dès {price}',
@@ -54,6 +54,26 @@ export const fr = {
     how2: 'Carte, wallet ou cash selon l’événement, sans frais de service.',
     how3Title: 'Entre au stade',
     how3: "Billet dans l'app, même sans réseau, en PDF et sur WhatsApp.",
+  },
+  clubs: {
+    /** aria-label of the chip row (W1). */
+    filter: 'Clubs affichés',
+    mine: 'Mes clubs',
+    all: 'Tout',
+    stripTitle: 'Clubs',
+    follow: 'Suivre',
+    following: 'Suivi',
+    /** Accessible name of the follow button: its visible word, then the club. */
+    followA11y: '{action} {club}',
+    /** Empty club or "Mes clubs": "match" for a sports club, "événement" otherwise (kind, UI only). */
+    emptyMatch: 'Pas de match à venir',
+    emptyEvent: "Pas d'événement à venir",
+    seeAll: 'Voir tout',
+    /** W7 title; the root template adds " · Jomhor". */
+    metaTitle: 'Billetterie {club}',
+    description: 'Billets officiels {club} : choisis ta zone et reçois tes billets dans l’app, en PDF et sur WhatsApp.',
+    upcoming: 'À venir',
+    ogAlt: 'Billetterie du club sur Jomhor',
   },
   sale: {
     ON_SALE: 'Vente ouverte',

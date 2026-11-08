@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
 import 'package:jomhor_core/jomhor_core.dart';
+import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 
 /// A ticket id as the API writes it (lowercase UUID). Route parameters are checked against it.
@@ -133,11 +134,17 @@ class TicketEvent {
     this.doorsOpenAt,
     this.venueCity,
     this.status,
+    this.organizer,
   });
 
   factory fromJson(Map<String, Object?> j) {
     final venue = j['venue']! as Map<String, Object?>;
     return TicketEvent(
+      // Optional and never fatal: a cache from before multi-club, or a malformed block, means no club line.
+      organizer: switch (j['organizer']) {
+        {'id': final String _, 'name': final String _} && final Map<String, Object?> o => Club.fromJson(o),
+        _ => null,
+      },
       id: j['id']! as int,
       title: j['title']! as String,
       eventType: j['event_type']! as String,
@@ -168,6 +175,9 @@ class TicketEvent {
   final String venueName;
   final String? venueCity;
   final Map<String, Object?> metadata;
+
+  /// The club `{id, slug, name, crest_url}`; null in a ticket cache saved before multi-club (no club line then).
+  final Club? organizer;
 
   EventFacts get facts => EventFacts.of(eventType, metadata);
 }

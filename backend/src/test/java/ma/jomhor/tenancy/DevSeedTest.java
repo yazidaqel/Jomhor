@@ -40,26 +40,43 @@ class DevSeedTest {
     }
 
     private void assertSeed() {
+        // two listed demo clubs, no crest (plan multi-club Q72, Q76)
         assertThat(jdbc.sql("""
-                select name || ' ' || kind || ' ' || (settings -> 'theme' ->> 'accent') || ' ' || (settings -> 'theme' ->> 'on_accent')
-                from organizers""").query(String.class).list())
-                .containsExactly("ATLAS FC SPORTS_CLUB #F5B700 #0B0F1A");
+                select name || ' ' || kind || ' ' || slug || ' ' || coalesce(settings ->> 'crest_url', 'no-crest')
+                from organizers order by name""").query(String.class).list())
+                .containsExactly("ATLAS FC SPORTS_CLUB atlas-fc no-crest",
+                        "Olympique Tensift SPORTS_CLUB olympique-tensift no-crest");
         assertThat(jdbc.sql("select p ->> 'name' from organizers, jsonb_array_elements(settings -> 'cash_points') p")
                 .query(String.class).list()).containsExactly("Guichet Grand Stade", "Boutique du club"); // cash on in dev
+        // the dev admin's memberships, as the organizer switcher lists them (by name)
         assertThat(jdbc.sql("""
-                select s.role::text from staff s join users u on u.id = s.user_id
-                where u.phone_e164 = '+212600000001' and s.active""").query(String.class).list())
-                .containsExactly("ADMIN");
-        assertThat(jdbc.sql("select name || ' ' || timezone from venues").query(String.class).list())
-                .containsExactly("Grand Stade Africa/Casablanca");
-        assertThat(jdbc.sql("select code from zones order by code").query(String.class).list())
-                .containsExactly("EST", "HONNEUR", "NORD", "SUD");
-        assertThat(jdbc.sql("select sum(z.capacity) <= 45000 and sum(z.capacity) <= max(v.capacity) from zones z join venues v on v.id = z.venue_id")
+                select o.name || ' ' || s.role::text from staff s join users u on u.id = s.user_id
+                join organizers o on o.id = s.organizer_id
+                where u.phone_e164 = '+212600000001' and s.active order by o.name""").query(String.class).list())
+                .containsExactly("ATLAS FC ADMIN", "Olympique Tensift ADMIN");
+        assertThat(jdbc.sql("select name || ' ' || city || ' ' || timezone from venues order by name")
+                .query(String.class).list())
+                .containsExactly("Grand Stade Casablanca Africa/Casablanca", "Stade Tensift Marrakech Africa/Casablanca");
+        assertThat(codes("zones", "Grand Stade")).containsExactly("EST", "HONNEUR", "NORD", "SUD");
+        assertThat(codes("zones", "Stade Tensift")).containsExactly("HONNEUR", "NORD", "SUD");
+        assertThat(jdbc.sql("""
+                select bool_and(t.total <= v.capacity) from venues v
+                join (select venue_id, sum(capacity) as total from zones group by venue_id) t on t.venue_id = v.id""")
                 .query(Boolean.class).single()).isTrue();
-        assertThat(jdbc.sql("select code from gates order by code").query(String.class).list())
-                .isEqualTo(List.of("P1", "P2", "P3", "P4", "P5", "P6", "P7"));
-        assertThat(jdbc.sql("select count(*) from gate_zones").query(Integer.class).single()).isEqualTo(9);
+        assertThat(codes("gates", "Grand Stade")).isEqualTo(List.of("P1", "P2", "P3", "P4", "P5", "P6", "P7"));
+        assertThat(codes("gates", "Stade Tensift")).isEqualTo(List.of("P1", "P2", "P3"));
+        assertThat(jdbc.sql("select count(*) from gate_zones").query(Integer.class).single()).isEqualTo(12);
+        assertThat(jdbc.sql("""
+                select count(*) from gate_zones gz join gates g on g.id = gz.gate_id join zones z on z.id = gz.zone_id
+                where g.venue_id <> z.venue_id or gz.organizer_id <> g.organizer_id""").query(Integer.class).single())
+                .isZero();
         assertThat(jdbc.sql("select count(*) from gates g where not exists (select 1 from gate_zones gz where gz.gate_id = g.id)")
                 .query(Integer.class).single()).isZero();
+    }
+
+    /** Codes of the zones or gates of the venue named {@code venue}, ascending. */
+    private List<String> codes(String table, String venue) {
+        return jdbc.sql("select t.code from " + table + " t join venues v on v.id = t.venue_id where v.name = ? order by t.code")
+                .param(venue).query(String.class).list();
     }
 }

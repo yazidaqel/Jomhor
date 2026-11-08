@@ -28,18 +28,21 @@ import tools.jackson.databind.node.JsonNodeFactory;
 
 /**
  * Dev demo data that Flyway can't write (K_e is encrypted in Java) or that must follow the clock (docs/TESTING.md).
- * Runs at every dev startup, through the modules' services, after db/dev/R__dev_seed.sql (organizer, venue, staff,
- * demo fans). Idempotent by event title: a missing demo event is created, priced, published, and the demo fan gets
- * a ticket for it (a till sale by the dev admin, with two paper tickets); then the ON_SALE demo events get their
- * times moved relative to now, so the stack is always testable. The past event is closed once and left alone.
+ * Runs at every dev startup, through the modules' services, after db/dev/R__dev_seed.sql (organizers, venues, staff,
+ * demo fans), for each demo club in turn. Idempotent by event title per club: a missing demo event is created,
+ * priced, published, and the demo fan gets a ticket for it (a till sale by the dev admin on that club's till, with
+ * two paper tickets); then the club's ON_SALE demo events get their times moved relative to now, so the stack is
+ * always testable. The past event is closed once and left alone.
  */
 @Component
 @Profile("dev")
 class DevSeeder implements ApplicationRunner {
 
     static final UUID ORG = UUID.fromString("a7a5fc00-0000-4000-8000-000000000001");
+    static final UUID TENSIFT = UUID.fromString("a7a5fc00-0000-4000-8000-000000000002");
     static final UUID ADMIN = UUID.fromString("a7a5fc00-0000-4000-8000-000000000101");
     static final UUID VENUE = UUID.fromString("a7a5fc00-0000-4000-8000-000000000301");
+    static final UUID TENSIFT_VENUE = UUID.fromString("a7a5fc00-0000-4000-8000-000000000302");
     static final String FAN_PHONE = "+212600000010";
     static final String FAN_NAME = "Yassine Benali";
 
@@ -56,9 +59,17 @@ class DevSeeder implements ApplicationRunner {
     static final Demo MATCHDAY = new Demo("ATLAS FC vs Sporting Anfa", "Sporting Anfa", 11, Duration.ofMinutes(75),
             Duration.ofHours(2));
     static final Demo PAST = new Demo("ATLAS FC vs Union Rif", "Union Rif", 10, Duration.ofDays(-7), Duration.ofHours(2));
-    static final List<Demo> ALL = List.of(UPCOMING, MATCHDAY, PAST);
+    /** The second demo club's home event (plan multi-club Q76): on sale, the demo fan holds a ticket. */
+    static final Demo TENSIFT_HOME = new Demo("Olympique Tensift vs Union Rif", "Union Rif", 12, Duration.ofDays(6),
+            Duration.ofHours(2));
 
-    /** Centimes and quota per zone code of the dev venue. */
+    /** A demo club: R__dev_seed.sql's organizer and venue (the dev admin is ADMIN there), and its demo events. */
+    record Club(UUID org, UUID venue, List<Demo> demos) {}
+
+    static final List<Club> CLUBS = List.of(new Club(ORG, VENUE, List.of(UPCOMING, MATCHDAY, PAST)),
+            new Club(TENSIFT, TENSIFT_VENUE, List.of(TENSIFT_HOME)));
+
+    /** Centimes and quota per zone code of the dev venues (a code a venue lacks is skipped). */
     static final Map<String, long[]> PRICES = Map.of("NORD", new long[] {5_000, 2_000}, "SUD", new long[] {5_000, 2_000},
             "EST", new long[] {8_000, 3_000}, "HONNEUR", new long[] {25_000, 500});
 
@@ -82,60 +93,65 @@ class DevSeeder implements ApplicationRunner {
     }
 
     void seed() {
+        CLUBS.forEach(this::seed);
+    }
+
+    private void seed(Club club) {
         Map<String, Event.Summary> existing = new HashMap<>();
-        events.list(ORG, null, null).forEach(e -> existing.putIfAbsent(e.title(), e));
-        List<Demo> missing = ALL.stream().filter(d -> !existing.containsKey(d.title())).toList();
+        events.list(club.org(), null, null).forEach(e -> existing.putIfAbsent(e.title(), e));
+        List<Demo> missing = club.demos().stream().filter(d -> !existing.containsKey(d.title())).toList();
         if (!missing.isEmpty()) {
-            var till = pos.open(ORG, ADMIN, "Guichet démo");
+            var till = pos.open(club.org(), ADMIN, "Guichet démo");
             long cash = 0;
             for (Demo d : missing) {
-                cash += create(d);
+                cash += create(club, d);
             }
             if (till.created()) {
-                pos.close(ORG, ADMIN, StaffRole.ADMIN, till.session().id(), cash);
+                pos.close(club.org(), ADMIN, StaffRole.ADMIN, till.session().id(), cash);
             }
             log.info("[dev seed] created {}", missing.stream().map(Demo::title).toList());
         }
         Instant now = Instant.now().truncatedTo(ChronoUnit.MINUTES);
-        for (Demo d : List.of(UPCOMING, MATCHDAY)) {
+        for (Demo d : club.demos()) {
             Event.Summary e = existing.get(d.title());
             if (e != null && e.status() == Event.Status.ON_SALE) {
-                move(e.id(), d, now);
+                move(club, e.id(), d, now);
             }
         }
     }
 
     /** Creates, prices and publishes the event, sells the demo fan's ticket; returns the cash taken. */
-    private long create(Demo d) {
+    private long create(Club club, Demo d) {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MINUTES);
         var metadata = JsonNodeFactory.instance.objectNode()
                 .put("opponent", d.opponent()).put("competition", "Championnat").put("matchday", d.matchday());
         Instant onSale = now.plus(UPCOMING.kickoff()); // sold first, moved after
-        int id = events.create(ORG, new EventInput(VENUE, Event.Type.FOOTBALL_MATCH, d.title(), onSale,
+        int id = events.create(club.org(), new EventInput(club.venue(), Event.Type.FOOTBALL_MATCH, d.title(), onSale,
                 onSale.minus(d.doors()), null, null, null, metadata)).id();
         Map<String, UUID> priceOf = new HashMap<>();
-        for (var zone : venues.get(ORG, VENUE).zones()) {
+        for (var zone : venues.get(club.org(), club.venue()).zones()) {
             long[] p = PRICES.get(zone.code());
             if (p != null) {
-                priceOf.put(zone.code(), events.createPrice(ORG, id, zone.id(), "Plein tarif", p[0], (int) p[1]).id());
+                priceOf.put(zone.code(),
+                        events.createPrice(club.org(), id, zone.id(), "Plein tarif", p[0], (int) p[1]).id());
             }
         }
-        events.publish(ORG, ADMIN, id);
+        events.publish(club.org(), ADMIN, id);
         List<ItemRequest> items = new ArrayList<>();
         items.add(new ItemRequest(priceOf.get("HONNEUR"), 1, List.of(new HolderRequest(FAN_NAME, FAN_PHONE))));
         items.add(new ItemRequest(priceOf.get("NORD"), 2,
                 List.of(new HolderRequest("Karim Alaoui", null), new HolderRequest("Nadia Berrada", null))));
-        long cash = pos.sale(ORG, ADMIN, UUID.randomUUID(), id, items).view().order().totalMad();
-        move(id, d, now);
+        long cash = pos.sale(club.org(), ADMIN, UUID.randomUUID(), id, items).view().order().totalMad();
+        move(club, id, d, now);
         if (d == PAST) {
-            events.close(ORG, ADMIN, id);
+            events.close(club.org(), ADMIN, id);
         }
         return cash;
     }
 
-    private void move(int id, Demo d, Instant now) {
+    private void move(Club club, int id, Demo d, Instant now) {
         Instant kickoff = now.plus(d.kickoff());
-        events.update(ORG, id, new EventInput(null, null, null, kickoff, kickoff.minus(d.doors()), null, null, null,
+        events.update(club.org(), id, new EventInput(null, null, null, kickoff, kickoff.minus(d.doors()), null, null, null,
                 null));
     }
 }

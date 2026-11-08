@@ -31,6 +31,8 @@
 | campaign | campagne | حملة | — |
 | gate load | affluence | الازدحام | Fluide / Modérée / Chargée |
 | opt-in | consentement | الموافقة | — |
+| follow | suivre | تابع | A club whose events the fan sees first ("Mes clubs"); kept on the device |
+| club directory | annuaire des clubs | لائحة الفرق | The listed organizers (with a slug) |
 
 ## Scan result codes
 

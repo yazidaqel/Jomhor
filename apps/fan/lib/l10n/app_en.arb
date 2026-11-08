@@ -25,7 +25,6 @@
   "errorValidation": "Check what you entered.",
   "errorNotFound": "Not found. It may have been removed.",
   "errorNetwork": "No connection. Check your network and try again.",
-  "errorMissingOrganizer": "App misconfigured: no club set (ORGANIZER_ID).",
   "errorGeneric": "Something went wrong. Try again in a moment.",
 
   "heroLabelMatch": "Next match · Home",
@@ -256,5 +255,21 @@
   "lostPhoneNone": "No upcoming ticket can get a new QR.",
   "lostPhoneConfirm": "New QRs",
   "lostPhoneDone": "{count, plural, =1{New QR ready for 1 ticket.} other{New QRs ready for {count} tickets.}}",
-  "lostPhoneFailed": "Some tickets did not get a new QR. Check your tickets."
+  "lostPhoneFailed": "Some tickets did not get a new QR. Check your tickets.",
+
+  "myClubs": "My clubs",
+  "chipAll": "All",
+  "clubsTitle": "Your clubs",
+  "clubsIntro": "Follow your clubs to see their matches first. Change them any time.",
+  "clubsSearch": "Search clubs",
+  "clubsNoResult": "No club matches.",
+  "clubFollow": "Follow",
+  "clubFollowing": "Following",
+  "clubsContinue": "Continue",
+  "clubsSeeAll": "See all",
+  "clubsDone": "Done",
+  "clubKind": "{kind, select, SPORTS_CLUB{Sports club} PROMOTER{Promoter} VENUE{Venue} other{Organizer}}",
+  "homeNoMatch": "No upcoming match",
+  "homeNoEvent": "No upcoming event",
+  "homeSeeAll": "See all"
 }

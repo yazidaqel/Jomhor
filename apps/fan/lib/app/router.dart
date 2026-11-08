@@ -8,6 +8,8 @@ import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_screen.dart';
 import 'package:jomhor_fan/features/checkout/order_screen.dart';
 import 'package:jomhor_fan/features/checkout/zones_screen.dart';
+import 'package:jomhor_fan/features/clubs/clubs_screen.dart';
+import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
 import 'package:jomhor_fan/features/profile/profile_screen.dart';
@@ -52,8 +54,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         final id = returnedOrderId(state.uri.toString());
         return id == null ? '/' : '/orders/$id';
       }
-      final signedIn = ref.read(sessionProvider);
       final path = state.matchedLocation;
+      // First launch: the club picker (screen 11), from the app's start only. Deep links (orders, tickets, events)
+      // are never intercepted; the picker writes the flag before it navigates.
+      if (path == '/' && !ref.read(followsProvider).seen) return '/clubs';
+      final signedIn = ref.read(sessionProvider);
       if (path == '/login') return signedIn ? afterLogin(state.uri.queryParameters['from']) : null;
       if (!signedIn && needsSession(path)) {
         return Uri(path: '/login', queryParameters: {'from': state.uri.toString()}).toString();
@@ -76,6 +81,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(path: '/clubs', builder: (context, state) => const ClubsScreen()),
       GoRoute(
         path: '/events/:id',
         builder: (context, state) => EventScreen(id: int.tryParse(state.pathParameters['id']!) ?? -1),

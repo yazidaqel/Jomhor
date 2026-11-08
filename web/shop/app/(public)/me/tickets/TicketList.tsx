@@ -5,8 +5,7 @@ import Link from 'next/link'
 import { fmt, isolate } from '@/lib/i18n'
 import type { TicketView } from '@/lib/tickets'
 import { countdown, formatDate, formatTime } from '@/lib/time'
-import { club } from '@/lib/club'
-import { JMark } from '../../../brand'
+import { Crest, JMark } from '../../../brand'
 import { ArrowIcon, ClockIcon, DownloadIcon, QrIcon, TransferIcon } from '../../../icons'
 import { closedCopy, TransferDialog, type Outcome, type TransferCopy } from './TransferDialog'
 
@@ -206,18 +205,18 @@ function TicketCard({ t, copy, now, i, leaving, onTransfer, onLeft }: { t: Ticke
       >
         <header className={`relative isolate flex items-start justify-between gap-3 overflow-hidden px-5 pt-5 pb-4 ${live ? 'bg-accent text-on-accent' : 'bg-border-muted text-text'}`}>
           <div className="flex min-w-0 flex-col gap-1">
+            {t.event.organizer && (
+              <p data-club-line className="flex min-w-0 items-center gap-2 text-caption font-semibold">
+                <Crest club={t.event.organizer} size={20} standIn="bg-ticket-ink text-accent" />
+                <bdi className="truncate">{t.event.organizer.name}</bdi>
+              </p>
+            )}
             <p className="truncate text-[11px] font-semibold uppercase tracking-[1.5px] opacity-75">{venue}</p>
             <h3 id={`ticket-${t.id}`} className="font-display text-[28px] font-extrabold uppercase leading-[0.95] text-balance">
               {t.event.title}
             </h3>
             <p className="text-sm font-medium opacity-85">{formatDate(t.event.starts_at, t.event.timezone, copy.meta.intl)}</p>
           </div>
-          <span
-            aria-hidden="true"
-            className="flex size-11 shrink-0 items-center justify-center rounded-pill bg-ticket-ink font-display text-[22px] font-extrabold text-accent"
-          >
-            {club.crestInitial}
-          </span>
         </header>
 
         <dl className="grid grid-cols-3 gap-3 px-5 pt-4">
