@@ -228,6 +228,11 @@ void main() {
     testWidgets('device clock 30 s ahead: an early "not on sale" read backs off, never "Vente terminée"', (
       tester,
     ) async {
+      // Reduced motion: no launch splash, whose second of fake time the device clock below would not follow.
+      tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
       const skew = Duration(seconds: 30); // device ahead of the server
       final opensAt = DateTime.parse(opens);
       final clock = TestClock(opensAt.subtract(const Duration(seconds: 60))); // server: opening - 90 s

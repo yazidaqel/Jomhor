@@ -51,7 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const JomhorLockup(height: 56),
+                      JomhorLockup(height: 56, entrance: true, busy: state.busy),
                       const SizedBox(height: JomhorSpace.s),
                       Text(l.brandTagline, style: JomhorType.body.copyWith(color: JomhorColors.textSecondary)),
                     ],

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jomhor_fan/app/launch_splash.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
@@ -76,6 +77,7 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       routerConfig: ref.watch(routerProvider),
+      builder: (context, child) => LaunchSplash(child: child!),
     );
   }
 }
