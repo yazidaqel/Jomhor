@@ -184,6 +184,14 @@ public class TicketService {
         return groups.stream().flatMap(List::stream).toList();
     }
 
+    /**
+     * 04 GET /fan/gates/{event_id}/load: the tickets {@code holderUserId} holds of the event, any status (a ticket
+     * transferred away included), but those a re-issue cancelled. One query; each row carries its organizer_id.
+     */
+    public List<Ticket> heldOfEvent(UUID holderUserId, int eventId) {
+        return tickets.heldOfEvent(holderUserId, eventId);
+    }
+
     /** A rendered ticket PDF. Not for logs. */
     public record Pdf(String ticketNo, byte[] content) {
         @Override

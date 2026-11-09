@@ -1,5 +1,6 @@
 package ma.jomhor.catalog.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -56,9 +57,18 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
      */
     public record Organizer(String slug, String name, String crestUrl) {}
 
-    /** A zone of a public event with its gate codes (ascending) and the event's prices on it. */
-    public record ZoneListing(int id, String code, String name, boolean seated, List<String> gateCodes,
-                              List<PriceListing> prices) {}
+    /** A zone of a public event with the gates serving it (by code, byte-wise) and the event's prices on it. */
+    public record ZoneListing(int id, String code, String name, boolean seated, List<GateListing> gates,
+                              List<PriceListing> prices) {
+
+        /** The gates' codes, ascending byte-wise. */
+        public List<String> gateCodes() {
+            return gates.stream().map(GateListing::code).toList();
+        }
+    }
+
+    /** A gate as fans see it (04 /fan/tickets {@code gates[]}): coordinates both or neither, scale 6. */
+    public record GateListing(String code, String name, String directions, BigDecimal latitude, BigDecimal longitude) {}
 
     /** remaining = quota - sold. */
     public record PriceListing(UUID priceCategoryId, int zoneId, String name, long priceMad, int remaining) {}

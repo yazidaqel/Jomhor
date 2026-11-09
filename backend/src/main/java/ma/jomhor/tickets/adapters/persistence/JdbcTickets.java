@@ -77,6 +77,12 @@ class JdbcTickets implements Tickets {
     }
 
     @Override
+    public List<Ticket> heldOfEvent(UUID holderUserId, int eventId) {
+        return jdbc.sql(HELD + " and t.event_id = :event and coalesce(tt.to_user_id <> tt.from_user_id, true) order by t.id")
+                .param("holder", holderUserId).param("event", eventId).query(TICKET).list();
+    }
+
+    @Override
     public Optional<Ticket> heldBy(UUID holderUserId, UUID ticketId) {
         return jdbc.sql(HELD + " and t.id = :id")
                 .param("id", ticketId).param("holder", holderUserId).query(TICKET).optional();

@@ -1,6 +1,7 @@
 package ma.jomhor.gate.application;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import ma.jomhor.gate.domain.Scan;
@@ -16,6 +17,15 @@ public interface Scans {
 
     /** Admitted (OK/OVERRIDE) scans of the event by devices other than {@code deviceId} with seq > cursor, by seq. */
     List<Scan.Used> usedSince(UUID org, int eventId, UUID deviceId, long cursor, int limit);
+
+    /** A ticket's canonical admitted scan: its device_time and its gate's code (04 /fan/gates/{id}/load entries). */
+    record Entry(UUID ticketId, Instant enteredAt, String gateCode) {}
+
+    /**
+     * The canonical admitted (OK/OVERRIDE, direction IN) scan of each of {@code ticketIds} that has one: earliest
+     * device_time, tie lowest scan_id (as the reports). By ticket id.
+     */
+    List<Entry> entries(UUID org, int eventId, Collection<UUID> ticketIds);
 
     // ---------- gate reports (docs/04-api.md §Gate reports), read in the caller's snapshot ----------
 

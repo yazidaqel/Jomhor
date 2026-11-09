@@ -82,6 +82,12 @@ public class GateReports {
     public record GateRow(UUID gateId, String code, String name, List<String> zoneCodes, long entered,
                           Map<Scan.Result, Long> refusedByResult, long duplicatesLate, long overrides) {}
 
+    // ---------- fan load (GET /fan/gates/{event_id}/load) ----------
+
+    public enum Level { LOW, MEDIUM, HIGH, UNKNOWN }
+
+    public record GateLevel(String code, Level level) {}
+
     /** Everything a report reads, in one snapshot. */
     private record Snapshot(Event event, Instant now, Map<UUID, Venue.Gate> gates, Map<Integer, String> zoneCodes,
                             List<Assignment> assignments, List<Admitted> admitted, List<Other> others,
@@ -170,6 +176,43 @@ public class GateReports {
                 sum(s.admitted(), Admitted::prev5) / 5, new Refused(total(refused), refused),
                 sum(s.admitted(), a -> a.admitted() - a.canonical()),
                 new Overrides(sum(overrides, Other::count), OVERRIDE_CAP_PER_DEVICE, byDevice), gates, devicesStale);
+    }
+
+    /**
+     * 04 GET /fan/gates/{event_id}/load {@code gates}: the venue's gates with an assigned device, by code, each with
+     * its level from the /live figures of that gate (rate_per_min, devices_online), so the two never disagree.
+     */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public List<GateLevel> fanGateLevels(UUID org, int eventId) {
+        // Only what a level needs: gates, assignments and the admitted counts (not the refused rows nor sold).
+        Event e = events.get(org, eventId);
+        Map<UUID, Venue.Gate> gates = venues.gates(org, e.venueId()).stream()
+                .collect(Collectors.toMap(Venue.Gate::id, g -> g));
+        Instant online = scans.now().truncatedTo(ChronoUnit.MILLIS).minus(ONLINE_WITHIN);
+        List<Assignment> assigned = assignments.list(org, eventId);
+        List<Admitted> admitted = scans.admitted(org, eventId);
+        return assigned.stream().map(Assignment::gateId).distinct().map(gates::get).filter(Objects::nonNull)
+                .sorted(Comparator.comparing(Venue.Gate::code))
+                .map(g -> {
+                    long ratePerMin = sum(atGate(admitted, Admitted::gateId, g.id()), Admitted::last5) / 5;
+                    long devicesOnline = assigned.stream().filter(a -> a.gateId().equals(g.id()) && isActive(a)
+                            && a.lastSeenAt() != null && !a.lastSeenAt().isBefore(online)).count();
+                    return new GateLevel(g.code(), level(ratePerMin, devicesOnline));
+                })
+                .toList();
+    }
+
+    /**
+     * 04: UNKNOWN with no device online; else charge = rate ÷ (online × 24): LOW below 0.5, MEDIUM below 0.85, HIGH.
+     * In integers (rate × 100 against online × 24 × 50 / 85): no rounding at the boundaries.
+     */
+    static Level level(long ratePerMin, long devicesOnline) {
+        if (devicesOnline == 0) {
+            return Level.UNKNOWN;
+        }
+        long charge = ratePerMin * 100;
+        long capacity = devicesOnline * 24;
+        return charge < capacity * 50 ? Level.LOW : charge < capacity * 85 ? Level.MEDIUM : Level.HIGH;
     }
 
     /**

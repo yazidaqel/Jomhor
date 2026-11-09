@@ -30,6 +30,12 @@ public interface Tickets {
      */
     List<Ticket> heldBy(UUID holderUserId);
 
+    /**
+     * The tickets {@code holderUserId} holds of event {@code eventId}, any status, but those a re-issue cancelled, by
+     * id. One query on the holder index (GET /fan/gates/{event_id}/load polls it).
+     */
+    List<Ticket> heldOfEvent(UUID holderUserId, int eventId);
+
     /** The ticket {@code ticketId} if {@code holderUserId} holds it (same scope as {@link #heldBy(UUID)}). */
     Optional<Ticket> heldBy(UUID holderUserId, UUID ticketId);
 

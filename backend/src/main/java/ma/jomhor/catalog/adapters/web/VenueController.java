@@ -7,7 +7,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.catalog.application.VenueService;
 import ma.jomhor.catalog.domain.Venue;
@@ -26,10 +28,15 @@ import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
  * docs/04-api.md §Organizer: /org/venues*, /org/gates/{id}/zones. PATCH bodies are partial: an absent or
- * null field is left unchanged; venue {@code city: ""} clears the city.
+ * null field is left unchanged; venue {@code city: ""} and gate {@code directions: ""} clear the field; a gate PATCH
+ * with both {@code latitude: null} and {@code longitude: null} clears its location.
  */
 @RestController
 class VenueController {
@@ -55,10 +62,54 @@ class VenueController {
                      @Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String name,
                      @PositiveOrZero Integer capacity, Boolean seated) {}
 
-    record GateCreate(@NotBlank String code, @NotBlank String name) {}
+    /** Coordinates: JSON numbers only (see {@link Explicit}); absent and null both mean none. */
+    record GateCreate(@NotBlank String code, @NotBlank String name, String directions, Explicit latitude,
+                      Explicit longitude) {}
 
+    /**
+     * {@code latitude} / {@code longitude}: null = absent from the body, {@code Explicit(null)} = an explicit JSON null,
+     * so both nulls can clear the location. (Jackson 3 reads both absent and null as Optional.empty(): no use here.)
+     */
     record GatePatch(@Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String code,
-                     @Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String name) {}
+                     @Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String name, String directions,
+                     Explicit latitude, Explicit longitude) {}
+
+    /**
+     * A decimal present in the body, possibly as null (absent = Java null). Only a JSON number token: "33.5" or true
+     * is refused whatever the mapper's coercion settings (→ 422 VALIDATION_FAILED on the field, ApiExceptionHandler).
+     * Read from the number's text, never through a double.
+     */
+    @JsonDeserialize(using = Explicit.Reader.class)
+    record Explicit(BigDecimal value) {
+
+        static BigDecimal orNull(Explicit e) {
+            return e == null ? null : e.value();
+        }
+
+        static Optional<BigDecimal> of(Explicit e) {
+            return e == null ? null : Optional.ofNullable(e.value());
+        }
+
+        static class Reader extends ValueDeserializer<Explicit> {
+            @Override
+            public Explicit deserialize(JsonParser p, DeserializationContext ctxt) {
+                if (!p.currentToken().isNumeric()) {
+                    return (Explicit) ctxt.handleUnexpectedToken(BigDecimal.class, p);
+                }
+                return new Explicit(p.getDecimalValue());
+            }
+
+            @Override
+            public Explicit getNullValue(DeserializationContext ctxt) {
+                return new Explicit(null);
+            }
+
+            @Override
+            public Object getAbsentValue(DeserializationContext ctxt) {
+                return null;
+            }
+        }
+    }
 
     record GateZones(@NotNull @Size(max = 1000) List<@NotNull Integer> zoneIds) {}
 
@@ -109,13 +160,15 @@ class VenueController {
     @ResponseStatus(HttpStatus.CREATED)
     Gate createGate(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id,
                     @Valid @RequestBody GateCreate body) {
-        return venues.createGate(org.organizerId(), id, body.code(), body.name());
+        return venues.createGate(org.organizerId(), id, body.code(), body.name(), body.directions(),
+                Explicit.orNull(body.latitude()), Explicit.orNull(body.longitude()));
     }
 
     @PatchMapping("/org/venues/{id}/gates/{gateId}")
     Gate updateGate(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id,
                     @PathVariable UUID gateId, @Valid @RequestBody GatePatch body) {
-        return venues.updateGate(org.organizerId(), id, gateId, body.code(), body.name());
+        return venues.updateGate(org.organizerId(), id, gateId, body.code(), body.name(), body.directions(),
+                Explicit.of(body.latitude()), Explicit.of(body.longitude()));
     }
 
     @DeleteMapping("/org/venues/{id}/gates/{gateId}")
