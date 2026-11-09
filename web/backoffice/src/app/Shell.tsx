@@ -63,13 +63,13 @@ const POS_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'CASHIER']
 const home = (role: Role) => (role === 'CASHIER' ? '/pos' : '/')
 const allowed = (role: Role, pathname: string) => (/^\/pos(\/|$)/.test(pathname) ? POS_ROLES.includes(role) : role !== 'CASHIER')
 
-type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices' | 'pos' | 'finance'
-type NavKey = Section | 'invitations' | 'crm'
+type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices' | 'pos' | 'finance' | 'crm'
+type NavKey = Section | 'invitations'
 // no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others); no `roles`:
 // every role but CASHIER.
 type NavItem = { key: NavKey; icon: LucideIcon; to?: string; roles?: readonly Role[] }
 // Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Portes en direct and Appareils in Lot 2,
-// Guichet and Finance (its Encaissements page) in Lot 3.
+// Guichet and Finance (its Encaissements page) in Lot 3, Fans · CRM in Lot 4.
 const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: NavItem[] }[] = [
   {
     group: 'manage',
@@ -93,7 +93,7 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
     items: [
       { key: 'invitations', icon: IdCard },
       { key: 'finance', icon: Landmark, to: '/finance/cash', roles: ['ADMIN', 'OPS', 'FINANCE'] },
-      { key: 'crm', icon: Users },
+      { key: 'crm', icon: Users, to: '/crm', roles: ['ADMIN', 'OPS', 'FINANCE'] },
     ],
   },
   { group: 'settings', items: [{ key: 'venues', icon: MapPin, to: '/settings/venues' }] },
@@ -117,7 +117,9 @@ const section = (pathname: string): Section | null =>
                 ? 'pos'
                 : pathname.startsWith('/finance')
                   ? 'finance'
-                  : null
+                  : pathname.startsWith('/crm')
+                    ? 'crm'
+                    : null
 
 const initials = (name: string) =>
   name
