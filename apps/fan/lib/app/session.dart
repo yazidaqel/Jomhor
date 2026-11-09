@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
+import 'package:jomhor_fan/features/club/club_seen.dart';
 import 'package:jomhor_fan/features/tickets/gate_load.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,7 +41,12 @@ class Session extends Notifier<bool> {
   Future<void> signOut() async {
     try {
       // Both run even if one fails.
-      await Future.wait([ref.read(tokenStoreProvider).clear(), ref.read(ticketCacheProvider).wipe(), wipeEntered()]);
+      await Future.wait([
+        ref.read(tokenStoreProvider).clear(),
+        ref.read(ticketCacheProvider).wipe(),
+        wipeEntered(),
+        wipeClubSeen(),
+      ]);
     } on Object {
       // Storage failed: signed out for this run anyway (no button callback sees the error).
     } finally {

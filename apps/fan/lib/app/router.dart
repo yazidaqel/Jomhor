@@ -8,6 +8,7 @@ import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_screen.dart';
 import 'package:jomhor_fan/features/checkout/order_screen.dart';
 import 'package:jomhor_fan/features/checkout/zones_screen.dart';
+import 'package:jomhor_fan/features/club/club_screen.dart';
 import 'package:jomhor_fan/features/clubs/clubs_screen.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
@@ -21,6 +22,8 @@ import 'package:jomhor_fan/features/tickets/tickets_screen.dart';
 /// Paths that need a session; events are public (no login prompt to browse), buying is not.
 bool needsSession(String path) =>
     path.startsWith('/tickets') ||
+    path == '/club' ||
+    path.startsWith('/club/') ||
     path.startsWith('/profile') ||
     path.startsWith('/orders') ||
     RegExp('^/events/[^/]+/(zones|checkout)').hasMatch(path);
@@ -37,7 +40,7 @@ bool isTicketsLink(Uri uri) =>
 String afterLogin(String? from) =>
     from != null && from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login') ? from : '/';
 
-/// Routes follow design/DESIGN.md §Screen inventory. Lot 1 tabs: Accueil · Billets · Profil.
+/// Routes follow design/DESIGN.md §Screen inventory. Lot 4 tabs: Accueil · Billets · Club · Profil.
 final routerProvider = Provider<GoRouter>((ref) {
   final sessionChanged = ValueNotifier(0);
   ref
@@ -74,6 +77,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: '/tickets', builder: (context, state) => const TicketsScreen())],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/club',
+                builder: (context, state) =>
+                    ClubScreen(organizer: state.uri.queryParameters['organizer'], request: state.extra),
+              ),
+            ],
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen())],

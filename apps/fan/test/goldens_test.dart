@@ -6,13 +6,16 @@ import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/app.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
+import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/app_theme.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
+import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'cash_order_test.dart' show CashSale, orderId;
+import 'club_test.dart' show ClubBackend, loyaltyJson, memberJson;
 import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
@@ -24,7 +27,8 @@ import 'transfer_test.dart' show openTicketJson, transferredJson;
 /// the top bar with the Jomhor lockup (design/BRAND.md). Next to the
 /// pictures, the rules the pictures show are asserted: right to left, Western digits only, codes and prices in
 /// left-to-right isolates. Multi-club (FL-23..25): screen 11, the club chips on screen 1, the club line on tickets.
-/// FL-19: screen 5 gate side and "Tu es dedans". Recorded on Linux with the docker command at the top of goldens.dart.
+/// FL-19: screen 5 gate side and "Tu es dedans". FL-20: screen 7 (two member cards, a non-member, the join sheet)
+/// and the member strip on screen 1. Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +98,11 @@ void main() {
           ],
         }),
         ('GET', '/v1/fan/orders') => json({'orders': <Object?>[]}),
+        // FL-20: a member of Atlas FC only, so the strip names it.
+        ('GET', '/v1/fan/me/membership') => json({
+          'member': r.url.queryParameters['organizer'] == testOrganizer ? memberJson() : null,
+          'loyalty': loyaltyJson(tier: locale == 'ar' ? 'وفي' : 'Fidèle'),
+        }),
         _ => apiError(404, 'NOT_FOUND'),
       };
       await pumpJomhor(
@@ -108,6 +117,7 @@ void main() {
       // Mes clubs · Atlas FC · Olympique Tensift · Tout, Mes clubs selected (DESIGN.md §Multi-club adjustments).
       expect(find.byKey(const Key('home.chip.mine')), findsOneWidget);
       expect(find.byKey(const Key('home.chip.$otherOrganizer')), findsOneWidget);
+      expect(find.byKey(const Key('home.member')), findsOneWidget);
       if (locale == 'ar') {
         expectArabicRules(tester);
         expect(find.text('الماتش الجاي · فدارنا'), findsOneWidget);
@@ -118,6 +128,26 @@ void main() {
       expectLockupAtStart(tester, find.byType(BrandBar));
       // The same bar alone, on the ground colour it sits on in the app.
       final bar = tester.widget<BrandBar>(find.byType(BrandBar));
+      // FL-20: the member strip under "Mon billet", scrolled into view above the nav.
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('home.member')),
+        300,
+        scrollable: find.ancestor(of: find.byKey(const Key('home.greeting')), matching: find.byType(Scrollable)).first,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(const Key('home.member'))).bottom,
+        lessThan(tester.getRect(find.byType(NavigationBar)).top),
+      );
+      expect(
+        find.text(
+          locale == 'ar'
+              ? 'رقم ${lookupAppLocalizations(const Locale('ar')).ltr('000042')} · وفي · 8 ماتشات'
+              : 'N° 000042 · Fidèle · 8 matchs',
+        ),
+        findsOneWidget,
+      );
+      await snap('$locale-1-accueil-membre');
       await tester.pumpWidget(
         MaterialApp(
           theme: buildAppTheme(),
@@ -276,6 +306,54 @@ void main() {
           if (entered) expect(find.text('راك داخل'), findsOneWidget);
         }
         await snap('$locale-5-billet-$face');
+      });
+    }
+
+    // FL-20: screen 7, on a phone of its own (club.seen included), after the number has rolled and the dots filled.
+    for (final (name, members, follows) in [
+      ('7-club', {testOrganizer, otherOrganizer}, const [testOrganizer, otherOrganizer]),
+      ('7-club-non-membre', <String>{}, const [testOrganizer]),
+      ('7-club-rejoindre', <String>{}, const [testOrganizer]),
+    ]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await phone(tester);
+        final before = SharedPreferencesAsyncPlatform.instance;
+        SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+        addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+        final ar = locale == 'ar';
+        final backend = ClubBackend(
+          members: {for (final id in members) id: memberJson(number: id == testOrganizer ? 42 : 1907)},
+          loyalty: {
+            for (final id in follows) id: loyaltyJson(tier: ar ? 'وفي' : 'Fidèle', nextTier: ar ? 'ركيزة' : 'Pilier'),
+          },
+        );
+        final c = await pumpJomhor(
+          tester,
+          backend: backend.handle,
+          tokens: MemoryTokenStore('jwt'),
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+          follows: (ids: follows, seen: true, chip: null),
+        );
+        c.read(routerProvider).go('/club');
+        await tester.pumpAndSettle();
+        if (name == '7-club-rejoindre') {
+          await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
+          await tester.pumpAndSettle();
+        }
+        if (members.isNotEmpty) {
+          // The number reads left to right in every locale.
+          expect(tester.widget<Text>(find.byKey(const Key('club.number')).first).textDirection, TextDirection.ltr);
+          expect(find.text('000042'), findsOneWidget);
+        }
+        // The season runs in reading direction: the twelfth (amber) dot at the end, on the left in AR.
+        final (first, last) = (
+          tester.getCenter(find.byKey(const Key('club.dot.attended.101'))).dx,
+          tester.getCenter(find.byKey(const Key('club.dot.next'))).dx,
+        );
+        expect(ar ? last < first : first < last, isTrue);
+        if (ar) expectArabicRules(tester);
+        await snap('$locale-$name');
       });
     }
 

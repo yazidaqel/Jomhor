@@ -6,6 +6,7 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/clock.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
+import 'package:jomhor_fan/features/club/member_strip.dart';
 import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:jomhor_fan/features/clubs/clubs_repository.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
@@ -70,9 +71,10 @@ class HomeScreen extends ConsumerWidget {
             const _CashStrip(),
             ...events.when(
               // Without the hero (offline on matchday, say) the strip still leads to the ticket.
-              loading: () => [const MyTicketStrip(), const SkeletonList(hero: true)],
+              loading: () => [const MyTicketStrip(), const MemberStrip(), const SkeletonList(hero: true)],
               error: (e, _) => [
                 const MyTicketStrip(),
+                const MemberStrip(),
                 ErrorPanel(
                   error: e,
                   onRetry: () => ref
@@ -81,13 +83,14 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ],
               data: (list) => list.isEmpty
-                  ? [const MyTicketStrip(), _Empty(view: view)]
+                  ? [const MyTicketStrip(), const MemberStrip(), _Empty(view: view)]
                   : [
                       Entrance(
                         index: 2,
                         child: _Hero(event: list.first, now: now, view: view),
                       ),
                       const Entrance(index: 3, child: MyTicketStrip()),
+                      const Entrance(index: 3, child: MemberStrip()),
                       if (list.length > 1) ...[
                         const SizedBox(height: JomhorSpace.l),
                         Entrance(index: 4, child: Text(l.calendar, style: JomhorType.h2)),
@@ -238,9 +241,10 @@ class _CardClubLine extends ConsumerWidget {
       crestUrl: club.crestUrl,
       trailing: switch ((view?.chip == chipAll, followed)) {
         (false, _) => null,
+        // Start padding only: the calendar row leaves the club line about 126 px on a 390 px phone.
         (true, true) => Padding(
           key: Key('home.following.${event.id}'),
-          padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.m),
+          padding: const EdgeInsetsDirectional.only(start: JomhorSpace.s),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -262,7 +266,7 @@ class _CardClubLine extends ConsumerWidget {
           onPressed: () => ref.read(followsProvider.notifier).follow(club.id),
           style: TextButton.styleFrom(
             minimumSize: const Size(JomhorSize.touchMin, JomhorSize.touchMin),
-            padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.m),
+            padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.s),
             foregroundColor: JomhorColors.accent,
             textStyle: JomhorType.caption.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
           ),
