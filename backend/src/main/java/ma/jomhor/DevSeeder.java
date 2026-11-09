@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.catalog.application.EventService.EventInput;
 import ma.jomhor.catalog.application.VenueService;
@@ -21,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -32,7 +35,7 @@ import tools.jackson.databind.node.JsonNodeFactory;
  * demo fans), for each demo club in turn. Idempotent by event title per club: a missing demo event is created,
  * priced, published, and the demo fan gets a ticket for it (a till sale by the dev admin on that club's till, with
  * two paper tickets); then the club's ON_SALE demo events get their times moved relative to now, so the stack is
- * always testable. The past event is closed once and left alone.
+ * always testable. Past events are closed once and left alone; the demo fan was admitted at most of the archive ones.
  */
 @Component
 @Profile("dev")
@@ -59,6 +62,27 @@ class DevSeeder implements ApplicationRunner {
     static final Demo MATCHDAY = new Demo("ATLAS FC vs Sporting Anfa", "Sporting Anfa", 11, Duration.ofMinutes(75),
             Duration.ofHours(2));
     static final Demo PAST = new Demo("ATLAS FC vs Union Rif", "Union Rif", 10, Duration.ofDays(-7), Duration.ofHours(2));
+    /**
+     * Plan lot-4 Q98: ten earlier home matches, a week apart before PAST, so the Club tab shows 11 past dots. The oldest
+     * is last season's final matchday.
+     */
+    static final List<Demo> ARCHIVE = List.of(
+            past("Étoile Souss", 9, 2), past("Chabab Draa", 8, 3), past("Ittihad Saïss", 7, 4),
+            past("Moghreb Côtier", 6, 5), past("Racing Tadla", 5, 6), past("Hilal Oriental", 4, 7),
+            past("Najm Ziz", 3, 8), past("Amal Loukkos", 2, 9), past("Fath Bouregreg", 1, 10),
+            past("Nahda Dakhla", 30, 11));
+    /** Archive matches the demo fan missed: admitted at the other seven. */
+    static final Set<Demo> MISSED = Set.of(ARCHIVE.get(2), ARCHIVE.get(5), ARCHIVE.get(8));
+    /** Retired scanner, P1 (Honneur) and the PIN gate agent of R__dev_seed.sql: where the archive admissions happened. */
+    static final UUID ARCHIVE_DEVICE = UUID.fromString("a7a5fc00-0000-4000-8000-000000000501");
+    static final UUID GATE_P1 = UUID.fromString("a7a5fc00-0000-4000-8000-000000000401");
+    static final UUID GATE_AGENT = UUID.fromString("a7a5fc00-0000-4000-8000-000000000205");
+
+    private static Demo past(String opponent, int matchday, int weeksAgo) {
+        return new Demo("ATLAS FC vs " + opponent, opponent, matchday, Duration.ofDays(-7L * weeksAgo),
+                Duration.ofHours(2));
+    }
+
     /** The second demo club's home event (plan multi-club Q76): on sale, the demo fan holds a ticket. */
     static final Demo TENSIFT_HOME = new Demo("Olympique Tensift vs Union Rif", "Union Rif", 12, Duration.ofDays(6),
             Duration.ofHours(2));
@@ -66,7 +90,8 @@ class DevSeeder implements ApplicationRunner {
     /** A demo club: R__dev_seed.sql's organizer and venue (the dev admin is ADMIN there), and its demo events. */
     record Club(UUID org, UUID venue, List<Demo> demos) {}
 
-    static final List<Club> CLUBS = List.of(new Club(ORG, VENUE, List.of(UPCOMING, MATCHDAY, PAST)),
+    static final List<Club> CLUBS = List.of(
+            new Club(ORG, VENUE, Stream.concat(Stream.of(UPCOMING, MATCHDAY, PAST), ARCHIVE.stream()).toList()),
             new Club(TENSIFT, TENSIFT_VENUE, List.of(TENSIFT_HOME)));
 
     /** Centimes and quota per zone code of the dev venues (a code a venue lacks is skipped). */
@@ -78,12 +103,15 @@ class DevSeeder implements ApplicationRunner {
     private final EventService events;
     private final VenueService venues;
     private final PosService pos;
+    private final JdbcClient jdbc;
     private final TransactionTemplate tx;
 
-    DevSeeder(EventService events, VenueService venues, PosService pos, PlatformTransactionManager transactions) {
+    DevSeeder(EventService events, VenueService venues, PosService pos, JdbcClient jdbc,
+              PlatformTransactionManager transactions) {
         this.events = events;
         this.venues = venues;
         this.pos = pos;
+        this.jdbc = jdbc;
         this.tx = new TransactionTemplate(transactions);
     }
 
@@ -143,10 +171,30 @@ class DevSeeder implements ApplicationRunner {
                 List.of(new HolderRequest("Karim Alaoui", null), new HolderRequest("Nadia Berrada", null))));
         long cash = pos.sale(club.org(), ADMIN, UUID.randomUUID(), id, items).view().order().totalMad();
         move(club, id, d, now);
-        if (d == PAST) {
+        if (d.kickoff().isNegative()) {
             events.close(club.org(), ADMIN, id);
         }
+        if (ARCHIVE.contains(d) && !MISSED.contains(d)) {
+            admit(club, id);
+        }
         return cash;
+    }
+
+    /**
+     * One OK scan of the demo fan's ticket, 40 min before kickoff. Written as a row: ingestion takes only signed device
+     * batches, and this is dev history, not a gate.
+     */
+    private void admit(Club club, int eventId) {
+        jdbc.sql("""
+                        insert into scans (scan_id, organizer_id, event_id, device_id, ticket_id, gate_id, staff_id,
+                                           direction, result, token_version, device_time)
+                        select uuidv7(), t.organizer_id, t.event_id, ?, t.id, ?, ?, 'IN', 'OK', 1,
+                               e.starts_at - interval '40 minutes'
+                        from tickets t join events e on e.id = t.event_id and e.organizer_id = t.organizer_id
+                        join users u on u.id = t.holder_user_id
+                        where t.organizer_id = ? and t.event_id = ? and u.phone_e164 = ?
+                        """)
+                .params(ARCHIVE_DEVICE, GATE_P1, GATE_AGENT, club.org(), eventId, FAN_PHONE).update();
     }
 
     private void move(Club club, int id, Demo d, Instant now) {

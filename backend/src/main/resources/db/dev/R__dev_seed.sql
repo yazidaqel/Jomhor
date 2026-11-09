@@ -84,6 +84,13 @@ insert into staff (id, organizer_id, name, role, pin_hash) values
    'pbkdf2-sha256$10000$EBESExQVFhcYGRobHB0eHw$Wzdm_KJN_gc6hqVgmslgQuahKrWpsf0rtnBoe55hD6I')
 on conflict do nothing;
 
+-- A retired scanner (Lot 4 BE-31, plan Q98): DevSeeder's past admissions of the demo fan point at it. Revoked, and
+-- its public key is a placeholder byte, so it can never sign a request.
+insert into devices (id, organizer_id, label, public_key, status, approved_at, revoked_at) values
+  ('a7a5fc00-0000-4000-8000-000000000501', 'a7a5fc00-0000-4000-8000-000000000001', 'PDA archive', '\x00'::bytea,
+   'REVOKED', now(), now())
+on conflict do nothing;
+
 -- ---------- multi-club (plan multi-club Q76) ----------
 -- ATLAS FC is listed (docs/04-api.md §Club directory); a slug set by hand on a dev database is left alone.
 update organizers set slug = 'atlas-fc' where id = 'a7a5fc00-0000-4000-8000-000000000001' and slug is null;
