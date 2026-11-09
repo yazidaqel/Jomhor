@@ -160,6 +160,30 @@ void main() {
     expect(await savedCache(), isNotNull, reason: 'a failed refresh keeps the saved tickets');
   });
 
+  testWidgets('offline inside the gate load window: screen 5 calls /fan/gates/7/load only, and still rotates', (
+    tester,
+  ) async {
+    seedCache([ticketJson()]);
+    final t0 = DateTime.parse('2027-03-13T19:00:00Z');
+    // T0 - 2 h: matchday opens screen 5 straight away, inside [T0 - 3 h, T0 + 1 h].
+    final c = await pumpJomhor(
+      tester,
+      backend: offline,
+      tokens: MemoryTokenStore('jwt'),
+      clock: TestClock(t0.subtract(const Duration(hours: 2))),
+      keepSecureStorage: true,
+    );
+    expect(location(c), '/tickets/$ticketId');
+    final before = calls.length; // the launch refresh, which failed, and the first gate load poll
+    final first = shownQr(tester);
+    await tester.pump(const Duration(seconds: 60));
+    expect(shownQr(tester), isNot(first));
+    final screen5 = calls.skip(before).map((r) => r.url.path).toList();
+    expect(screen5, isNotEmpty);
+    expect(screen5.toSet(), {'/v1/fan/gates/7/load'});
+    expect(find.byType(TicketQr), findsOneWidget);
+  });
+
   testWidgets('the server offset is applied: a device clock 5 min ahead still shows the server slot', (tester) async {
     final server = slotStart.add(const Duration(seconds: 2));
     final c = await pumpJomhor(

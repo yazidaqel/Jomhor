@@ -271,5 +271,18 @@
   "clubKind": "{kind, select, SPORTS_CLUB{Sports club} PROMOTER{Promoter} VENUE{Venue} other{Organizer}}",
   "homeNoMatch": "No upcoming match",
   "homeNoEvent": "No upcoming event",
-  "homeSeeAll": "See all"
+  "homeSeeAll": "See all",
+  "gateRoute": "Directions",
+  "gateOpenMaps": "Open in Maps",
+  "gateFlipBack": "Turn the ticket over",
+  "gateOthers": "Other gates for your zone",
+  "gateLevelLow": "Quiet",
+  "gateLevelMedium": "Moderate",
+  "gateLevelHigh": "Busy",
+  "gateSmoother": "Gate {code} is quieter right now",
+  "gateShow": "{gates}, see directions",
+  "gateSideLabel": "Gate side of the ticket, gate {code}",
+  "ticketEntered": "You're in",
+  "ticketEnteredAt": "Entered at {time} · Gate {code}",
+  "gateMore": "+{count}"
 }

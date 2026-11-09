@@ -920,4 +920,53 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeSeeAll => 'See all';
+
+  @override
+  String get gateRoute => 'Directions';
+
+  @override
+  String get gateOpenMaps => 'Open in Maps';
+
+  @override
+  String get gateFlipBack => 'Turn the ticket over';
+
+  @override
+  String get gateOthers => 'Other gates for your zone';
+
+  @override
+  String get gateLevelLow => 'Quiet';
+
+  @override
+  String get gateLevelMedium => 'Moderate';
+
+  @override
+  String get gateLevelHigh => 'Busy';
+
+  @override
+  String gateSmoother(String code) {
+    return 'Gate $code is quieter right now';
+  }
+
+  @override
+  String gateShow(String gates) {
+    return '$gates, see directions';
+  }
+
+  @override
+  String gateSideLabel(String code) {
+    return 'Gate side of the ticket, gate $code';
+  }
+
+  @override
+  String get ticketEntered => 'You\'re in';
+
+  @override
+  String ticketEnteredAt(String time, String code) {
+    return 'Entered at $time · Gate $code';
+  }
+
+  @override
+  String gateMore(int count) {
+    return '+$count';
+  }
 }

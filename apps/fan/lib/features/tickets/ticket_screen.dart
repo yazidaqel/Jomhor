@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show pi;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,8 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_core/jomhor_core.dart' show slotAt;
 import 'package:jomhor_fan/core/venue_time.dart';
+import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
+import 'package:jomhor_fan/features/tickets/gate_load.dart';
+import 'package:jomhor_fan/features/tickets/gate_side.dart';
 import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
@@ -37,8 +41,10 @@ String ticketStatusText(AppLocalizations l, FanTicket t) => switch (t.status) {
 /// "3, 4" for the gate codes, with the locale's list separator.
 String gatesText(AppLocalizations l, FanTicket t) => t.gateCodes.join(l.listSeparator);
 
-/// Screen 5 · Mon billet (DESIGN.md + Lot 1 adjustments). Reads the saved tickets only, so it works in airplane
-/// mode; its one network call is the WhatsApp re-send, on a tap. Full brightness and screen kept awake while shown.
+/// Screen 5 · Mon billet (DESIGN.md + Lot 1 and Lot 4 adjustments). Reads the saved tickets, so the QR, the gate
+/// side and the directions work in airplane mode. Network calls: the WhatsApp re-send, on a tap, and on matchday the
+/// gate load poll (`/fan/gates/{event}/load`: chips and "Tu es dedans"), only while visible, from T0 - 3 h to
+/// T0 + 1 h, every 60 s ± 10 s, until the shown ticket is entered. Full brightness and screen kept awake while shown.
 class TicketScreen extends ConsumerStatefulWidget {
   const new({required this.id, this.origin, super.key});
 
@@ -62,11 +68,21 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
   /// The ticket just given away, as it was: it slides out of the screen before the wallet shows its new row.
   FanTicket? _gone;
 
+  /// Tickets showing their gate side.
+  final _gateSide = <String>{};
+
+  /// Tickets entered while this screen is open: they flip once to "Tu es dedans". The others open on it.
+  final _entering = <String>{};
+
+  /// No sheet over this screen (read in build).
+  var _current = true;
+
   @override
   void initState() {
     super.initState();
     unawaited(_glow(on: true));
     _schedule();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePoll());
   }
 
   /// Redraws on each server-time second: the QR changes right at each 30 s boundary, and the matchday label
@@ -77,14 +93,80 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
     _tick = Timer(Duration(milliseconds: 1000 - ms), () {
       if (!mounted) return;
       _tickHaptic();
+      _maybePoll();
       setState(() {});
       _schedule();
     });
   }
 
+  /// The ticket of the current page.
+  FanTicket? _shown() {
+    final snapshot = ref.read(ticketsProvider).value?.snapshot;
+    final ticket = snapshot?.tickets.where((t) => t.id == widget.id).firstOrNull;
+    if (snapshot == null || ticket == null) return null;
+    final group = snapshot.ofEvent(ticket.event.id);
+    return group[_page.clamp(0, group.length - 1)];
+  }
+
+  bool get _visible {
+    final app = WidgetsBinding.instance.lifecycleState;
+    return mounted && _current && (app == null || app == AppLifecycleState.resumed);
+  }
+
+  /// On each tick: the event's [GateLoads] decides whether a gate load poll is due.
+  void _maybePoll() {
+    final shown = _shown();
+    final now = ref.read(ticketsProvider).value?.snapshot?.clock.now();
+    if (shown != null && now != null) unawaited(_poll(shown, now));
+  }
+
+  Future<void> _poll(FanTicket shown, DateTime now) async {
+    final fresh = await ref.read(gateLoadProvider(shown.event.id).notifier).pollIfDue(shown, now, visible: _visible);
+    if (!mounted || fresh.isEmpty) return;
+    setState(() {
+      _entering.addAll(fresh);
+      _gateSide.removeAll(fresh);
+    });
+    // The stadium tells the fan they made it.
+    if (fresh.contains(_shown()?.id)) unawaited(HapticFeedback.heavyImpact());
+  }
+
+  void _flip(String ticketId) => setState(() {
+    if (!_gateSide.remove(ticketId)) _gateSide.add(ticketId);
+  });
+
+  /// The card of [t] with its faces (three while it flips to "Tu es dedans"), all as tall as the tallest.
+  Widget _card(FanTicket t, DateTime now, bool matchday, Map<String, Entry> entered) {
+    final entry = entered[t.id];
+    final gate = t.hasQr && _gone == null ? () => _flip(t.id) : null;
+    Widget front(Entry? e) => _TicketCard(ticket: t, now: now, matchday: matchday, entry: e, onGate: gate);
+    final entering = entry != null && _entering.contains(t.id);
+    return IntrinsicHeight(
+      child: _Flip(
+        shown: _gateSide.contains(t.id) ? 'gate' : (entering ? 'entered' : 'front'),
+        faces: {
+          // Opened on an entered ticket: the entered face is the front, with no flip.
+          'front': front(entering ? null : entry),
+          'entered': ?(entering ? front(entry) : null),
+          if (t.hasQr)
+            'gate': GateFace(
+              ticket: t,
+              load: ref.watch(gateLoadProvider(t.event.id)),
+              now: now,
+              matchday: matchday,
+              onBack: () => _flip(t.id),
+              onMaps: (url) => unawaited(ref.read(openMapsProvider)(url)),
+            ),
+        },
+      ),
+    );
+  }
+
   void _tickHaptic() {
     final snapshot = ref.read(ticketsProvider).value?.snapshot;
-    final shows = snapshot?.tickets.any((t) => t.id == widget.id && t.hasQr) ?? false;
+    // An entered ticket shows "Tu es dedans" instead of its QR: no tick for a code nobody sees.
+    final entered = ref.read(enteredProvider).value?.containsKey(widget.id) ?? false;
+    final shows = !entered && (snapshot?.tickets.any((t) => t.id == widget.id && t.hasQr) ?? false);
     final slot = shows ? slotAt(snapshot!.clock.now()) : null;
     if (slot != null && _slot != null && slot != _slot) unawaited(HapticFeedback.selectionClick());
     _slot = slot;
@@ -165,6 +247,9 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
     final shown = group[_page.clamp(0, group.length - 1)];
     final now = snapshot.clock.now();
     final matchday = isMatchday(shown, now);
+    final entered = ref.watch(enteredProvider).value ?? const <String, Entry>{};
+    final shownEntered = entered.containsKey(shown.id);
+    _current = ModalRoute.isCurrentOf(context) ?? true;
     return Scaffold(
       body: Stack(
         children: [
@@ -210,9 +295,9 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
                                 final origin? when t.id == widget.id && !reduceMotion(context) => Hero(
                                   tag: passHeroTag(origin, t.id),
                                   flightShuttleBuilder: passFlight,
-                                  child: _TicketCard(ticket: t, now: now, matchday: matchday),
+                                  child: _card(t, now, matchday, entered),
                                 ),
-                                _ => _TicketCard(ticket: t, now: now, matchday: matchday),
+                                _ => _card(t, now, matchday, entered),
                               },
                             ),
                         ],
@@ -221,7 +306,25 @@ class _TicketScreenState extends ConsumerState<TicketScreen> {
                   ),
                 ),
                 if (group.length > 1) _Dots(count: group.length, current: _page),
-                _Actions(ticket: _gone ?? shown, now: now, onTransfer: _gone == null ? () => _transfer(shown) : null),
+                if (shown.hasQr && !shownEntered && _gone == null)
+                  // The gate side already says all of it: the row fades out while it is up (keeping its room, so
+                  // the card does not move).
+                  _Fade(
+                    key: const Key('gate.rowFade'),
+                    shown: !_gateSide.contains(shown.id),
+                    child: GateRow(
+                      ticket: shown,
+                      load: ref.watch(gateLoadProvider(shown.event.id)),
+                      now: now,
+                      onRoute: () => _flip(shown.id),
+                    ),
+                  ),
+                _Actions(
+                  ticket: _gone ?? shown,
+                  now: now,
+                  entered: shownEntered,
+                  onTransfer: _gone == null ? () => _transfer(shown) : null,
+                ),
               ],
             ),
           ),
@@ -297,14 +400,128 @@ class _Header extends StatelessWidget {
   }
 }
 
+/// The paper of a card face: radius 28, the matchday glow behind it. Each face carries its own, so it turns with it.
+class TicketPaper extends StatelessWidget {
+  const new({required this.matchday, required this.child, super.key});
+
+  final bool matchday;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedContainer(
+    duration: motionOf(context, JomhorMotion.ticketFlip),
+    decoration: BoxDecoration(
+      color: JomhorColors.ticketPaper,
+      borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.cardLarge)),
+      boxShadow: [
+        BoxShadow(
+          color: matchday ? JomhorColors.accent.withValues(alpha: 0.5) : JomhorColors.ground.withValues(alpha: 0),
+          blurRadius: 36,
+          spreadRadius: 2,
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.cardLarge)),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(color: JomhorColors.ticketInk),
+        child: child,
+      ),
+    ),
+  );
+}
+
+/// The band of a card face: the Jomhor mark (all ink on amber, far from the QR), [overline], [title] and the ticket's
+/// club crest. Amber, or `success` once the ticket is entered. The club is content here, never a colour.
+class TicketBand extends StatelessWidget {
+  const new({
+    required this.title,
+    this.overline,
+    this.club,
+    this.success = false,
+    this.crestKey = const Key('ticket.crest'),
+    super.key,
+  });
+
+  final String title;
+  final String? overline;
+  final Club? club;
+  final bool success;
+  final Key crestKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final ink = success ? JomhorColors.text : JomhorColors.onAccent;
+    return ColoredBox(
+      key: Key(success ? 'ticket.band.success' : 'ticket.band'),
+      color: success ? JomhorColors.success : JomhorBrand.amber,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(JomhorSpace.xl, JomhorSpace.m, JomhorSpace.l, JomhorSpace.l),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      JomhorMark(size: 28, onAmber: !success),
+                      if (overline case final text?)
+                        Expanded(
+                          child: Text(
+                            text.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: JomhorType.caption
+                                .copyWith(
+                                  color: ink.withValues(alpha: 0.72),
+                                  letterSpacing: 1.5,
+                                  fontWeight: FontWeight.w600,
+                                )
+                                .tracked(context),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(title.toUpperCase(), style: JomhorType.hero.copyWith(fontSize: 29, color: ink)),
+                ],
+              ),
+            ),
+            // The ticket's club (a cache saved before multi-club has none: no crest then).
+            if (club case final club?) ...[
+              const SizedBox(width: JomhorSpace.m),
+              Crest(
+                key: crestKey,
+                name: club.name,
+                url: club.crestUrl,
+                size: JomhorSize.touchMin,
+                disc: JomhorColors.ground,
+                ink: JomhorColors.accent,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The front of the card: band, facts, holder, perforation and the rotating QR; once [entry] is set, "Tu es dedans"
+/// on a `success` band in place of the QR (DESIGN.md Lot 4, screen 5 entry).
 class _TicketCard extends StatelessWidget {
-  const new({required this.ticket, required this.now, required this.matchday});
+  const new({required this.ticket, required this.now, required this.matchday, this.entry, this.onGate});
 
   final FanTicket ticket;
 
   /// Server time of this frame.
   final DateTime now;
   final bool matchday;
+  final Entry? entry;
+
+  /// The PORTE fact flips the card to its gate side; null when there is none (no QR).
+  final VoidCallback? onGate;
 
   @override
   Widget build(BuildContext context) {
@@ -327,12 +544,21 @@ class _TicketCard extends StatelessWidget {
       color: JomhorColors.ticketInk,
     );
 
-    Widget fact(String name, String text, [String? caption]) => Column(
+    Widget fact(String name, String text, {String? caption, String? extra, bool chevron = false}) => Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(name.toUpperCase(), style: muted),
         const SizedBox(height: 4),
-        Text(text, style: value),
+        Row(
+          children: [
+            Flexible(child: Text(text, style: value)),
+            if (extra != null) ...[
+              const SizedBox(width: JomhorSpace.xs),
+              Text(extra, key: const Key('ticket.gateMore'), style: muted.copyWith(fontSize: 13, letterSpacing: 0)),
+            ],
+            if (chevron) const Icon(Icons.chevron_right_rounded, size: 20, color: JomhorColors.ticketMuted),
+          ],
+        ),
         if (caption != null) ...[
           const SizedBox(height: 2),
           Text(caption, style: muted.copyWith(letterSpacing: 0, fontWeight: FontWeight.w500)),
@@ -340,184 +566,184 @@ class _TicketCard extends StatelessWidget {
       ],
     );
 
-    return AnimatedContainer(
-      duration: motionOf(context, JomhorMotion.ticketFlip),
-      decoration: BoxDecoration(
-        color: JomhorColors.ticketPaper,
-        borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.cardLarge)),
-        boxShadow: [
-          BoxShadow(
-            color: matchday ? JomhorColors.accent.withValues(alpha: 0.5) : JomhorColors.ground.withValues(alpha: 0),
-            blurRadius: 36,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.cardLarge)),
-        child: DefaultTextStyle.merge(
-          style: const TextStyle(color: JomhorColors.ticketInk),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Amber band: the Jomhor mark (all ink on amber, far from the QR), competition, title, crest.
-              ColoredBox(
-                color: JomhorBrand.amber,
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(
-                    JomhorSpace.xl,
-                    JomhorSpace.m,
-                    JomhorSpace.l,
-                    JomhorSpace.l,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const JomhorMark(size: 28, onAmber: true),
-                                if (label != null)
-                                  Expanded(
-                                    child: Text(
-                                      label.toUpperCase(),
-                                      style: JomhorType.caption
-                                          .copyWith(
-                                            color: JomhorColors.onAccent.withValues(alpha: 0.72),
-                                            letterSpacing: 1.5,
-                                            fontWeight: FontWeight.w600,
-                                          )
-                                          .tracked(context),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              e.title.toUpperCase(),
-                              style: JomhorType.hero.copyWith(fontSize: 29, color: JomhorColors.onAccent),
-                            ),
-                          ],
+    // Your gate only (lot-4 Q81), on one line; "+2" when the zone has more: the gate side lists them.
+    final yours = t.shownGates.firstOrNull;
+    final more = t.shownGates.length - 1;
+    final gates = fact(
+      l.ticketGates(1),
+      yours?.code ?? '',
+      extra: more > 0 ? l.ltr(l.gateMore(more)) : null,
+      chevron: onGate != null,
+    );
+    return TicketPaper(
+      matchday: matchday,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TicketBand(overline: label, title: e.title, club: e.organizer, success: entry != null),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 18, JomhorSpace.xl, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 4, child: fact(l.ticketZone, t.zone.name)),
+                const SizedBox(width: JomhorSpace.m),
+                Expanded(
+                  flex: 2,
+                  child: switch (onGate) {
+                    // The PORTE fact is the way to the gate side: a 44 px button.
+                    final flip? => Semantics(
+                      button: true,
+                      label: l.gateShow(gateName(l, yours?.code ?? '')),
+                      excludeSemantics: true,
+                      onTap: flip,
+                      child: InkWell(
+                        key: const Key('ticket.gate'),
+                        onTap: flip,
+                        borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.chip)),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: JomhorSize.touchMin),
+                          child: gates,
                         ),
                       ),
-                      // The ticket's club (a cache saved before multi-club has none: no crest then).
-                      if (e.organizer case final club?) ...[
-                        const SizedBox(width: JomhorSpace.m),
-                        Crest(
-                          key: const Key('ticket.crest'),
-                          name: club.name,
-                          url: club.crestUrl,
-                          size: JomhorSize.touchMin,
-                          disc: JomhorColors.ground,
-                          ink: JomhorColors.accent,
-                        ),
+                    ),
+                    null => gates,
+                  },
+                ),
+                const SizedBox(width: JomhorSpace.m),
+                Expanded(
+                  flex: 3,
+                  child: fact(
+                    e.facts is FootballFacts ? l.ticketKickoff : l.ticketStart,
+                    venueClock(e.startsAt, e.timezone, l.localeName),
+                    caption: venueDate(e.startsAt, e.timezone, l.localeName),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, JomhorSpace.xs),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (t.holderLabel case final holder?) ...[
+                        Text(l.ticketHolder.toUpperCase(), style: muted),
+                        const SizedBox(height: 4),
+                        Text(l.isolate(holder), style: strong),
+                      ],
+                      if (t.seatLabel case final seat?) ...[
+                        const SizedBox(height: JomhorSpace.s),
+                        Text(l.ticketSeat.toUpperCase(), style: muted),
+                        const SizedBox(height: 4),
+                        Text(seat, style: strong),
                       ],
                     ],
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 18, JomhorSpace.xl, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 4, child: fact(l.ticketZone, t.zone.name)),
-                    const SizedBox(width: JomhorSpace.m),
-                    Expanded(flex: 2, child: fact(l.ticketGates(t.gateCodes.length), gatesText(l, t))),
-                    const SizedBox(width: JomhorSpace.m),
-                    Expanded(
-                      flex: 3,
-                      child: fact(
-                        e.facts is FootballFacts ? l.ticketKickoff : l.ticketStart,
-                        venueClock(e.startsAt, e.timezone, l.localeName),
-                        venueDate(e.startsAt, e.timezone, l.localeName),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, JomhorSpace.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (t.holderLabel case final holder?) ...[
-                            Text(l.ticketHolder.toUpperCase(), style: muted),
-                            const SizedBox(height: 4),
-                            Text(l.isolate(holder), style: strong),
-                          ],
-                          if (t.seatLabel case final seat?) ...[
-                            const SizedBox(height: JomhorSpace.s),
-                            Text(l.ticketSeat.toUpperCase(), style: muted),
-                            const SizedBox(height: 4),
-                            Text(seat, style: strong),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: JomhorSpace.m),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(l.ticketNumber.toUpperCase(), style: muted),
-                          const SizedBox(height: 4),
-                          Text(
-                            t.ticketNo,
-                            textDirection: TextDirection.ltr,
-                            textAlign: TextAlign.end,
-                            style: JomhorType.h2.copyWith(
-                              fontSize: 20,
-                              color: JomhorColors.ticketInk,
-                              letterSpacing: 1.5,
-                              height: 1.05,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const _Perforation(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.xs, JomhorSpace.xl, JomhorSpace.xl),
-                child: t.hasQr
-                    ? RotatingQr(ticket: t, now: now)
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xxl),
-                        child: Column(
-                          children: [
-                            const Icon(Icons.qr_code_2_rounded, size: 56, color: JomhorColors.ticketRule),
-                            const SizedBox(height: JomhorSpace.m),
-                            Text(
-                              ticketStatusText(l, t),
-                              key: const Key('ticket.status'),
-                              textAlign: TextAlign.center,
-                              style: JomhorType.h2.copyWith(color: JomhorColors.ticketInk),
-                            ),
-                          ],
+                const SizedBox(width: JomhorSpace.m),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(l.ticketNumber.toUpperCase(), style: muted),
+                      const SizedBox(height: 4),
+                      Text(
+                        t.ticketNo,
+                        textDirection: TextDirection.ltr,
+                        textAlign: TextAlign.end,
+                        style: JomhorType.h2.copyWith(
+                          fontSize: 20,
+                          color: JomhorColors.ticketInk,
+                          letterSpacing: 1.5,
+                          height: 1.05,
                         ),
                       ),
-              ),
-            ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+          // When the gate side is the taller face, the extra room goes above the perforation.
+          const Spacer(),
+          const Perforation(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.xs, JomhorSpace.xl, JomhorSpace.xl),
+            child: switch ((entry, t.hasQr)) {
+              (final entry?, _) => _Entered(ticket: t, entry: entry),
+              (null, true) => RotatingQr(ticket: t, now: now),
+              (null, false) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xxl),
+                child: Column(
+                  children: [
+                    const Icon(Icons.qr_code_2_rounded, size: 56, color: JomhorColors.ticketRule),
+                    const SizedBox(height: JomhorSpace.m),
+                    Text(
+                      ticketStatusText(l, t),
+                      key: const Key('ticket.status'),
+                      textAlign: TextAlign.center,
+                      style: JomhorType.h2.copyWith(color: JomhorColors.ticketInk),
+                    ),
+                  ],
+                ),
+              ),
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Tu es dedans" / "راك داخل" and "Entré à 18:42 · Porte 4" (venue time), where the QR was.
+class _Entered extends StatelessWidget {
+  const new({required this.ticket, required this.entry});
+
+  final FanTicket ticket;
+  final Entry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final e = ticket.event;
+    return Padding(
+      key: const Key('ticket.entered'),
+      padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xl),
+      child: Column(
+        children: [
+          const SizedBox.square(
+            dimension: 88,
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: JomhorColors.success, shape: BoxShape.circle),
+              child: Icon(Icons.check_rounded, size: 52, color: JomhorColors.text),
+            ),
+          ),
+          const SizedBox(height: JomhorSpace.l),
+          Text(
+            isRtl(context) ? l.ticketEntered : l.ticketEntered.toUpperCase(),
+            textAlign: TextAlign.center,
+            style: JomhorType.hero.copyWith(color: JomhorColors.ticketInk, fontSize: 40),
+          ),
+          const SizedBox(height: JomhorSpace.s),
+          Text(
+            l.ticketEnteredAt(l.ltr(venueClock(entry.at, e.timezone, l.localeName)), l.ltr(entry.gateCode)),
+            textAlign: TextAlign.center,
+            style: JomhorType.body.copyWith(color: JomhorColors.ticketMuted, fontSize: 14),
+          ),
+        ],
       ),
     );
   }
 }
 
 /// Two ground-coloured notches and a dashed rule between the facts and the QR.
-class _Perforation extends StatelessWidget {
-  const new();
+class Perforation extends StatelessWidget {
+  const new({super.key});
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -573,8 +799,12 @@ class RotatingQr extends StatelessWidget {
     return Column(
       children: [
         // Nothing moves over the QR (DESIGN.md principle 6); it repaints alone each second.
-        RepaintBoundary(
-          child: TicketQr(data: ticket.rotatingToken(now)!, size: size, label: l.ticketQrLabel(ticket.ticketNo)),
+        // Sized here: the card measures its faces (IntrinsicHeight), which the QR's own layout cannot answer.
+        SizedBox.square(
+          dimension: size,
+          child: RepaintBoundary(
+            child: TicketQr(data: ticket.rotatingToken(now)!, size: size, label: l.ticketQrLabel(ticket.ticketNo)),
+          ),
         ),
         const SizedBox(height: 14),
         Row(
@@ -699,11 +929,14 @@ class _Dots extends StatelessWidget {
 
 /// Screen 5 actions (DESIGN.md Lot 4): Transférer (screen 8) and the WhatsApp re-send of the PDF, both for a VALID
 /// ticket. The re-send call runs only on a tap. Transférer is off after `transfer_until`, without a cutoff, or once
-/// the server said the ticket was admitted, with the reason under it.
+/// the server said the ticket was admitted (a refusal, or `/load` entries), with the reason under it.
 class _Actions extends ConsumerStatefulWidget {
-  const new({required this.ticket, required this.now, required this.onTransfer});
+  const new({required this.ticket, required this.now, required this.entered, required this.onTransfer});
 
   final FanTicket ticket;
+
+  /// `/load` listed it: admitted at a gate, so it can no longer be transferred.
+  final bool entered;
 
   /// Server time of this frame: the action turns off the second `transfer_until` passes.
   final DateTime now;
@@ -743,7 +976,7 @@ class _ActionsState extends ConsumerState<_Actions> {
     final t = widget.ticket;
     final valid = t.status == 'VALID';
     final refusals = ref.watch(transferRefusalsProvider);
-    final block = blockOf(t, widget.now, refusals);
+    final block = widget.entered ? TransferBlock.admitted : blockOf(t, widget.now, refusals);
     final blocked = transferBlockText(l, t, block, refusals[t.id]);
     Widget action(Widget button) => Expanded(
       child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 56), child: button),
@@ -786,4 +1019,104 @@ class _ActionsState extends ConsumerState<_Actions> {
       ),
     );
   }
+}
+
+/// The card as a physical object (DESIGN.md principle 6, `motion.ticketFlip`): every face is laid out, the card is
+/// as tall as the tallest (its parent gives it that height), and a change of [shown] turns it about its vertical
+/// axis: the old face to 90°, then the new one from -90°. Instant under reduced motion. Hidden faces are neither
+/// painted, tapped nor read out.
+class _Flip extends StatefulWidget {
+  const new({required this.shown, required this.faces});
+
+  final String shown;
+  final Map<String, Widget> faces;
+
+  @override
+  State<_Flip> createState() => _FlipState();
+}
+
+class _FlipState extends State<_Flip> with SingleTickerProviderStateMixin {
+  late final _turn = AnimationController(vsync: this, value: 1);
+  String? _from;
+
+  @override
+  void didUpdateWidget(_Flip old) {
+    super.didUpdateWidget(old);
+    if (old.shown == widget.shown) return;
+    _from = old.shown;
+    _turn.duration = motionOf(context, JomhorMotion.ticketFlip);
+    if (_turn.duration == Duration.zero) {
+      _turn.value = 1;
+    } else {
+      _turn.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _turn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Turns the way the page reads: towards the start edge.
+    final sign = isRtl(context) ? -1 : 1;
+    return AnimatedBuilder(
+      animation: _turn,
+      builder: (context, _) {
+        final t = Curves.easeInOutCubic.transform(_turn.value);
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            for (final MapEntry(key: name, value: face) in widget.faces.entries)
+              () {
+                final angle = switch (name) {
+                  _ when name == widget.shown && t >= 0.5 => -(1 - t) * pi,
+                  _ when name == _from && t < 0.5 => t * pi,
+                  _ => null,
+                };
+                return Visibility(
+                  key: Key('ticket.face.$name'),
+                  visible: angle != null,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()
+                      ..setEntry(3, 2, 0.0012)
+                      ..rotateY(sign * (angle ?? 0)),
+                    child: face,
+                  ),
+                );
+              }(),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// [child] faded out and out of reach (taps, screen readers) while not [shown]; `motion.base`, instant under reduced
+/// motion.
+class _Fade extends StatelessWidget {
+  const new({required this.shown, required this.child, super.key});
+
+  final bool shown;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    ignoring: !shown,
+    child: ExcludeSemantics(
+      excluding: !shown,
+      child: AnimatedOpacity(
+        opacity: shown ? 1 : 0,
+        duration: motionOf(context, JomhorMotion.base),
+        curve: Curves.easeOut,
+        child: child,
+      ),
+    ),
+  );
 }

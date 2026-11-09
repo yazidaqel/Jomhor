@@ -22,6 +22,7 @@ class FanTicket {
     required this.event,
     required this.zone,
     required this.gateCodes,
+    this.gates = const [],
     this.holderLabel,
     this.seatLabel,
     this.transferUntil,
@@ -40,6 +41,16 @@ class FanTicket {
       event: TicketEvent.fromJson(j['event']! as Map<String, Object?>),
       zone: (id: zone['id']! as int, code: zone['code']! as String, name: zone['name']! as String),
       gateCodes: [for (final g in j['gate_codes']! as List<Object?>) g! as String],
+      // Lot 4, optional: a cache saved before it has no `gates` and must still open offline (no wipe). Malformed
+      // rows are skipped the same way.
+      gates: switch (j['gates']) {
+        final List<Object?> rows => [
+          for (final g in rows)
+            if (g case {'code': final String _, 'name': final String _} && final Map<String, Object?> m)
+              TicketGate.fromJson(m),
+        ],
+        _ => const [],
+      },
       transferUntil: switch (j['transfer_until']) {
         final String at => DateTime.parse(at).toUtc(),
         _ => null,
@@ -70,6 +81,12 @@ class FanTicket {
   final ({int id, String code, String name}) zone;
   final List<String> gateCodes;
 
+  /// The gates serving the zone, by code (`gates[]`, Lot 4); empty in a cache saved before Lot 4.
+  final List<TicketGate> gates;
+
+  /// What screen 5 shows: [gates], or the bare codes of an older cache. "Your gate" is the first (lot-4 Q81).
+  List<TicketGate> get shownGates => gates.isNotEmpty ? gates : [for (final c in gateCodes) TicketGate(code: c)];
+
   /// Transfers and re-issues are refused from this instant (`refund_cutoff_at − 30 min`); null = never possible.
   final DateTime? transferUntil;
 
@@ -96,6 +113,7 @@ class FanTicket {
     event: event,
     zone: zone,
     gateCodes: gateCodes,
+    gates: gates,
     holderLabel: holderLabel,
     seatLabel: seatLabel,
     transferUntil: transferUntil,
@@ -113,6 +131,35 @@ class FanTicket {
   /// Past, as the API orders them: the event is CLOSED or started more than 12 h ago.
   bool isPast(DateTime serverNow) =>
       event.status == 'CLOSED' || !serverNow.isBefore(event.startsAt.add(const Duration(hours: 12)));
+}
+
+/// A gate serving the ticket's zone: where it is and how to get there. No personal data.
+class TicketGate {
+  const new({required this.code, this.name, this.directions, this.latitude, this.longitude});
+
+  factory fromJson(Map<String, Object?> j) {
+    final (lat, lng) = (j['latitude'], j['longitude']);
+    // Both or neither (the API's rule); anything else means no Maps link rather than a wrong pin.
+    final located = lat is num && lng is num;
+    return TicketGate(
+      code: j['code']! as String,
+      name: j['name']! as String,
+      directions: switch (j['directions']) {
+        final String d when d.trim().isNotEmpty => d,
+        _ => null,
+      },
+      latitude: located ? lat.toDouble() : null,
+      longitude: located ? lng.toDouble() : null,
+    );
+  }
+
+  final String code;
+
+  /// Null for a gate known by its code only (a cache saved before Lot 4).
+  final String? name;
+  final String? directions;
+  final double? latitude;
+  final double? longitude;
 }
 
 /// The `transferred` field of a ticket the holder gave away.

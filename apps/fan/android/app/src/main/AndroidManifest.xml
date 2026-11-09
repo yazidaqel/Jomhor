@@ -62,5 +62,10 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Screen 5 gate side, "Ouvrir dans Plans": a geo: link to the gate (url_launcher). -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="geo"/>
+        </intent>
     </queries>
 </manifest>
