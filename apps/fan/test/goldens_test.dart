@@ -9,8 +9,11 @@ import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/theme/app_theme.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/brand.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'cash_order_test.dart' show CashSale, orderId;
+import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
 import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
@@ -21,7 +24,7 @@ import 'transfer_test.dart' show openTicketJson, transferredJson;
 /// the top bar with the Jomhor lockup (design/BRAND.md). Next to the
 /// pictures, the rules the pictures show are asserted: right to left, Western digits only, codes and prices in
 /// left-to-right isolates. Multi-club (FL-23..25): screen 11, the club chips on screen 1, the club line on tickets.
-/// Recorded on Linux with the docker command at the top of goldens.dart.
+/// FL-19: screen 5 gate side and "Tu es dedans". Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -234,6 +237,47 @@ void main() {
       }
       await snap('$locale-5-billet');
     });
+
+    // FL-19: the gate side (live chips) and "Tu es dedans", on matchday inside the load window.
+    for (final (face, entered) in [('porte', false), ('dedans', true)]) {
+      testWidgets('$locale · screen 5 $face', (tester) async {
+        await phone(tester);
+        // Its own preferences, dropped after: the entry saved here must not reach the next tests.
+        final before = SharedPreferencesAsyncPlatform.instance;
+        SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+        addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+        final open = kickoff.subtract(const Duration(minutes: 90));
+        final clock = TestClock(open);
+        Future<http.Response> backend(http.Request r) async => switch ((r.method, r.url.path)) {
+          ('GET', '/v1/fan/tickets') => json({
+            'server_time': clock.now.toIso8601String(),
+            'tickets': [
+              {...gatedTicket(), 'holder_label': holder},
+            ],
+          }),
+          ('GET', '/v1/fan/gates/7/load') => json(loadJson(open, entries: [if (entered) entryJson()])),
+          _ => json(<Object?>[]),
+        };
+        final c = await pumpJomhor(
+          tester,
+          backend: backend,
+          tokens: MemoryTokenStore('jwt'),
+          clock: clock,
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+        );
+        expect(c.read(routerProvider).state.uri.path, '/tickets/$ticketId'); // matchday: straight on the ticket
+        if (!entered) {
+          await tester.tap(find.byKey(const Key('ticket.gate')));
+        }
+        await tester.pumpAndSettle();
+        if (locale == 'ar') {
+          expectArabicRules(tester);
+          if (entered) expect(find.text('راك داخل'), findsOneWidget);
+        }
+        await snap('$locale-5-billet-$face');
+      });
+    }
 
     testWidgets('$locale · screen 8 Transférer', (tester) async {
       await phone(tester);

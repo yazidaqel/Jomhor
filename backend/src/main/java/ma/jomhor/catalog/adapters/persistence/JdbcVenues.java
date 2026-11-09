@@ -1,5 +1,6 @@
 package ma.jomhor.catalog.adapters.persistence;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -21,7 +22,7 @@ class JdbcVenues implements Venues {
     private static final String VENUE_COLUMNS = "id, name, city, capacity, timezone";
     private static final String ZONE_COLUMNS = "id, code, name, capacity, seated";
     private static final String GATE_SELECT = """
-            select g.id, g.code, g.name,
+            select g.id, g.code, g.name, g.directions, g.latitude, g.longitude,
                    array(select gz.zone_id::int from gate_zones gz
                          where gz.gate_id = g.id and gz.organizer_id = g.organizer_id order by 1) as zone_ids
             from gates g
@@ -153,26 +154,37 @@ class JdbcVenues implements Venues {
     }
 
     @Override
-    public Optional<Gate> insertGate(UUID org, UUID venueId, String code, String name) {
+    public Optional<Gate> insertGate(UUID org, UUID venueId, String code, String name, String directions,
+                                     BigDecimal latitude, BigDecimal longitude) {
         return jdbc.sql("""
-                        insert into gates (organizer_id, venue_id, code, name)
-                        select organizer_id, id, :code, :name
+                        insert into gates (organizer_id, venue_id, code, name, directions, latitude, longitude)
+                        select organizer_id, id, :code, :name, cast(:directions as text), cast(:latitude as numeric),
+                               cast(:longitude as numeric)
                         from venues where organizer_id = :org and id = :venue
-                        returning id, code, name
+                        returning id, code, name, directions, latitude, longitude, array[]::int[] as zone_ids
                         """)
                 .param("org", org).param("venue", venueId).param("code", code).param("name", name)
-                .query((rs, n) -> new Gate(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
-                        List.of()))
+                .param("directions", directions).param("latitude", latitude).param("longitude", longitude)
+                .query(JdbcVenues::gate)
                 .optional();
     }
 
     @Override
-    public boolean updateGate(UUID org, UUID venueId, UUID gateId, String code, String name) {
+    public boolean updateGate(UUID org, UUID venueId, UUID gateId, String code, String name, String directions,
+                              boolean setLocation, BigDecimal latitude, BigDecimal longitude) {
         return jdbc.sql("""
-                        update gates set code = coalesce(cast(:code as text), code), name = coalesce(cast(:name as text), name)
+                        update gates set
+                          code = coalesce(cast(:code as text), code),
+                          name = coalesce(cast(:name as text), name),
+                          directions = case when cast(:directions as text) is null then directions
+                                            else nullif(cast(:directions as text), '') end,
+                          latitude = case when cast(:setLocation as boolean) then cast(:latitude as numeric) else latitude end,
+                          longitude = case when cast(:setLocation as boolean) then cast(:longitude as numeric) else longitude end
                         where organizer_id = :org and venue_id = :venue and id = :id
                         """)
                 .param("org", org).param("venue", venueId).param("id", gateId).param("code", code).param("name", name)
+                .param("directions", directions).param("setLocation", setLocation)
+                .param("latitude", latitude).param("longitude", longitude)
                 .update() == 1;
     }
 
@@ -210,6 +222,8 @@ class JdbcVenues implements Venues {
 
     private static Gate gate(ResultSet rs, int n) throws SQLException {
         Integer[] zoneIds = (Integer[]) rs.getArray("zone_ids").getArray();
-        return new Gate(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"), Arrays.asList(zoneIds));
+        return new Gate(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name"),
+                rs.getString("directions"), rs.getBigDecimal("latitude"), rs.getBigDecimal("longitude"),
+                Arrays.asList(zoneIds));
     }
 }

@@ -3,6 +3,7 @@ package ma.jomhor;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,11 +18,28 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV17Apply() {
+    void v1ToV18Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17");
+                        "17", "18");
+    }
+
+    @Test
+    void gateLocationIsBothOrNeitherAndInRange() {
+        UUID org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Loc') returning id", UUID.class);
+        UUID venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'V', 10) returning id", UUID.class, org);
+        String insert = "insert into gates (organizer_id, venue_id, code, name, latitude, longitude) values (?, ?, ?, 'G', ?, ?)";
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, venue, "A", 33.5, null))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("gates_location");
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, venue, "B", null, -7.6))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("gates_location");
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, venue, "C", new BigDecimal("91"),
+                new BigDecimal("-7.6")))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("gates_latitude_check");
+        jdbcTemplate.update(insert, org, venue, "D", new BigDecimal("-90"), new BigDecimal("180"));
+        jdbcTemplate.update(insert, org, venue, "E", null, null);
     }
 
     @Test

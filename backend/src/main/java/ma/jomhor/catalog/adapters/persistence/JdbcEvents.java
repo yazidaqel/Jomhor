@@ -6,6 +6,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,6 +18,7 @@ import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
 import ma.jomhor.common.Crests;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -295,21 +298,27 @@ class JdbcEvents implements Events {
                         rs.getString("name"), rs.getLong("price_mad"), rs.getInt("remaining")))
                 .list().stream()
                 .collect(Collectors.groupingBy(Event.PriceListing::zoneId));
+        String zoneIds = prices.keySet().stream().map(String::valueOf).collect(Collectors.joining(",", "{", "}"));
         // collate "C": codes ascending byte-wise, the same on every database locale.
+        Map<Integer, List<Event.GateListing>> gates = new HashMap<>();
+        jdbc.sql("""
+                        select gz.zone_id, g.code, g.name, g.directions, g.latitude, g.longitude
+                        from gate_zones gz join gates g on g.id = gz.gate_id and g.organizer_id = gz.organizer_id
+                        where gz.organizer_id = :org and gz.zone_id = any(cast(:zones as smallint[]))
+                        order by g.code collate "C"
+                        """)
+                .param("org", org).param("zones", zoneIds)
+                .query((RowCallbackHandler) rs -> gates.computeIfAbsent(rs.getInt("zone_id"), z -> new ArrayList<>())
+                        .add(new Event.GateListing(rs.getString("code"), rs.getString("name"), rs.getString("directions"),
+                                rs.getBigDecimal("latitude"), rs.getBigDecimal("longitude"))));
         return jdbc.sql("""
-                        select z.id, z.code, z.name, z.seated,
-                               array(select g.code from gate_zones gz
-                                     join gates g on g.id = gz.gate_id and g.organizer_id = gz.organizer_id
-                                     where gz.zone_id = z.id and gz.organizer_id = z.organizer_id
-                                     order by g.code collate "C") as gate_codes
-                        from zones z
+                        select z.id, z.code, z.name, z.seated from zones z
                         where z.organizer_id = :org and z.id = any(cast(:zones as smallint[]))
                         order by z.id
                         """)
-                .param("org", org).param("zones", prices.keySet().stream().map(String::valueOf)
-                        .collect(Collectors.joining(",", "{", "}")))
+                .param("org", org).param("zones", zoneIds)
                 .query((rs, n) -> new Event.ZoneListing(rs.getInt("id"), rs.getString("code"), rs.getString("name"),
-                        rs.getBoolean("seated"), List.of((String[]) rs.getArray("gate_codes").getArray()),
+                        rs.getBoolean("seated"), gates.getOrDefault(rs.getInt("id"), List.of()),
                         prices.get(rs.getInt("id"))))
                 .list();
     }

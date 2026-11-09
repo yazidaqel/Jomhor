@@ -127,7 +127,7 @@ class TestClock {
 
 /// Pumps the whole app (FR unless [locale] says otherwise: the device language) with a fake backend and an empty in-memory secure storage (the ticket cache);
 /// [follows] is what `main` read from the phone: by default the picker was seen and no club is followed;
-/// [keepSecureStorage] keeps what a test put there with `FlutterSecureStorage.setMockInitialValues`. Returns the container to drive the router and providers.
+/// [jitter] replaces the zero jitter; [keepSecureStorage] keeps what a test put there with `FlutterSecureStorage.setMockInitialValues`. Returns the container to drive the router and providers.
 Future<ProviderContainer> pumpJomhor(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request request) backend,
@@ -135,6 +135,7 @@ Future<ProviderContainer> pumpJomhor(
   FollowsState follows = (ids: const [], seen: true, chip: null),
   TestClock? clock,
   List<Override> overrides = const [],
+  Duration Function(Duration max)? jitter,
   bool keepSecureStorage = false,
   Locale locale = const Locale('fr', 'MA'),
 }) async {
@@ -152,7 +153,7 @@ Future<ProviderContainer> pumpJomhor(
       initialSignedInProvider.overrideWithValue(store.token != null),
       initialFollowsProvider.overrideWithValue(follows),
       nowProvider.overrideWithValue(() => time.now),
-      jitterProvider.overrideWithValue((_) => Duration.zero),
+      jitterProvider.overrideWithValue(jitter ?? (_) => Duration.zero),
       ...overrides,
       clockProvider.overrideWith((ref) async* {
         yield time.now;

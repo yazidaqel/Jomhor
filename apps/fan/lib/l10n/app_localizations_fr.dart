@@ -928,4 +928,53 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get homeSeeAll => 'Voir tout';
+
+  @override
+  String get gateRoute => 'Itinéraire';
+
+  @override
+  String get gateOpenMaps => 'Ouvrir dans Plans';
+
+  @override
+  String get gateFlipBack => 'Retourner le billet';
+
+  @override
+  String get gateOthers => 'Autres portes de ta zone';
+
+  @override
+  String get gateLevelLow => 'Fluide';
+
+  @override
+  String get gateLevelMedium => 'Modérée';
+
+  @override
+  String get gateLevelHigh => 'Chargée';
+
+  @override
+  String gateSmoother(String code) {
+    return 'Porte $code plus fluide en ce moment';
+  }
+
+  @override
+  String gateShow(String gates) {
+    return '$gates, voir l\'itinéraire';
+  }
+
+  @override
+  String gateSideLabel(String code) {
+    return 'Face porte du billet, porte $code';
+  }
+
+  @override
+  String get ticketEntered => 'Tu es dedans';
+
+  @override
+  String ticketEnteredAt(String time, String code) {
+    return 'Entré à $time · Porte $code';
+  }
+
+  @override
+  String gateMore(int count) {
+    return '+$count';
+  }
 }

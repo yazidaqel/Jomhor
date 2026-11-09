@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/clock.dart';
 import 'package:jomhor_fan/features/clubs/clubs_repository.dart';
+import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 
 class EventsRepository {
@@ -56,9 +57,10 @@ void _refetchAtOpenings(Ref ref, Iterable<FanEvent> events) {
   ref.onDispose(timer.cancel);
 }
 
+/// Filtered by the follows on the phone only, never the club directory: Accueil lists events while it is down.
 final FutureProvider<List<FanEvent>> upcomingEventsProvider = FutureProvider.autoDispose<List<FanEvent>>((ref) async {
-  final organizers = organizersOf(await ref.watch(homeViewProvider.future));
-  final events = await ref.watch(eventsRepositoryProvider).upcoming(organizers);
+  final f = ref.watch(followsProvider.select((f) => (ids: f.ids, chip: f.chip)));
+  final events = await ref.watch(eventsRepositoryProvider).upcoming(organizersOf(homeChip(f.chip, f.ids), f.ids));
   _refetchAtOpenings(ref, events);
   return events;
 });

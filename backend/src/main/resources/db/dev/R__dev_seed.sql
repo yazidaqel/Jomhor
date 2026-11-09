@@ -124,3 +124,20 @@ on conflict do nothing;
 
 -- Events, prices and the demo fan's tickets need K_e (encrypted in Java) and keep their times relative to now:
 -- DevSeeder writes them at every dev startup.
+
+-- Gate directions and locations (Lot 4 BE-32): made-up FR copy and made-up points around each stadium. Only gates
+-- still without directions, so an edit made in the back-office survives the next startup.
+update gates g set directions = m.directions, latitude = m.latitude, longitude = m.longitude
+from (values
+  ('a7a5fc00-0000-4000-8000-000000000401'::uuid, 'Tribune d''honneur, côté parvis principal. Entrée par l''esplanade, suivez le fléchage vert.', 33.583120, -7.647410),
+  ('a7a5fc00-0000-4000-8000-000000000402'::uuid, 'Tribune d''honneur, côté parking VIP. Accès par la rue des Orangers.', 33.583460, -7.646720),
+  ('a7a5fc00-0000-4000-8000-000000000403'::uuid, 'Angle Nord-Est. Depuis le tramway (station Stade), tournez à gauche et longez les grilles.', 33.584210, -7.645980),
+  ('a7a5fc00-0000-4000-8000-000000000404'::uuid, 'Virage Nord, au bout de l''allée des Palmiers. Prévoyez 10 min depuis le parking P2.', 33.584650, -7.647120),
+  ('a7a5fc00-0000-4000-8000-000000000405'::uuid, 'Entre le virage Nord et la tribune Est, face à la station de taxis.', 33.584020, -7.645310),
+  ('a7a5fc00-0000-4000-8000-000000000406'::uuid, 'Tribune Est, au milieu de l''avenue du Stade. Fouille avant le portique.', 33.583180, -7.644890),
+  ('a7a5fc00-0000-4000-8000-000000000407'::uuid, 'Virage Sud, côté boulevard. Depuis le parking P3, suivez le fléchage orange.', 33.581940, -7.646350),
+  ('a7a5fc00-0000-4000-8000-000000000411'::uuid, 'Tribune d''honneur, entrée principale face à la route de l''Ourika.', 31.602410, -8.034520),
+  ('a7a5fc00-0000-4000-8000-000000000412'::uuid, 'Virage Nord, à droite après le parking des bus. Suivez le fléchage bleu.', 31.603580, -8.035210),
+  ('a7a5fc00-0000-4000-8000-000000000413'::uuid, 'Virage Sud, côté jardins. Accès piéton par l''allée des Oliviers.', 31.601270, -8.035840)
+) as m(id, directions, latitude, longitude)
+where g.id = m.id and g.directions is null;

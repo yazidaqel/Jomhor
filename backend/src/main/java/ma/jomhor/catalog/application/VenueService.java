@@ -1,8 +1,10 @@
 package ma.jomhor.catalog.application;
 
+import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -50,6 +52,11 @@ public class VenueService {
                 venues.gates(org, venueId));
     }
 
+    /** The venue's gates with their zone ids, by code (empty for an unknown venue or another organizer's). */
+    public List<Gate> gates(UUID org, UUID venueId) {
+        return venues.gates(org, venueId);
+    }
+
     /**
      * A new timezone is refused (VENUE_IN_USE) once an event references the venue: their wall times were entered
      * in the old zone. The venue lock makes the check and a concurrent event create on it run one after the other.
@@ -94,16 +101,74 @@ public class VenueService {
         }
     }
 
-    public Gate createGate(UUID org, UUID venueId, String code, String name) {
-        return codeUnique(() -> venues.insertGate(org, venueId, code.trim(), name.trim())).orElseThrow(notFound("Venue"));
+    /** {@code directions} "" or blank = none; coordinates both or neither (docs/04-api.md POST /org/venues/{id}/gates). */
+    public Gate createGate(UUID org, UUID venueId, String code, String name, String directions, BigDecimal latitude,
+                           BigDecimal longitude) {
+        String d = directions(directions);
+        checkLocation(latitude, longitude);
+        return codeUnique(() -> venues.insertGate(org, venueId, code.trim(), name.trim(), d == null || d.isEmpty() ? null : d,
+                latitude, longitude)).orElseThrow(notFound("Venue"));
     }
 
+    /**
+     * {@code directions} null = unchanged, "" = cleared. {@code latitude} / {@code longitude}: null = absent from the
+     * body, {@code Optional.empty()} = an explicit JSON null. Both absent = unchanged; both null = location cleared
+     * (04's one exception to null-unchanged); anything else must be both values, else 422 on {@code latitude}.
+     * Directions and coordinates are not in the manifest payload: changing them builds no new version.
+     */
     @Transactional
-    public Gate updateGate(UUID org, UUID venueId, UUID gateId, String code, String name) {
-        if (!codeUnique(() -> venues.updateGate(org, venueId, gateId, trim(code), trim(name)))) {
+    public Gate updateGate(UUID org, UUID venueId, UUID gateId, String code, String name, String directions,
+                           Optional<BigDecimal> latitude, Optional<BigDecimal> longitude) {
+        String d = directions(directions);
+        boolean setLocation = latitude != null || longitude != null;
+        if (setLocation && (latitude == null || longitude == null || latitude.isPresent() != longitude.isPresent())) {
+            throw invalid("latitude", BOTH_OR_NEITHER);
+        }
+        BigDecimal lat = setLocation ? latitude.orElse(null) : null;
+        BigDecimal lon = setLocation ? longitude.orElse(null) : null;
+        checkLocation(lat, lon);
+        if (!codeUnique(() -> venues.updateGate(org, venueId, gateId, trim(code), trim(name), d, setLocation, lat, lon))) {
             throw notFound("Gate").get();
         }
         return venues.findGate(org, venueId, gateId).orElseThrow();
+    }
+
+    private static final String BOTH_OR_NEITHER = "latitude and longitude go together: both or neither";
+    private static final int MAX_DIRECTIONS = 200;
+    private static final int MAX_COORDINATE_DECIMALS = 6;
+    private static final BigDecimal MAX_LATITUDE = BigDecimal.valueOf(90);
+    private static final BigDecimal MAX_LONGITUDE = BigDecimal.valueOf(180);
+
+    /** Trimmed; at most 200 chars. */
+    private static String directions(String directions) {
+        String d = trim(directions);
+        if (d != null && d.length() > MAX_DIRECTIONS) {
+            throw invalid("directions", "must be at most " + MAX_DIRECTIONS + " characters");
+        }
+        return d;
+    }
+
+    /**
+     * Both or neither; ranges -90..90 / -180..180; at most 6 decimals once trailing zeros are dropped (33.1234560 is
+     * 33.123456: what a client's number type sends). Checked here: numeric(8,6) would round a 7th decimal silently.
+     */
+    private static void checkLocation(BigDecimal latitude, BigDecimal longitude) {
+        if ((latitude == null) != (longitude == null)) {
+            throw invalid("latitude", BOTH_OR_NEITHER);
+        }
+        if (latitude != null) {
+            checkCoordinate("latitude", latitude, MAX_LATITUDE);
+            checkCoordinate("longitude", longitude, MAX_LONGITUDE);
+        }
+    }
+
+    private static void checkCoordinate(String field, BigDecimal value, BigDecimal max) {
+        if (value.abs().compareTo(max) > 0) {
+            throw invalid(field, "must be between -" + max + " and " + max);
+        }
+        if (value.stripTrailingZeros().scale() > MAX_COORDINATE_DECIMALS) {
+            throw invalid(field, "must have at most " + MAX_COORDINATE_DECIMALS + " decimals");
+        }
     }
 
     /**
@@ -155,6 +220,11 @@ public class VenueService {
         } catch (DuplicateKeyException e) {
             throw new ApiException("CODE_TAKEN", HttpStatus.CONFLICT, "Code already used in this venue");
         }
+    }
+
+    private static ApiException invalid(String field, String message) {
+        return new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                Map.of("fields", Map.of(field, message)));
     }
 
     private static ApiException zonesNotInVenue() {

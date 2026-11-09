@@ -2,6 +2,7 @@ package ma.jomhor.gate.adapters.persistence;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -68,6 +69,22 @@ class JdbcScans implements Scans {
                 .params(org, eventId, cursor, deviceId, limit)
                 .query((rs, n) -> new Scan.Used(rs.getLong("seq"), rs.getObject("ticket_id", UUID.class),
                         Scan.Direction.valueOf(rs.getString("direction")),
+                        rs.getObject("device_time", OffsetDateTime.class).toInstant(), rs.getString("code")))
+                .list();
+    }
+
+    // Index scans (event_id, ticket_id, device_time): a handful of ticket ids, a handful of rows each.
+    @Override
+    public List<Entry> entries(UUID org, int eventId, Collection<UUID> ticketIds) {
+        return jdbc.sql("""
+                        select distinct on (s.ticket_id) s.ticket_id, s.device_time, g.code
+                        from scans s join gates g on g.id = s.gate_id and g.organizer_id = s.organizer_id
+                        where s.organizer_id = ? and s.event_id = ? and s.ticket_id = any(?)
+                          and s.result in ('OK', 'OVERRIDE') and s.direction = 'IN'
+                        order by s.ticket_id, s.device_time, s.scan_id
+                        """)
+                .params(org, eventId, ticketIds.toArray(UUID[]::new))
+                .query((rs, n) -> new Entry(rs.getObject("ticket_id", UUID.class),
                         rs.getObject("device_time", OffsetDateTime.class).toInstant(), rs.getString("code")))
                 .list();
     }

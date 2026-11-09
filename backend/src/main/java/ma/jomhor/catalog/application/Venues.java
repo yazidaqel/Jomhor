@@ -1,5 +1,6 @@
 package ma.jomhor.catalog.application;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -47,9 +48,15 @@ public interface Venues {
     Optional<UUID> lockGate(UUID org, UUID gateId);
 
     /** Empty if the venue is not found. */
-    Optional<Gate> insertGate(UUID org, UUID venueId, String code, String name);
+    Optional<Gate> insertGate(UUID org, UUID venueId, String code, String name, String directions, BigDecimal latitude,
+                              BigDecimal longitude);
 
-    boolean updateGate(UUID org, UUID venueId, UUID gateId, String code, String name);
+    /**
+     * {@code directions} null = unchanged, "" = cleared. {@code setLocation} false = coordinates unchanged; true = set
+     * to {@code latitude} / {@code longitude} (both null clears the location).
+     */
+    boolean updateGate(UUID org, UUID venueId, UUID gateId, String code, String name, String directions,
+                       boolean setLocation, BigDecimal latitude, BigDecimal longitude);
 
     /** Deletes the gate and its gate_zones rows. False if not found. */
     boolean deleteGate(UUID org, UUID venueId, UUID gateId);

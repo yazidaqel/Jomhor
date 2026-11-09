@@ -45,14 +45,17 @@ final FutureProvider<List<Club>> followedClubsProvider = FutureProvider<List<Clu
 typedef HomeView = ({List<Club> followed, String chip});
 
 final FutureProvider<HomeView> homeViewProvider = FutureProvider<HomeView>((ref) async {
-  final remembered = ref.watch(followsProvider.select((f) => f.chip));
+  // The chip comes from the follows on the phone, exactly as the events filter does (upcomingEventsProvider); the
+  // directory only names the chips.
+  final f = ref.watch(followsProvider.select((f) => (ids: f.ids, chip: f.chip)));
   final followed = await ref.watch(followedClubsProvider.future);
-  return (followed: followed, chip: homeChip(remembered, followed));
+  return (followed: followed, chip: homeChip(f.chip, f.ids));
 });
 
-/// The `organizer` filter of [view]: none for `Tout` (every listed club), else the chip's club or every followed one.
-List<String>? organizersOf(HomeView view) => switch (view.chip) {
+/// The `organizer` filter of [chip] over the followed [ids]: none for `Tout` (every listed club), else the chip's
+/// club or every followed one.
+List<String>? organizersOf(String chip, List<String> ids) => switch (chip) {
   chipAll => null,
-  chipMine => [for (final c in view.followed) c.id],
+  chipMine => ids,
   final id => [id],
 };

@@ -1658,6 +1658,84 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Voir tout'**
   String get homeSeeAll;
+
+  /// Screen 5 gate row chip: flips the ticket to its gate side.
+  ///
+  /// In fr, this message translates to:
+  /// **'Itinéraire'**
+  String get gateRoute;
+
+  /// Gate side: opens the gate location in the phone's maps app.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ouvrir dans Plans'**
+  String get gateOpenMaps;
+
+  /// Gate side: flips back to the QR.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retourner le billet'**
+  String get gateFlipBack;
+
+  /// Gate side: the zone's other gates.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autres portes de ta zone'**
+  String get gateOthers;
+
+  /// Gate load chip, LOW.
+  ///
+  /// In fr, this message translates to:
+  /// **'Fluide'**
+  String get gateLevelLow;
+
+  /// Gate load chip, MEDIUM.
+  ///
+  /// In fr, this message translates to:
+  /// **'Modérée'**
+  String get gateLevelMedium;
+
+  /// Gate load chip, HIGH.
+  ///
+  /// In fr, this message translates to:
+  /// **'Chargée'**
+  String get gateLevelHigh;
+
+  /// Your gate is HIGH and this gate of the zone is LOW.
+  ///
+  /// In fr, this message translates to:
+  /// **'Porte {code} plus fluide en ce moment'**
+  String gateSmoother(String code);
+
+  /// Screen reader label of the PORTE fact, which flips the card.
+  ///
+  /// In fr, this message translates to:
+  /// **'{gates}, voir l\'itinéraire'**
+  String gateShow(String gates);
+
+  /// Screen reader label of the gate side.
+  ///
+  /// In fr, this message translates to:
+  /// **'Face porte du billet, porte {code}'**
+  String gateSideLabel(String code);
+
+  /// Screen 5 once the ticket was scanned at a gate.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tu es dedans'**
+  String get ticketEntered;
+
+  /// Time in the venue zone and gate of the admitting scan.
+  ///
+  /// In fr, this message translates to:
+  /// **'Entré à {time} · Porte {code}'**
+  String ticketEnteredAt(String time, String code);
+
+  /// Screen 5 PORTE fact: how many other gates serve the zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'+{count}'**
+  String gateMore(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

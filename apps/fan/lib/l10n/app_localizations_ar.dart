@@ -942,4 +942,53 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get homeSeeAll => 'شوف كلشي';
+
+  @override
+  String get gateRoute => 'الطريق';
+
+  @override
+  String get gateOpenMaps => 'حل ف الخريطة';
+
+  @override
+  String get gateFlipBack => 'قلب التذكرة';
+
+  @override
+  String get gateOthers => 'بيبان خرين ديال المنطقة ديالك';
+
+  @override
+  String get gateLevelLow => 'سالكة';
+
+  @override
+  String get gateLevelMedium => 'متوسطة';
+
+  @override
+  String get gateLevelHigh => 'عامرة';
+
+  @override
+  String gateSmoother(String code) {
+    return 'الباب $code سالك كثر دابا';
+  }
+
+  @override
+  String gateShow(String gates) {
+    return '$gates، شوف الطريق';
+  }
+
+  @override
+  String gateSideLabel(String code) {
+    return 'جيهة الباب ديال التذكرة، الباب $code';
+  }
+
+  @override
+  String get ticketEntered => 'راك داخل';
+
+  @override
+  String ticketEnteredAt(String time, String code) {
+    return 'دخلتي ف $time · الباب $code';
+  }
+
+  @override
+  String gateMore(int count) {
+    return '+$count';
+  }
 }

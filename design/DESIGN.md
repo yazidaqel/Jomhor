@@ -71,7 +71,7 @@ code), membership, profile, gate map. Follow the same components.
 
 ### 1 · Accueil
 
-- Top bar: crest + club name (left), bell icon button (right).
+- Top bar: Jomhor lockup (start); bell (Lot 4), then the avatar (end).
 - Hero card: label "PROCHAIN MATCH · DOMICILE", two crests + "VS", date · time · venue,
   three countdown tiles (jours / heures / min), CTA "Prendre mes places · dès {from_price}".
   If sold out: CTA becomes "Liste d'attente". If on-sale not open: "Vente le {date}".
@@ -302,7 +302,7 @@ Screens that carry the founder's "wow" bar (inside principles 3, 6 and 7 and `BR
 | Screen | What makes it special |
 | --- | --- |
 | 5 · Mon billet, matchday | The ticket behaves like a physical object with two faces. A flip shows the gate side: the gate code in display 72, the directions, one tap to Maps, live load chips. A second flip, "Tu es dedans" / "راك داخل", turns the band `success` with a heavy haptic the moment the scan syncs: the stadium tells the fan they made it. Brightness max, nothing moves over the QR, everything works offline except the chips. |
-| 7 · Club, Carte membre | A dark `surface2` card, radius 28, with the club's accent band, crest and name (like the ticket band, so the ticket stays the only light surface). "MEMBRE N° 000042" in Barlow 44 rolls once on first reveal; "depuis nov. 2026" and the tier name sit in accent. Under it, **"Ta saison" in twelve dots**: the club's last 11 closed events as white dots (attended) or outlined dots (missed), and the 12th dot in amber for the next event. This is the brand's idea (the amber twelfth is the supporter who completes the team) applied to the fan's own season. It is a straight row, never the J mark, so the mark rules stay intact. A new attendance fills its dot once. Joining: the card rises from the CTA and settles (≤ 420 ms) with a success haptic. |
+| 7 · Club, Carte membre | A dark `surface2` card, radius 28, with a Jomhor accent band carrying the club's crest and name (the club is content, never a colour; like the ticket band, so the ticket stays the only light surface). "MEMBRE N° 000042" in Barlow 44 rolls once on first reveal; "depuis nov. 2026" and the tier name sit in accent. Under it, **"Ta saison" in twelve dots**: the club's last 11 closed events as white dots (attended) or outlined dots (missed), and the 12th dot in amber for the next event. This is the brand's idea (the amber twelfth is the supporter who completes the team) applied to the fan's own season. It is a straight row, never the J mark, so the mark rules stay intact. A new attendance fills its dot once. Joining: the card rises from the CTA and settles (≤ 420 ms) with a success haptic. |
 | 8 · Transférer | Hold-to-confirm with a fill (an irreversible action deserves a deliberate gesture). Then the ticket slides out of the wallet, the reverse of the purchase slide-in. The recipient gets a push that opens screen 5 with the existing fly-in. Giving a ticket feels like handing it over. |
 | 9 · Groupe | "2/4 payées" in display type rolls up as friends pay. Each friend's check settles in once, and initials avatars make the group feel like people, not rows. "Relancer sur WhatsApp" is one tap with the copy prefilled. The member side opens on the event hero with one line: "Yazid A. t'a gardé une place". |
 | 1 · Accueil between matches | The countdown digits roll, the member strip shows tier and matchs at a glance, and the bell has a live inbox: reasons to open the app on a Tuesday. |

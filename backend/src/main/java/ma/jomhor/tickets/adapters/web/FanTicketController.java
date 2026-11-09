@@ -3,6 +3,7 @@ package ma.jomhor.tickets.adapters.web;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonRawValue;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -57,8 +58,11 @@ class FanTicketController {
 
     record TransferredDto(String toLabel, Instant at) {}
 
+    /** 04 Lot 4: a gate serving the ticket's zone; coordinates as JSON numbers (scale 6, plain) or null. */
+    record GateDto(String code, String name, String directions, BigDecimal latitude, BigDecimal longitude) {}
+
     record TicketDto(UUID id, String ticketNo, Ticket.Status status, String holderLabel, String seatLabel,
-                     EventDto event, ZoneDto zone, List<String> gateCodes, Instant transferUntil,
+                     EventDto event, ZoneDto zone, List<String> gateCodes, List<GateDto> gates, Instant transferUntil,
                      TransferredDto transferred,
                      @JsonProperty("k_t") @JsonInclude(JsonInclude.Include.NON_NULL) String ticketKey) {
 
@@ -72,7 +76,10 @@ class FanTicketController {
                             new VenueDto(e.venueName(), e.venueCity()), e.metadata(),
                             new OrganizerDto(e.organizerId(), e.organizer().slug(), e.organizer().name(),
                                     e.organizer().crestUrl())),
-                    new ZoneDto(z.id(), z.code(), z.name()), z.gateCodes(), h.transferUntil(),
+                    new ZoneDto(z.id(), z.code(), z.name()), z.gateCodes(), z.gates().stream()
+                            .map(g -> new GateDto(g.code(), g.name(), g.directions(), g.latitude(), g.longitude()))
+                            .toList(),
+                    h.transferUntil(),
                     t.transferred() == null ? null : new TransferredDto(
                             t.transferred().toName() == null ? null : HolderNames.label(t.transferred().toName()),
                             t.transferred().at()),

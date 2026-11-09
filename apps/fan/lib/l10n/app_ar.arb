@@ -271,5 +271,18 @@
   "clubKind": "{kind, select, SPORTS_CLUB{فريق رياضي} PROMOTER{منظم} VENUE{قاعة} other{منظم}}",
   "homeNoMatch": "ما كاين حتى ماتش جاي",
   "homeNoEvent": "ما كاين حتى حدث جاي",
-  "homeSeeAll": "شوف كلشي"
+  "homeSeeAll": "شوف كلشي",
+  "gateRoute": "الطريق",
+  "gateOpenMaps": "حل ف الخريطة",
+  "gateFlipBack": "قلب التذكرة",
+  "gateOthers": "بيبان خرين ديال المنطقة ديالك",
+  "gateLevelLow": "سالكة",
+  "gateLevelMedium": "متوسطة",
+  "gateLevelHigh": "عامرة",
+  "gateSmoother": "الباب {code} سالك كثر دابا",
+  "gateShow": "{gates}، شوف الطريق",
+  "gateSideLabel": "جيهة الباب ديال التذكرة، الباب {code}",
+  "ticketEntered": "راك داخل",
+  "ticketEnteredAt": "دخلتي ف {time} · الباب {code}",
+  "gateMore": "+{count}"
 }
