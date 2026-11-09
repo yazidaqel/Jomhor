@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/core/money.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
@@ -465,6 +466,56 @@ void main() {
         expect(find.byKey(const Key('hero.cta')), findsOneWidget);
       });
     }
+
+    testWidgets('a remembered club missing from a stale directory: the chip and the filter agree on it', (
+      tester,
+    ) async {
+      var reads = 0;
+      await pumpJomhor(
+        tester,
+        backend: (r) async {
+          if (r.url.path == '/v1/fan/organizers') {
+            requests.add(r);
+            // The launch read predates the club; the re-read (to check before dropping it) fails offline.
+            if (reads++ == 0) return json([clubJson()]);
+            throw http.ClientException('offline');
+          }
+          return await clubsBackend(both)(r);
+        },
+        follows: (ids: const [testOrganizer, otherOrganizer], seen: true, chip: otherOrganizer),
+      );
+      expect(lastFilter(), [otherOrganizer]);
+      expect(selected(tester, 'mine'), isFalse, reason: 'not "Mes clubs" while the list shows one club');
+      expect(selected(tester, testOrganizer), isFalse);
+    });
+
+    group('club directory down (500)', () {
+      Future<http.Response> directoryDown(http.Request r) async =>
+          r.url.path == '/v1/fan/organizers' ? apiError(500, 'INTERNAL') : await clubsBackend(both)(r);
+
+      testWidgets('follows + remembered `Tout`: /fan/events with no organizer, no error panel', (tester) async {
+        await pumpJomhor(
+          tester,
+          backend: directoryDown,
+          follows: (ids: const [testOrganizer], seen: true, chip: chipAll),
+        );
+        expect(lastFilter(), isNull);
+        expect(find.byType(ErrorPanel), findsNothing);
+        expect(find.byKey(const Key('hero.cta')), findsOneWidget);
+      });
+
+      testWidgets('`Mes clubs` A, B: organizer=A&organizer=B, events listed, no chip row', (tester) async {
+        await pumpJomhor(
+          tester,
+          backend: directoryDown,
+          follows: (ids: const [testOrganizer, otherOrganizer], seen: true, chip: null),
+        );
+        expect(lastFilter(), [testOrganizer, otherOrganizer]);
+        expect(find.byType(ErrorPanel), findsNothing);
+        expect(find.byKey(const Key('hero.cta')), findsOneWidget);
+        expect(find.byKey(const Key('home.chips')), findsNothing);
+      });
+    });
 
     testWidgets('AR: the chip row starts at the right and club names sit in isolates', (tester) async {
       await pumpJomhor(

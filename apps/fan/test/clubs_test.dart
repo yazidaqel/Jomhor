@@ -87,7 +87,9 @@ void main() {
     expect(location(again), '/');
     expect(find.byKey(const Key('home.chip.mine')), findsOneWidget);
     expect(find.byKey(const Key('home.chip.$otherOrganizer')), findsOneWidget);
-    expect(requests.last.url.queryParametersAll['organizer'], [otherOrganizer]);
+    expect(requests.lastWhere((r) => r.url.path == '/v1/fan/events').url.queryParametersAll['organizer'], [
+      otherOrganizer,
+    ]);
   });
 
   testWidgets('a deep link on first launch is not intercepted by the picker', (tester) async {
@@ -214,7 +216,7 @@ void main() {
     );
   });
 
-  testWidgets('pull-to-refresh retries a failed directory read', (tester) async {
+  testWidgets('a failed directory read hides the chips but not the events; pull-to-refresh retries it', (tester) async {
     var directoryFails = true;
     await pumpJomhor(
       tester,
@@ -229,13 +231,29 @@ void main() {
       },
       follows: (ids: const [testOrganizer], seen: true, chip: null),
     );
-    expect(find.text('Pas de connexion. Vérifie ton réseau et réessaie.'), findsOneWidget);
+    // The events filter comes from the follows on the phone, never the directory (lot-4 Q87).
+    expect(find.text('Pas de connexion. Vérifie ton réseau et réessaie.'), findsNothing);
+    expect(find.byKey(const Key('hero.cta')), findsOneWidget);
+    expect(find.byKey(const Key('home.chips')), findsNothing);
     directoryFails = false;
     await tester.fling(find.byType(Scrollable).first, const Offset(0, 400), 1000);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('hero.cta')), findsOneWidget);
     expect(find.byKey(const Key('home.chip.$testOrganizer')), findsOneWidget);
-    expect(requests.last.url.queryParametersAll['organizer'], [testOrganizer]);
+    expect(requests.lastWhere((r) => r.url.path == '/v1/fan/events').url.queryParametersAll['organizer'], [
+      testOrganizer,
+    ]);
+  });
+
+  test('homeChip: the remembered chip while it still makes sense, else the default', () {
+    const a = testOrganizer;
+    expect(homeChip(null, const []), chipAll);
+    expect(homeChip(null, const [a]), chipMine);
+    expect(homeChip(chipAll, const [a]), chipAll);
+    expect(homeChip(chipMine, const []), chipAll);
+    expect(homeChip(a, const [a]), a);
+    expect(homeChip(otherOrganizer, const [a]), chipMine, reason: 'a club no longer followed');
+    expect(homeChip(otherOrganizer, const []), chipAll);
   });
 
   testWidgets('a directory failure shows the error and "Réessayer"; "Tout voir" still works', (tester) async {

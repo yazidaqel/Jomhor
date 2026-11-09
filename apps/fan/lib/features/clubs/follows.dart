@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Follows live on the phone only (docs/04-api.md §Club directory: the server keeps no follow list).
@@ -37,11 +36,12 @@ Future<FollowsState> savedFollows(SharedPreferencesAsync prefs) async {
 }
 
 /// The chip Accueil shows: the remembered one while it still makes sense, else `Mes clubs` when following, else
-/// `Tout`. A remembered club the fan no longer follows falls back to the default.
-String homeChip(String? remembered, List<Club> followed) => switch (remembered) {
+/// `Tout`. A remembered club the fan no longer follows falls back to the default. [followedIds] come from the phone,
+/// so the events filter never waits on the club directory.
+String homeChip(String? remembered, List<String> followedIds) => switch (remembered) {
   chipAll => chipAll,
-  final id? when id != chipMine && followed.any((c) => c.id == id) => id,
-  _ => followed.isEmpty ? chipAll : chipMine,
+  final id? when id != chipMine && followedIds.contains(id) => id,
+  _ => followedIds.isEmpty ? chipAll : chipMine,
 };
 
 class Follows extends Notifier<FollowsState> {
