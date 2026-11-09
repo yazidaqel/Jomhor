@@ -127,6 +127,7 @@ Exit ("the app people open between matches"):
 | Q98 | Dev data for the wow review | `DevSeeder` (dev only): 10 more past CLOSED events for the first demo club, the demo fan admitted on 7. Timebox 0.5 d, else the review runs on goldens. |
 | Q99 | Malformed `settings.loyalty` | Defaults + one WARN log, never a 500. |
 | Q100 | `events_attended` before CLOSED? | Yes (04 has no status filter): the count moves at the entry scan; the dot fills once the event is CLOSED. |
+| Q101 | PATCH can't clear a campaign's `event_id` (null = unchanged) | Keep the contract. The B9 composer doesn't offer removing the event of a saved draft; delete the draft and start again. Revisit with BE-33 if organizers ask. |
 
 ## 4. Contract changes
 
