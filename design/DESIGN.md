@@ -21,7 +21,13 @@ Live canvas: https://claude.ai/artifact/RZdBe8HCqJUDBhB61S55mt
    (web and Android; iOS keeps its native slide and swipe-back), a quick selection mark
    (`motion.base`). Fan app specifics: the pass flies from its card into screen 5, countdown
    digits roll when they change, the paid check settles in once, a haptic tick marks each QR
-   rotation (nothing moves over the QR itself). Lot 4 adds, each tied to a meaning: a
+   rotation (nothing moves over the QR itself). The Jomhor mark moves in two places only. At
+   launch, the splash plays one pass: the eleven dim, a light runs along them, the twelfth
+   swells as it lands and the splash fades to the app. That is the one entrance allowed past
+   the 420 ms cap (about 0.9 s in all, a tap skips it). On login, the dots assemble once on
+   first paint (420 ms, the twelfth last) and the same pass loops as the progress indicator
+   while a code is sent or checked.
+   Lot 4 adds, each tied to a meaning: a
    transferred ticket slides out of the wallet (the reverse of the purchase slide-in); the
    ticket card flips to its gate side and back (`motion.ticketFlip`); figures roll when they
    change (events attended, a group's paid count, the member number on its first reveal); a

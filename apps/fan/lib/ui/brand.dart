@@ -2,22 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
+import 'package:jomhor_fan/ui/motion.dart';
 
 /// The Jomhor mark (design/logo/jomhor-mark-transparent.svg): eleven white dots draw the J, the twelfth, amber and
 /// bigger, ends the hook. Always Jomhor's colours, never the club's; on an amber ground all twelve dots are ink
 /// ([onAmber], design/BRAND.md). Drawn, not an asset, so it stays crisp at any size; its viewBox holds the clear space.
 class JomhorMark extends StatelessWidget {
-  const new({this.size = 64, this.onAmber = false, super.key});
+  const new({this.size = 64, this.onAmber = false, this.entrance = false, this.busy = false, super.key});
 
   /// The tile; 24 at least (design/BRAND.md).
   final double size;
   final bool onAmber;
 
+  /// The dots assemble along the J once, on first paint, the amber one last.
+  final bool entrance;
+
+  /// A progress indicator: a wave runs along the J to the amber dot for as long as this is true.
+  final bool busy;
+
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
     child: SizedBox.square(
       dimension: size,
-      child: CustomPaint(painter: _BrandPainter(onAmber: onAmber)),
+      child: _AnimatedBrand(onAmber: onAmber, entrance: entrance, busy: busy),
     ),
   );
 }
@@ -26,9 +33,13 @@ class JomhorMark extends StatelessWidget {
 /// retyped. It is a picture, so it is not mirrored in AR; a row puts it at the start (the right side in AR).
 class JomhorLockup extends StatelessWidget {
   /// [height] 30 at least: below 120 px wide, the mark goes alone (design/BRAND.md).
-  const new({this.height = 32, super.key});
+  const new({this.height = 32, this.entrance = false, this.busy = false, super.key});
 
   final double height;
+
+  /// As on [JomhorMark]; the wordmark stays still.
+  final bool entrance;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -37,7 +48,7 @@ class JomhorLockup extends StatelessWidget {
     child: SizedBox(
       width: height * JomhorBrand.lockupWidth / 120,
       height: height,
-      child: const CustomPaint(painter: _BrandPainter(lockup: true)),
+      child: _AnimatedBrand(lockup: true, entrance: entrance, busy: busy),
     ),
   );
 }
@@ -82,11 +93,94 @@ final Path jomhorWordmark = () {
   return path;
 }();
 
+/// The painted mark or lockup, with the controllers of its motion (DESIGN.md §6): none for a still one, none
+/// under reduced motion.
+class _AnimatedBrand extends StatefulWidget {
+  const new({required this.entrance, required this.busy, this.onAmber = false, this.lockup = false});
+
+  final bool entrance;
+  final bool busy;
+  final bool onAmber;
+  final bool lockup;
+
+  @override
+  State<_AnimatedBrand> createState() => _AnimatedBrandState();
+}
+
+class _AnimatedBrandState extends State<_AnimatedBrand> with TickerProviderStateMixin {
+  AnimationController? _entrance;
+  AnimationController? _wave;
+
+  /// The entrance is for the first paint: it plays then or never (not when reduced motion is turned off later).
+  var _entranceDecided = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedBrand old) {
+    super.didUpdateWidget(old);
+    if (old.busy != widget.busy) _sync();
+  }
+
+  void _sync() {
+    final still = reduceMotion(context);
+    if (!_entranceDecided) {
+      _entranceDecided = true;
+      if (widget.entrance && !still) {
+        _entrance = AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: _BrandPainter.entranceMs),
+        )..forward();
+      }
+    }
+    if (still) {
+      _entrance?.dispose();
+      _wave?.dispose();
+      _entrance = _wave = null;
+      return;
+    }
+    if (widget.busy) {
+      (_wave ??= AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))).repeat();
+    } else if (_wave?.isAnimating ?? false) {
+      // The pass under way ends on the still mark: no snap back.
+      _wave!.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entrance?.dispose();
+    _wave?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _BrandPainter(onAmber: widget.onAmber, lockup: widget.lockup, entrance: _entrance, wave: _wave),
+  );
+}
+
 class _BrandPainter extends CustomPainter {
-  const new({this.onAmber = false, this.lockup = false});
+  new({this.onAmber = false, this.lockup = false, this.entrance, this.wave})
+    : super(repaint: Listenable.merge([entrance, wave]));
+
+  /// DESIGN.md principle 6: an entrance lasts 420 ms at most.
+  static const entranceMs = 420;
 
   final bool onAmber;
   final bool lockup;
+
+  /// 0 to 1, once: each white dot grows and fades in over 170 ms, 25 ms after the one before it along the J; the
+  /// amber one comes last and overshoots. Null, or at 1: the still mark.
+  final Animation<double>? entrance;
+
+  /// 0 to 1, looped while busy: the eleven dim (in by 0.1, back by 0.9) and a bump runs along them until 0.6; the
+  /// amber dot swells as it lands (0.5 to 0.8) and never dims. Null, at 0 or at 1: the still mark, exactly.
+  final Animation<double>? wave;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -99,10 +193,25 @@ class _BrandPainter extends CustomPainter {
         ..translate(0, JomhorBrand.lockupMarkDy)
         ..scale(JomhorBrand.lockupMarkScale);
     }
-    final dot = Paint()..color = onAmber ? JomhorBrand.ink : JomhorBrand.white;
-    final twelfth = Paint()..color = onAmber ? JomhorBrand.ink : JomhorBrand.amber;
+    final e = entrance?.value ?? 1;
+    final w = wave?.value ?? 0;
+    final dim = (w < 0.5 ? w / 0.1 : (0.9 - w) / 0.3).clamp(0.0, 1.0);
+    final swell = 1 - (2 * ((w - 0.5) / 0.3).clamp(0.0, 1.0) - 1).abs();
+    final paint = Paint();
     for (final (i, (x, y, r)) in JomhorBrand.dots.indexed) {
-      canvas.drawCircle(Offset(x, y), r, i == JomhorBrand.dots.length - 1 ? twelfth : dot);
+      final twelfth = i == JomhorBrand.dots.length - 1;
+      final grow = twelfth
+          ? const Interval(270 / entranceMs, 1, curve: Curves.easeOutBack).transform(e)
+          : Interval(i * 25 / entranceMs, (i * 25 + 170) / entranceMs, curve: Curves.easeOut).transform(e);
+      // The bump is two dots wide each side; it starts before the first dot and has left the eleventh at 0.6.
+      final bump = (1 - (i - (w / 0.6 * 14 - 2)).abs() / 2).clamp(0.0, 1.0);
+      // The amber dot stops at 1.18: it would touch the eleventh from 1.198.
+      final scale = grow * (twelfth ? 1 + 0.18 * swell : 1 + 0.2 * bump);
+      final alpha = grow.clamp(0.0, 1.0) * (twelfth ? 1 : 1 - 0.55 * dim * (1 - bump));
+      paint.color = (onAmber ? JomhorBrand.ink : (twelfth ? JomhorBrand.amber : JomhorBrand.white)).withValues(
+        alpha: alpha,
+      );
+      canvas.drawCircle(Offset(x, y), r * scale, paint);
     }
     if (lockup) {
       canvas
@@ -114,7 +223,8 @@ class _BrandPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BrandPainter old) => old.onAmber != onAmber || old.lockup != lockup;
+  bool shouldRepaint(_BrandPainter old) =>
+      old.onAmber != onAmber || old.lockup != lockup || old.entrance != entrance || old.wave != wave;
 }
 
 /// A club's crest (docs/04-api.md §Club directory): the `crest_url` image as supplied, never recoloured; with no
