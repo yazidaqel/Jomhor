@@ -36,7 +36,7 @@ create table organizers (
 --   "loyalty": {"tiers": [{"code": "T1", "name": {"fr": "Membre", "ar": "منخرط", "en": "Member"}, "min_events": 0},
 --                         {"code": "T2", "name": {"fr": "Fidèle", "ar": "وفي", "en": "Regular"}, "min_events": 3},
 --                         {"code": "T3", "name": {"fr": "Pilier", "ar": "ركيزة", "en": "Stalwart"}, "min_events": 10}]}
---   tiers by min_events ascending, the first at 0; absent = these defaults; a missing locale falls back to "fr".
+--   tiers by min_events ascending, the first at 0; absent or malformed = these defaults; a missing locale falls back to "fr".
 
 create table users (
   id            uuid primary key default gen_random_uuid(),
@@ -328,7 +328,7 @@ create table memberships (                            -- a fan who joined an org
   user_id             uuid not null references users(id),
   number              integer not null check (number > 0),   -- member number per organizer, from 1, never reused
   joined_at           timestamptz not null default now(),
-  left_at             timestamptz,                           -- left the club; a rejoin clears it and keeps the number
+  left_at             timestamptz,                           -- left the club; a rejoin clears it and keeps the number and joined_at
   marketing_push      boolean not null default false,        -- opt-ins for MEMBERS campaigns (changes audited: membership.consent)
   marketing_whatsapp  boolean not null default false,
   unique (organizer_id, user_id),

@@ -19,6 +19,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get navTickets => 'تذاكري';
 
   @override
+  String get navClub => 'النادي';
+
+  @override
   String get navProfile => 'حسابي';
 
   @override
@@ -990,5 +993,170 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String gateMore(int count) {
     return '+$count';
+  }
+
+  @override
+  String clubTabTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'فرقك', one: 'فريقك');
+    return '$_temp0';
+  }
+
+  @override
+  String get clubNoFollowsTitle => 'ختار فرقك';
+
+  @override
+  String get clubNoFollows => 'تابع شي فريق باش تاخد الكارطة ديال المنخرط والموسم ديالك فالملعب.';
+
+  @override
+  String get clubNoFollowsAction => 'ختار فرقي';
+
+  @override
+  String get clubMemberCard => 'كارطة المنخرط';
+
+  @override
+  String get clubMemberNo => 'رقم المنخرط';
+
+  @override
+  String clubMemberSince(String date) {
+    return 'من $date';
+  }
+
+  @override
+  String get clubJoin => 'نخرط فالنادي · فابور';
+
+  @override
+  String get clubJoinPitch => 'الكارطة ديالك، الموسم ديالك فالملعب والأخبار ديال النادي.';
+
+  @override
+  String clubJoinTitle(String club) {
+    return 'نخرط ف$club';
+  }
+
+  @override
+  String get clubJoinBody => 'فابور. نتا لي كتختار شنو يقدر يصيفط ليك النادي، وتقدر تبدل وقتما بغيتي.';
+
+  @override
+  String get clubJoinConfirm => 'نخرط';
+
+  @override
+  String get clubPushTitle => 'إشعارات النادي';
+
+  @override
+  String get clubPushBody => 'الماتشات، التذاكر والأخبار ديال النادي، فهاد التيليفون.';
+
+  @override
+  String get clubWhatsappTitle => 'ميساجات الواتساب ديال النادي';
+
+  @override
+  String get clubWhatsappBody => 'الأخبار ديال النادي فالواتساب ديالك.';
+
+  @override
+  String get clubSeason => 'الموسم ديالك';
+
+  @override
+  String clubSeasonNext(String date) {
+    return 'الجاي · $date';
+  }
+
+  @override
+  String clubSeasonLabel(int attended, int total) {
+    return '$attended من $total';
+  }
+
+  @override
+  String clubSeasonLabelNext(String title) {
+    return 'الجاي: $title';
+  }
+
+  @override
+  String clubMatchesAttended(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ماتش فالملعب',
+      few: '$count ماتشات فالملعب',
+      two: 'جوج ماتشات فالملعب',
+      one: 'ماتش واحد فالملعب',
+      zero: 'حتى ماتش فالملعب',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String clubEventsAttended(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حضرتي $count حدث',
+      few: 'حضرتي $count أحداث',
+      two: 'حضرتي جوج أحداث',
+      one: 'حضرتي حدث واحد',
+      zero: 'حتى حدث ما حضرتي',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String clubToNextTier(int count, String tier) {
+    return 'باقي $count باش تولّي $tier';
+  }
+
+  @override
+  String get clubRecent => 'الأخيرين';
+
+  @override
+  String get clubAttended => 'كنت تما';
+
+  @override
+  String get clubMissed => 'فاتني';
+
+  @override
+  String get clubMessages => 'الميساجات ديال النادي';
+
+  @override
+  String get clubLeave => 'خرج من النادي';
+
+  @override
+  String clubLeaveTitle(String club) {
+    return 'تخرج من $club؟';
+  }
+
+  @override
+  String get clubLeaveBody => 'ما بقاوش يوصلوك الميساجات ديال النادي. إلا رجعتي، كتلقى نفس الرقم ديالك.';
+
+  @override
+  String get clubLeaveConfirm => 'خرج';
+
+  @override
+  String memberStripNo(String number) {
+    return 'رقم $number';
+  }
+
+  @override
+  String memberStripMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ماتش',
+      few: '$count ماتشات',
+      two: 'جوج ماتشات',
+      one: 'ماتش واحد',
+      zero: '0 ماتش',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String memberStripEvents(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count حدث',
+      few: '$count أحداث',
+      two: 'جوج أحداث',
+      one: 'حدث واحد',
+      zero: '0 حدث',
+    );
+    return '$_temp0';
   }
 }

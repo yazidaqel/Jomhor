@@ -18,11 +18,29 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV18Apply() {
+    void v1ToV19Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18");
+                        "17", "18", "19");
+    }
+
+    @Test
+    void membershipNumbersArePositiveAndUniquePerOrganizer() {
+        UUID org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        UUID other = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club 2') returning id", UUID.class);
+        String user = "insert into users (phone_e164) values (?) returning id";
+        UUID u1 = jdbcTemplate.queryForObject(user, UUID.class, randomPhone());
+        UUID u2 = jdbcTemplate.queryForObject(user, UUID.class, randomPhone());
+        String insert = "insert into memberships (organizer_id, user_id, number) values (?, ?, ?)";
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, u1, 0))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("memberships_number_check");
+        jdbcTemplate.update(insert, org, u1, 1);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, u2, 1)).isInstanceOf(DuplicateKeyException.class)
+                .hasMessageContaining("memberships_organizer_id_number_key");
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, u1, 2)).isInstanceOf(DuplicateKeyException.class)
+                .hasMessageContaining("memberships_organizer_id_user_id_key");
+        jdbcTemplate.update(insert, other, u2, 1); // numbers are per organizer
     }
 
     @Test

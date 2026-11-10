@@ -440,10 +440,14 @@ class TicketBand extends StatelessWidget {
     this.club,
     this.success = false,
     this.crestKey = const Key('ticket.crest'),
+    this.titleMaxLines,
     super.key,
   });
 
   final String title;
+
+  /// One line on the member card (screen 7), whose height is fixed; the ticket wraps.
+  final int? titleMaxLines;
   final String? overline;
   final Club? club;
   final bool success;
@@ -485,7 +489,12 @@ class TicketBand extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(title.toUpperCase(), style: JomhorType.hero.copyWith(fontSize: 29, color: ink)),
+                  Text(
+                    title.toUpperCase(),
+                    maxLines: titleMaxLines,
+                    overflow: titleMaxLines == null ? null : TextOverflow.ellipsis,
+                    style: JomhorType.hero.copyWith(fontSize: 29, color: ink),
+                  ),
                 ],
               ),
             ),

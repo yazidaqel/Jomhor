@@ -19,6 +19,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navTickets => 'Tickets';
 
   @override
+  String get navClub => 'Club';
+
+  @override
   String get navProfile => 'Profile';
 
   @override
@@ -968,5 +971,150 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String gateMore(int count) {
     return '+$count';
+  }
+
+  @override
+  String clubTabTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'Your clubs', one: 'Your club');
+    return '$_temp0';
+  }
+
+  @override
+  String get clubNoFollowsTitle => 'Pick your clubs';
+
+  @override
+  String get clubNoFollows => 'Follow a club to get your member card and your season at the stadium.';
+
+  @override
+  String get clubNoFollowsAction => 'Pick my clubs';
+
+  @override
+  String get clubMemberCard => 'Member card';
+
+  @override
+  String get clubMemberNo => 'Member no.';
+
+  @override
+  String clubMemberSince(String date) {
+    return 'since $date';
+  }
+
+  @override
+  String get clubJoin => 'Join the club · free';
+
+  @override
+  String get clubJoinPitch => 'Your member card, your season at the stadium and the club\'s news.';
+
+  @override
+  String clubJoinTitle(String club) {
+    return 'Join $club';
+  }
+
+  @override
+  String get clubJoinBody => 'It\'s free. You choose what the club may send you and change it whenever you like.';
+
+  @override
+  String get clubJoinConfirm => 'Join';
+
+  @override
+  String get clubPushTitle => 'Club notifications';
+
+  @override
+  String get clubPushBody => 'Matches, tickets and club news, on this phone.';
+
+  @override
+  String get clubWhatsappTitle => 'Club WhatsApp messages';
+
+  @override
+  String get clubWhatsappBody => 'Club news on your WhatsApp.';
+
+  @override
+  String get clubSeason => 'Your season';
+
+  @override
+  String clubSeasonNext(String date) {
+    return 'Next · $date';
+  }
+
+  @override
+  String clubSeasonLabel(int attended, int total) {
+    return '$attended of $total';
+  }
+
+  @override
+  String clubSeasonLabelNext(String title) {
+    return 'next: $title';
+  }
+
+  @override
+  String clubMatchesAttended(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matches at the stadium',
+      one: '1 match at the stadium',
+      zero: 'No match at the stadium',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String clubEventsAttended(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count events attended',
+      one: '1 event attended',
+      zero: 'No event attended',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String clubToNextTier(int count, String tier) {
+    return '$count more to $tier';
+  }
+
+  @override
+  String get clubRecent => 'Latest';
+
+  @override
+  String get clubAttended => 'I was there';
+
+  @override
+  String get clubMissed => 'Missed';
+
+  @override
+  String get clubMessages => 'Club messages';
+
+  @override
+  String get clubLeave => 'Leave the club';
+
+  @override
+  String clubLeaveTitle(String club) {
+    return 'Leave $club?';
+  }
+
+  @override
+  String get clubLeaveBody => 'You won\'t get the club\'s messages any more. If you come back, you keep your number.';
+
+  @override
+  String get clubLeaveConfirm => 'Leave';
+
+  @override
+  String memberStripNo(String number) {
+    return 'No. $number';
+  }
+
+  @override
+  String memberStripMatches(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count matches', one: '1 match');
+    return '$_temp0';
+  }
+
+  @override
+  String memberStripEvents(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count events', one: '1 event');
+    return '$_temp0';
   }
 }

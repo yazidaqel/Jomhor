@@ -46,7 +46,7 @@ DateTime? _date(String? header) {
   }
 }
 
-/// JSON client for the fan API. [get], [post] and [patch] send `Authorization: Bearer` when a
+/// JSON client for the fan API. [get], [post], [patch], [put] and [delete] send `Authorization: Bearer` when a
 /// token is stored. Public endpoints (`GET /fan/events*`, `GET /fan/organizers*`, `POST /fan/auth/*`) go through
 /// [getPublic] and [postPublic], which never do; [get] and [post] refuse those paths.
 ///
@@ -105,6 +105,11 @@ class ApiClient {
   Future<Object?> postPublic(String path, {Object? body}) => _body(_send('POST', path, body: body, auth: false));
 
   Future<Object?> patch(String path, {Object? body}) => _body(_send('PATCH', path, body: body, auth: true));
+
+  Future<Object?> put(String path, {Object? body}) => _body(_send('PUT', path, body: body, auth: true));
+
+  Future<Object?> delete(String path, {Map<String, Object>? query}) =>
+      _body(_send('DELETE', path, query: query, auth: true));
 
   static Future<Object?> _body(Future<ApiResponse> response) async => (await response).body;
 

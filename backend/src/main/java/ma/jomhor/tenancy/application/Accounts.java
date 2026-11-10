@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.tenancy.domain.CashPoint;
+import ma.jomhor.tenancy.domain.LoyaltyTier;
 import ma.jomhor.tenancy.domain.Membership;
 import ma.jomhor.tenancy.domain.Organizer;
 import ma.jomhor.tenancy.domain.StaffMember;
@@ -52,6 +53,16 @@ public interface Accounts {
 
     /** organizers.settings.cash_points: object entries with a name, in order; anything else is skipped. */
     List<CashPoint> cashPoints(UUID organizerId);
+
+    /**
+     * organizers.settings.loyalty: {@code present} = the key is set; {@code tiers} = the entries of its tiers array in
+     * order (empty when not an array), unchecked. Empty if no such organizer.
+     */
+    Optional<LoyaltySetting> loyalty(UUID organizerId);
+
+    record LoyaltySetting(boolean present, List<LoyaltyTier> tiers) {}
+
+    boolean organizerExists(UUID organizerId);
 
     /** Organizers with a slug (the club directory), by name then id. */
     List<Organizer> listedOrganizers();

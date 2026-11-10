@@ -2,12 +2,16 @@ package ma.jomhor.tenancy.adapters.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.common.Crests;
 import ma.jomhor.tenancy.application.Accounts;
 import ma.jomhor.tenancy.domain.CashPoint;
+import ma.jomhor.tenancy.domain.LoyaltyTier;
 import ma.jomhor.tenancy.domain.Membership;
 import ma.jomhor.tenancy.domain.Organizer;
 import ma.jomhor.tenancy.domain.StaffMember;
@@ -59,6 +63,63 @@ class JdbcAccounts implements Accounts {
                 .param(organizerId)
                 .query((rs, n) -> new CashPoint(rs.getString("name"), rs.getString("address"), rs.getString("hours")))
                 .list();
+    }
+
+    /** One row per tiers entry (one row with a null tier when there is none); typed fields only, else null / -1. */
+    @Override
+    public Optional<LoyaltySetting> loyalty(UUID organizerId) {
+        record Row(boolean present, LoyaltyTier tier) {}
+        List<Row> rows = jdbc.sql("""
+                        select o.settings -> 'loyalty' is not null as present, e.n,
+                               case when jsonb_typeof(e.p -> 'code') = 'string' then e.p ->> 'code' end as code,
+                               case when jsonb_typeof(e.p -> 'name' -> 'fr') = 'string' then e.p -> 'name' ->> 'fr' end as fr,
+                               case when jsonb_typeof(e.p -> 'name' -> 'ar') = 'string' then e.p -> 'name' ->> 'ar' end as ar,
+                               case when jsonb_typeof(e.p -> 'name' -> 'en') = 'string' then e.p -> 'name' ->> 'en' end as en,
+                               case when jsonb_typeof(e.p -> 'min_events') = 'number' then e.p ->> 'min_events' end
+                                 as min_events
+                        from organizers o
+                        left join lateral jsonb_array_elements(
+                                case when jsonb_typeof(o.settings -> 'loyalty' -> 'tiers') = 'array'
+                                     then o.settings -> 'loyalty' -> 'tiers' else '[]'::jsonb end)
+                            with ordinality as e(p, n) on true
+                        where o.id = ?
+                        order by e.n
+                        """)
+                .param(organizerId)
+                .query((rs, i) -> {
+                    if (rs.getObject("n") == null) {
+                        return new Row(rs.getBoolean("present"), null);
+                    }
+                    Map<String, String> name = new HashMap<>();
+                    for (String locale : new String[] {"fr", "ar", "en"}) {
+                        if (rs.getString(locale) != null) {
+                            name.put(locale, rs.getString(locale));
+                        }
+                    }
+                    return new Row(rs.getBoolean("present"),
+                            new LoyaltyTier(rs.getString("code"), Map.copyOf(name), minEvents(rs.getString("min_events"))));
+                })
+                .list();
+        if (rows.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new LoyaltySetting(rows.getFirst().present(),
+                rows.stream().map(Row::tier).filter(Objects::nonNull).toList()));
+    }
+
+    /** A JSON number that is not a non-negative int → -1 (invalid). */
+    private static int minEvents(String number) {
+        try {
+            return number == null ? -1 : Math.max(-1, Integer.parseInt(number));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    @Override
+    public boolean organizerExists(UUID organizerId) {
+        return jdbc.sql("select exists (select 1 from organizers where id = ?)").param(organizerId)
+                .query(Boolean.class).single();
     }
 
     // Platform reads of the organizers table itself (public directory), not of a tenant table.

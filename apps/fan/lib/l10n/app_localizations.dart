@@ -111,6 +111,12 @@ abstract class AppLocalizations {
   /// **'Billets'**
   String get navTickets;
 
+  /// Bottom nav, 3rd tab: screen 7.
+  ///
+  /// In fr, this message translates to:
+  /// **'Club'**
+  String get navClub;
+
   /// Bottom nav tab: the fan's profile.
   ///
   /// In fr, this message translates to:
@@ -1736,6 +1742,210 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'+{count}'**
   String gateMore(int count);
+
+  /// Screen 7 title; count = followed clubs.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{Ton club} other{Tes clubs}}'**
+  String clubTabTitle(int count);
+
+  /// Screen 7 without a followed club.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisis tes clubs'**
+  String get clubNoFollowsTitle;
+
+  /// No description provided for @clubNoFollows.
+  ///
+  /// In fr, this message translates to:
+  /// **'Suis un club pour avoir ta carte de membre et ta saison au stade.'**
+  String get clubNoFollows;
+
+  /// → screen 11.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir mes clubs'**
+  String get clubNoFollowsAction;
+
+  /// Overline of the member card band.
+  ///
+  /// In fr, this message translates to:
+  /// **'Carte membre'**
+  String get clubMemberCard;
+
+  /// Label over the member number (uppercased in FR/EN).
+  ///
+  /// In fr, this message translates to:
+  /// **'Membre N°'**
+  String get clubMemberNo;
+
+  /// Join month on the card, e.g. depuis nov. 2026.
+  ///
+  /// In fr, this message translates to:
+  /// **'depuis {date}'**
+  String clubMemberSince(String date);
+
+  /// Non-member card CTA → join sheet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rejoindre le club · gratuit'**
+  String get clubJoin;
+
+  /// No description provided for @clubJoinPitch.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta carte de membre, ta saison au stade et les nouvelles du club.'**
+  String get clubJoinPitch;
+
+  /// Join sheet title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rejoindre {club}'**
+  String clubJoinTitle(String club);
+
+  /// No description provided for @clubJoinBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'C\'est gratuit. Tu choisis ce que le club peut t\'envoyer et tu changes quand tu veux.'**
+  String get clubJoinBody;
+
+  /// Join sheet CTA: PUT /fan/me/membership.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rejoindre'**
+  String get clubJoinConfirm;
+
+  /// Opt-in switch (marketing_push), default off.
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications du club'**
+  String get clubPushTitle;
+
+  /// No description provided for @clubPushBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Matchs, billetterie et nouvelles du club, sur ce téléphone.'**
+  String get clubPushBody;
+
+  /// Opt-in switch (marketing_whatsapp), default off.
+  ///
+  /// In fr, this message translates to:
+  /// **'Messages WhatsApp du club'**
+  String get clubWhatsappTitle;
+
+  /// No description provided for @clubWhatsappBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les nouvelles du club sur ton WhatsApp.'**
+  String get clubWhatsappBody;
+
+  /// Section over the 12-dot row.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta saison'**
+  String get clubSeason;
+
+  /// Caption under the 12th (amber) dot.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prochain · {date}'**
+  String clubSeasonNext(String date);
+
+  /// Screen reader label of the 12-dot row.
+  ///
+  /// In fr, this message translates to:
+  /// **'{attended} sur {total}'**
+  String clubSeasonLabel(int attended, int total);
+
+  /// Screen reader, after the count.
+  ///
+  /// In fr, this message translates to:
+  /// **'prochain : {title}'**
+  String clubSeasonLabelNext(String title);
+
+  /// events_attended, the club's past events all being football matches (lot-4 Q92).
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =0{Aucun match au stade} =1{1 match au stade} other{{count} matchs au stade}}'**
+  String clubMatchesAttended(int count);
+
+  /// events_attended, any other club (lot-4 Q92).
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =0{Aucun événement sur place} =1{1 événement sur place} other{{count} événements sur place}}'**
+  String clubEventsAttended(int count);
+
+  /// Tier progress; hidden at the top tier.
+  ///
+  /// In fr, this message translates to:
+  /// **'Encore {count} pour {tier}'**
+  String clubToNextTier(int count, String tier);
+
+  /// The 3 newest closed events.
+  ///
+  /// In fr, this message translates to:
+  /// **'Derniers'**
+  String get clubRecent;
+
+  /// Chip on a past event the fan attended.
+  ///
+  /// In fr, this message translates to:
+  /// **'J\'y étais'**
+  String get clubAttended;
+
+  /// Chip on a past event the fan did not attend.
+  ///
+  /// In fr, this message translates to:
+  /// **'Manqué'**
+  String get clubMissed;
+
+  /// Member settings section: the two opt-ins.
+  ///
+  /// In fr, this message translates to:
+  /// **'Messages du club'**
+  String get clubMessages;
+
+  /// No description provided for @clubLeave.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quitter le club'**
+  String get clubLeave;
+
+  /// Leave confirm dialog.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quitter {club} ?'**
+  String clubLeaveTitle(String club);
+
+  /// No description provided for @clubLeaveBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tu ne recevras plus les messages du club. Si tu reviens, tu retrouves ton numéro.'**
+  String get clubLeaveBody;
+
+  /// No description provided for @clubLeaveConfirm.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quitter'**
+  String get clubLeaveConfirm;
+
+  /// Accueil member strip: the member number (LTR isolate in AR).
+  ///
+  /// In fr, this message translates to:
+  /// **'N° {number}'**
+  String memberStripNo(String number);
+
+  /// Accueil member strip, football club (lot-4 Q92).
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 match} other{{count} matchs}}'**
+  String memberStripMatches(int count);
+
+  /// Accueil member strip, other clubs (lot-4 Q92).
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 événement} other{{count} événements}}'**
+  String memberStripEvents(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
