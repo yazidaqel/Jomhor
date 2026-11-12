@@ -109,10 +109,36 @@ it.each<[string, unknown]>([
   ['holders not a list', item({ holders: { name: 'A B' } })],
   ['a name that is not a string', item({ holders: [{ name: 42 }] })],
   ['a phone that is not a string', item({ holders: [{ name: 'A B', phone: 612345678 }] })],
+  ['pays as a string', item({ holders: [{ name: 'A B', phone: '+212612345678', pays: 'true' }] })],
+  ['pays as a number', item({ holders: [{ name: 'A B', phone: '+212612345678', pays: 1 }] })],
+  ['pays null', item({ holders: [{ name: 'A B', phone: '+212612345678', pays: null }] })],
 ])('create refuses %s (422) and calls nothing', async (_, body) => {
   const res = await createOrder(req('/api/orders', { body }))
   expect(res.status).toBe(422)
   expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('create (split pay): pays kept only when true, false dropped, per holder', async () => {
+  fetchMock.mockResolvedValue(upstream(201, ORDER))
+  const holders = [{ name: 'Yazid Aqel' }, { name: 'Salma Benali', phone: '+212612345678', pays: true }, { name: 'Omar Idrissi', phone: '+212698765432', pays: false }]
+  const res = await createOrder(req('/api/orders', { body: { event_id: 12, items: [{ price_category_id: 'pc-virage', qty: 3, holders }] } }))
+  expect(res.status).toBe(201)
+  expect(sent().body.items[0].holders).toEqual([
+    { name: 'Yazid Aqel' },
+    { name: 'Salma Benali', phone: '+212612345678', pays: true },
+    { name: 'Omar Idrissi', phone: '+212698765432' },
+  ])
+})
+
+it.each([
+  ['NO_BUYER_PLACE', 422, { code: 'VALIDATION_FAILED', message: '', details: { fields: { items: 'x' }, reason: 'NO_BUYER_PLACE' } }],
+  ['TOO_LATE', 422, { code: 'VALIDATION_FAILED', message: '', details: { fields: { 'items[0].holders[1].pays': 'x' }, reason: 'TOO_LATE' } }],
+  ['a member over their limit', 409, { code: 'PER_ACCOUNT_LIMIT', message: '', details: { limit: 4, held: 4, field: 'items[0].holders[1]' } }],
+])('create passes the split pay error %s through', async (_, status, body) => {
+  fetchMock.mockResolvedValue(upstream(status, body))
+  const res = await createOrder(req('/api/orders', { body: VALID }))
+  expect(res.status).toBe(status)
+  expect(await res.json()).toEqual(body)
 })
 
 it.each(['CARD', 'WALLET'])('pay %s: Bearer from the cookie, method forwarded, answers only redirect_url', async (method) => {
@@ -126,7 +152,7 @@ it.each(['CARD', 'WALLET'])('pay %s: Bearer from the cookie, method forwarded, a
   const s = sent()
   expect(s.url).toBe(`http://backend.test/v1/fan/orders/${ORDER_ID}/pay`)
   expect(s.headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
-  expect(s.body).toEqual({ method })
+  expect(s.body).toEqual({ method, channel: 'WEB' }) // Lot 4: the paying client, so /return lands on the shop
 })
 
 it('pay CASH_AGENCY: method forwarded; answers {method} only, never the code payload nor the cookie token', async () => {
@@ -139,7 +165,7 @@ it('pay CASH_AGENCY: method forwarded; answers {method} only, never the code pay
   const text = await res.text()
   expect(JSON.parse(text)).toEqual({ method: 'CASH_AGENCY' })
   expect(text).not.toContain(TOKEN)
-  expect(sent().body).toEqual({ method: 'CASH_AGENCY' })
+  expect(sent().body).toEqual({ method: 'CASH_AGENCY', channel: 'WEB' })
   expect(sent().headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
 })
 
@@ -237,6 +263,15 @@ it('status of a cash order: payment_method passed on, the code itself is not pol
     payment_status: 'PENDING',
     payment_method: 'CASH_AGENCY',
   })
+})
+
+it('status (poll) never carries the split pay group: labels and pay links stay in the server render', async () => {
+  fetchMock.mockResolvedValue(
+    upstream(200, { ...ORDER, group: { role: 'INITIATOR', members: [{ order_id: 'm1', holder_label: 'Salma B.', places: 1, total_mad: 5000, status: 'RESERVED', reserved_until: null, pay_url: 'https://shop.test/orders/m1', phone: '+212612345678' }] } }),
+  )
+  const text = await (await getOrder(req(`/api/orders/${ORDER_ID}`, { method: 'GET' }), params(ORDER_ID))).text()
+  expect(text).not.toContain('group')
+  expect(text).not.toContain('+212612345678')
 })
 
 it("status passes 404 through (someone else's order)", async () => {

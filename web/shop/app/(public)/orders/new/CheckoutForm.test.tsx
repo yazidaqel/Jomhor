@@ -52,7 +52,7 @@ it('cash refused (METHOD_NOT_AVAILABLE): stays on the held order with its countd
         priceCategoryId="pc-virage"
         qty={1}
         displayName="Yazid Aqel"
-        totalMad={5000}
+        unitMad={5000}
         methods={['CARD', 'CASH_AGENCY']}
         cashLate={false}
         cashDeadline="Lun. 2 févr. 2026 · 13:00"
