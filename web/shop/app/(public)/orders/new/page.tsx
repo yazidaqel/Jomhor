@@ -7,6 +7,7 @@ import { getEvent, saleState } from '@/lib/events'
 import { currentSession } from '@/lib/http'
 import { fmt } from '@/lib/i18n'
 import { getI18n } from '@/lib/i18n/server'
+import { cashOptions } from '@/lib/checkout'
 import { formatDh } from '@/lib/money'
 import { checkoutPath, loginUrl, parseCheckout } from '@/lib/orders'
 import { formatDateTime } from '@/lib/time'
@@ -57,11 +58,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
   const total = price.price_mad * qty // integer centimes × integer count: exact
   const zoneLabel = zone.prices.length > 1 ? `${zone.name} · ${price.name}` : zone.name
   const when = `${formatDateTime(e.starts_at, e.timezone, d.meta.intl)} · ${e.venue.name}`
-  // Cash (04 GET /fan/events/{id}): hidden when not set up (cash_until null), "trop tard" from cash_until on (also when
-  // a cached read still lists it). A code issued now is valid until least(now + 24 h, sales close): the hint says so.
-  const cashLate = !!e.cash_until && (now >= Date.parse(e.cash_until) || !e.payment_methods.includes('CASH_AGENCY'))
-  const methods = e.payment_methods.filter((m) => m !== 'CASH_AGENCY' || (e.cash_until && !cashLate))
-  const cashUntil = Math.min(now + 24 * 3_600_000, e.sales_close_at ? Date.parse(e.sales_close_at) : Infinity)
+  const { methods, cashLate, cashUntil } = cashOptions(e, now)
 
   return (
     <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-16">
@@ -81,12 +78,12 @@ export default async function CheckoutPage({ searchParams }: Props) {
           priceCategoryId={price.price_category_id}
           qty={qty}
           displayName={typeof me?.display_name === 'string' ? me.display_name : null}
-          totalMad={total}
+          unitMad={price.price_mad}
           methods={methods}
           cashLate={cashLate}
           now={now}
           timezone={e.timezone}
-          cashDeadline={formatDateTime(new Date(cashUntil).toISOString(), e.timezone, d.meta.intl)}
+          cashDeadline={formatDateTime(cashUntil, e.timezone, d.meta.intl)}
           copy={{ checkout: d.checkout, errors: d.errors, meta: d.meta }}
         />
       </section>

@@ -26,7 +26,7 @@ class CheckoutRepository {
             'price_category_id': priceCategoryId,
             'qty': holders.length,
             'holders': [
-              for (final h in holders) {'name': h.name, 'phone': ?h.phone},
+              for (final h in holders) {'name': h.name, 'phone': ?h.phone, if (h.pays) 'pays': true},
             ],
           },
         ],
@@ -35,9 +35,13 @@ class CheckoutRepository {
     return (FanOrder.fromJson(res.body! as Map<String, Object?>), res.date);
   }
 
-  /// CARD and WALLET answer the hosted page; CASH_AGENCY moves the order to AWAITING_CASH with a pay code.
+  /// CARD and WALLET answer the hosted page; CASH_AGENCY moves the order to AWAITING_CASH with a pay code. `channel`
+  /// APP: the card page returns to the app, even for a split-pay member order made on the shop.
   Future<PayStart> pay(String orderId, PayMethod method) async => PayStart.fromJson(
-    (await _api.post('/fan/orders/${Uri.encodeComponent(orderId)}/pay', body: {'method': method.wire}))!
+    (await _api.post(
+          '/fan/orders/${Uri.encodeComponent(orderId)}/pay',
+          body: {'method': method.wire, 'channel': 'APP'},
+        ))!
         as Map<String, Object?>,
     method,
   );
@@ -60,13 +64,14 @@ final checkoutRepositoryProvider = Provider<CheckoutRepository>(
   (ref) => CheckoutRepository(ref.watch(apiClientProvider)),
 );
 
-/// The AWAITING_CASH order of an upcoming event whose PENDING code runs out first, judged on server time [now].
-/// An AWAITING_CASH order without a code (`pay_code` null, e.g. after a network amount mismatch) is left out.
+/// The order of an upcoming event that waits on the fan and runs out first, judged on server time [now]: an
+/// AWAITING_CASH order with its PENDING code, or a place a friend kept (a MEMBER order still RESERVED, DESIGN.md Lot
+/// 4 screen 1). An AWAITING_CASH order without a code (`pay_code` null, e.g. after a network amount mismatch) is
+/// left out.
 OrderRow? pendingCash(List<OrderRow> rows, DateTime now) {
   final waiting = [
     for (final o in rows)
-      if (o.status == 'AWAITING_CASH' &&
-          o.payCode != null &&
+      if ((o.status == 'AWAITING_CASH' && o.payCode != null || o.status == 'RESERVED' && o.groupRole == 'MEMBER') &&
           o.eventStartsAt.isAfter(now) &&
           (o.reservedUntil?.isAfter(now) ?? false))
         o,

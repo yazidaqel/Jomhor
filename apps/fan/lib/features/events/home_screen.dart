@@ -277,8 +277,9 @@ class _CardClubLine extends ConsumerWidget {
   }
 }
 
-/// DESIGN.md Lot 3, screen 1: the AWAITING_CASH order whose code runs out first, in amber, → the cash order
-/// screen. Nothing while loading, signed out, offline or on error: it never holds the home back.
+/// DESIGN.md Lot 3 and Lot 4, screen 1: the order waiting on the fan that runs out first, in amber: a cash code →
+/// the cash order screen, or a place a friend kept → screen 9 member. Nothing while loading, signed out, offline or
+/// on error: it never holds the home back.
 class _CashStrip extends ConsumerWidget {
   const new();
 
@@ -287,6 +288,7 @@ class _CashStrip extends ConsumerWidget {
     final o = ref.watch(pendingCashProvider).value;
     if (o == null) return const SizedBox.shrink();
     final l = AppLocalizations.of(context);
+    final member = o.status == 'RESERVED'; // pendingCash: else AWAITING_CASH with a code.
     final deadline = venueWhen(o.reservedUntil!, o.timezone, l.localeName);
     return Entrance(
       child: Padding(
@@ -300,19 +302,21 @@ class _CashStrip extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(vertical: JomhorSpace.l, horizontal: JomhorSpace.xl),
           child: Row(
             children: [
-              const Icon(Icons.payments_outlined, size: 22, color: JomhorColors.accent),
+              Icon(member ? Icons.event_seat_outlined : Icons.payments_outlined, size: 22, color: JomhorColors.accent),
               const SizedBox(width: JomhorSpace.m),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      l.homeCashTitle,
+                      member
+                          ? l.homeMemberTitle(l.ltr(venueClock(o.reservedUntil!, o.timezone, l.localeName)))
+                          : l.homeCashTitle,
                       style: JomhorType.body.copyWith(color: JomhorColors.text, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      l.dotPair(o.eventTitle, l.homeCashDeadline(deadline)),
+                      member ? o.eventTitle : l.dotPair(o.eventTitle, l.homeCashDeadline(deadline)),
                       key: const Key('home.cashDeadline'),
                       style: JomhorType.bodySmall.copyWith(color: JomhorColors.accentHover),
                     ),

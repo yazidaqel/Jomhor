@@ -7,6 +7,29 @@ bool reduceMotion(BuildContext context) => MediaQuery.maybeDisableAnimationsOf(c
 /// A `motion` token in milliseconds, or zero under reduced motion.
 Duration motionOf(BuildContext context, int ms) => reduceMotion(context) ? Duration.zero : Duration(milliseconds: ms);
 
+/// A figure that rolls when it changes (DESIGN.md principle 6: countdown digits, a group's paid count): the new
+/// [child] slides up and fades in over `motion.base` whenever [value] changes; instant under reduced motion. The
+/// first paint does not roll.
+class Roll extends StatelessWidget {
+  const new({required this.value, required this.child, super.key});
+
+  final Object value;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSwitcher(
+    duration: motionOf(context, JomhorMotion.base),
+    transitionBuilder: (child, animation) => FadeTransition(
+      opacity: animation,
+      child: SlideTransition(
+        position: Tween(begin: const Offset(0, 0.4), end: Offset.zero).animate(animation),
+        child: child,
+      ),
+    ),
+    child: KeyedSubtree(key: ValueKey(value), child: child),
+  );
+}
+
 /// Fades and lifts its child into place once, on first paint; [index] staggers siblings.
 class Entrance extends StatelessWidget {
   const new({required this.child, this.index = 0, super.key});

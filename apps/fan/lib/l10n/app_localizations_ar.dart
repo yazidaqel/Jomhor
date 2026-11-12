@@ -1159,4 +1159,99 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get splitPays => 'يخلص بلاصتو';
+
+  @override
+  String splitYouPay(int count, String total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'نتا كتخلص $count بلاصة · $total',
+      few: 'نتا كتخلص $count بلايص · $total',
+      two: 'نتا كتخلص جوج بلايص · $total',
+      one: 'نتا كتخلص بلاصة وحدة · $total',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String splitFriendsPay(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count بلاصة غادي يخلصوها صحابك',
+      few: '$count بلايص غادي يخلصوهم صحابك',
+      two: 'جوج بلايص غادي يخلصوهم صحابك',
+      one: 'بلاصة وحدة غادي يخلصوها صحابك',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get splitCaption => 'صحابك عندهم ساعتين من بعد ما تخلص';
+
+  @override
+  String get splitTooLate => 'فات الوقت باش تقسم';
+
+  @override
+  String get holderOwnPhone => 'هاد الرقم ديالك';
+
+  @override
+  String holderLimit(String label) {
+    return '$label وصل للحد ديالو';
+  }
+
+  @override
+  String get groupBand => 'الجماعة ديالك';
+
+  @override
+  String groupPaid(int paid, int total) {
+    return '$paid/$total تخلصو';
+  }
+
+  @override
+  String get groupPaidWord => 'تخلصو';
+
+  @override
+  String groupDue(String time) {
+    return 'خاصو يخلص · قبل $time';
+  }
+
+  @override
+  String get groupPaidChip => 'تخلص';
+
+  @override
+  String get groupExpiredChip => 'سالا الوقت';
+
+  @override
+  String get groupRemind => 'فكرو فواتساب';
+
+  @override
+  String get groupCopyLink => 'نسخ الرابط';
+
+  @override
+  String get groupLinkCopied => 'تنسخ الرابط';
+
+  @override
+  String groupRemindText(String event, String time, String url) {
+    return 'خليت ليك بلاصة ف $event. خلصها قبل $time:\n$url';
+  }
+
+  @override
+  String memberKept(String label) {
+    return '$label خلا ليك بلاصة';
+  }
+
+  @override
+  String get memberKeptAnon => 'صاحبك خلا ليك بلاصة';
+
+  @override
+  String get memberExpired => 'البلاصة تطلقات';
+
+  @override
+  String homeMemberTitle(String time) {
+    return 'البلاصة ديالك كتسناك · قبل $time';
+  }
 }

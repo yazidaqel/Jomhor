@@ -1946,6 +1946,132 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'{count, plural, =1{1 événement} other{{count} événements}}'**
   String memberStripEvents(int count);
+
+  /// Screen 4 switch on a friend row with a phone (split pay), default off.
+  ///
+  /// In fr, this message translates to:
+  /// **'Paie sa place'**
+  String get splitPays;
+
+  /// Screen 4 summary when friends pay their own place.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{Tu paies 1 place · {total}} other{Tu paies {count} places · {total}}}'**
+  String splitYouPay(int count, String total);
+
+  /// Screen 4 summary: places friends pay themselves.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{1 place payée par tes amis} other{{count} places payées par tes amis}}'**
+  String splitFriendsPay(int count);
+
+  /// Screen 4 caption; literal 2 h (lot-4 Q109).
+  ///
+  /// In fr, this message translates to:
+  /// **'Tes amis ont 2 h après ton paiement'**
+  String get splitCaption;
+
+  /// Switch disabled after 422 TOO_LATE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Trop tard pour partager'**
+  String get splitTooLate;
+
+  /// 422 PHONE_REQUIRED: the friend's phone is the buyer's.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce numéro est le tien'**
+  String get holderOwnPhone;
+
+  /// 409 PER_ACCOUNT_LIMIT on a friend who pays.
+  ///
+  /// In fr, this message translates to:
+  /// **'{label} a déjà atteint sa limite'**
+  String holderLimit(String label);
+
+  /// Screen 9 initiator header, before the event title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta bande'**
+  String get groupBand;
+
+  /// Screen 9 big figure, read by screen readers (places, lot-4 Q107).
+  ///
+  /// In fr, this message translates to:
+  /// **'{paid}/{total} payées'**
+  String groupPaid(int paid, int total);
+
+  /// Screen 9 word after the big {paid}/{total} figure.
+  ///
+  /// In fr, this message translates to:
+  /// **'payées'**
+  String get groupPaidWord;
+
+  /// Member chip: unpaid, deadline in the venue zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'À payer · avant {time}'**
+  String groupDue(String time);
+
+  /// Member chip: paid.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payé'**
+  String get groupPaidChip;
+
+  /// Member chip: released unpaid.
+  ///
+  /// In fr, this message translates to:
+  /// **'Expiré'**
+  String get groupExpiredChip;
+
+  /// Per unpaid member: opens WhatsApp with the copy and pay link.
+  ///
+  /// In fr, this message translates to:
+  /// **'Relancer sur WhatsApp'**
+  String get groupRemind;
+
+  /// Per unpaid member: copies the pay link.
+  ///
+  /// In fr, this message translates to:
+  /// **'Copier le lien'**
+  String get groupCopyLink;
+
+  /// Snackbar after copying a pay link.
+  ///
+  /// In fr, this message translates to:
+  /// **'Lien copié'**
+  String get groupLinkCopied;
+
+  /// WhatsApp message prefilled by Relancer; no phone, no name.
+  ///
+  /// In fr, this message translates to:
+  /// **'Je t\'ai gardé une place pour {event}. Paie-la avant {time} :\n{url}'**
+  String groupRemindText(String event, String time, String url);
+
+  /// Screen 9 member headline.
+  ///
+  /// In fr, this message translates to:
+  /// **'{label} t\'a gardé une place'**
+  String memberKept(String label);
+
+  /// Screen 9 member headline when initiator_label is null.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un ami t\'a gardé une place'**
+  String get memberKeptAnon;
+
+  /// Screen 9 member: the hold ran out.
+  ///
+  /// In fr, this message translates to:
+  /// **'La place a été libérée'**
+  String get memberExpired;
+
+  /// Accueil amber strip: a place a friend kept, to pay.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta place t\'attend · avant {time}'**
+  String homeMemberTitle(String time);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

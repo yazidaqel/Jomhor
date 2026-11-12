@@ -215,8 +215,8 @@ export function canRetryPay(o: OrderStatus, msOnPage: number, renderedAt: number
 }
 
 /**
- * FR copy for an error answer: reason-specific for EVENT_NOT_ON_SALE and METHOD_NOT_AVAILABLE, limit numbers for
- * PER_ACCOUNT_LIMIT.
+ * Copy for an error answer: reason-specific for EVENT_NOT_ON_SALE, METHOD_NOT_AVAILABLE and split pay's
+ * NO_BUYER_PLACE (a 422 on `items`, no row to mark), limit numbers for PER_ACCOUNT_LIMIT.
  */
 export function errorText(errors: Dict['errors'], r: Result): string {
   const code = errorCode(r)
@@ -225,6 +225,13 @@ export function errorText(errors: Dict['errors'], r: Result): string {
   if (code === 'METHOD_NOT_AVAILABLE' && (details.reason === 'TOO_LATE' || details.reason === 'CASH_CAP' || details.reason === 'NOT_CONFIGURED')) {
     return errors[`METHOD_${details.reason}`]
   }
+  if (code === 'VALIDATION_FAILED' && details.reason === 'NO_BUYER_PLACE') return errors.NO_BUYER_PLACE
   if (code === 'PER_ACCOUNT_LIMIT') return fmt(errors.PER_ACCOUNT_LIMIT, { limit: String(details.limit ?? ''), held: String(details.held ?? '') })
   return Object.hasOwn(errors, code) ? (errors as Record<string, string>)[code]! : errors.generic
+}
+
+/** Time left on a hold, as shown next to its deadline: `7 min 59 s`, or `1 h 52 min` from an hour on. */
+export function leftText(c: Pick<Dict['orderPage'], 'left' | 'leftHours'>, seconds: number) {
+  const s = Math.max(0, seconds)
+  return s >= 3600 ? fmt(c.leftHours, { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60) }) : fmt(c.left, { m: Math.floor(s / 60), s: s % 60 })
 }

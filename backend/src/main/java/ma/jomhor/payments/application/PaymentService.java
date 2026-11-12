@@ -103,11 +103,12 @@ public class PaymentService {
     }
 
     /**
-     * Where the browser lands after the gateway (04 §Payments /return): the configured URL of the order's channel,
-     * never a caller-supplied one. Reads only. Unknown payment → empty.
+     * Where the browser lands after the gateway (04 §Payments /return): the configured URL of the attempt's channel
+     * from /pay, else the order's, never a caller-supplied one. Reads only. Unknown payment → empty.
      */
     public Optional<URI> returnUrl(UUID paymentId) {
-        return payments.find(paymentId).flatMap(p -> orders.channel(p.organizerId(), p.orderId())
+        return payments.find(paymentId).flatMap(p -> Optional.ofNullable(p.returnChannel())
+                .or(() -> orders.channel(p.organizerId(), p.orderId()))
                 .map(c -> URI.create(returnUrls.get(c).replace(ORDER_ID, p.orderId().toString()))));
     }
 
@@ -119,14 +120,16 @@ public class PaymentService {
     /**
      * A new PENDING CARD or WALLET attempt for the buyer's RESERVED or AWAITING_CASH order, inserted under the order
      * lock (see lockForPayment). On an AWAITING_CASH order the code stays payable until one method succeeds.
+     * {@code channel}: the paying client (APP or WEB, null = the order's), where /return lands (04 Lot 4, P77).
      */
     @Transactional
-    public Started payHosted(UUID userId, UUID orderId, PaymentMethod method) {
+    public Started payHosted(UUID userId, UUID orderId, PaymentMethod method, Order.Channel channel) {
         Order order = orders.lockForPayment(userId, orderId);
         if (method == PaymentMethod.WALLET && !options.walletConfigured()) {
             throw OrderService.methodNotAvailable(Map.of("reason", "NOT_CONFIGURED"));
         }
-        Payment p = payments.insertPending(order.organizerId(), order.id(), method, gateway.provider(), order.totalMad());
+        Payment p = payments.insertPending(order.organizerId(), order.id(), method, gateway.provider(), order.totalMad(),
+                channel);
         return new Started(p.id(), method, baseUrl + "/payments/card/" + p.id() + "/redirect");
     }
 

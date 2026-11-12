@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
+
+/// Whether the app plays [LaunchSplash] at launch. Tests that count time from "the app is open" turn it off: its
+/// second of animation would otherwise run on their fake clock before the first assertion.
+final launchSplashProvider = Provider<bool>((ref) => true);
 
 /// The hand-off from the native splash (pubspec.yaml `flutter_native_splash`). Its first frame is that splash
 /// exactly: ink ground, the mark 160 wide, centred. Then the wave runs along the J to the amber dot, the splash fades

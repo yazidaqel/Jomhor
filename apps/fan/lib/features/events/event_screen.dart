@@ -79,80 +79,15 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final e = detail.event;
-    final facts = factsLine(l, e.facts);
     final open = e.saleState(now) == SaleState.onSale;
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       children: [
-        // Header block: the club light in the corner, the title big.
-        DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [JomhorColors.surface2, JomhorColors.surface],
-            ),
-            border: Border(bottom: BorderSide(color: JomhorColors.border)),
-          ),
-          child: ClipRect(
-            child: Stack(
-              children: [
-                const PositionedDirectional(bottom: -170, start: -130, child: AccentGlow(size: 380, opacity: 0.2)),
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(
-                      JomhorSpace.l,
-                      JomhorSpace.s,
-                      JomhorSpace.xl,
-                      JomhorSpace.xxl,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        BackButton(onPressed: () => _back(context)),
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(start: JomhorSpace.xs, top: JomhorSpace.m),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClubLine(name: e.organizer.name, crestUrl: e.organizer.crestUrl),
-                              const SizedBox(height: JomhorSpace.m),
-                              if (facts != null) ...[
-                                Text(
-                                  facts.toUpperCase(),
-                                  style: JomhorType.label.copyWith(color: JomhorColors.accent).tracked(context),
-                                ),
-                                const SizedBox(height: JomhorSpace.s),
-                              ],
-                              Entrance(child: Text(e.title.toUpperCase(), style: JomhorType.hero)),
-                              const SizedBox(height: JomhorSpace.l),
-                              Wrap(
-                                spacing: JomhorSpace.s,
-                                runSpacing: JomhorSpace.s,
-                                children: [
-                                  InfoChip(
-                                    l.dotPair(
-                                      venueDate(e.startsAt, e.timezone, l.localeName),
-                                      venueClock(e.startsAt, e.timezone, l.localeName),
-                                    ),
-                                    icon: Icons.calendar_today_outlined,
-                                  ),
-                                  InfoChip(e.venueName, icon: Icons.place_outlined),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        EventHeader(
+          event: e,
+          leading: BackButton(onPressed: () => _back(context)),
         ),
         Padding(
           padding: const EdgeInsets.all(JomhorSpace.xl),
@@ -183,6 +118,89 @@ class _Body extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Screen 2's header block (also screen 9 member's): the club line, facts, the title big, date and venue chips, the
+/// club light in the corner; [leading] (back) above it.
+class EventHeader extends StatelessWidget {
+  const new({required this.event, this.leading, super.key});
+
+  final FanEvent event;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final e = event;
+    final facts = factsLine(l, e.facts);
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [JomhorColors.surface2, JomhorColors.surface],
+        ),
+        border: Border(bottom: BorderSide(color: JomhorColors.border)),
+      ),
+      child: ClipRect(
+        child: Stack(
+          children: [
+            const PositionedDirectional(bottom: -170, start: -130, child: AccentGlow(size: 380, opacity: 0.2)),
+            SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(
+                  JomhorSpace.l,
+                  JomhorSpace.s,
+                  JomhorSpace.xl,
+                  JomhorSpace.xxl,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ?leading,
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: JomhorSpace.xs, top: JomhorSpace.m),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClubLine(name: e.organizer.name, crestUrl: e.organizer.crestUrl),
+                          const SizedBox(height: JomhorSpace.m),
+                          if (facts != null) ...[
+                            Text(
+                              facts.toUpperCase(),
+                              style: JomhorType.label.copyWith(color: JomhorColors.accent).tracked(context),
+                            ),
+                            const SizedBox(height: JomhorSpace.s),
+                          ],
+                          Entrance(child: Text(e.title.toUpperCase(), style: JomhorType.hero)),
+                          const SizedBox(height: JomhorSpace.l),
+                          Wrap(
+                            spacing: JomhorSpace.s,
+                            runSpacing: JomhorSpace.s,
+                            children: [
+                              InfoChip(
+                                l.dotPair(
+                                  venueDate(e.startsAt, e.timezone, l.localeName),
+                                  venueClock(e.startsAt, e.timezone, l.localeName),
+                                ),
+                                icon: Icons.calendar_today_outlined,
+                              ),
+                              InfoChip(e.venueName, icon: Icons.place_outlined),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

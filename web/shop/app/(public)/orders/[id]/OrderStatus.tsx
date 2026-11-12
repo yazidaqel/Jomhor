@@ -9,6 +9,7 @@ import {
   CASH_POLL_MS,
   errorText,
   FINAL,
+  leftText,
   pageClock,
   pollOrder,
   POLL_MS,
@@ -42,6 +43,7 @@ export function OrderStatus({
   timezone,
   eventHref,
   methods,
+  member = false,
   copy,
   children,
 }: {
@@ -53,6 +55,8 @@ export function OrderStatus({
   eventHref: string | null
   /** CARD and/or WALLET, as the event offers them. */
   methods: OnlineMethod[]
+  /** A split-pay member's order (04 `group.role` MEMBER): once EXPIRED, "La place a été libérée". */
+  member?: boolean
   copy: Copy
   children?: React.ReactNode
 }) {
@@ -118,8 +122,19 @@ export function OrderStatus({
 
   const until = order.reserved_until ? Date.parse(order.reserved_until) : NaN
   const left = Math.max(0, Math.floor((until - (renderedAt + onPageMs)) / 1000))
-  const leftText =
-    left >= 3600 ? fmt(c.leftHours, { h: Math.floor(left / 3600), m: Math.floor((left % 3600) / 60) }) : fmt(c.left, { m: Math.floor(left / 60), s: left % 60 })
+  const leftLabel = leftText(c, left)
+  // A split-pay member's hold that has passed on server time with no attempt in flight (none, or FAILED): the place is
+  // gone, the expiry job just hasn't run yet. Shown as EXPIRED ("La place a été libérée" + the event), never "paiement
+  // en cours"; polling goes on until the backend says so. A PENDING card / wallet attempt keeps the normal view (late
+  // success stays possible).
+  const lapsed =
+    member &&
+    order.status === 'RESERVED' &&
+    !!order.reserved_until &&
+    (order.payment_status == null || order.payment_status === 'FAILED') &&
+    !(until > renderedAt + onPageMs)
+  const shown = lapsed ? 'EXPIRED' : order.status
+  const done = final || lapsed
   const online = canRetryPay(order, onPageMs, renderedAt)
   const payLabel = { CARD: c.payCARD, WALLET: c.payWALLET }
   const retryLabel = { CARD: c.retryCARD, WALLET: c.retryWALLET }
@@ -145,8 +160,8 @@ export function OrderStatus({
   const statusChip = (
     <p className="flex flex-wrap gap-x-1 rounded-chip border border-border bg-surface px-3.5 py-3 text-xs text-text-muted">
       <span>{c.statusLabel}</span>
-      <strong className={order.status === 'PAID' ? 'text-success-text' : 'text-accent-hover'}>{statusName(c, order.status)}</strong>
-      {!final && <span>{c.live}</span>}
+      <strong className={order.status === 'PAID' ? 'text-success-text' : 'text-accent-hover'}>{statusName(c, shown)}</strong>
+      {!done && <span>{c.live}</span>}
     </p>
   )
   const banner = (text: string) => (
@@ -161,14 +176,14 @@ export function OrderStatus({
     <div className="flex flex-col gap-5">
       {/* One live region for both layouts, so a change (PAID, EXPIRED) is announced whichever view was showing. */}
       <p role="status" className="sr-only">
-        {c.statusLabel} {statusName(c, order.status)}
+        {c.statusLabel} {statusName(c, shown)}
       </p>
       {awaiting ? (
         <>
           <Steps current={3} copy={copy.steps} />
           {order.reserved_until &&
             timezone &&
-            banner(fmt(c.cashBanner, { time: formatDateTime(order.reserved_until, timezone, copy.meta.intl), left: leftText }))}
+            banner(fmt(c.cashBanner, { time: formatDateTime(order.reserved_until, timezone, copy.meta.intl), left: leftLabel }))}
           <h1 className="font-display text-hero uppercase motion-safe:animate-rise">{hasCode ? c.cashTitle : c.awaitingTitle}</h1>
           {hasCode ? children : <p className="text-body text-text-secondary">{c.noCode}</p>}
           {online ? (
@@ -198,21 +213,21 @@ export function OrderStatus({
       ) : (
         <>
           <Steps current={paid ? 5 : 3} copy={copy.steps} />
-          {order.status === 'RESERVED' &&
+          {shown === 'RESERVED' &&
             order.reserved_until &&
             timezone &&
-            banner(fmt(c.banner, { time: formatTime(order.reserved_until, timezone, copy.meta.intl), left: leftText }))}
+            banner(fmt(c.banner, { time: formatTime(order.reserved_until, timezone, copy.meta.intl), left: leftLabel }))}
           <div className="mt-2 flex flex-col gap-3">
             <span
-              key={order.status}
+              key={shown}
               aria-hidden="true"
               className={`flex size-16 items-center justify-center rounded-pill motion-safe:animate-pop ${
-                paid ? 'bg-success-bg text-success-text ring-4 ring-success' : final ? 'bg-surface2 text-text-muted' : 'relative text-accent'
+                paid ? 'bg-success-bg text-success-text ring-4 ring-success' : done ? 'bg-surface2 text-text-muted' : 'relative text-accent'
               }`}
             >
               {paid ? (
                 <CheckIcon className="size-8" />
-              ) : final ? (
+              ) : done ? (
                 <ClockIcon className="size-8" />
               ) : (
                 <>
@@ -221,8 +236,8 @@ export function OrderStatus({
                 </>
               )}
             </span>
-            <h1 className="font-display text-hero uppercase sm:text-[56px]">{title(c, order.status, wasCash)}</h1>
-            <p className="text-body text-text-secondary">{body(c, order.status)}</p>
+            <h1 className="font-display text-hero uppercase sm:text-[56px]">{title(c, shown, wasCash, member)}</h1>
+            <p className="text-body text-text-secondary">{body(c, shown, member)}</p>
             {order.status === 'PAID' && order.ticket_count < places && <p className="text-body text-text-secondary">{c.paidOthers}</p>}
           </div>
           {paid && (
@@ -231,7 +246,7 @@ export function OrderStatus({
               {c.tickets}
             </Link>
           )}
-          {order.status === 'RESERVED' && online && (
+          {shown === 'RESERVED' && online && (
             <div className="flex flex-col items-start gap-2">
               <p className="text-body-small text-text-muted">{c.retryNote}</p>
               {methods.map((m) => (
@@ -249,7 +264,7 @@ export function OrderStatus({
               {payErrorLine}
             </div>
           )}
-          {final && order.status !== 'PAID' && eventHref && (
+          {done && order.status !== 'PAID' && eventHref && (
             <Link href={eventHref} className={`${cta} self-start`}>
               {c.back}
             </Link>
@@ -264,16 +279,16 @@ export function OrderStatus({
 type OrderCopy = Dict['orderPage']
 const own = (c: OrderCopy, k: string) => (Object.hasOwn(c, k) ? (c as Record<string, string>)[k] : undefined)
 const statusName = (c: OrderCopy, s: string) => own(c, s) ?? s
-function title(c: OrderCopy, s: string, wasCash: boolean) {
+function title(c: OrderCopy, s: string, wasCash: boolean, member: boolean) {
   if (s === 'PAID') return c.paidTitle
-  if (s === 'EXPIRED') return wasCash ? c.cashExpiredTitle : c.expiredTitle
+  if (s === 'EXPIRED') return wasCash ? c.cashExpiredTitle : member ? c.memberExpiredTitle : c.expiredTitle
   if (s === 'CANCELLED') return c.cancelledTitle
   if (s === 'REFUNDED') return c.refundedTitle
   return c.pendingTitle
 }
-function body(c: OrderCopy, s: string) {
+function body(c: OrderCopy, s: string, member: boolean) {
   if (s === 'PAID') return c.paid
-  if (s === 'EXPIRED') return c.expired
+  if (s === 'EXPIRED') return member ? c.memberExpired : c.expired
   if (s === 'CANCELLED') return c.cancelled
   if (s === 'REFUNDED') return c.refunded
   return c.pending

@@ -23,6 +23,25 @@ export type OrderView = {
   items: { price_category_id: string; name: string; qty: number; unit_price_mad: number; labels: string[] }[]
   /** Tickets the caller holds (a friend's ticket is never listed to the buyer). */
   ticket_count: number
+  /** Lot 4 split pay (04 GET /fan/orders/{id} `group`); null when not split or from an older backend. */
+  group: GroupView
+}
+
+/** Labels only: the contract never carries a member's phone or full name, and none is kept here. */
+export type GroupView =
+  | { role: 'INITIATOR'; members: MemberView[] }
+  | { role: 'MEMBER'; initiator_label: string | null; initiator_status: string }
+  | null
+
+export type MemberView = {
+  order_id: string
+  holder_label: string
+  places: number
+  total_mad: number
+  status: string
+  reserved_until: string | null
+  /** The member's order page on the shop; null unless an absolute http(s) URL. */
+  pay_url: string | null
 }
 
 export type CashView = {
@@ -57,7 +76,28 @@ export function toOrderView(raw: unknown): OrderView {
     })),
     ticket_count: Array.isArray(r.ticket_ids) ? r.ticket_ids.length : 0,
     cash: toCash(r.cash),
+    group: toGroup(r.group),
   }
+}
+
+const httpUrl = (v: unknown) => (typeof v === 'string' && URL.canParse(v) && /^https?:$/.test(new URL(v).protocol) ? v : null)
+
+function toGroup(v: unknown): GroupView {
+  const g = obj(v)
+  if (g.role === 'MEMBER') return { role: 'MEMBER', initiator_label: strOrNull(g.initiator_label), initiator_status: String(g.initiator_status) }
+  if (g.role !== 'INITIATOR') return null
+  const members = list(g.members)
+    .filter((m) => typeof m.order_id === 'string' && SAFE_ID.test(m.order_id) && Number.isSafeInteger(m.places) && Number.isSafeInteger(m.total_mad))
+    .map((m) => ({
+      order_id: m.order_id as string,
+      holder_label: String(m.holder_label ?? ''),
+      places: m.places as number,
+      total_mad: m.total_mad as number,
+      status: String(m.status),
+      reserved_until: strOrNull(m.reserved_until),
+      pay_url: httpUrl(m.pay_url),
+    }))
+  return { role: 'INITIATOR', members }
 }
 
 function toCash(v: unknown): CashView | null {
@@ -91,8 +131,8 @@ export function orderNo(id: string): string {
 
 /**
  * The `POST /fan/orders` body rebuilt by type from what the browser sent: `event_id` (positive integer), then per item
- * `price_category_id` (id string), `qty` (positive integer) and `holders[{name, phone?}]` (strings; an empty phone
- * is left out), channel WEB. Anything else is dropped. Null when a value has the wrong type or shape: the form never
+ * `price_category_id` (id string), `qty` (positive integer) and `holders[{name, phone?, pays?}]` (strings; an empty
+ * phone is left out; `pays` boolean, kept only when true: 04 §Split pay), channel WEB. Anything else is dropped. Null when a value has the wrong type or shape: the form never
  * sends that, so it is a tampered request (422). Name and phone rules are the backend's (422 with field paths).
  */
 export function orderPayload(body: Raw) {
@@ -105,7 +145,8 @@ export function orderPayload(body: Raw) {
     const holders = []
     for (const h of i.holders.map(obj)) {
       if (typeof h.name !== 'string' || (h.phone !== undefined && typeof h.phone !== 'string')) return null
-      holders.push(h.phone ? { name: h.name, phone: h.phone } : { name: h.name })
+      if (h.pays !== undefined && typeof h.pays !== 'boolean') return null
+      holders.push({ name: h.name, ...(h.phone ? { phone: h.phone as string } : {}), ...(h.pays === true && { pays: true as const }) })
     }
     items.push({ price_category_id: i.price_category_id, qty: i.qty as number, holders })
   }

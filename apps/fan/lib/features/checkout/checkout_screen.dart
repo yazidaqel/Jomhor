@@ -5,17 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/error_text.dart';
-import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
-import 'package:jomhor_fan/features/checkout/order.dart';
+import 'package:jomhor_fan/features/checkout/method_rows.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
-import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 4 · Paiement: named holders, summary, method (card, wallet, cash from `payment_methods`). "Payer"
@@ -73,6 +71,9 @@ class _FormState extends ConsumerState<_Form> {
   ];
   var _consent = false;
 
+  /// Friend rows whose "Paie sa place" switch is on (split pay); only rows with a phone count.
+  final _pays = <int>{};
+
   /// The card page is on screen (pushed above this one).
   var _cardOpen = false;
 
@@ -113,6 +114,7 @@ class _FormState extends ConsumerState<_Form> {
       [for (final c in _phones) c.text],
       friendsConsent: _consent,
       method: method,
+      pays: _paying(ref.read(provider)),
     );
     if (start == null || !mounted) return; // Left the screen: no payment page.
     final order = ref.read(provider).order!;
@@ -138,6 +140,11 @@ class _FormState extends ConsumerState<_Form> {
 
   bool get _hasFriendPhone => _phones.skip(1).any((c) => c.text.trim().isNotEmpty);
 
+  bool _hasPhone(int i) => i > 0 && _phones[i].text.trim().isNotEmpty;
+
+  /// The switches that count: on, on a row with a phone, and split pay not refused as too late.
+  Set<int> _paying(CheckoutState s) => s.splitTooLate ? const {} : {..._pays.where(_hasPhone)};
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -149,7 +156,8 @@ class _FormState extends ConsumerState<_Form> {
     });
     final locked = state.order != null; // The holders are on the order now.
     final busy = state.busy;
-    final total = state.order?.totalMad ?? widget.price.priceMad * args.qty;
+    final split = state.summary(unitMad: widget.price.priceMad, qty: args.qty, paying: _paying(state).length);
+    final total = split.totalMad;
     final error = state.error;
     final selected = state.selectedIn(widget.detail);
     final event = widget.detail.event;
@@ -185,7 +193,36 @@ class _FormState extends ConsumerState<_Form> {
                       _Line(l.summaryLine(args.qty, widget.zone.name), l.dh(widget.price.priceMad * args.qty)),
                       _Line(l.serviceFee, l.dh(0)),
                       const Divider(color: JomhorColors.border),
-                      _Line(l.total, l.dh(total), strong: true),
+                      if (split.friends == 0)
+                        _Line(l.total, l.dh(total), strong: true)
+                      else ...[
+                        // DESIGN.md Lot 4, screen 4: what the fan pays now, and what friends pay themselves.
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            l.splitYouPay(split.mine, l.dh(total)),
+                            key: const Key('split.mine'),
+                            style: JomhorType.h2,
+                          ),
+                        ),
+                        const SizedBox(height: JomhorSpace.xs),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            l.splitFriendsPay(split.friends),
+                            key: const Key('split.friends'),
+                            style: JomhorType.body.copyWith(color: JomhorColors.textSecondary),
+                          ),
+                        ),
+                        const SizedBox(height: JomhorSpace.xs),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            l.splitCaption,
+                            style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -223,10 +260,34 @@ class _FormState extends ConsumerState<_Form> {
                       labelText: l.holderPhoneLabel,
                       helperText: l.holderPhoneHelp,
                       helperMaxLines: 2,
-                      errorText: state.badPhones.contains(i) ? l.holderPhoneError(l.ltr(examplePhone)) : null,
+                      errorText: switch (state.limitRow) {
+                        _ when state.ownPhones.contains(i) => l.holderOwnPhone,
+                        (:final row, :final label) when row == i => l.holderLimit(l.isolate(label)),
+                        _ when state.badPhones.contains(i) => l.holderPhoneError(l.ltr(examplePhone)),
+                        _ => null,
+                      },
+                      errorMaxLines: 2,
                       prefixIcon: const Icon(Icons.chat_outlined),
                     ),
                   ),
+                  // Split pay: once a phone is typed, this friend may pay their own place (default off).
+                  if (_hasPhone(i))
+                    SwitchListTile(
+                      key: Key('holder.$i.pays'),
+                      value: !state.splitTooLate && _pays.contains(i),
+                      onChanged: locked || state.splitTooLate
+                          ? null
+                          : (on) => setState(() => on ? _pays.add(i) : _pays.remove(i)),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l.splitPays, style: JomhorType.body),
+                      subtitle: state.splitTooLate
+                          ? Text(
+                              l.splitTooLate,
+                              key: Key('holder.$i.tooLate'),
+                              style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
+                            )
+                          : null,
+                    ),
                 ],
                 const SizedBox(height: JomhorSpace.l),
               ],
@@ -249,22 +310,12 @@ class _FormState extends ConsumerState<_Form> {
               ],
               SectionLabel(l.methodTitle),
               const SizedBox(height: JomhorSpace.xs),
-              for (final (:method, :enabled, :tooLate) in state.methodRows(widget.detail)) ...[
-                _MethodRow(
-                  method: method,
-                  selected: method == selected,
-                  enabled: enabled,
-                  hint: switch (method) {
-                    _ when tooLate => l.methodCashTooLate,
-                    PayMethod.cashAgency => l.methodCashBefore(
-                      venueWhen(cashDeadline(event), event.timezone, l.localeName),
-                    ),
-                    _ => l.instant,
-                  },
-                  onTap: () => ref.read(checkoutControllerProvider(args).notifier).select(method),
-                ),
-                const SizedBox(height: JomhorSpace.s),
-              ],
+              MethodRows(
+                rows: state.methodRows(widget.detail),
+                event: event,
+                selected: selected,
+                onSelect: ref.read(checkoutControllerProvider(args).notifier).select,
+              ),
             ],
           ),
         ),
@@ -294,12 +345,7 @@ class _FormState extends ConsumerState<_Form> {
                     onPressed: busy || selected == null || (state.phase == CheckoutPhase.expired && !state.cardOpened)
                         ? null
                         : _pay,
-                    child: Text(switch (selected) {
-                      _ when state.cardOpened => l.checkPayment,
-                      PayMethod.wallet => l.payWalletCta(l.dh(total)),
-                      PayMethod.cashAgency => l.payCashCta,
-                      _ => l.payCta(l.dh(total)),
-                    }),
+                    child: Text(state.cardOpened ? l.checkPayment : payCtaText(l, selected, total)),
                   ),
                   const SizedBox(height: JomhorSpace.xs),
                   Text(
@@ -332,86 +378,6 @@ class _FormState extends ConsumerState<_Form> {
                 context.go('/events/$eventId/zones');
               },
               child: Text(l.expiredCta),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One "MOYEN DE PAIEMENT" row (DESIGN.md screen 4): icon, name, detail, hint; 2 px accent border when picked.
-class _MethodRow extends StatelessWidget {
-  const new({
-    required this.method,
-    required this.selected,
-    required this.enabled,
-    required this.hint,
-    required this.onTap,
-  });
-
-  final PayMethod method;
-  final bool selected;
-  final bool enabled;
-  final String hint;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final on = selected && enabled;
-    final ink = enabled ? JomhorColors.text : JomhorColors.textDisabled;
-    final (icon, name, detail) = switch (method) {
-      PayMethod.card => (Icons.credit_card_rounded, l.methodCard, l.methodCardHint),
-      PayMethod.wallet => (Icons.smartphone_rounded, l.methodWallet, l.methodWalletHint),
-      PayMethod.cashAgency => (Icons.payments_outlined, l.methodCash, l.methodCashHint),
-    };
-    return Semantics(
-      selected: on,
-      button: true,
-      enabled: enabled,
-      child: TapCard(
-        inkKey: Key('method.${method.wire}'),
-        onTap: enabled ? onTap : null,
-        borderColor: on ? JomhorColors.accent : JomhorColors.border,
-        borderWidth: 2,
-        padding: const EdgeInsets.symmetric(vertical: JomhorSpace.m, horizontal: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: ink),
-            const SizedBox(width: JomhorSpace.m),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: JomhorType.body.copyWith(fontWeight: FontWeight.w600, color: ink),
-                  ),
-                  Text(detail, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
-                ],
-              ),
-            ),
-            const SizedBox(width: JomhorSpace.s),
-            Flexible(
-              child: Text(
-                hint,
-                key: Key('method.${method.wire}.hint'),
-                textAlign: TextAlign.end,
-                style: JomhorType.caption.copyWith(
-                  color: enabled && method.hosted ? JomhorColors.successText : JomhorColors.textMuted,
-                ),
-              ),
-            ),
-            const SizedBox(width: JomhorSpace.s),
-            AnimatedSwitcher(
-              duration: motionOf(context, JomhorMotion.base),
-              child: Icon(
-                on ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                key: ValueKey(on),
-                size: 20,
-                color: on ? JomhorColors.accent : JomhorColors.borderMuted,
-              ),
             ),
           ],
         ),

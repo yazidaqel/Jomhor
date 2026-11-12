@@ -53,3 +53,24 @@ String? normalizeHolderName(String raw) {
       .replaceAll(_ends, '');
   return _latinName.hasMatch(name) || _arabicName.hasMatch(name) ? name : null;
 }
+
+final _arabicStart = RegExp(_arabicLetter);
+
+/// `holder_label` of a normalised name (§Holder names): first word + first letter of the last word, uppercased,
+/// + "." (`Yazid A.`, `يزيد ع.`); one word as is.
+String holderLabel(String name) {
+  final words = name.split(' ');
+  if (words.length == 1) return name;
+  return '${words.first} ${words.last.substring(0, 1).toUpperCase()}.';
+}
+
+/// The avatar letters of a holder label (DESIGN.md Lot 4, screen 9): first letter of the first word + first letter
+/// of the last word (`Karim B.` → `KB`); Arabic letters separated by a space so they don't join (`ي ع`).
+String labelInitials(String label) {
+  final words = label.split(' ').where((w) => w.isNotEmpty).toList();
+  if (words.isEmpty) return '';
+  final letters = [
+    for (final w in [words.first, if (words.length > 1) words.last]) String.fromCharCode(w.runes.first).toUpperCase(),
+  ];
+  return letters.join(_arabicStart.hasMatch(letters.first) ? ' ' : '');
+}

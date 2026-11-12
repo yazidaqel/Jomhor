@@ -292,6 +292,7 @@ create table payments (
   callback        jsonb,                -- last verified callback, card fields stripped
   created_at      timestamptz not null default now(),
   completed_at    timestamptz,
+  return_channel  sales_channel check (return_channel in ('APP','WEB')),  -- CARD/WALLET: the client that started the attempt; /return lands there (null = orders.channel)
   constraint payments_pay_code check ((method = 'CASH_AGENCY') = (pay_code is not null))
 );
 create index on payments (order_id);

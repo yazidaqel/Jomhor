@@ -11,6 +11,7 @@ import 'package:jomhor_fan/features/auth/phone.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
 import 'package:jomhor_fan/features/checkout/holder_name.dart';
+import 'package:jomhor_fan/features/checkout/method_rows.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/events/event.dart';
@@ -51,9 +52,21 @@ class CheckoutState {
     this.method,
     this.refused = const {},
     this.payingCash = false,
+    this.splitTooLate = false,
+    this.ownPhones = const {},
+    this.limitRow,
   });
 
   final CheckoutPhase phase;
+
+  /// `422 TOO_LATE`: sales close too soon for friends to pay later; the "Paie sa place" switches are off for good.
+  final bool splitTooLate;
+
+  /// Rows whose friend pays but whose phone is the buyer's own (`422 PHONE_REQUIRED`).
+  final Set<int> ownPhones;
+
+  /// The friend's row over their own account limit (`409 PER_ACCOUNT_LIMIT` with `details.field`), with its label.
+  final ({int row, String label})? limitRow;
 
   /// A cash `/pay` is in flight: if the hold hits 0 meanwhile, its answer decides (a code issued means the
   /// order now waits for cash), so the "Réservation expirée" modal waits for it.
@@ -84,18 +97,19 @@ class CheckoutState {
 
   bool get busy => phase == CheckoutPhase.working || phase == CheckoutPhase.busy;
 
-  /// The "MOYEN DE PAIEMENT" rows for [d] (DESIGN.md Lot 3, screen 4): card and wallet as offered; cash when
-  /// offered, or off with "Trop tard pour le cash" when the organizer has cash (`cash_until`) but it is too late
-  /// now; no cash row at all without `cash_until`. A row `/pay` refused, or any row once the hosted page opened
-  /// or while a request runs, is off.
-  List<MethodRow> methodRows(EventDetail d) {
-    final offered = d.paymentMethods;
-    final cash = offered.contains(PayMethod.cashAgency);
-    return [
-      for (final m in offered.where((m) => m.hosted)) (method: m, enabled: _canPick(m), tooLate: false),
-      if (cash) (method: PayMethod.cashAgency, enabled: _canPick(PayMethod.cashAgency), tooLate: false),
-      if (!cash && d.cashUntil != null) (method: PayMethod.cashAgency, enabled: false, tooLate: true),
-    ];
+  /// The "MOYEN DE PAIEMENT" rows for [d] ([methodRowsOf]). A row `/pay` refused, or any row once the hosted page
+  /// opened or while a request runs, is off.
+  List<MethodRow> methodRows(EventDetail d) => methodRowsOf(d, canPick: _canPick);
+
+  /// What screen 4's summary and CTA show (DESIGN.md Lot 4, screen 4): the places the buyer pays and their total,
+  /// and the places friends pay themselves. Before the hold, from the rows ([paying] rows whose friend pays, at
+  /// [unitMad] each); after it, from the order the server made.
+  ({int mine, int friends, int totalMad}) summary({required int unitMad, required int qty, required int paying}) {
+    if (order case final o?) {
+      final members = o.group?.members ?? const <GroupMember>[];
+      return (mine: o.places, friends: members.fold(0, (n, m) => n + m.places), totalMad: o.totalMad);
+    }
+    return (mine: qty - paying, friends: paying, totalMad: unitMad * (qty - paying));
   }
 
   /// The picked method, else the first one the event offers that `/pay` has not refused; null when none is left.
@@ -113,6 +127,9 @@ class CheckoutState {
     Set<int>? badPhones,
     bool consentMissing = false,
     Duration? left,
+    bool? splitTooLate,
+    Set<int>? ownPhones,
+    ({int row, String label})? limitRow,
   }) => CheckoutState(
     phase: phase,
     badNames: badNames ?? const {},
@@ -125,18 +142,19 @@ class CheckoutState {
     cardOpened: cardOpened,
     method: method,
     refused: refused,
+    splitTooLate: splitTooLate ?? this.splitTooLate,
+    ownPhones: ownPhones ?? const {},
+    limitRow: limitRow,
   );
 }
-
-/// One payment method row of screen 4: `tooLate` = cash set up but past `cash_until`.
-typedef MethodRow = ({PayMethod method, bool enabled, bool tooLate});
 
 /// The signed-in fan (`GET /fan/me`): row 1 of the holders is prefilled with `display_name`.
 final FutureProvider<FanUser> meProvider = FutureProvider.autoDispose<FanUser>(
   (ref) => ref.watch(authRepositoryProvider).me(),
 );
 
-final RegExp _fieldPath = RegExp(r'^items\[0\]\.holders\[(\d+)\]\.(name|phone)$');
+final RegExp _fieldPath = RegExp(r'^items\[0\]\.holders\[(\d+)\]\.(name|phone|pays)$');
+final RegExp _holderPath = RegExp(r'^items\[0\]\.holders\[(\d+)\]$');
 
 class CheckoutController extends Notifier<CheckoutState> {
   new(this.args);
@@ -163,7 +181,8 @@ class CheckoutController extends Notifier<CheckoutState> {
   }
 
   /// Validates the rows (row 0 is the fan: no phone), saves an edited name on `/fan/me`, holds the places
-  /// (retrying `SALE_BUSY` on its own) and starts the payment with [method]. Returns where to send the fan
+  /// (retrying `SALE_BUSY` on its own) and starts the payment with [method]. Rows in [pays] whose friend has a phone
+  /// pay their own place (split pay), unless split pay was refused as too late. Returns where to send the fan
   /// to pay (the hosted page, or the cash order screen), or null when something needs their attention
   /// (state says what).
   Future<PayStart?> submit(
@@ -171,6 +190,7 @@ class CheckoutController extends Notifier<CheckoutState> {
     List<String> phones, {
     required bool friendsConsent,
     PayMethod method = PayMethod.card,
+    Set<int> pays = const {},
   }) async {
     if (state.cardOpened || state.phase == CheckoutPhase.working || state.phase == CheckoutPhase.busy) return null;
     state = _with(state, method: method);
@@ -185,7 +205,7 @@ class CheckoutController extends Notifier<CheckoutState> {
       final phone = rawPhone.isEmpty ? null : normalizePhone(rawPhone);
       if (name == null) badNames.add(i);
       if (rawPhone.isNotEmpty && phone == null) badPhones.add(i);
-      holders.add((name: name ?? '', phone: phone));
+      holders.add((name: name ?? '', phone: phone, pays: phone != null && pays.contains(i) && !state.splitTooLate));
     }
     // Q21: friends get their ticket on WhatsApp; the buyer confirms they agree.
     final consentMissing = !friendsConsent && holders.any((h) => h.phone != null);
@@ -209,7 +229,7 @@ class CheckoutController extends Notifier<CheckoutState> {
       if (!ref.mounted) return null;
       _startHold(order, serverDate);
     } on ApiError catch (e) {
-      if (ref.mounted) state = _failed(e);
+      if (ref.mounted) state = _failed(e, holders);
       return null;
     } on Object {
       if (ref.mounted) state = state.next(CheckoutPhase.editing, error: unexpectedAnswer);
@@ -333,6 +353,7 @@ class CheckoutController extends Notifier<CheckoutState> {
       left: left(),
       method: state.method,
       refused: state.refused,
+      splitTooLate: state.splitTooLate,
     );
     _hold = Timer.periodic(const Duration(seconds: 1), (t) {
       final l = left();
@@ -350,6 +371,7 @@ class CheckoutController extends Notifier<CheckoutState> {
         method: state.method,
         refused: state.refused,
         payingCash: state.payingCash,
+        splitTooLate: state.splitTooLate,
       );
       if (phase == CheckoutPhase.expired) t.cancel();
     });
@@ -363,6 +385,7 @@ class CheckoutController extends Notifier<CheckoutState> {
     cardOpened: true,
     method: state.method,
     refused: state.refused,
+    splitTooLate: state.splitTooLate,
   );
 
   /// [s] with another method, refused set or cash flag; everything else kept. Giving [refused] also clears the
@@ -381,19 +404,45 @@ class CheckoutController extends Notifier<CheckoutState> {
         method: refused != null ? method : method ?? s.method,
         refused: refused ?? s.refused,
         payingCash: payingCash ?? s.payingCash,
+        splitTooLate: s.splitTooLate,
+        ownPhones: s.ownPhones,
+        limitRow: s.limitRow,
       );
 
-  CheckoutState _failed(ApiError e) {
+  CheckoutState _failed(ApiError e, List<HolderInput> holders) {
+    // Split pay (docs/04-api.md §Split pay): too late to share, so every switch goes off and the fan pays again
+    // without them.
+    if (e.code == 'VALIDATION_FAILED' && e.details['reason'] == 'TOO_LATE') {
+      return state.next(CheckoutPhase.editing, splitTooLate: true);
+    }
     if (e.details['fields'] case final Map<String, Object?> fields when e.code == 'VALIDATION_FAILED') {
       final badNames = <int>{};
       final badPhones = <int>{};
+      final ownPhones = <int>{};
+      final mine = ref.read(meProvider).value?.phone;
       for (final key in fields.keys) {
         if (_fieldPath.firstMatch(key) case final m?) {
-          (m[2] == 'name' ? badNames : badPhones).add(int.parse(m[1]!));
+          final row = int.parse(m[1]!);
+          switch (m[2]) {
+            case 'name':
+              badNames.add(row);
+            // PHONE_REQUIRED on `pays` with the buyer's own number; any other phone problem marks the phone.
+            case 'pays' when mine != null && row < holders.length && holders[row].phone == mine:
+              ownPhones.add(row);
+            default:
+              badPhones.add(row);
+          }
         }
       }
-      if (badNames.isNotEmpty || badPhones.isNotEmpty) {
-        return state.next(CheckoutPhase.editing, badNames: badNames, badPhones: badPhones);
+      if (badNames.isNotEmpty || badPhones.isNotEmpty || ownPhones.isNotEmpty) {
+        return state.next(CheckoutPhase.editing, badNames: badNames, badPhones: badPhones, ownPhones: ownPhones);
+      }
+    }
+    // A friend who pays is over their own limit: said on their row.
+    if ((e.code, e.details['field']) case ('PER_ACCOUNT_LIMIT', final String field)) {
+      if (_holderPath.firstMatch(field) case final m? when int.parse(m[1]!) < holders.length) {
+        final row = int.parse(m[1]!);
+        return state.next(CheckoutPhase.editing, limitRow: (row: row, label: holderLabel(holders[row].name)));
       }
     }
     // The PATCH /fan/me of row 1 answers a bad display_name with a 422 on `display_name`.
@@ -409,10 +458,3 @@ final NotifierProviderFamily<CheckoutController, CheckoutState, CheckoutArgs> ch
 
 /// Places a fan can pick in one order: the account limit, and what is left in the category.
 int maxPlaces({required int perAccountLimit, required int remaining}) => max(0, min(perAccountLimit, remaining));
-
-/// The cash code's deadline as screen 4 can guess it before `/pay`: `least(now + 24 h, sales close)` on the server
-/// time of the event read (docs/plans/lot-3.md Q45). `/pay` answers the real `reserved_until`.
-DateTime cashDeadline(FanEvent e) {
-  final day = e.fetchedAt.add(const Duration(hours: 24));
-  return day.isBefore(e.salesCloseAt) ? day : e.salesCloseAt;
-}

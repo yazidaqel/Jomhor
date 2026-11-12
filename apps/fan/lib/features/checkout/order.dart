@@ -1,8 +1,9 @@
 // Read-only DTOs for `POST /fan/orders`, `GET /fan/orders/{id}` and `POST /fan/orders/{id}/pay`
 // (docs/04-api.md §Fan). Hand-written like the event DTOs (the freezed decision is pending).
 
-/// One holder row as the fan typed it, already normalised. `phone` null = the buyer holds it.
-typedef HolderInput = ({String name, String? phone});
+/// One holder row as the fan typed it, already normalised. `phone` null = the buyer holds it. `pays`: the friend
+/// pays their own place (split pay, docs/04-api.md §Split pay); only with a phone.
+typedef HolderInput = ({String name, String? phone, bool pays});
 
 class FanOrder {
   new({
@@ -18,6 +19,7 @@ class FanOrder {
     this.paymentStatus,
     this.paymentMethod,
     this.cash,
+    this.group,
   });
 
   factory fromJson(Map<String, Object?> j) => FanOrder(
@@ -34,6 +36,11 @@ class FanOrder {
     paymentMethod: PayMethod.of(j['payment_method']),
     cash: switch (j['cash']) {
       final Map<String, Object?> c => CashCode.fromJson(c),
+      _ => null,
+    },
+    group: switch (j['group']) {
+      // A role this app does not know: the plain order screen.
+      final Map<String, Object?> g when g['role'] == 'INITIATOR' || g['role'] == 'MEMBER' => OrderGroup.fromJson(g),
       _ => null,
     },
   );
@@ -71,6 +78,12 @@ class FanOrder {
   bool get hostedPaymentPending => paymentMethod != null && paymentMethod!.hosted && paymentStatus == 'PENDING';
 
   bool get paid => status == 'PAID';
+
+  /// Split pay (Lot 4): this order started a group (INITIATOR) or is a friend's place in one (MEMBER); else null.
+  final OrderGroup? group;
+
+  /// Places on this order.
+  int get places => items.fold(0, (n, i) => n + i.qty);
 
   /// Nothing more will happen to this order: stop polling.
   bool get settled => status != 'RESERVED' && status != 'AWAITING_CASH';
@@ -181,6 +194,7 @@ class OrderRow {
     required this.timezone,
     this.reservedUntil,
     this.payCode,
+    this.groupRole,
   });
 
   factory fromJson(Map<String, Object?> j) {
@@ -193,6 +207,7 @@ class OrderRow {
       timezone: e['timezone']! as String,
       reservedUntil: _instant(j['reserved_until']),
       payCode: j['pay_code'] as String?,
+      groupRole: j['group_role'] as String?,
     );
   }
 
@@ -207,6 +222,80 @@ class OrderRow {
 
   /// The PENDING code of an AWAITING_CASH order (6 symbols), else null: nothing to pay at a counter.
   final String? payCode;
+
+  /// `INITIATOR`, `MEMBER` (a friend kept this place for the caller) or null.
+  final String? groupRole;
+}
+
+/// `group` of `POST /fan/orders` and `GET /fan/orders/{id}` (docs/04-api.md §Split pay). INITIATOR: the member
+/// orders of the friends who pay their own place. MEMBER: who kept the place (a label, or null).
+class OrderGroup {
+  new({required this.initiator, this.members = const [], this.initiatorLabel, this.initiatorStatus});
+
+  factory fromJson(Map<String, Object?> j) => OrderGroup(
+    initiator: j['role'] == 'INITIATOR',
+    members: [
+      for (final m in (j['members'] as List<Object?>? ?? const []).cast<Map<String, Object?>>())
+        GroupMember.fromJson(m),
+    ],
+    initiatorLabel: j['initiator_label'] as String?,
+    initiatorStatus: j['initiator_status'] as String?,
+  );
+
+  /// INITIATOR (else MEMBER; any other role parses as no group).
+  final bool initiator;
+  final List<GroupMember> members;
+  final String? initiatorLabel;
+  final String? initiatorStatus;
+
+  /// A friend can still pay: the initiator's screen keeps polling.
+  bool get payable => members.any((m) => !m.settled);
+}
+
+/// One friend's order in the initiator's group: labels only, never a phone or full name.
+class GroupMember {
+  new({
+    required this.orderId,
+    required this.holderLabel,
+    required this.places,
+    required this.totalMad,
+    required this.status,
+    required this.payUrl,
+    this.reservedUntil,
+  });
+
+  factory fromJson(Map<String, Object?> j) => GroupMember(
+    orderId: j['order_id']! as String,
+    holderLabel: j['holder_label']! as String,
+    places: j['places']! as int,
+    totalMad: j['total_mad']! as int,
+    status: j['status']! as String,
+    reservedUntil: _instant(j['reserved_until']),
+    payUrl: j['pay_url']! as String,
+  );
+
+  final String orderId;
+  final String holderLabel;
+  final int places;
+  final int totalMad;
+  final String status;
+  final DateTime? reservedUntil;
+
+  /// The shop's `/orders/{id}` of this member order: what the friend opens to pay.
+  final String payUrl;
+
+  bool get paid => status == 'PAID';
+  bool get settled => status != 'RESERVED' && status != 'AWAITING_CASH';
+}
+
+/// "{paid}/{total} payées" of screen 9 (lot-4 Q107: places, not people): every place of the group, expired ones
+/// included, and the places of PAID orders.
+({int paid, int total}) groupPlaces(FanOrder buyer) {
+  final members = buyer.group?.members ?? const <GroupMember>[];
+  return (
+    paid: (buyer.paid ? buyer.places : 0) + members.where((m) => m.paid).fold(0, (n, m) => n + m.places),
+    total: buyer.places + members.fold(0, (n, m) => n + m.places),
+  );
 }
 
 const _crockford = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';

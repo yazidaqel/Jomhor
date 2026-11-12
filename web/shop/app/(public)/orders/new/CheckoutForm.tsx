@@ -2,23 +2,35 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { firstInvalid, hasFriendPhone, rowErrorsFrom422, shouldSaveName, validateRows, type Row, type RowError } from '@/lib/checkout'
+import {
+  canSplit,
+  firstInvalid,
+  hasFriendPhone,
+  rowErrorsFrom422,
+  shouldSaveName,
+  splitSummary,
+  validateRows,
+  type Row,
+  type RowError,
+} from '@/lib/checkout'
 import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
-import { errorCode, errorText, PAY_METHODS, pageClock, placeOrder, postJson, type PayMethod, type Result } from '@/lib/order-client'
+import { errorCode, errorText, pageClock, placeOrder, postJson, type PayMethod, type Result } from '@/lib/order-client'
 import { formatTime } from '@/lib/time'
-import { CardIcon, CashIcon, CheckIcon, ClockIcon, TicketIcon, WalletIcon } from '../../../icons'
+import { ClockIcon, TicketIcon } from '../../../icons'
+import { ctaText, METHOD_ICONS, MethodRows } from '../MethodRows'
 
 type Copy = Pick<Dict, 'checkout' | 'errors' | 'meta'>
 
 const input =
   'mt-1.5 block h-cta-height w-full rounded-control border border-border bg-ground px-4 text-body text-text placeholder:text-text-muted aria-invalid:border-danger'
 const label = 'text-label uppercase text-text-secondary'
-const ICONS = { CARD: CardIcon, WALLET: WalletIcon, CASH_AGENCY: CashIcon }
 
 /**
  * W3 holder rows, payment method and payment. One row per place: a name (required, §Holder names) and, from ticket 2, an optional
  * WhatsApp number (that phone's account then holds the ticket; the buyer confirms the friends' consent, plan Q21).
+ * A row with a phone gets "Paie sa place" (split pay, 04 §Split pay: posts `pays: true`, default off); the summary
+ * then splits the buyer's places and amount from the friends'. A 422 TOO_LATE turns the switches off for good.
  * Ticket 1 is the buyer, prefilled from /fan/me; an edited name is saved back. Methods come from the event's
  * `payment_methods` (DESIGN Lot 3 W3): wallet only when offered, cash disabled once too late, hidden when not set up. Then
  * lib/order-client placeOrder: create (SALE_BUSY → wait and retry), pay with the method, then follow the hosted page
@@ -30,7 +42,8 @@ export function CheckoutForm(props: {
   priceCategoryId: string
   qty: number
   displayName: string | null
-  totalMad: number
+  /** Price of one place, integer centimes. */
+  unitMad: number
   methods: PayMethod[]
   /** Cash is set up but too late for this event: its row shows disabled. */
   cashLate: boolean
@@ -52,6 +65,7 @@ export function CheckoutForm(props: {
   const [consent, setConsent] = useState(false)
   const [consentError, setConsentError] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tooLate, setTooLate] = useState(false) // 422 TOO_LATE: split pay refused for this event now
   const [pending, setPending] = useState(false)
   const [refused, setRefused] = useState<PayMethod[]>([]) // METHOD_NOT_AVAILABLE on this order
   const usable = props.methods.filter((m) => !refused.includes(m))
@@ -78,9 +92,20 @@ export function CheckoutForm(props: {
     }
   }, [])
 
-  const CtaIcon = ICONS[method ?? 'CARD']
+  const CtaIcon = METHOD_ICONS[method ?? 'CARD']
   const friends = hasFriendPhone(rows)
-  const set = (i: number, field: keyof Row, value: string) => setRows((r) => r.map((row, j) => (j === i ? { ...row, [field]: value } : row)))
+  const split = splitSummary(rows, props.unitMad)
+  const set = (i: number, field: keyof Row, value: string | boolean) => setRows((r) => r.map((row, j) => (j === i ? { ...row, [field]: value } : row)))
+  const phoneError = (e: RowError | undefined) =>
+    e?.phone
+      ? c.phoneInvalid
+      : e?.limit
+        ? fmt(c.friendLimit, e.limit)
+        : e?.pays
+          ? e.pays === 'PHONE_REQUIRED'
+            ? c.paysPhoneRequired
+            : copy.errors.VALIDATION_FAILED
+          : null
 
   function showErrors(errs: RowError[], consentMissing = false) {
     setRowErrors(errs)
@@ -136,6 +161,11 @@ export function CheckoutForm(props: {
       return router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
     }
     const errs = rowErrorsFrom422(r)
+    if (errs.some((e) => e?.pays === 'TOO_LATE')) {
+      setTooLate(true)
+      setRows((rs) => rs.map((row) => ({ ...row, pays: false })))
+      return setError(c.splitTooLate)
+    }
     if (errs.length) return showErrors(errs)
     setError(errorText(copy.errors, r))
   }
@@ -191,16 +221,40 @@ export function CheckoutForm(props: {
                 onChange={(e) => set(i, 'phone', e.target.value)}
                 autoComplete="off"
                 placeholder={c.phonePlaceholder}
-                aria-invalid={!!rowErrors[i]?.phone}
-                aria-describedby={rowErrors[i]?.phone ? `phone-${i}-hint phone-${i}-error` : `phone-${i}-hint`}
+                aria-invalid={!!phoneError(rowErrors[i])}
+                aria-describedby={phoneError(rowErrors[i]) ? `phone-${i}-hint phone-${i}-error` : `phone-${i}-hint`}
                 className={input}
               />
-              {rowErrors[i]?.phone && (
+              {phoneError(rowErrors[i]) && (
                 <p id={`phone-${i}-error`} className="mt-1.5 text-body-small text-danger">
-                  {c.phoneInvalid}
+                  {phoneError(rowErrors[i])}
                 </p>
               )}
             </div>
+          )}
+          {canSplit(row, i) && (
+            <label className="flex min-h-touch-min cursor-pointer items-center justify-between gap-4 has-disabled:cursor-not-allowed">
+              <span className="flex min-w-0 flex-col">
+                <span className="font-semibold">{c.paysToggle}</span>
+                <span id={`pays-${i}-hint`} className="text-body-small text-text-muted">
+                  {tooLate ? c.splitTooLate : c.paysHint}
+                </span>
+              </span>
+              <input
+                id={`pays-${i}`}
+                type="checkbox"
+                role="switch"
+                checked={!!row.pays}
+                disabled={tooLate}
+                onChange={(e) => set(i, 'pays', e.target.checked)}
+                aria-describedby={`pays-${i}-hint`}
+                className="peer sr-only"
+              />
+              <span
+                aria-hidden="true"
+                className="relative h-7 w-12 shrink-0 rounded-pill border border-border bg-ground transition-colors duration-200 peer-checked:border-accent peer-checked:bg-accent peer-disabled:opacity-50 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent after:absolute after:start-1 after:top-1 after:size-5 after:rounded-pill after:bg-text-muted after:transition-transform after:duration-200 peer-checked:after:translate-x-5 peer-checked:after:bg-on-accent rtl:peer-checked:after:-translate-x-5"
+              />
+            </label>
           )}
         </fieldset>
       ))}
@@ -251,53 +305,23 @@ export function CheckoutForm(props: {
           <span>{heldText(c, held.until, props.timezone, copy.meta.intl, props.now + onPageMs)}</span>
         </p>
       )}
-      <fieldset className="flex flex-col gap-2.5 rounded-card border border-border bg-surface p-5">
-        <legend className="float-start mb-1 font-display text-h2 uppercase">{c.methodTitle}</legend>
-        {PAY_METHODS.filter((m) => props.methods.includes(m) || (m === 'CASH_AGENCY' && props.cashLate)).map((m) => {
-          const off = !usable.includes(m)
-          const Icon = ICONS[m]
-          const hint = refused.includes(m)
-            ? c.unavailable
-            : m !== 'CASH_AGENCY'
-              ? c.instant
-              : props.methods.includes(m)
-                ? fmt(c.cashBefore, { deadline: props.cashDeadline })
-                : c.cashTooLate
-          return (
-            <label
-              key={m}
-              className={`clear-start flex min-h-touch-min items-center gap-3 rounded-control border-2 bg-ground px-4 py-3 transition-colors duration-200 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
-                off ? 'cursor-not-allowed border-border text-text-muted' : m === method ? 'cursor-pointer border-accent' : 'cursor-pointer border-border hover:border-border-muted'
-              }`}
-            >
-              <input
-                type="radio"
-                name="method"
-                value={m}
-                checked={m === method}
-                disabled={off || pending}
-                onChange={() => setMethod(m)}
-                aria-describedby={`method-${m}-hint`}
-                className="sr-only"
-              />
-              <Icon className={`size-6 ${off ? '' : 'text-accent'}`} />
-              <span className="flex min-w-0 flex-1 flex-col gap-x-3 sm:flex-row sm:items-center sm:justify-between">
-                <span className="font-semibold">{c[m]}</span>
-                <span id={`method-${m}-hint`} className="text-body-small text-text-muted sm:text-end">
-                  {hint}
-                </span>
-              </span>
-              <span
-                aria-hidden="true"
-                className={`flex size-6 shrink-0 items-center justify-center rounded-pill border-2 ${m === method ? 'border-accent bg-accent text-on-accent' : 'border-border'}`}
-              >
-                {m === method && <CheckIcon key={m} className="size-3.5 motion-safe:animate-mark" />}
-              </span>
-            </label>
-          )
-        })}
-        {method === 'CASH_AGENCY' && <p className="text-body-small text-text-secondary">{c.cashNote}</p>}
-      </fieldset>
+      {split.friends > 0 && (
+        <div data-split className="flex flex-col gap-1 rounded-control border border-border bg-surface px-4 py-3.5 text-sm">
+          <p className="font-semibold">{fmt(c.splitMine, { n: split.mine, total: formatDh(split.mineMad) })}</p>
+          <p className="text-text-secondary">{fmt(c.splitFriends, { m: split.friends })}</p>
+          <p className="text-xs text-text-muted">{c.splitCaption}</p>
+        </div>
+      )}
+      <MethodRows
+        methods={props.methods}
+        cashLate={props.cashLate}
+        cashDeadline={props.cashDeadline}
+        refused={refused}
+        method={method}
+        onPick={setMethod}
+        disabled={pending}
+        copy={c}
+      />
 
       <button
         type="submit"
@@ -310,7 +334,7 @@ export function CheckoutForm(props: {
         ) : (
           <CtaIcon className="size-5" />
         )}
-        {pending && wait === null ? (method === 'CASH_AGENCY' ? c.creatingCode : c.paying) : ctaText(c, method, formatDh(props.totalMad))}
+        {pending && wait === null ? (method === 'CASH_AGENCY' ? c.creatingCode : c.paying) : ctaText(c, method, formatDh(split.mineMad))}
       </button>
       {pending && (
         <button
@@ -333,10 +357,4 @@ export function CheckoutForm(props: {
 function heldText(c: Copy['checkout'], until: string, timezone: string, intl: string, serverNow: number) {
   const left = Math.max(0, Math.floor((Date.parse(until) - serverNow) / 1000))
   return fmt(c.held, { time: formatTime(until, timezone, intl), m: Math.floor(left / 60), s: left % 60 })
-}
-
-function ctaText(c: Copy['checkout'], m: PayMethod | undefined, amount: string) {
-  if (m === 'CASH_AGENCY') return c.payCash
-  if (m === 'WALLET') return fmt(c.payWallet, { amount })
-  return fmt(c.pay, { amount })
 }

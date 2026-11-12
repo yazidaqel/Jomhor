@@ -77,7 +77,7 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       routerConfig: ref.watch(routerProvider),
-      builder: (context, child) => LaunchSplash(child: child!),
+      builder: (context, child) => ref.watch(launchSplashProvider) ? LaunchSplash(child: child!) : child!,
     );
   }
 }

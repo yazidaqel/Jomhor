@@ -19,6 +19,7 @@ import 'club_test.dart' show ClubBackend, loyaltyJson, memberJson;
 import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
+import 'split_pay_test.dart' show SplitBackend, buyerId, karimId, memberId, omarId, saraId;
 import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
 import 'transfer_test.dart' show openTicketJson, transferredJson;
 
@@ -28,7 +29,8 @@ import 'transfer_test.dart' show openTicketJson, transferredJson;
 /// pictures, the rules the pictures show are asserted: right to left, Western digits only, codes and prices in
 /// left-to-right isolates. Multi-club (FL-23..25): screen 11, the club chips on screen 1, the club line on tickets.
 /// FL-19: screen 5 gate side and "Tu es dedans". FL-20: screen 7 (two member cards, a non-member, the join sheet)
-/// and the member strip on screen 1. Recorded on Linux with the docker command at the top of goldens.dart.
+/// and the member strip on screen 1. FL-21: screen 4 with a friend paying their own place, screen 9 initiator (2/4)
+/// and member (to pay, released). Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -467,5 +469,92 @@ void main() {
       }
       await snap('$locale-cash-order');
     });
+
+    // FL-21: split pay, each on a phone of its own (group.seen included).
+    Future<void> split(WidgetTester tester, String location) async {
+      await phone(tester);
+      final before = SharedPreferencesAsyncPlatform.instance;
+      SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+      addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+      final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
+      final backend = SplitBackend(clock);
+      if (locale == 'ar') {
+        backend
+          ..labels.addAll({karimId: 'كريم ب.', saraId: 'سارة ب.', omarId: 'عمر ت.'})
+          ..initiatorLabel = holder;
+      }
+      final c = await pumpJomhor(
+        tester,
+        backend: backend.handle,
+        tokens: MemoryTokenStore('jwt'),
+        clock: clock,
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+      );
+      c.read(routerProvider).go(location);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('$locale · screen 4 split pay', (tester) async {
+      await split(tester, '/events/1/checkout?price=pc-1-0&qty=2');
+      await tester.enterText(find.byKey(const Key('holder.1.name')), locale == 'ar' ? 'سارة بنعلي' : 'Sara Benali');
+      await tester.enterText(find.byKey(const Key('holder.1.phone')), '06 12 34 56 78');
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('holder.1.pays')));
+      await tester.tap(find.byKey(const Key('holder.1.pays')));
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      // Back to the top: the split summary and the switch on one screen.
+      await tester.drag(find.byType(ListView).last, const Offset(0, 2000));
+      await tester.pumpAndSettle();
+      if (locale == 'ar') {
+        expectArabicRules(tester);
+        expect(find.textContaining('\u206650\u00A0DH\u2069'), findsWidgets, reason: 'prices stay LTR isolates');
+      }
+      await snap('$locale-4-paiement-partage');
+    });
+
+    testWidgets('$locale · screen 9 group, initiator', (tester) async {
+      await split(tester, '/orders/$buyerId');
+      // "2/4" reads left to right in every locale: the paid count sits left of "/4".
+      expect(tester.widget<Text>(find.byKey(const Key('group.total'))).textDirection, TextDirection.ltr);
+      expect(
+        tester.getCenter(find.byKey(const Key('group.paid'))).dx,
+        lessThan(tester.getCenter(find.byKey(const Key('group.total'))).dx),
+      );
+      if (locale == 'ar') {
+        expectArabicRules(tester);
+        expect(find.text('ك ب'), findsOneWidget, reason: 'Arabic initials spaced so they do not join');
+      }
+      await snap('$locale-9-groupe');
+    });
+
+    for (final (name, status) in [('9-membre', 'RESERVED'), ('9-membre-expire', 'EXPIRED')]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await phone(tester);
+        final before = SharedPreferencesAsyncPlatform.instance;
+        SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+        addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+        final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
+        final backend = SplitBackend(clock)
+          ..memberStatus = status
+          ..initiatorLabel = holder;
+        final c = await pumpJomhor(
+          tester,
+          backend: backend.handle,
+          tokens: MemoryTokenStore('jwt'),
+          clock: clock,
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+        );
+        c.read(routerProvider).go('/orders/$memberId');
+        await tester.pumpAndSettle();
+        if (locale == 'ar') {
+          expectArabicRules(tester);
+          if (status == 'RESERVED') expect(find.text('يزيد ع. خلا ليك بلاصة'), findsOneWidget);
+        }
+        await snap('$locale-$name');
+      });
+    }
   }
 }

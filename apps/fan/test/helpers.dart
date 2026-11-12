@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:jomhor_fan/app/app.dart';
+import 'package:jomhor_fan/app/launch_splash.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
@@ -127,7 +128,8 @@ class TestClock {
 
 /// Pumps the whole app (FR unless [locale] says otherwise: the device language) with a fake backend and an empty in-memory secure storage (the ticket cache);
 /// [follows] is what `main` read from the phone: by default the picker was seen and no club is followed;
-/// [jitter] replaces the zero jitter; [keepSecureStorage] keeps what a test put there with `FlutterSecureStorage.setMockInitialValues`. Returns the container to drive the router and providers.
+/// [jitter] replaces the zero jitter; [splash] plays the launch splash (off: the app is open, and the test's clock
+/// starts, when this returns); [settle] false returns on the first frame; [keepSecureStorage] keeps what a test put there with `FlutterSecureStorage.setMockInitialValues`. Returns the container to drive the router and providers.
 Future<ProviderContainer> pumpJomhor(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request request) backend,
@@ -138,6 +140,8 @@ Future<ProviderContainer> pumpJomhor(
   Duration Function(Duration max)? jitter,
   bool keepSecureStorage = false,
   Locale locale = const Locale('fr', 'MA'),
+  bool splash = false,
+  bool settle = true,
 }) async {
   final time = clock ?? TestClock(DateTime.utc(2027, 2, 20, 12));
   tzdata.initializeTimeZones();
@@ -154,6 +158,7 @@ Future<ProviderContainer> pumpJomhor(
       initialFollowsProvider.overrideWithValue(follows),
       nowProvider.overrideWithValue(() => time.now),
       jitterProvider.overrideWithValue(jitter ?? (_) => Duration.zero),
+      launchSplashProvider.overrideWithValue(splash),
       ...overrides,
       clockProvider.overrideWith((ref) async* {
         yield time.now;
@@ -167,7 +172,7 @@ Future<ProviderContainer> pumpJomhor(
       child: UncontrolledProviderScope(container: container, child: const JomhorApp()),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
   return container;
 }
 
