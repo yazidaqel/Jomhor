@@ -128,6 +128,20 @@ Exit ("the app people open between matches"):
 | Q99 | Malformed `settings.loyalty` | Defaults + one WARN log, never a 500. |
 | Q100 | `events_attended` before CLOSED? | Yes (04 has no status filter): the count moves at the entry scan; the dot fills once the event is CLOSED. |
 | Q101 | PATCH can't clear a campaign's `event_id` (null = unchanged) | Keep the contract. The B9 composer doesn't offer removing the event of a saved draft; delete the draft and start again. Revisit with BE-33 if organizers ask. |
+| Q102 | Member `AWAITING_CASH` or in card grace when the buyer expires | Keeps its own hold (P79). (Wave 3 plan, 2026-11-12.) |
+| Q103 | Member hold while the buyer has a cash code | Mirrors the buyer's `reserved_until` (P78). |
+| Q104 | Split as a holding vector | Unpaid member places also count toward the initiator's limit (P83). |
+| Q105 | `initiator_label` source | P82; null → "Un ami t'a gardé une place". |
+| Q106 | Same phone with `pays` on one place and not on another | Allowed: the non-`pays` place stays in the buyer's order. |
+| Q107 | "{paid}/{total}" counts places or people | Places (P84). |
+| Q108 | "Check settles once" | Per phone: member order ids in `group.seen`, wiped on sign-out. |
+| Q109 | "2 h" caption vs `sales.split.hold` | Literal "2 h" in copy; clients learn TOO_LATE only from the 422. Changing the hold means changing the copy. |
+| Q110 | Relancer per member or per group | Per unpaid member (P84). |
+| Q111 | W4 group block live | SSR + `router.refresh()` every 10 s while visible and a member is payable. |
+| Q112 | Mirrored member places in the cash cap | Not counted (soft cap, `ponytail:` note). |
+| Q113 | Buyer pays cash close to the cutoff | Accepted: members get `least(paid_at + 2 h, cutoff)`, no minimum. |
+| Q114 | List member orders to pay in W5 / Billets | No: app Accueil strip only; the shop relies on `pay_url`. |
+| Q115 | Initiator opens a member's `pay_url` | 404 (not the owner). |
 
 ## 4. Contract changes
 
