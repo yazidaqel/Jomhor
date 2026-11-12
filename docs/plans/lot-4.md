@@ -142,6 +142,20 @@ Exit ("the app people open between matches"):
 | Q113 | Buyer pays cash close to the cutoff | Accepted: members get `least(paid_at + 2 h, cutoff)`, no minimum. |
 | Q114 | List member orders to pay in W5 / Billets | No: app Accueil strip only; the shop relies on `pay_url`. |
 | Q115 | Initiator opens a member's `pay_url` | 404 (not the owner). |
+| Q116 | Which settles send ORDER_PAID | `AWAITING_CASH` → `PAID` by any method, and a late success reviving an `EXPIRED` order. Not `RESERVED` → `PAID` (P89). (Wave 4 plan, 2026-11-12.) |
+| Q117 | Subject changed before send | `FAILED STALE`, no retry (P88). |
+| Q118 | One token per session | Yes: a PUT deletes the session's other tokens (P90). |
+| Q119 | Firebase client config | Dart-defines `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_PROJECT_ID` (+ `FIREBASE_IOS_BUNDLE_ID`) into `Firebase.initializeApp(options:)`. No google-services.json, plist or gms Gradle plugin in the repo. |
+| Q120 | Foreground banner | DESIGN "Push in foreground" row (P93); never over `/tickets/:id`. |
+| Q121 | Bell signed out | Hidden. |
+| Q122 | Unread basis | Newest `sent_at` seen (server time) under one key `inbox.seen`, wiped on sign-out. |
+| Q123 | Profil "Notifications" row | Shows the permission state; "Activer" asks only while the OS allows a prompt; denied → "Active-les dans les réglages du téléphone". |
+| Q124 | Offline logout leaves a live server token | `signOut()` also calls `deleteToken()` on the device; FCM then reports UNREGISTERED. |
+| Q125 | Arabic push text with amounts and times | FSI…PDI isolates in the `ar` push bundle, not in WhatsApp params. |
+| Q126 | "First purchase" for the permission ask | The first PAID order screen (split members included) or a join with push on; once per install (`push.asked`). |
+| Q127 | Who builds the send-rate cap | BE-30: at most rate × job period per run, transactional kinds first. |
+| Q128 | PAY_CODE recipient and later codes | The order's `user_id`; a later code sends nothing (unique index). |
+| Q129 | Inbox before BE-33 | Dot hidden on any error; screen 10 shows the error panel with retry. FL-22's inbox closes after one run against BE-33. |
 
 ## 4. Contract changes
 
