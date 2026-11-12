@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jomhor_fan/app/launch_splash.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/brand.dart';
+
+import 'helpers.dart';
 
 void main() {
   Widget host(Widget brand, {bool reduce = false}) => MediaQuery(
@@ -140,6 +143,25 @@ void main() {
         ),
       ),
     );
+
+    test('the app plays it at launch (only test harnesses turn it off)', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      expect(container.read(launchSplashProvider), isTrue);
+    });
+
+    for (final splash in [true, false]) {
+      testWidgets('the app ${splash ? 'opens on' : 'skips'} the splash when launchSplashProvider is $splash', (
+        tester,
+      ) async {
+        await pumpJomhor(tester, backend: (_) async => json(<Object?>[]), splash: splash, settle: false);
+        expect(find.byType(LaunchSplash), splash ? findsOneWidget : findsNothing);
+        final mark = find.byWidgetPredicate((w) => w is JomhorMark && w.size == 160);
+        expect(mark, splash ? findsOneWidget : findsNothing, reason: 'the native splash, exactly');
+        await tester.pumpAndSettle();
+        expect(mark, findsNothing);
+      });
+    }
 
     testWidgets('covers the app built under it, lets taps through as it fades, then leaves the tree for good', (
       tester,
