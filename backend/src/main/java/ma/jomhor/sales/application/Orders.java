@@ -15,17 +15,36 @@ public interface Orders {
     /** Serialises the orders of one buyer on one event until the end of the transaction. */
     void lockBuyer(UUID userId, int eventId);
 
-    /** Σ qty of the buyer's RESERVED, AWAITING_CASH and PAID orders on the event. */
+    /**
+     * Σ qty of the buyer's RESERVED, AWAITING_CASH and PAID orders on the event, plus the places of member orders of
+     * the buyer's split groups still RESERVED or AWAITING_CASH (04 §Split pay Limits, P83).
+     */
     long held(UUID org, UUID userId, int eventId);
+
+    /** Σ qty of the account's own RESERVED, AWAITING_CASH and PAID orders on the event (a split member's count). */
+    long ownHeld(UUID org, UUID userId, int eventId);
 
     /** The event's RESERVED orders still held (reserved_until > now()). No lock (docs/04-api.md §On-sale Busy). */
     long activeHolds(UUID org, int eventId);
+
+    /** The database clock (now(), the transaction's start), the clock of the sale window. */
+    Instant now();
 
     /** The channel of an order of this organizer. */
     Optional<Order.Channel> channel(UUID org, UUID orderId);
 
     /** A RESERVED order held 8 min from now (database clock), with its items and their holders. */
     Order insert(UUID org, int eventId, UUID userId, Order.Channel channel, long totalMad, List<Order.Item> items);
+
+    /**
+     * A split-pay member order (04 §Split pay Orders): RESERVED until {@code reservedUntil} (the buyer's), with
+     * group_order_id = {@code groupOrderId}.
+     */
+    Order insertMember(UUID org, int eventId, UUID userId, Order.Channel channel, UUID groupOrderId,
+                       Instant reservedUntil, long totalMad, List<Order.Item> items);
+
+    /** The organizer's member orders of this buyer's order, with their items, by id. */
+    List<Order> members(UUID org, UUID groupOrderId);
 
     /**
      * A till sale (04 POST /org/pos/orders): order {@code id} PAID now, channel POS, no buyer, payment_method POS_CASH,
@@ -60,6 +79,21 @@ public interface Orders {
      */
     Optional<Instant> awaitCash(UUID org, UUID orderId, Instant salesCloseAt, Duration minWindow);
 
+    /** Its member orders still RESERVED get reserved_until = {@code until} (the buyer's new hold, P78). */
+    void mirrorMembers(UUID org, UUID orderId, Instant until);
+
+    /**
+     * Its member orders still RESERVED get reserved_until = least(now() + {@code hold}, {@code salesCloseAt}) (the
+     * buyer just paid, 04 §Split pay Hold). Returns their ids.
+     */
+    List<UUID> extendMembers(UUID org, UUID orderId, Duration hold, Instant salesCloseAt);
+
+    /**
+     * Locks its member orders still RESERVED ({@code for no key update}, waiting for them) until the end of the
+     * transaction: settle takes them after the order row and before any price category (lock order).
+     */
+    void lockMembers(UUID org, UUID orderId);
+
     /** Whether the order is RESERVED or AWAITING_CASH and reserved_until is at least {@code left} away (database clock). */
     boolean holdsFor(UUID org, UUID orderId, Duration left);
 
@@ -68,16 +102,26 @@ public interface Orders {
 
     /** A fan's order as GET /fan/orders lists it. */
     record Listed(UUID id, UUID organizerId, int eventId, Order.Channel channel, Order.Status status, long totalMad,
-                  Instant reservedUntil, Instant createdAt) {}
+                  Instant reservedUntil, Instant createdAt, Order.GroupRole groupRole) {}
 
-    /** The buyer's orders, AWAITING_CASH first, then newest first, at most {@code limit}. */
+    /**
+     * The buyer's orders: AWAITING_CASH ones and member orders still RESERVED and held first, then newest first, at
+     * most {@code limit}.
+     */
     List<Listed> listed(UUID userId, int limit);
 
     /**
      * Locks up to {@code limit} RESERVED or AWAITING_CASH orders past reserved_until, oldest first, leaving out
-     * {@code exclude} and rows another transaction holds (skip locked).
+     * {@code exclude}, rows another transaction holds (skip locked), and member orders whose buyer's order is still
+     * RESERVED or AWAITING_CASH (04 §Split pay Hold).
      */
     List<UUID> claimDue(int limit, Collection<UUID> exclude);
+
+    /**
+     * Locks the RESERVED member orders of these buyer orders (they expire with them), leaving out {@code exclude} and
+     * rows another transaction holds (skip locked).
+     */
+    List<UUID> claimMembers(Collection<UUID> buyerOrderIds, Collection<UUID> exclude);
 
     /** RESERVED or AWAITING_CASH → EXPIRED for these (already locked) orders; their items summed per price category. */
     List<Expired> expire(Collection<UUID> orderIds);

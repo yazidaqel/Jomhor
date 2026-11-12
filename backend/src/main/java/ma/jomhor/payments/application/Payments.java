@@ -5,13 +5,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.payments.domain.Payment;
+import ma.jomhor.sales.domain.Order;
 import ma.jomhor.sales.domain.Order.PaymentMethod;
 
 /** Persistence port for payments. */
 public interface Payments {
 
-    /** A PENDING CARD or WALLET attempt. */
-    Payment insertPending(UUID org, UUID orderId, PaymentMethod method, String provider, long amountMad);
+    /** A PENDING CARD or WALLET attempt; /return lands on {@code returnChannel} (APP or WEB, null = the order's). */
+    Payment insertPending(UUID org, UUID orderId, PaymentMethod method, String provider, long amountMad,
+                          Order.Channel returnChannel);
 
     /** A PENDING CASH_AGENCY attempt (provider CASH) with this code; empty if the code is taken (draw again). */
     Optional<Payment> insertCashPending(UUID org, UUID orderId, String payCode, long amountMad);

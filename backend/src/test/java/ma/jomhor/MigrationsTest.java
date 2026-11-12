@@ -18,11 +18,24 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV19Apply() {
+    void v1ToV20Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19");
+                        "17", "18", "19", "20");
+    }
+
+    /** V20: an attempt returns to APP or WEB only (a CHECK runs before the foreign keys, so no rows are needed). */
+    @Test
+    void paymentReturnChannelRefusesPos() {
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into payments (organizer_id, order_id, method, provider, amount_mad, return_channel)
+                values (gen_random_uuid(), gen_random_uuid(), 'CARD', 'FAKE', 1, 'POS')"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("payments_return_channel_check");
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from pg_indexes
+                where tablename = 'orders' and indexdef like '%(group_order_id) WHERE (group_order_id IS NOT NULL)'""",
+                Integer.class)).isEqualTo(1);
     }
 
     @Test

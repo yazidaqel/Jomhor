@@ -16,6 +16,7 @@ import java.util.UUID;
 import ma.jomhor.payments.application.Payments;
 import ma.jomhor.payments.domain.Payment;
 import ma.jomhor.sales.application.PendingPayments;
+import ma.jomhor.sales.domain.Order;
 import ma.jomhor.sales.domain.Order.PaymentMethod;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -25,7 +26,7 @@ import org.springframework.stereotype.Repository;
 class JdbcPayments implements Payments, PendingPayments {
 
     private static final String COLUMNS =
-            "id, organizer_id, order_id, method, provider, amount_mad, status, pay_code, pos_session_id";
+            "id, organizer_id, order_id, method, provider, amount_mad, status, pay_code, pos_session_id, return_channel";
     /** The attempt an order reports (04 GET /fan/orders/{id}): a success first, else the latest. */
     private static final String REPORTED_FIRST = "status = 'SUCCEEDED' desc, created_at desc, id desc";
 
@@ -36,13 +37,15 @@ class JdbcPayments implements Payments, PendingPayments {
     }
 
     @Override
-    public Payment insertPending(UUID org, UUID orderId, PaymentMethod method, String provider, long amountMad) {
+    public Payment insertPending(UUID org, UUID orderId, PaymentMethod method, String provider, long amountMad,
+                                 Order.Channel returnChannel) {
         return jdbc.sql("""
-                        insert into payments (organizer_id, order_id, method, provider, amount_mad)
-                        values (:org, :order, cast(:method as payment_method), :provider, :amount)
+                        insert into payments (organizer_id, order_id, method, provider, amount_mad, return_channel)
+                        values (:org, :order, cast(:method as payment_method), :provider, :amount,
+                                cast(:channel as sales_channel))
                         returning\s""" + COLUMNS)
                 .param("org", org).param("order", orderId).param("method", method.name()).param("provider", provider)
-                .param("amount", amountMad)
+                .param("amount", amountMad).param("channel", returnChannel == null ? null : returnChannel.name())
                 .query(JdbcPayments::payment).single();
     }
 
@@ -264,6 +267,7 @@ class JdbcPayments implements Payments, PendingPayments {
         return new Payment(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
                 rs.getObject("order_id", UUID.class), PaymentMethod.valueOf(rs.getString("method")),
                 rs.getString("provider"), rs.getLong("amount_mad"), Payment.Status.valueOf(rs.getString("status")),
-                rs.getString("pay_code"), rs.getObject("pos_session_id", UUID.class));
+                rs.getString("pay_code"), rs.getObject("pos_session_id", UUID.class),
+                rs.getString("return_channel") == null ? null : Order.Channel.valueOf(rs.getString("return_channel")));
     }
 }

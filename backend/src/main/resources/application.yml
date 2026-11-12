@@ -88,6 +88,10 @@ tickets:
 sales:
   # Basic on-sale queue (04 §On-sale Busy): active holds of one event at or above this → 429 SALE_BUSY.
   max-active-holds-per-event: ${SALES_MAX_ACTIVE_HOLDS_PER_EVENT:2000}
+  split:
+    # Split pay (04 §Split pay, plan Q60): member orders are held this long after the buyer pays, capped at sales
+    # close; a split is refused when sales close sooner than this. The fan copy says "2 h" literally (Q109).
+    hold: ${SALES_SPLIT_HOLD:2h}
 
 otp:
   # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14). Mobile CGNAT puts many fans behind one IP:

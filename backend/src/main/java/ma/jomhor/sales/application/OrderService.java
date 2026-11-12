@@ -11,8 +11,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import ma.jomhor.catalog.application.Inventory;
@@ -38,9 +40,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Fan orders (docs/04-api.md §Fan). Quota goes through catalog's Inventory in this module's transaction, so an
  * order, its items and the places it takes commit together or not at all.
  *
- * <p>Lock order on one order, everywhere: the payment row (payments' callback) → the order row → the buyer lock
- * → price categories in UUID order. Placing an order takes the buyer lock → categories; the expiry claims order
- * rows with skip locked (it never waits for one) → categories. So none of them waits in a circle.
+ * <p>Lock order on one order, everywhere: the payment row (payments' callback) → the order row → its member order
+ * rows (a split, 04 §Split pay) → the buyer lock → price categories in UUID order. Placing an order (online or at a
+ * till) takes the holders' users rows (sorted phones) → the buyer locks (buyer and split members, in UUID order) →
+ * categories; the expiry claims order rows with skip locked (it never waits for one) → categories. So none of them
+ * waits in a circle.
  */
 @Service
 public class OrderService {
@@ -59,8 +63,15 @@ public class OrderService {
     /** {@code holders} as sent: validated and resolved by {@link #place}. */
     public record ItemRequest(UUID priceCategoryId, int qty, List<HolderRequest> holders) {}
 
-    /** {@code phone} absent → the buyer holds the place. */
-    public record HolderRequest(String name, String phone) {}
+    /**
+     * {@code phone} absent → the buyer holds the place. {@code pays}: split pay, the holder pays for this place
+     * (04 §Split pay Request).
+     */
+    public record HolderRequest(String name, String phone, boolean pays) {
+        public HolderRequest(String name, String phone) {
+            this(name, phone, false);
+        }
+    }
 
     /** Same as the fan auth endpoints. */
     private static final Pattern E164 = Pattern.compile("\\+[1-9][0-9]{7,14}");
@@ -70,7 +81,18 @@ public class OrderService {
      * {@link PendingPayments#latestAttempt} reports it (null before any /pay) and, while it waits for cash, its code.
      */
     public record View(Order order, Map<UUID, SalePrice> categories, List<UUID> ticketIds,
-                       PendingPayments.Attempt attempt, CashInstructions.Cash cash) {}
+                       PendingPayments.Attempt attempt, CashInstructions.Cash cash, Group group) {}
+
+    /**
+     * 04 {@code group} of an order: INITIATOR with its member orders (by id), or MEMBER with the buyer's label and
+     * status. Labels only: never a member's phone or full name.
+     */
+    public record Group(Order.GroupRole role, List<Member> members, String initiatorLabel,
+                        Order.Status initiatorStatus) {}
+
+    /** A member order as its buyer sees it; {@code payUrl} is the shop's page of that order (server config). */
+    public record Member(UUID orderId, String holderLabel, int places, long totalMad, Order.Status status,
+                         Instant reservedUntil, String payUrl) {}
 
     /**
      * A row of GET /fan/orders: the order, its event, its payment method (null before any /pay) and, while it is
@@ -91,11 +113,19 @@ public class OrderService {
     private final TicketDeliveryService deliveries;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
+    private final Duration splitHold;
+    private final String payUrl;
 
+    /**
+     * {@code payUrl}: payments.return-url.web, the shop's order page; read here (not from PaymentService, which
+     * depends on this class) for the members' {@code pay_url}. PaymentService checks it at startup.
+     */
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         CashInstructions cashInstructions, UserService users, TicketDeliveryService deliveries,
                         PlatformTransactionManager transactions,
-                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds) {
+                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
+                        @Value("${sales.split.hold}") Duration splitHold,
+                        @Value("${payments.return-url.web}") String payUrl) {
         this.orders = orders;
         this.inventory = inventory;
         this.tickets = tickets;
@@ -105,14 +135,21 @@ public class OrderService {
         this.deliveries = deliveries;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
+        this.splitHold = splitHold;
+        this.payUrl = payUrl;
     }
 
     /**
-     * Checks in this order: event (404, 409 EVENT_NOT_ON_SALE), items and holders (422), queue (429 SALE_BUSY),
-     * per-account limit (409), quota (409 SOLD_OUT). The buyer lock is taken before the limit is read, so two
-     * parallel orders of one buyer are counted one after the other. A holder phone's account is found or created
-     * once everything else passed (it rolls back with the order); the response is the same either way, so it can't
-     * be used to probe whether a phone has an account.
+     * Checks in this order: event (404, 409 EVENT_NOT_ON_SALE), items and holders (422, split pay included: per
+     * holder name, phone, pays; then NO_BUYER_PLACE; then TOO_LATE), queue (429 SALE_BUSY), per-account limit (409:
+     * the buyer, then each split member), quota (409 SOLD_OUT). Holder phones' accounts are found or created before
+     * any lock (they roll back with the order; the response is the same either way, so it can't be used to probe
+     * whether a phone has an account). The buyer locks (buyer and members) are taken before the limits are read, so
+     * parallel orders of one account are counted one after the other.
+     *
+     * <p>Split pay (04 §Split pay Orders): one reservation for every place; the buyer's order holds the places
+     * without {@code pays}, and each distinct {@code pays} phone gets a member order of its places, RESERVED until
+     * the buyer's reserved_until.
      */
     @Transactional
     public View place(UUID userId, int eventId, Order.Channel channel, List<ItemRequest> items) {
@@ -122,7 +159,21 @@ public class OrderService {
             throw notOnSale(event);
         }
         UUID org = event.organizerId();
-        Checked checked = check(byId(inventory.prices(org, eventId)), items);
+        Checked checked = check(byId(inventory.prices(org, eventId)), items, users.get(userId).phone());
+        // Each pays phone → the path of its first place, in place order.
+        Map<String, String> payers = new LinkedHashMap<>();
+        for (int i = 0; i < checked.holders().size(); i++) {
+            for (int j = 0; j < checked.holders().get(i).size(); j++) {
+                HolderRequest h = checked.holders().get(i).get(j);
+                if (h.pays()) {
+                    payers.putIfAbsent(h.phone(), "items[%d].holders[%d]".formatted(i, j));
+                }
+            }
+        }
+        // Database clock, like the sale window: the split's 2 h must fit before sales close.
+        if (!payers.isEmpty() && !orders.now().plus(splitHold).isBefore(event.refundCutoffAt())) {
+            throw invalid(payers.values().iterator().next() + ".pays", "sales close too soon to split", "TOO_LATE");
+        }
 
         // ponytail: soft cap on a plain count, no lock (04 §On-sale Busy); the ranked queue is Lot 5.
         if (orders.activeHolds(org, eventId) >= maxActiveHolds) {
@@ -130,17 +181,36 @@ public class OrderService {
                     Map.of("retry_after_s", ThreadLocalRandom.current().nextInt(5, 31)));
         }
 
-        orders.lockBuyer(userId, eventId);
+        Map<String, UUID> byPhone = phones(checked.holders());
+        Set<UUID> accounts = new TreeSet<>(List.of(userId));
+        payers.keySet().forEach(phone -> accounts.add(byPhone.get(phone)));
+        accounts.forEach(account -> orders.lockBuyer(account, eventId));
         long held = orders.held(org, userId, eventId);
         if (held + checked.places() > event.perAccountLimit()) {
             throw new ApiException("PER_ACCOUNT_LIMIT", HttpStatus.CONFLICT, "Per-account limit reached",
                     Map.of("limit", event.perAccountLimit(), "held", held));
         }
+        for (var payer : payers.entrySet()) {
+            UUID member = byPhone.get(payer.getKey());
+            long memberHeld = orders.ownHeld(org, member, eventId); // own orders only: P83 is the buyer's rule
+            long added = checked.holders().stream().flatMap(List::stream)
+                    .filter(h -> h.pays() && h.phone().equals(payer.getKey())).count();
+            if (memberHeld + added > event.perAccountLimit()) {
+                throw new ApiException("PER_ACCOUNT_LIMIT", HttpStatus.CONFLICT, "Per-account limit reached",
+                        Map.of("limit", event.perAccountLimit(), "held", memberHeld, "field", payer.getValue()));
+            }
+        }
 
         Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, checked.qty());
-        List<Order.Item> lines = lines(items, checked.holders(), taken, userId);
-        long total = lines.stream().mapToLong(l -> l.qty() * l.unitPriceMad()).sum();
-        return new View(orders.insert(org, eventId, userId, channel, total, lines), taken, List.of(), null, null);
+        List<Order.Item> own = lines(items, checked.holders(), taken, byPhone, userId, h -> !h.pays());
+        Order buyer = orders.insert(org, eventId, userId, channel, total(own), own);
+        for (String phone : payers.keySet()) {
+            List<Order.Item> theirs = lines(items, checked.holders(), taken, byPhone, userId,
+                    h -> h.pays() && h.phone().equals(phone));
+            orders.insertMember(org, eventId, byPhone.get(phone), channel, buyer.id(), buyer.reservedUntil(),
+                    total(theirs), theirs);
+        }
+        return new View(buyer, taken, List.of(), null, null, payers.isEmpty() ? null : group(buyer));
     }
 
     /**
@@ -158,18 +228,18 @@ public class OrderService {
         if (event.window() != Inventory.SaleWindow.OPEN) {
             throw notOnSale(event);
         }
-        Checked checked = check(byId(inventory.prices(org, eventId)), items);
+        Checked checked = check(byId(inventory.prices(org, eventId)), items, null);
         if (checked.places() > event.perAccountLimit()) {
             throw new ApiException("PER_ACCOUNT_LIMIT", HttpStatus.CONFLICT, "Per-account limit reached",
                     Map.of("limit", event.perAccountLimit(), "held", 0));
         }
+        Map<String, UUID> byPhone = phones(checked.holders()); // users rows before categories (lock order)
         Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, checked.qty());
-        List<Order.Item> lines = lines(items, checked.holders(), taken, null);
-        long total = lines.stream().mapToLong(l -> l.qty() * l.unitPriceMad()).sum();
-        return orders.insertPos(orderId, org, eventId, total, lines)
+        List<Order.Item> lines = lines(items, checked.holders(), taken, byPhone, null, h -> true);
+        return orders.insertPos(orderId, org, eventId, total(lines), lines)
                 .map(o -> {
                     issue(o, taken);
-                    return new View(o, taken, tickets.ofOrder(org, o.id()), null, null);
+                    return new View(o, taken, tickets.ofOrder(org, o.id()), null, null, null);
                 });
     }
 
@@ -181,7 +251,7 @@ public class OrderService {
     /** The organizer's order with its categories and every ticket of it (the till's view: no buyer). */
     public Optional<View> inOrg(UUID org, UUID orderId) {
         return orders.findInOrg(org, orderId).map(o -> new View(o, byId(inventory.prices(org, o.eventId())),
-                tickets.ofOrder(org, o.id()), null, null));
+                tickets.ofOrder(org, o.id()), null, null, null));
     }
 
     /**
@@ -199,10 +269,47 @@ public class OrderService {
         return new View(order, byId(inventory.prices(org, order.eventId())),
                 tickets.heldInOrder(org, order.id(), userId),
                 pendingPayments.latestAttempt(org, order.id(), PAYMENT_GRACE).orElse(null),
-                order.status() == Order.Status.AWAITING_CASH ? cashInstructions.pending(org, order.id()).orElse(null) : null);
+                order.status() == Order.Status.AWAITING_CASH ? cashInstructions.pending(org, order.id()).orElse(null) : null,
+                group(order));
     }
 
-    /** GET /fan/orders: the buyer's orders, AWAITING_CASH first, then newest first, at most 20. */
+    /**
+     * The order's split group, read in its organizer only: its member orders (INITIATOR), its buyer's label and status
+     * (MEMBER), or null.
+     */
+    private Group group(Order o) {
+        if (o.groupOrderId() != null) {
+            Order initiator = orders.findInOrg(o.organizerId(), o.groupOrderId()).orElseThrow();
+            return new Group(Order.GroupRole.MEMBER, null, initiatorLabel(initiator), initiator.status());
+        }
+        List<Order> members = orders.members(o.organizerId(), o.id());
+        if (members.isEmpty()) {
+            return null;
+        }
+        return new Group(Order.GroupRole.INITIATOR, members.stream().map(m -> new Member(m.id(),
+                HolderNames.label(m.items().getFirst().holders().getFirst().name()), m.places(), m.totalMad(),
+                m.status(), m.reservedUntil(), payUrl.replace("{order_id}", m.id().toString()))).toList(), null, null);
+    }
+
+    /**
+     * How a member sees the buyer (04 GET /fan/orders/{id} {@code initiator_label}, P82; SPLIT_INVITE uses the same):
+     * the label of the first place of the buyer's order that the buyer holds, else of the buyer's display_name, else
+     * null.
+     */
+    public String initiatorLabel(Order buyerOrder) {
+        return buyerOrder.items().stream().flatMap(i -> i.holders().stream())
+                .filter(h -> buyerOrder.userId().equals(h.userId())).findFirst()
+                .map(h -> HolderNames.label(h.name()))
+                .orElseGet(() -> {
+                    String name = users.get(buyerOrder.userId()).displayName();
+                    return name == null || name.isEmpty() ? null : HolderNames.label(name);
+                });
+    }
+
+    /**
+     * GET /fan/orders: the buyer's orders, AWAITING_CASH ones and member orders still held first, then newest first, at
+     * most 20.
+     */
     public List<Summary> list(UUID userId) {
         List<Orders.Listed> listed = orders.listed(userId, FAN_LIST_MAX);
         Map<UUID, UUID> orgByOrder = new HashMap<>();
@@ -262,9 +369,12 @@ public class OrderService {
             throw methodNotAvailable(details);
         }
         // This order is AWAITING_CASH already (above): the count includes its places.
+        // ponytail: the mirrored member places below stay RESERVED, so the cap doesn't count them (plan Q112); count
+        // them here if split holds ever crowd the cash cap.
         if (orders.cashHeld(o.organizerId(), o.eventId()) * 100 > (long) maxHeldPercent * event.quota()) {
             throw methodNotAvailable(Map.of("reason", "CASH_CAP"));
         }
+        orders.mirrorMembers(o.organizerId(), o.id(), until); // 04 §Split pay Hold, P78
         return until;
     }
 
@@ -296,13 +406,17 @@ public class OrderService {
     /**
      * A payment of the order succeeded (payments, inside its transaction): RESERVED or AWAITING_CASH → PAID with
      * the payment's method and reference, one ticket per place, each with one WhatsApp delivery queued to its
-     * holder. EXPIRED (a late success, plan Q8) re-reserves the places under the buyer lock with the per-account
+     * holder; its split member orders still RESERVED are held until least(now + sales.split.hold, sales close).
+     * EXPIRED (a late success, plan Q8) re-reserves the places under the buyer lock with the per-account
      * limit checked again. Never throws for a business outcome: the payment commits as SUCCEEDED either way, and
      * anything but PAID is for a manual refund.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Settlement settle(UUID orderId, Order.PaymentMethod method, String paymentRef) {
         Order o = orders.lock(orderId).orElseThrow().order();
+        // Lock order: the order row → its member rows → buyer lock → categories (reReserve). Taken before any category,
+        // so an expiry pass holding a member while it waits for a category can't wait on us in a circle.
+        orders.lockMembers(o.organizerId(), o.id());
         if (o.status() == Order.Status.EXPIRED) {
             Settlement refused = reReserve(o);
             if (refused != null) {
@@ -313,6 +427,11 @@ public class OrderService {
         }
         orders.markPaid(o.organizerId(), o.id(), method, paymentRef);
         issue(o, byId(inventory.prices(o.organizerId(), o.eventId())));
+        // 04 §Split pay Hold: the members' own deadline starts now (an expired member stays expired, §Late).
+        List<UUID> invited = orders.extendMembers(o.organizerId(), o.id(), splitHold,
+                inventory.saleEvent(o.eventId()).orElseThrow().refundCutoffAt());
+        // BE-30: queue SPLIT_INVITE (WHATSAPP + PUSH) for each extended member order id (invited)
+        // BE-30: ORDER_PAID push when the order was AWAITING_CASH
         return Settlement.PAID;
     }
 
@@ -389,12 +508,17 @@ public class OrderService {
      * Orders whose hosted page was opened less than 20 min ago (plan P38) are left out of the claim (so they can't
      * fill every batch), and read again once the claimed rows are locked: a redirect that committed in between is
      * seen then, and its order is kept. A cash code never keeps its order: it expires at reserved_until, and the
-     * code payment stays PENDING so a racing confirmation follows the late-success path.
+     * code payment stays PENDING so a racing confirmation follows the late-success path. Member orders wait for their
+     * buyer's order (claimDue) and expire with it.
      */
     private Batch expireBatch(int batchSize) {
         List<UUID> due = orders.claimDue(batchSize, pendingPayments.ordersRedirectedWithin(PAYMENT_GRACE));
         Set<UUID> paying = pendingPayments.ordersRedirectedWithin(PAYMENT_GRACE);
-        List<Expired> expired = orders.expire(due.stream().filter(id -> !paying.contains(id)).toList());
+        List<UUID> ids = new ArrayList<>(due.stream().filter(id -> !paying.contains(id)).toList());
+        // 04 §Split pay Hold: a buyer's order takes its RESERVED member orders with it, in the same flip and release
+        // (members paying by card or wallet, or AWAITING_CASH, keep their own hold, P79).
+        ids.addAll(orders.claimMembers(List.copyOf(ids), paying));
+        List<Expired> expired = orders.expire(ids);
         try {
             inventory.release(expired.stream().map(Expired::hold).toList());
         } catch (Inventory.ReleaseFailed e) {
@@ -410,8 +534,11 @@ public class OrderService {
     /** Items checked against the event's categories: qty per category, total places, holders per item (normalized). */
     private record Checked(Map<UUID, Integer> qty, long places, List<List<HolderRequest>> holders) {}
 
-    /** Each category of the event, at most once (422 on items[i].price_category_id), then the holders. */
-    private static Checked check(Map<UUID, SalePrice> ofEvent, List<ItemRequest> items) {
+    /**
+     * Each category of the event, at most once (422 on items[i].price_category_id), then the holders, then at least
+     * one place without {@code pays} (422 on items, NO_BUYER_PLACE). {@code buyerPhone}: null at a till.
+     */
+    private static Checked check(Map<UUID, SalePrice> ofEvent, List<ItemRequest> items, String buyerPhone) {
         Map<UUID, Integer> qty = new LinkedHashMap<>();
         long places = 0;
         for (int i = 0; i < items.size(); i++) {
@@ -424,37 +551,56 @@ public class OrderService {
             }
             places += item.qty();
         }
-        return new Checked(qty, places, validHolders(items));
+        List<List<HolderRequest>> holders = validHolders(items, buyerPhone);
+        if (holders.stream().flatMap(List::stream).allMatch(HolderRequest::pays)) {
+            throw invalid("items", "at least one place the buyer pays for", "NO_BUYER_PLACE");
+        }
+        return new Checked(qty, places, holders);
+    }
+
+    private static long total(List<Order.Item> lines) {
+        return lines.stream().mapToLong(l -> l.qty() * l.unitPriceMad()).sum();
     }
 
     /**
-     * The order lines at the reserved prices. A holder with a phone: that phone's account (found or created); one
-     * without: {@code noPhone} (the buyer online, null at a till).
+     * Each distinct holder phone's account (found or created), in sorted order: two orders naming the same new phones
+     * insert their users rows in the same order, so they queue on the unique index instead of deadlocking.
      */
-    private List<Order.Item> lines(List<ItemRequest> items, List<List<HolderRequest>> holders,
-                                   Map<UUID, SalePrice> taken, UUID noPhone) {
-        // Each distinct phone once, in sorted order: two orders naming the same new phones insert their users rows
-        // in the same order, so they queue on the unique index instead of deadlocking.
+    private Map<String, UUID> phones(List<List<HolderRequest>> holders) {
         Map<String, UUID> byPhone = new TreeMap<>();
         holders.stream().flatMap(List::stream).map(HolderRequest::phone).filter(Objects::nonNull)
                 .forEach(p -> byPhone.put(p, null));
         byPhone.replaceAll((phone, none) -> users.holder(phone));
+        return byPhone;
+    }
+
+    /**
+     * The order lines of the places {@code kept}, at the reserved prices; an item with none of them is left out. A
+     * holder with a phone: that phone's account ({@code byPhone}); one without: {@code noPhone} (the buyer online,
+     * null at a till).
+     */
+    private static List<Order.Item> lines(List<ItemRequest> items, List<List<HolderRequest>> holders,
+                                          Map<UUID, SalePrice> taken, Map<String, UUID> byPhone, UUID noPhone,
+                                          Predicate<HolderRequest> kept) {
         List<Order.Item> lines = new ArrayList<>();
         for (int i = 0; i < items.size(); i++) {
             UUID category = items.get(i).priceCategoryId();
-            List<Order.Holder> holding = holders.get(i).stream()
+            List<Order.Holder> holding = holders.get(i).stream().filter(kept)
                     .map(h -> new Order.Holder(h.name(), h.phone() == null ? noPhone : byPhone.get(h.phone())))
                     .toList();
-            lines.add(new Order.Item(category, items.get(i).qty(), taken.get(category).priceMad(), holding));
+            if (!holding.isEmpty()) {
+                lines.add(new Order.Item(category, holding.size(), taken.get(category).priceMad(), holding));
+            }
         }
         return lines;
     }
 
     /**
      * docs/04-api.md §Fan POST /fan/orders and §Holder names: one holder per place, each name normalized and
-     * in one script (Latin or Arabic), each phone absent or E.164. Returns the holders per item with normalized names.
+     * in one script (Latin or Arabic), each phone absent or E.164, and a {@code pays} holder with a phone that isn't
+     * the buyer's (§Split pay Request, PHONE_REQUIRED). Returns the holders per item with normalized names.
      */
-    private static List<List<HolderRequest>> validHolders(List<ItemRequest> items) {
+    private static List<List<HolderRequest>> validHolders(List<ItemRequest> items, String buyerPhone) {
         List<List<HolderRequest>> all = new ArrayList<>();
         for (int i = 0; i < items.size(); i++) {
             ItemRequest item = items.get(i);
@@ -470,7 +616,10 @@ public class OrderService {
                 if (h.phone() != null && !E164.matcher(h.phone()).matches()) {
                     throw invalid(path + "phone", "an E.164 phone number");
                 }
-                holders.add(new HolderRequest(name, h.phone()));
+                if (h.pays() && (h.phone() == null || h.phone().equals(buyerPhone))) {
+                    throw invalid(path + "pays", "a phone that isn't the buyer's", "PHONE_REQUIRED");
+                }
+                holders.add(new HolderRequest(name, h.phone(), h.pays()));
             }
             all.add(holders);
         }
@@ -496,5 +645,11 @@ public class OrderService {
     private static ApiException invalid(String field, String message) {
         return new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
                 Map.of("fields", Map.of(field, message)));
+    }
+
+    /** 04 §Split pay Request: VALIDATION_FAILED with details.fields{path} and details.reason. */
+    private static ApiException invalid(String field, String message, String reason) {
+        return new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                Map.of("fields", Map.of(field, message), "reason", reason));
     }
 }

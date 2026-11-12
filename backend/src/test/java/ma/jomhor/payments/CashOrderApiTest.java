@@ -412,7 +412,7 @@ class CashOrderApiTest extends PaymentTest {
         assertThat(JsonPath.<List<String>>read(json, "$.orders[*].id")).containsExactly(cash, plain, card)
                 .doesNotContain(strangers);
         assertKeys(json, "$.orders[0]", "id", "event", "channel", "status", "total_mad", "reserved_until",
-                "payment_method", "pay_code", "created_at");
+                "payment_method", "pay_code", "created_at", "group_role");
         assertKeys(json, "$.orders[0].event", "id", "title", "starts_at", "timezone");
         assertThat(JsonPath.<Integer>read(json, "$.orders[0].event.id")).isEqualTo(s.eventId());
         assertThat(JsonPath.<String>read(json, "$.orders[0].event.title")).isEqualTo("Match");

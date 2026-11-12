@@ -8,7 +8,9 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import ma.jomhor.payments.application.CardGateway.Checkout;
 import ma.jomhor.payments.application.CardGateway.HttpCallback;
+import ma.jomhor.common.web.ApiException;
 import ma.jomhor.payments.application.PaymentService;
+import ma.jomhor.sales.domain.Order;
 import ma.jomhor.sales.domain.Order.PaymentMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,7 +40,8 @@ class PaymentController {
     /** What a fan can ask for (POS_CASH and FREE are not fan methods: 422). */
     enum Method { CARD, CASH_AGENCY, WALLET }
 
-    record PayRequest(@NotNull Method method) {}
+    /** {@code channel}: the paying client, APP or WEB (absent = the order's channel; POS → 422). */
+    record PayRequest(@NotNull Method method, Order.Channel channel) {}
 
     record HostedDto(UUID paymentId, PaymentMethod method, String redirectUrl) {}
 
@@ -48,11 +51,15 @@ class PaymentController {
     @PostMapping("/fan/orders/{id}/pay")
     Object pay(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id, @Valid @RequestBody PayRequest body) {
         UUID userId = UUID.fromString(jwt.getSubject());
+        if (body.channel() == Order.Channel.POS) {
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                    Map.of("fields", Map.of("channel", "APP or WEB")));
+        }
         if (body.method() == Method.CASH_AGENCY) {
             var c = payments.payCash(userId, id);
             return new CashDto(c.paymentId(), PaymentMethod.CASH_AGENCY, c.payCode(), c.reservedUntil(), c.amountMad());
         }
-        var started = payments.payHosted(userId, id, PaymentMethod.valueOf(body.method().name()));
+        var started = payments.payHosted(userId, id, PaymentMethod.valueOf(body.method().name()), body.channel());
         return new HostedDto(started.paymentId(), started.method(), started.redirectUrl());
     }
 
