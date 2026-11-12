@@ -1125,4 +1125,95 @@ class AppLocalizationsFr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count événements', one: '1 événement');
     return '$_temp0';
   }
+
+  @override
+  String get splitPays => 'Paie sa place';
+
+  @override
+  String splitYouPay(int count, String total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tu paies $count places · $total',
+      one: 'Tu paies 1 place · $total',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String splitFriendsPay(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count places payées par tes amis',
+      one: '1 place payée par tes amis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get splitCaption => 'Tes amis ont 2 h après ton paiement';
+
+  @override
+  String get splitTooLate => 'Trop tard pour partager';
+
+  @override
+  String get holderOwnPhone => 'Ce numéro est le tien';
+
+  @override
+  String holderLimit(String label) {
+    return '$label a déjà atteint sa limite';
+  }
+
+  @override
+  String get groupBand => 'Ta bande';
+
+  @override
+  String groupPaid(int paid, int total) {
+    return '$paid/$total payées';
+  }
+
+  @override
+  String get groupPaidWord => 'payées';
+
+  @override
+  String groupDue(String time) {
+    return 'À payer · avant $time';
+  }
+
+  @override
+  String get groupPaidChip => 'Payé';
+
+  @override
+  String get groupExpiredChip => 'Expiré';
+
+  @override
+  String get groupRemind => 'Relancer sur WhatsApp';
+
+  @override
+  String get groupCopyLink => 'Copier le lien';
+
+  @override
+  String get groupLinkCopied => 'Lien copié';
+
+  @override
+  String groupRemindText(String event, String time, String url) {
+    return 'Je t\'ai gardé une place pour $event. Paie-la avant $time :\n$url';
+  }
+
+  @override
+  String memberKept(String label) {
+    return '$label t\'a gardé une place';
+  }
+
+  @override
+  String get memberKeptAnon => 'Un ami t\'a gardé une place';
+
+  @override
+  String get memberExpired => 'La place a été libérée';
+
+  @override
+  String homeMemberTitle(String time) {
+    return 'Ta place t\'attend · avant $time';
+  }
 }

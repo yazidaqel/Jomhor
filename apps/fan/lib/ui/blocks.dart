@@ -170,18 +170,10 @@ class CountdownTile extends StatelessWidget {
     ),
     child: Column(
       children: [
-        AnimatedSwitcher(
-          duration: motionOf(context, JomhorMotion.base),
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween(begin: const Offset(0, 0.4), end: Offset.zero).animate(animation),
-              child: child,
-            ),
-          ),
+        Roll(
+          value: value,
           child: Text(
             value.toString().padLeft(2, '0'),
-            key: ValueKey(value),
             style: JomhorType.number.copyWith(fontSize: 30, fontFeatures: const [FontFeature.tabularFigures()]),
           ),
         ),

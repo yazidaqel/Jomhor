@@ -161,7 +161,7 @@ class CashOrder extends ConsumerWidget {
                           OutlinedButton.icon(
                             key: Key('cash.pay.${m.wire}'),
                             style: OutlinedButton.styleFrom(minimumSize: const Size(0, JomhorSize.touchMin)),
-                            onPressed: rePay.inFlight ? null : () => startHostedPayment(context, ref, order.id, m),
+                            onPressed: rePay.inFlight ? null : () => startPayment(context, ref, order.id, m),
                             icon: Icon(
                               m == PayMethod.card ? Icons.credit_card_rounded : Icons.smartphone_rounded,
                               size: 20,
@@ -378,8 +378,9 @@ class CashExpired extends StatelessWidget {
   }
 }
 
-/// A card or wallet attempt from the order screen through [RePay] (one at a time), then the hosted page.
-Future<void> startHostedPayment(BuildContext context, WidgetRef ref, String orderId, PayMethod method) async {
+/// An attempt from the order screen through [RePay] (one at a time): card or wallet then open the hosted page; cash
+/// gets a code, which the order screen then shows.
+Future<void> startPayment(BuildContext context, WidgetRef ref, String orderId, PayMethod method) async {
   final l = AppLocalizations.of(context);
   final launch = ref.read(cardPaymentLauncherProvider);
   final error = await ref.read(rePayProvider(orderId).notifier).start((url) async {

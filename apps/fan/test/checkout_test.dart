@@ -232,7 +232,7 @@ void main() {
       ],
     });
     expect(sale.calls('PATCH', '/fan/me'), isEmpty, reason: 'row 1 unchanged');
-    expect(body(sale.calls('POST', '/fan/orders/$orderId/pay').single), {'method': 'CARD'});
+    expect(body(sale.calls('POST', '/fan/orders/$orderId/pay').single), {'method': 'CARD', 'channel': 'APP'});
   });
 
   testWidgets('an edited row 1 is saved on /fan/me before the order', (tester) async {

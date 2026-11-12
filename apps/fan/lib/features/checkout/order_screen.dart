@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/features/checkout/cash_order.dart';
+import 'package:jomhor_fan/features/checkout/group_view.dart';
+import 'package:jomhor_fan/features/checkout/member_pay.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
@@ -24,6 +26,7 @@ class OrderScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     final status = ref.watch(orderStatusProvider(orderId));
+    final rePay = ref.watch(rePayProvider(orderId));
     return Scaffold(
       appBar: AppBar(
         leading: CloseButton(onPressed: () => context.go('/')),
@@ -31,22 +34,65 @@ class OrderScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         child: switch (status) {
-          // A cash code still payable: its own scrolling screen.
-          AsyncValue(value: final view?) when view.order.awaitingCash && !view.holdOver => CashOrder(view: view),
-          _ => Padding(
+          // The scrolling variants: a cash code still payable, a split-pay group or a friend's place to pay.
+          AsyncValue(value: final view?) => switch (orderVariant(view, rePay)) {
+            OrderVariant.cash => CashOrder(view: view),
+            OrderVariant.group => GroupView(view: view),
+            OrderVariant.member => MemberPay(view: view),
+            OrderVariant.memberExpired => const Padding(
+              padding: EdgeInsets.all(JomhorSpace.xl),
+              child: MemberExpired(),
+            ),
+            OrderVariant.plain => Padding(
+              padding: const EdgeInsets.all(JomhorSpace.xl),
+              child: _OrderState(view: view),
+            ),
+          },
+          AsyncError(:final error) => Padding(
             padding: const EdgeInsets.all(JomhorSpace.xl),
-            child: switch (status) {
-              AsyncValue(value: final view?) => _OrderState(view: view),
-              AsyncError(:final error) => Center(
-                child: ErrorPanel(error: error, onRetry: () => ref.invalidate(orderStatusProvider(orderId))),
-              ),
-              _ => const Center(child: CircularProgressIndicator()),
-            },
+            child: Center(
+              child: ErrorPanel(error: error, onRetry: () => ref.invalidate(orderStatusProvider(orderId))),
+            ),
           ),
+          _ => const Center(child: CircularProgressIndicator()),
         },
       ),
     );
   }
+}
+
+/// What the order screen draws for one answer.
+enum OrderVariant {
+  /// A cash code still payable ([CashOrder]).
+  cash,
+
+  /// Screen 9 initiator: the buyer paid and friends pay their own places ([GroupView]).
+  group,
+
+  /// Screen 9 member: a friend kept this place, RESERVED with no attempt or a FAILED one ([MemberPay]).
+  member,
+
+  /// A friend's place released unpaid ([MemberExpired]).
+  memberExpired,
+
+  /// Everything else: waiting for the bank, paid, expired, pay again ([_OrderState]).
+  plain,
+}
+
+/// [OrderVariant] for [view]. A member order follows the same "payer à nouveau" rule as any order ([payAgain]): the
+/// member screen is where that payment happens, and a PENDING attempt shows "paiement en cours".
+OrderVariant orderVariant(OrderView view, RePayState rePay) {
+  final order = view.order;
+  if (order.awaitingCash && !view.holdOver) return OrderVariant.cash;
+  final group = order.group;
+  if (group == null) return OrderVariant.plain;
+  if (group.initiator) return order.paid ? OrderVariant.group : OrderVariant.plain;
+  if (order.paid || order.awaitingCash) return OrderVariant.plain;
+  final again = view.freshFor(rePay)
+      ? payAgain(order, waitedLong: rePay.waitedLong, holdOver: view.holdOver)
+      : PayAgain.no;
+  if (order.settled || again == PayAgain.holdOver) return OrderVariant.memberExpired;
+  return again == PayAgain.notStarted || again == PayAgain.failed ? OrderVariant.member : OrderVariant.plain;
 }
 
 class _OrderState extends ConsumerWidget {
@@ -96,7 +142,7 @@ class _OrderState extends ConsumerWidget {
           const SizedBox(height: JomhorSpace.xl),
           OutlinedButton(
             key: const Key('order.payAgain'),
-            onPressed: rePay.inFlight ? null : () => startHostedPayment(context, ref, order.id, PayMethod.card),
+            onPressed: rePay.inFlight ? null : () => startPayment(context, ref, order.id, PayMethod.card),
             child: Text(again == PayAgain.notStarted ? l.payCta(l.dh(order.totalMad)) : l.payAgain),
           ),
         ],

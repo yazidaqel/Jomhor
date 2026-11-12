@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
+import 'package:jomhor_fan/features/checkout/group_view.dart';
 import 'package:jomhor_fan/features/club/club_seen.dart';
 import 'package:jomhor_fan/features/tickets/gate_load.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
@@ -46,6 +47,7 @@ class Session extends Notifier<bool> {
         ref.read(ticketCacheProvider).wipe(),
         wipeEntered(),
         wipeClubSeen(),
+        wipeGroupSeen(),
       ]);
     } on Object {
       // Storage failed: signed out for this run anyway (no button callback sees the error).

@@ -38,10 +38,12 @@ class OrderView {
   bool get holdOver => left == Duration.zero;
 }
 
-/// `GET /fan/orders/{id}` every [OrderStatus.every] ([OrderStatus.everyCash] while a cash code waits) until
-/// the order settles (PAID, EXPIRED, CANCELLED), the screen goes, or the answer is 401 / 404 (signed out, not
-/// this fan's order). Network, 5xx and unreadable answers keep the poll going. The card callback reaches the
-/// server on its own path, so the return URL alone proves nothing.
+/// `GET /fan/orders/{id}` every [OrderStatus.every] ([OrderStatus.everyCash] while a cash code waits, or a friend's
+/// place waits for its first attempt) until the order settles (PAID, EXPIRED, CANCELLED), the screen goes, or the
+/// answer is 401 / 404 (signed out, not this fan's order). A paid split-pay initiator keeps watching its group every
+/// [OrderStatus.everyCash] while a friend can still pay (DESIGN.md Lot 4, screen 9). Network, 5xx and unreadable
+/// answers keep the poll going. The card callback reaches the server on its own path, so the return URL alone
+/// proves nothing.
 class OrderStatus extends AsyncNotifier<OrderView> {
   new(this.id);
 
@@ -55,17 +57,20 @@ class OrderStatus extends AsyncNotifier<OrderView> {
   Future<OrderView> build() async {
     final before = state.value?.order;
     final waitingCash = before?.awaitingCash ?? false;
+    // A failed read keeps the cadence of what is on screen (a cash code, a group, a friend's place: 10 s).
+    final retry = before == null ? every : pollAfter(before) ?? every;
     final seen = ref.read(rePayProvider(id)).attempts;
     try {
       final (order, serverDate) = await ref.watch(checkoutRepositoryProvider).order(id);
-      // Into or out of AWAITING_CASH (paid, expired) since the last read: screen 1's strip reads it again. Not on
-      // the first read: the strip (or the cash /pay) that led here already knows.
-      if (before != null && order.awaitingCash != waitingCash) ref.invalidate(pendingCashProvider);
-      if (!order.settled) _again(order.awaitingCash ? everyCash : every);
+      // Into or out of AWAITING_CASH (paid, expired), or a friend's place that moved, since the last read: screen 1's
+      // strip reads it again. Not on the first read: the strip (or the cash /pay) that led here already knows.
+      final memberMoved = order.group?.initiator == false && order.status != before?.status;
+      if (before != null && (order.awaitingCash != waitingCash || memberMoved)) ref.invalidate(pendingCashProvider);
+      if (pollAfter(order) case final after?) _again(after);
       return OrderView(order, serverDate, ref.read(nowProvider)(), seenAttempts: seen);
     } on ApiError catch (e) {
       // A blip while waiting for the bank or the counter (offline, 5xx, a proxy page): keep asking.
-      if (e.status != 401 && e.status != 404) _again(waitingCash ? everyCash : every);
+      if (e.status != 401 && e.status != 404) _again(retry);
       rethrow;
     }
   }
@@ -74,6 +79,16 @@ class OrderStatus extends AsyncNotifier<OrderView> {
     final timer = Timer(after, ref.invalidateSelf);
     ref.onDispose(timer.cancel);
   }
+}
+
+/// When to read [order] again, or null: nothing more will happen to it on this screen.
+Duration? pollAfter(FanOrder order) {
+  if (order.settled) {
+    return order.paid && (order.group?.initiator ?? false) && order.group!.payable ? OrderStatus.everyCash : null;
+  }
+  // A cash code, or a friend's place before any attempt: paid minutes or hours away.
+  final memberWaiting = order.group?.initiator == false && (order.paymentStatus ?? 'FAILED') == 'FAILED';
+  return order.awaitingCash || memberWaiting ? OrderStatus.everyCash : OrderStatus.every;
 }
 
 final AsyncNotifierProviderFamily<OrderStatus, OrderView, String> orderStatusProvider = AsyncNotifierProvider
@@ -89,12 +104,17 @@ const payAgainAfter = Duration(seconds: 60);
 /// [OrderView.freshFor]).
 typedef RePayState = ({bool inFlight, bool waitedLong, int attempts});
 
-/// Another card (or wallet) attempt from the order screen: one at a time, and the wait restarts with each `/pay`.
+/// Another attempt from the order screen: one at a time, and the wait restarts with each `/pay`. Card and wallet open
+/// their page; cash (a split-pay member's first attempt) gets a code, and the order screen then shows it.
 class RePay extends Notifier<RePayState> {
   new(this.orderId);
 
   final String orderId;
   Timer? _wait;
+
+  /// Methods `/pay` answered `METHOD_NOT_AVAILABLE` for on this order (TOO_LATE, CASH_CAP, NOT_CONFIGURED): their rows
+  /// are off, as on screen 4. Set before the attempt ends, so the state change that follows rebuilds the readers.
+  final refused = <PayMethod>{};
 
   @override
   RePayState build() {
@@ -108,20 +128,22 @@ class RePay extends Notifier<RePayState> {
     _wait = Timer(payAgainAfter, () => state = (inFlight: state.inFlight, waitedLong: true, attempts: state.attempts));
   }
 
-  /// `POST /fan/orders/{id}/pay` with a hosted [method] (card or wallet), then [open] shows its page. Returns
-  /// the error to show, or null.
+  /// `POST /fan/orders/{id}/pay` with [method]; for card or wallet [open] then shows its page. Returns the error to
+  /// show, or null.
   Future<ApiError?> start(Future<void> Function(String redirectUrl) open, {PayMethod method = PayMethod.card}) async {
-    if (state.inFlight || !method.hosted) return null;
+    if (state.inFlight) return null;
     state = (inFlight: true, waitedLong: false, attempts: state.attempts);
     _restartWait();
+    final container = ref.container; // Kept: leaving the screen mid-/pay disposes this notifier.
     try {
       final start = await ref.read(checkoutRepositoryProvider).pay(orderId, method);
-      if (!ref.mounted) return null;
+      if (!ref.mounted || !method.hosted) return null;
       final url = start.redirectUrl!;
       if (!isPaymentPage(url)) return unexpectedAnswer;
       await open(url);
       return null;
     } on ApiError catch (e) {
+      if (e.code == 'METHOD_NOT_AVAILABLE') refused.add(method);
       return e;
     } on Object {
       return unexpectedAnswer;
@@ -131,6 +153,8 @@ class RePay extends Notifier<RePayState> {
         state = (inFlight: false, waitedLong: state.waitedLong, attempts: state.attempts + 1);
         ref.invalidate(orderStatusProvider(orderId));
       }
+      // A cash /pay may have issued the code even when its answer was lost: screen 1's strip asks the server.
+      if (!method.hosted) container.invalidate(pendingCashProvider);
     }
   }
 }

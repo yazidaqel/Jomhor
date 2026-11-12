@@ -1117,4 +1117,95 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count events', one: '1 event');
     return '$_temp0';
   }
+
+  @override
+  String get splitPays => 'Pays for their seat';
+
+  @override
+  String splitYouPay(int count, String total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'You pay $count seats · $total',
+      one: 'You pay 1 seat · $total',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String splitFriendsPay(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count seats paid by your friends',
+      one: '1 seat paid by your friends',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get splitCaption => 'Your friends have 2 h after you pay';
+
+  @override
+  String get splitTooLate => 'Too late to split';
+
+  @override
+  String get holderOwnPhone => 'This number is yours';
+
+  @override
+  String holderLimit(String label) {
+    return '$label has already reached their limit';
+  }
+
+  @override
+  String get groupBand => 'Your crew';
+
+  @override
+  String groupPaid(int paid, int total) {
+    return '$paid/$total paid';
+  }
+
+  @override
+  String get groupPaidWord => 'paid';
+
+  @override
+  String groupDue(String time) {
+    return 'To pay · before $time';
+  }
+
+  @override
+  String get groupPaidChip => 'Paid';
+
+  @override
+  String get groupExpiredChip => 'Expired';
+
+  @override
+  String get groupRemind => 'Remind on WhatsApp';
+
+  @override
+  String get groupCopyLink => 'Copy link';
+
+  @override
+  String get groupLinkCopied => 'Link copied';
+
+  @override
+  String groupRemindText(String event, String time, String url) {
+    return 'I kept you a seat for $event. Pay for it before $time:\n$url';
+  }
+
+  @override
+  String memberKept(String label) {
+    return '$label kept you a seat';
+  }
+
+  @override
+  String get memberKeptAnon => 'A friend kept you a seat';
+
+  @override
+  String get memberExpired => 'The seat was released';
+
+  @override
+  String homeMemberTitle(String time) {
+    return 'Your seat is waiting · before $time';
+  }
 }

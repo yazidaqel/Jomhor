@@ -42,6 +42,7 @@ void main() {
     String startsAt = '2027-03-13T19:00:00Z',
     DateTime? until,
     bool code = true,
+    String? groupRole,
   }) => {
     'id': id,
     'event': {'id': 1, 'title': title, 'starts_at': startsAt, 'timezone': 'Africa/Casablanca'},
@@ -52,6 +53,7 @@ void main() {
     'payment_method': status == 'AWAITING_CASH' ? 'CASH_AGENCY' : null,
     'pay_code': status == 'AWAITING_CASH' && code ? sale.payCode : null,
     'created_at': '2027-02-20T11:00:00Z',
+    'group_role': groupRole,
   };
 
   Future<http.Response> backend(http.Request r) async {
@@ -99,12 +101,14 @@ void main() {
       Duration startsIn = const Duration(days: 20),
       Duration? left,
       bool code = true,
+      String? role,
     }) => OrderRow.fromJson({
       'id': id,
       'event': {'id': 1, 'title': 'E', 'starts_at': now.add(startsIn).toIso8601String(), 'timezone': 'UTC'},
       'status': status,
       'reserved_until': now.add(left ?? const Duration(hours: 10)).toIso8601String(),
       'pay_code': code ? '4F7K29' : null,
+      'group_role': role,
     });
     expect(pendingCash([r('a', 'RESERVED'), r('b', 'PAID'), r('c', 'EXPIRED'), r('d', 'CANCELLED')], now), isNull);
     expect(pendingCash([r('past', 'AWAITING_CASH', startsIn: const Duration(hours: -1))], now), isNull);
@@ -116,6 +120,29 @@ void main() {
       r('reserved', 'RESERVED', left: const Duration(minutes: 5)),
     ], now);
     expect(soonest?.id, 'soon');
+    // Lot 4: a place a friend kept (MEMBER, RESERVED, held) waits on the fan too; an initiator's RESERVED does not.
+    final kept = pendingCash([
+      soonest!,
+      r('kept', 'RESERVED', role: 'MEMBER', left: const Duration(hours: 1)),
+      r('mine', 'RESERVED', role: 'INITIATOR', left: const Duration(minutes: 5)),
+    ], now);
+    expect(kept?.id, 'kept');
+    expect(pendingCash([r('gone', 'RESERVED', role: 'MEMBER', left: Duration.zero)], now), isNull);
+  });
+
+  testWidgets('a place a friend kept: the amber strip "Ta place t\'attend · avant {time}" opens screen 9', (
+    tester,
+  ) async {
+    const kept = '0b8e7a52-0000-4000-8000-0000000000d1';
+    final until = clock.now.add(const Duration(hours: 1, minutes: 30));
+    others = [row(id: kept, status: 'RESERVED', until: until, groupRole: 'MEMBER')];
+    final c = await open(tester);
+    expect(strip(), findsOneWidget);
+    expect(find.text("Ta place t'attend · avant ${venueClock(until, 'Africa/Casablanca', 'fr')}"), findsOneWidget);
+    expect(find.text('Atlas FC vs Rapid Oued'), findsWidgets);
+    await tester.tap(strip());
+    await tester.pump();
+    expect(c.read(routerProvider).state.uri.path, '/orders/$kept');
   });
 
   testWidgets('an AWAITING_CASH order shows the amber strip with its deadline in the venue zone', (tester) async {
