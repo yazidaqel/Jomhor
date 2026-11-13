@@ -46,9 +46,7 @@ class InboxRepository {
   /// Newest first, at most 30.
   Future<List<InboxMessage>> list() async {
     final body = (await _api.get('/fan/me/inbox'))! as Map<String, Object?>;
-    return [
-      for (final m in body['messages']! as List<Object?>) InboxMessage.fromJson(m! as Map<String, Object?>),
-    ];
+    return [for (final m in body['messages']! as List<Object?>) InboxMessage.fromJson(m! as Map<String, Object?>)];
   }
 }
 

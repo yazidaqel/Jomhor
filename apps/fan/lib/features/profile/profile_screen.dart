@@ -131,14 +131,11 @@ class _PushRow extends ConsumerWidget {
       key: const Key('profile.push'),
       leading: const Icon(Icons.notifications_none_rounded),
       title: Text(l.profilePushTitle),
-      subtitle: Text(
-        switch (permission) {
-          PushPermission.granted => l.profilePushOn,
-          PushPermission.denied => l.profilePushDenied,
-          _ => l.profilePushBody,
-        },
-        style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
-      ),
+      subtitle: Text(switch (permission) {
+        PushPermission.granted => l.profilePushOn,
+        PushPermission.denied => l.profilePushDenied,
+        _ => l.profilePushBody,
+      }, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
       trailing: permission == PushPermission.notAsked
           ? TextButton(
               key: const Key('profile.push.enable'),

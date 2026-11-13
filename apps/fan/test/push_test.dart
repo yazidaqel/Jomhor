@@ -31,11 +31,19 @@ void main() {
   Future<http.Response> base(http.Request r) async => switch ((r.method, r.url.path)) {
     ('GET', '/v1/fan/events') => json([eventJson()]),
     ('GET', '/v1/fan/events/12') => json({
-      ...eventJson(id: 12, zones: [zoneJson(1, 'Tribune Nord', [(5000, 100)])]),
+      ...eventJson(
+        id: 12,
+        zones: [
+          zoneJson(1, 'Tribune Nord', [(5000, 100)]),
+        ],
+      ),
       'payment_methods': ['CARD'],
       'cash_until': null,
     }),
-    ('GET', '/v1/fan/tickets') => json({'server_time': '2027-02-20T12:00:00Z', 'tickets': [ticketJson()]}),
+    ('GET', '/v1/fan/tickets') => json({
+      'server_time': '2027-02-20T12:00:00Z',
+      'tickets': [ticketJson()],
+    }),
     ('GET', '/v1/fan/orders') => json({'orders': <Object?>[]}),
     ('POST', '/v1/fan/me/logout') => http.Response('', 204),
     _ => apiError(404, 'NOT_FOUND'),

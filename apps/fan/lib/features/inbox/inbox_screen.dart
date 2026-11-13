@@ -59,7 +59,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             ],
             AsyncValue(hasValue: true, :final value?) => [
               for (final (i, m) in value.indexed)
-                Entrance(index: i, child: _Row(message: m, now: now)),
+                Entrance(
+                  index: i,
+                  child: _Row(message: m, now: now),
+                ),
             ],
             _ => const [SkeletonList(rows: 4)],
           },
@@ -92,7 +95,9 @@ class _Row extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: ClubLine(name: m.club.name, crestUrl: m.club.crestUrl)),
+                Expanded(
+                  child: ClubLine(name: m.club.name, crestUrl: m.club.crestUrl),
+                ),
                 const SizedBox(width: JomhorSpace.s),
                 Text(sentAgo(l, now, m.sentAt), style: JomhorType.caption.copyWith(color: JomhorColors.textMuted)),
               ],

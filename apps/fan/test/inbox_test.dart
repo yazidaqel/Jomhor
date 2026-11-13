@@ -23,7 +23,11 @@ void main() {
   Future<http.Response> base(http.Request r) async => switch ((r.method, r.url.path)) {
     ('GET', '/v1/fan/events') => json([eventJson()]),
     ('GET', '/v1/fan/events/1') => json({
-      ...eventJson(zones: [zoneJson(1, 'Tribune Nord', [(5000, 100)])]),
+      ...eventJson(
+        zones: [
+          zoneJson(1, 'Tribune Nord', [(5000, 100)]),
+        ],
+      ),
       'payment_methods': ['CARD'],
       'cash_until': null,
     }),
@@ -31,7 +35,12 @@ void main() {
   };
 
   final twoClubs = [
-    inboxJson(club: tensiftJson, title: 'Billetterie ouverte', body: 'Derby le 20 mars.', sentAt: '2027-02-20T11:55:00Z'),
+    inboxJson(
+      club: tensiftJson,
+      title: 'Billetterie ouverte',
+      body: 'Derby le 20 mars.',
+      sentAt: '2027-02-20T11:55:00Z',
+    ),
     inboxJson(
       id: 'c0000000-0000-4000-8000-000000000002',
       eventId: null,
@@ -64,10 +73,7 @@ void main() {
       final row = find.byKey(Key('inbox.row.$id'));
       final line = tester.widget<ClubLine>(find.descendant(of: row, matching: find.byType(ClubLine)));
       expect(line.name, club);
-      expect(
-        tester.widget<Crest>(find.descendant(of: row, matching: find.byType(Crest))).size,
-        20,
-      );
+      expect(tester.widget<Crest>(find.descendant(of: row, matching: find.byType(Crest))).size, 20);
       // The club line comes first, then the title.
       expect(
         tester.getRect(find.descendant(of: row, matching: find.byType(ClubLine))).bottom,
@@ -121,10 +127,7 @@ void main() {
     final backend = PushBackend(base)..inbox = twoClubs;
     final c = await open(tester, backend);
     expect(dot, findsOneWidget);
-    expect(
-      tester.widget<IconButton>(find.byKey(const Key('home.bell'))).tooltip,
-      'Notifications · nouveaux messages',
-    );
+    expect(tester.widget<IconButton>(find.byKey(const Key('home.bell'))).tooltip, 'Notifications · nouveaux messages');
     expect(tester.getSize(dot), const Size(8, 8));
 
     await openInbox(tester);

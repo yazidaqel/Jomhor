@@ -112,13 +112,12 @@ const pushRefusedKey = 'push.refused';
 /// prompt and below 13 when notifications are off in the settings (no prompt exists there): once a request came back
 /// refused on this phone ([refused]), only the settings can help. iOS `denied` and Android `deniedPermanently` are
 /// for good.
-PushPermission permissionOf(AuthorizationStatus status, {required bool ios, required bool refused}) =>
-    switch (status) {
-      AuthorizationStatus.authorized || AuthorizationStatus.provisional => PushPermission.granted,
-      AuthorizationStatus.deniedPermanently => PushPermission.denied,
-      AuthorizationStatus.denied => ios || refused ? PushPermission.denied : PushPermission.notAsked,
-      AuthorizationStatus.notDetermined => PushPermission.notAsked,
-    };
+PushPermission permissionOf(AuthorizationStatus status, {required bool ios, required bool refused}) => switch (status) {
+  AuthorizationStatus.authorized || AuthorizationStatus.provisional => PushPermission.granted,
+  AuthorizationStatus.deniedPermanently => PushPermission.denied,
+  AuthorizationStatus.denied => ios || refused ? PushPermission.denied : PushPermission.notAsked,
+  AuthorizationStatus.notDetermined => PushPermission.notAsked,
+};
 
 /// Firebase from the Q119 dart-defines; no google-services.json or plist in the repo.
 Future<void> initFirebase() => Firebase.initializeApp(
@@ -133,7 +132,10 @@ Future<void> initFirebase() => Firebase.initializeApp(
 
 /// Called once in `main`. Push is on only with `PUSH_ENABLED` and a Firebase that starts: any failure means push
 /// off (no token, no permission, no banner), never a crash. The inbox works either way.
-Future<PushMessaging?> startPush({bool enabled = AppConfig.pushEnabled, Future<void> Function() init = initFirebase}) async {
+Future<PushMessaging?> startPush({
+  bool enabled = AppConfig.pushEnabled,
+  Future<void> Function() init = initFirebase,
+}) async {
   if (!enabled) return null;
   try {
     await init();
