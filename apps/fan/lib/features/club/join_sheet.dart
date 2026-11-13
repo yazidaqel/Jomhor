@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
+import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/club/club_repository.dart';
 import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
@@ -10,8 +13,8 @@ import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/brand.dart';
 
 /// Screen 7 join sheet: two opt-ins, both off by default (lot-4 Q62: marketing needs consent), then
-/// `PUT /fan/me/membership`. Resolves with true once joined. No push permission is asked here: Profil asks after a
-/// join with push on (DESIGN.md Lot 4, Profil).
+/// `PUT /fan/me/membership`. Resolves with true once joined. A join with push on asks for the push permission, once
+/// per install (lot-4 Q126).
 Future<bool?> showJoinSheet(BuildContext context, Club club) => showModalBottomSheet<bool>(
   context: context,
   isScrollControlled: true,
@@ -47,6 +50,7 @@ class _JoinSheetState extends ConsumerState<JoinSheet> {
     });
     try {
       await ref.read(membershipProvider(widget.club.id).notifier).save(push: _push, whatsapp: _whatsapp);
+      if (_push) unawaited(maybeAskPermission(ref.read(pushMessagingProvider)));
       if (mounted) Navigator.pop(context, true);
     } on Object catch (e) {
       if (!mounted) return;

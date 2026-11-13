@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon of push notifications: the 12-dot mark (design/logo/jomhor-mark-mono.svg) in white; Android tints it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M31.7,28a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM46.7,28a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM61.7,28a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM76.7,28a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM76.7,43a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM76.7,58a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM76.7,73a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM72.5,85.9a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM61.5,93.9a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM47.9,93.9a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM36.9,85.9a5.3,5.3 0 1,0 10.6,0a5.3,5.3 0 1,0 -10.6,0zM31.1,73a6.9,6.9 0 1,0 13.8,0a6.9,6.9 0 1,0 -13.8,0z"/>
+</vector>

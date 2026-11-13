@@ -178,7 +178,7 @@ class TicketDeliveryTest extends PaymentTest {
         String phone = randomPhone();
         String orderId = paid(fanToken(phone), s, 1, holders(1));
         UUID ticket = ticketHeldBy(orderId, phone);
-        doThrow(new TicketMessenger.Failed("131026")).when(ticketMessenger).send(any());
+        doThrow(new TicketMessenger.Failed("131026")).when(ticketMessenger).send(any(TicketMessenger.Message.class));
 
         long[] backoffS = {60, 300, 1800, 7200};
         for (int attempt = 1; attempt <= 5; attempt++) {
@@ -205,11 +205,25 @@ class TicketDeliveryTest extends PaymentTest {
     }
 
     @Test
+    void aRefusalWithoutACodeIsRetriedNotSent() throws Exception {
+        Sale s = onSale(10);
+        String phone = randomPhone();
+        String orderId = paid(fanToken(phone), s, 1, holders(1));
+        doThrow(new TicketMessenger.Failed(null)).when(ticketMessenger).send(any(TicketMessenger.Message.class));
+        deliveries.deliverDue();
+        Map<String, Object> row = rows(orderId).getFirst();
+        assertThat(row).containsEntry("status", "PENDING").containsEntry("last_error", "Failed");
+        assertThat(attempts(row)).isEqualTo(1);
+        jdbc.sql("update ticket_deliveries set status = 'FAILED' where ticket_id = ?")
+                .param(ticketHeldBy(orderId, phone)).update();
+    }
+
+    @Test
     void anyOtherErrorKeepsOnlyItsClassNeverItsMessage() throws Exception {
         Sale s = onSale(10);
         String phone = randomPhone();
         String orderId = paid(fanToken(phone), s, 1, holders(1));
-        doThrow(new IllegalStateException("provider refused " + phone)).when(ticketMessenger).send(any());
+        doThrow(new IllegalStateException("provider refused " + phone)).when(ticketMessenger).send(any(TicketMessenger.Message.class));
         deliveries.deliverDue();
         assertThat(rows(orderId).getFirst()).containsEntry("status", "PENDING")
                 .containsEntry("last_error", "IllegalStateException");
@@ -285,7 +299,7 @@ class TicketDeliveryTest extends PaymentTest {
         doAnswer(inv -> {
             Thread.sleep(2);
             return null;
-        }).when(ticketMessenger).send(any());
+        }).when(ticketMessenger).send(any(TicketMessenger.Message.class));
 
         CountDownLatch start = new CountDownLatch(1);
         Callable<Integer> run = () -> {

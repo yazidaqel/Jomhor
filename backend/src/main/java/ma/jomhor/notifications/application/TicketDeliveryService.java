@@ -92,8 +92,10 @@ public class TicketDeliveryService {
         List<Delivery> due = deliveries.claimDue(BATCH);
         for (Delivery d : due) {
             String error = null;
+            boolean sent = false;
             try {
                 perRow.executeWithoutResult(s -> send(d));
+                sent = true;
             } catch (TicketMessenger.Failed e) {
                 error = e.code();
             } catch (ApiException e) {
@@ -102,7 +104,7 @@ public class TicketDeliveryService {
                 // The class only: an exception message could carry the phone or a provider response body.
                 error = e.getClass().getSimpleName();
             }
-            if (error == null) {
+            if (sent) {
                 deliveries.markSent(d.organizerId(), d.id());
             } else {
                 log.warn("Ticket delivery {} failed: {}", d.id(), error);

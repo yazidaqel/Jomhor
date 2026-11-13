@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:jomhor_fan/app/seen_set.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
+import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/checkout/group_view.dart';
 import 'package:jomhor_fan/features/club/club_seen.dart';
+import 'package:jomhor_fan/features/inbox/inbox.dart';
 import 'package:jomhor_fan/features/tickets/gate_load.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,14 +45,21 @@ class Session extends Notifier<bool> {
 
   /// Never throws: signed out even if the Keystore/Keychain fails, and [Tickets.build] wipes the cache again then.
   Future<void> signOut() async {
+    // Best effort and not awaited (lot-4 Q124): an offline logout leaves the server token live; deleting it on the
+    // phone makes FCM report it unregistered. Offline, it must not hold the sign-out up.
+    if (ref.read(pushMessagingProvider) case final push?) {
+      unawaited(Future.sync(push.deleteToken).catchError((Object _) {}));
+    }
     try {
-      // Both run even if one fails.
+      // All run even if one fails.
       await Future.wait([
         ref.read(tokenStoreProvider).clear(),
         ref.read(ticketCacheProvider).wipe(),
         wipeEntered(),
         wipeClubSeen(),
         wipeGroupSeen(),
+        wipeSeen(pushSentKey),
+        wipeSeen(inboxSeenKey),
       ]);
     } on Object {
       // Storage failed: signed out for this run anyway (no button callback sees the error).

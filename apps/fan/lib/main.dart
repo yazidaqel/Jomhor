@@ -7,6 +7,7 @@ import 'package:jomhor_fan/app/config.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
+import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
@@ -31,6 +32,7 @@ Future<void> main() async {
   final signedIn = await startSession(tokens, prefs);
   final locale = await savedLocale(prefs);
   final follows = await savedFollows(prefs);
+  final push = await startPush();
   runApp(
     ProviderScope(
       // No automatic retry: screens show the error and a "Réessayer" button.
@@ -40,6 +42,7 @@ Future<void> main() async {
         initialSignedInProvider.overrideWithValue(signedIn),
         initialLocaleProvider.overrideWithValue(locale),
         initialFollowsProvider.overrideWithValue(follows),
+        pushMessagingProvider.overrideWithValue(push),
       ],
       child: const JomhorApp(),
     ),

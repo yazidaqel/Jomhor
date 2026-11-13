@@ -93,6 +93,14 @@ sales:
     # close; a split is refused when sales close sooner than this. The fan copy says "2 h" literally (Q109).
     hold: ${SALES_SPLIT_HOLD:2h}
 
+notifications:
+  push:
+    # Push adapter (docs/04-api.md §Notifications): 'log' = dev/staging, refused under prod; 'fcm' comes with BE-36.
+    # Unset = no push: PUSH messages fail NOT_CONFIGURED.
+    provider: ${NOTIFICATIONS_PUSH_PROVIDER:}
+  # The fan_messages job sends at most this × its period (5 s) per run, transactional kinds first (plan lot-4 Q127).
+  send-rate-per-second: ${NOTIFICATIONS_SEND_RATE_PER_SECOND:20}
+
 otp:
   # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14). Mobile CGNAT puts many fans behind one IP:
   # keep the fan limits loose and watch them on on-sale day. Org over its limit still answers 202.

@@ -5,6 +5,7 @@ import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/session.dart';
+import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/auth/auth_repository.dart';
 import 'package:jomhor_fan/features/clubs/clubs_repository.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
@@ -99,6 +100,7 @@ class ProfileScreen extends ConsumerWidget {
                       ),
                       onTap: () => context.push('/clubs'),
                     ),
+                    if (ref.watch(pushMessagingProvider) != null) const _PushRow(),
                   ],
                 ),
               ),
@@ -112,6 +114,42 @@ class ProfileScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Notifications: the system permission state (lot-4 Q123). "Activer" asks only while the OS can still prompt;
+/// refused → where to turn it on. Shown only when push is on in this build.
+class _PushRow extends ConsumerWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    final permission = ref.watch(pushPermissionProvider).value;
+    return ListTile(
+      key: const Key('profile.push'),
+      leading: const Icon(Icons.notifications_none_rounded),
+      title: Text(l.profilePushTitle),
+      subtitle: Text(switch (permission) {
+        PushPermission.granted => l.profilePushOn,
+        PushPermission.denied => l.profilePushDenied,
+        _ => l.profilePushBody,
+      }, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+      trailing: permission == PushPermission.notAsked
+          ? TextButton(
+              key: const Key('profile.push.enable'),
+              onPressed: () async {
+                try {
+                  await ref.read(pushMessagingProvider)?.requestPermission();
+                } on Object {
+                  // No prompt: the row reads the state again below.
+                }
+                if (context.mounted) ref.invalidate(pushPermissionProvider);
+              },
+              child: Text(l.profilePushEnable),
+            )
+          : null,
     );
   }
 }

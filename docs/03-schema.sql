@@ -365,6 +365,7 @@ create table push_tokens (                            -- FCM registration tokens
   updated_at    timestamptz not null default now()
 );
 create index on push_tokens (user_id);
+create index on push_tokens (session_id);   -- deleted with their session (logout, re-issue)
 
 create type campaign_status   as enum ('DRAFT','SCHEDULED','SENDING','SENT','CANCELLED');
 create type campaign_audience as enum ('MEMBERS','EVENT_HOLDERS');
@@ -400,10 +401,13 @@ create table fan_messages (                           -- outbox: push and WhatsA
   status           delivery_status not null default 'PENDING',
   attempts         smallint not null default 0,
   next_attempt_at  timestamptz not null default now(),
-  last_error       text,                                   -- provider code or NO_DEVICE / OPTED_OUT / NOT_CONFIGURED; never a phone or body
+  last_error       text,                                   -- provider code or NO_DEVICE / OPTED_OUT / NOT_CONFIGURED / STALE; never a phone or body
   created_at       timestamptz not null default now(),
   sent_at          timestamptz,
-  constraint fan_messages_campaign check ((kind = 'CAMPAIGN') = (campaign_id is not null))
+  constraint fan_messages_campaign check ((kind = 'CAMPAIGN') = (campaign_id is not null)),
+  constraint fan_messages_subject check (
+    (ticket_id is not null) = (kind = 'TICKET_RECEIVED')
+    and (order_id is not null) = (kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID')))
 );
 create index on fan_messages (next_attempt_at) where status = 'PENDING';
 create unique index on fan_messages (campaign_id, user_id) where campaign_id is not null;          -- one per recipient
