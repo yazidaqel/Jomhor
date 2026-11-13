@@ -88,10 +88,12 @@ const SENT = row({
   sent: 490,
   failed: 10,
 })
-const SCHEDULED = row({ id: 'c-2', event_id: 3, title: 'Billets en vente', status: 'SCHEDULED', scheduled_at: '2026-11-15T19:00:00Z' })
+// Far in the future: never due, so suites on the real clock never see it start polling (P100).
+const SCHEDULED = row({ id: 'c-2', event_id: 3, title: 'Billets en vente', status: 'SCHEDULED', scheduled_at: '2099-11-15T19:00:00Z' })
 const DRAFT = row({ id: 'c-3', title: 'Brouillon du jeudi' })
 const DRAFT_PARIS = row({ id: 'c-4', title: 'Concert à Paris', event_id: 3 })
 const CAMPAIGNS = [SCHEDULED, SENT, DRAFT, DRAFT_PARIS]
+const SCHEDULED_LATER = row({ id: 'c-7', title: 'Demain', status: 'SCHEDULED', scheduled_at: '2026-11-14T12:00:00Z' })
 const detail = (r: CampaignRow, audience_estimate = 742): Campaign => ({ ...r, body: 'Le texte du message', audience_estimate })
 
 type Call = { method: string; path: string; org: string | null; body: unknown }
@@ -468,7 +470,53 @@ it(`refetches the list every ${CAMPAIGN_REFETCH_MS} ms only while a campaign is 
   expect(listCalls(calls)).toBe(3)
 })
 
-it('no SENDING row: no polling at all', async () => {
+it('P100: a SCHEDULED row already due polls (the job has yet to pick it up); a future one does not; SENT stops it', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-13T12:00:00Z'))
+  const due = row({ id: 'c-6', title: 'Envoyée maintenant', status: 'SCHEDULED', scheduled_at: '2026-11-13T11:59:50Z' })
+  const calls = stubApi('ADMIN', {
+    campaigns: (n) => (n < 3 ? [due, SCHEDULED_LATER] : [{ ...due, status: 'SENT', finished_at: '2026-11-13T12:00:20Z' }, SCHEDULED_LATER]),
+  })
+  renderApp('/crm')
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: fr.crm.tabs.campaigns }))
+  await screen.findByRole('cell', { name: due.title })
+  expect(listCalls(calls)).toBe(1)
+
+  await act(() => vi.advanceTimersByTimeAsync(CAMPAIGN_REFETCH_MS))
+  await waitFor(() => expect(listCalls(calls)).toBe(2))
+  await act(() => vi.advanceTimersByTimeAsync(CAMPAIGN_REFETCH_MS))
+  await screen.findByText(fr.crm.statuses.SENT)
+  expect(listCalls(calls)).toBe(3)
+
+  // Left: SENT and a SCHEDULED row due tomorrow. No more polling.
+  await act(() => vi.advanceTimersByTimeAsync(5 * CAMPAIGN_REFETCH_MS))
+  expect(listCalls(calls)).toBe(3)
+})
+
+it('P100: a send-now stamped by a server clock a few seconds ahead of the browser still polls', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-13T12:00:00Z'))
+  const ahead = row({ id: 'c-8', title: 'Horloge en avance', status: 'SCHEDULED', scheduled_at: '2026-11-13T12:00:05Z' })
+  const calls = stubApi('ADMIN', { campaigns: () => [ahead] })
+  renderApp('/crm')
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: fr.crm.tabs.campaigns }))
+  await screen.findByRole('cell', { name: ahead.title })
+  await act(() => vi.advanceTimersByTimeAsync(CAMPAIGN_REFETCH_MS))
+  await waitFor(() => expect(listCalls(calls)).toBe(2))
+})
+
+it('P100: only a future SCHEDULED row: no polling', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-13T12:00:00Z'))
+  const calls = stubApi('ADMIN', { campaigns: () => [SCHEDULED_LATER] })
+  renderApp('/crm')
+  fireEvent.mouseDown(await screen.findByRole('tab', { name: fr.crm.tabs.campaigns }))
+  await screen.findByRole('cell', { name: SCHEDULED_LATER.title })
+  await act(() => vi.advanceTimersByTimeAsync(3 * CAMPAIGN_REFETCH_MS))
+  expect(listCalls(calls)).toBe(1)
+})
+
+it('no SENDING row and no SCHEDULED row due: no polling at all', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
   const calls = stubApi('ADMIN')
   renderApp('/crm')

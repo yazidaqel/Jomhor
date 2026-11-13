@@ -18,11 +18,33 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV21Apply() {
+    void v1ToV22Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21");
+                        "17", "18", "19", "20", "21", "22");
+    }
+
+    /** V22: a CAMPAIGN row needs its campaign and only it has one; EVENT_HOLDERS needs an event; one row per user. */
+    @Test
+    void campaignRowsAndHolderCampaignsNeedTheirSubject() {
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind)
+                values (gen_random_uuid(), gen_random_uuid(), 'PUSH', 'CAMPAIGN')"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_campaign");
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind, order_id, campaign_id)
+                values (gen_random_uuid(), gen_random_uuid(), 'PUSH', 'ORDER_PAID', gen_random_uuid(),
+                        gen_random_uuid())"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_campaign");
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into campaigns (organizer_id, channel, audience, title, body, created_by)
+                values (gen_random_uuid(), 'WHATSAPP', 'EVENT_HOLDERS', 'T', 'B', gen_random_uuid())"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("campaigns_event");
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from pg_indexes where tablename = 'fan_messages'
+                  and indexdef like 'CREATE UNIQUE INDEX%(campaign_id, user_id) WHERE (campaign_id IS NOT NULL)'""",
+                Integer.class)).isEqualTo(1);
     }
 
     /** V21: an order kind needs its order (a CHECK runs before the foreign keys), and is queued once per channel. */

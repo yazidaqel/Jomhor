@@ -1,0 +1,408 @@
+### Lot 4 demo, fan side (IntelliJ HTTP client): plan lot-4 §1 demo steps (1)-(8); Lot4FanFlowTest runs the same
+### flow in CI.
+#
+# Start the backend with the dev profile (dev seed: ATLAS FC, admin +212600000001, Ops Dev +212600000003, fan Yassine
+# +212600000010 who holds a ticket of a demo event; dev enables the simulated card gateway and cash network and uses
+# the log push sender, which prints the path and the token's tail):
+#   docker compose up -d && SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# OTP codes are printed by the dev log sender ([dev OTP] +2126... -> 123456), or fixed by JOMHOR_DEV_FIXED_OTP:
+# paste them into the @...Code variables (the values below are placeholders). Put an ON_SALE event of ATLAS FC in
+# @eventId and its price category in @priceId (GET /fan/events/{id}); its sales must close more than 2 h from now
+# for a split ("ATLAS FC vs Rapid Oued" does). The other phones are made up: use your own test numbers.
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@fanPhone = +212600000010
+@opsPhone = +212600000003
+@adminPhone = +212600000001
+@buyerPhone = +212611110001
+@karimPhone = +212611110002
+@saraPhone = +212611110003
+@omarPhone = +212611110004
+@cashierPhone = +212611110005
+@fanCode = 000000
+@opsCode = 000000
+@adminCode = 000000
+@buyerCode = 000000
+@karimCode = 000000
+@saraCode = 000000
+@omarCode = 000000
+@cashierCode = 000000
+@eventId = 1
+@priceId = 00000000-0000-0000-0000-000000000000
+
+### ---------- (1) Arabic ----------
+
+### 1.1 Buyer (Yazid): ask for a code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{buyerPhone}}"}
+
+### 1.2 Buyer: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{buyerPhone}}", "code": "{{buyerCode}}"}
+
+> {% client.global.set("buyerToken", response.body.token); %}
+
+### 1.3 Buyer: the app in Arabic (copy and template locale)
+PATCH {{base}}/fan/me
+Authorization: Bearer {{buyerToken}}
+Content-Type: application/json
+
+{"locale": "ar"}
+
+### ---------- (2) Split pay: 3 places, his own for "يزيد عقل", Karim and Sara pay their own ----------
+
+### 2.1 Buyer: order 3 places -> 201, total_mad 5000 (his place only), holders[0].label "يزيد ع.", group.members:
+### 2 member orders with holder_label and pay_url only (no phone, no full name)
+POST {{base}}/fan/orders
+Authorization: Bearer {{buyerToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{priceId}}", "qty": 3, "holders": [
+ {"name": "يزيد عقل"},
+ {"name": "Karim Alaoui", "phone": "{{karimPhone}}", "pays": true},
+ {"name": "Sara Bennani", "phone": "{{saraPhone}}", "pays": true}]}]}
+
+> {% client.global.set("buyerOrder", response.body.id); %}
+
+### 2.2 Buyer: pay his own place by card. Open redirect_url in a browser and click "Approuver". Each friend then gets
+### a SPLIT_INVITE: a WhatsApp log row (split_invite, user id only) and a push (fake) once they have the app.
+POST {{base}}/fan/orders/{{buyerOrder}}/pay
+Authorization: Bearer {{buyerToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 2.3 Buyer: the group -> status PAID, members RESERVED (1/3)
+GET {{base}}/fan/orders/{{buyerOrder}}
+Authorization: Bearer {{buyerToken}}
+
+### 2.4 Karim: ask for a code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}"}
+
+### 2.5 Karim: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}", "code": "{{karimCode}}"}
+
+> {% client.global.set("karimToken", response.body.token); %}
+
+### 2.6 Karim: his member order (group_role MEMBER)
+GET {{base}}/fan/orders
+Authorization: Bearer {{karimToken}}
+
+> {% client.global.set("karimOrder", response.body.orders[0].id); %}
+
+### 2.7 Karim: pay by card as on the shop (channel WEB); approve on the simulated page -> PAID, the ticket is his
+POST {{base}}/fan/orders/{{karimOrder}}/pay
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"method": "CARD", "channel": "WEB"}
+
+### 2.8 Sara: ask for a code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}"}
+
+### 2.9 Sara: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}", "code": "{{saraCode}}"}
+
+> {% client.global.set("saraToken", response.body.token); %}
+
+### 2.10 Sara: her member order
+GET {{base}}/fan/orders
+Authorization: Bearer {{saraToken}}
+
+> {% client.global.set("saraOrder", response.body.orders[0].id); %}
+
+### 2.11 Sara: a cash code -> AWAITING_CASH; one PAY_CODE WhatsApp log row (pay_code)
+POST {{base}}/fan/orders/{{saraOrder}}/pay
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"method": "CASH_AGENCY"}
+
+> {% client.global.set("payCode", response.body.pay_code); %}
+
+### 2.12 Admin: ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 2.13 Admin: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{adminCode}}"}
+
+> {% client.global.set("adminToken", response.body.token); %}
+
+### 2.14 Admin: a cashier (422 TAKEN on a second run: skip it)
+POST {{base}}/org/staff
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"name": "Nadia Guichet", "role": "CASHIER", "phone": "{{cashierPhone}}"}
+
+### 2.15 Cashier: ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}"}
+
+### 2.16 Cashier: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}", "code": "{{cashierCode}}"}
+
+> {% client.global.set("cashierToken", response.body.token); %}
+
+### 2.17 Cashier: open the till (201; already open -> 200)
+POST {{base}}/org/pos/sessions
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Guichet Nord"}
+
+### 2.18 Cashier: collect Sara's code -> PAID; an ORDER_PAID push is queued for Sara
+POST {{base}}/org/pos/codes/{{payCode}}/collect
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"amount_mad": 5000}
+
+### 2.19 Buyer: the group -> members PAID, PAID (3/3), labels only
+GET {{base}}/fan/orders/{{buyerOrder}}
+Authorization: Bearer {{buyerToken}}
+
+### ---------- (3) Transfer: Karim -> Omar ----------
+
+### 3.1 Karim: his ticket (VALID, transfer_until = sales close - 30 min)
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{karimToken}}
+
+> {% client.global.set("karimTicket", response.body.tickets[0].id); %}
+
+### 3.2 Karim: transfer to Omar -> 201 {transfer_id, to_label "Omar I.", transferred_at}. Omar gets one
+### TICKET_RECEIVED push (once he has the app) and a WhatsApp delivery that goes SENT (log adapter). After the next
+### manifest delta the scanner shows Karim's old QR ANNULÉ and Omar's VALIDE. At or after transfer_until: 409
+### TRANSFER_CLOSED.
+POST {{base}}/fan/tickets/{{karimTicket}}/transfer
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"to_phone": "{{omarPhone}}", "name": "Omar Idrissi"}
+
+### 3.3 Karim: the old ticket is CANCELLED with transferred.to_label, and no k_t
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{karimToken}}
+
+### 3.4 Omar: ask for a code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}"}
+
+### 3.5 Omar: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}", "code": "{{omarCode}}"}
+
+> {% client.global.set("omarToken", response.body.token); %}
+
+### 3.6 Omar: the new ticket, VALID, with a new k_t
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{omarToken}}
+
+### ---------- (4) Re-issue: Sara lost her phone ----------
+
+### 4.1 Sara: her ticket
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{saraToken}}
+
+> {% client.global.set("saraTicket", response.body.tickets[0].id); %}
+
+### 4.2 Sara: "Téléphone perdu ?" -> 201 {ticket_id}: a new id; her other sessions are signed out; the old QR scans
+### ANNULÉ after the next manifest delta
+POST {{base}}/fan/tickets/{{saraTicket}}/reissue
+Authorization: Bearer {{saraToken}}
+
+### 4.3 Sara: only the new ticket is listed
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{saraToken}}
+
+### ---------- (5) Matchday ----------
+
+### 5.1 Buyer: the gate side of his ticket (gates with directions and coordinates)
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{buyerToken}}
+
+### 5.2 Buyer: gate load chips and his entries. Scan his QR with a Lot 2 scanner (lot2-gate.http): once the scan
+### syncs, entries holds his ticket ("Tu es dedans"). Omar sees only his own; a fan with no ticket gets 404.
+GET {{base}}/fan/gates/{{eventId}}/load
+Authorization: Bearer {{buyerToken}}
+
+### ---------- (6) Membership ----------
+
+### 6.1 Buyer: join ATLAS FC with push on -> 201, member.number
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{buyerToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": true, "marketing_whatsapp": false}
+
+### 6.2 Omar: join with push off
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": false, "marketing_whatsapp": false}
+
+### 6.3 Buyer: after the event closes (lot2-gate.http step 5) -> loyalty.events_attended 1 and the event attended
+### in last_events (Omar's too: the transferred ticket counts for him)
+GET {{base}}/fan/me/membership?organizer={{org}}
+Authorization: Bearer {{buyerToken}}
+
+### ---------- (7) Campaigns: the BE-33 section below (C1-C14) ----------
+
+### ---------- (8) Back-office ----------
+
+### 8.1 B3: paid 3 for the split, unchanged by the transfer and the re-issue
+GET {{base}}/org/events/{{eventId}}/sales
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+
+### 8.2 B4: sold, unchanged likewise
+GET {{base}}/org/events/{{eventId}}/live
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+
+### 8.3 B12: the transfer chain from Omar's phone (transferred_from = Karim's ticket number)
+POST {{base}}/org/events/{{eventId}}/tickets/search
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{omarPhone}}"}
+
+### 8.4 B9: member counts (counts only)
+GET {{base}}/org/members/summary
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- Campaigns and the inbox (BE-33) ----------
+
+### C1. Fan: ask for a code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{fanPhone}}"}
+
+### C2. Fan: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{fanPhone}}", "code": "{{fanCode}}"}
+
+> {% client.global.set("fanToken", response.body.token); %}
+
+### C3. Fan: a fake push token for this session (the log sender accepts any token) -> 204
+PUT {{base}}/fan/me/push-token
+Authorization: Bearer {{fanToken}}
+Content-Type: application/json
+
+{"token": "dev-fake-{{$random.uuid}}", "platform": "android"}
+
+### C4. Fan: join ATLAS FC with the push opt-in on -> 201 (200 if already a member)
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{fanToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": true, "marketing_whatsapp": false}
+
+### C5. Ops: ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### C6. Ops: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{opsCode}}"}
+
+> {% client.global.set("opsToken", response.body.token); %}
+
+### C7. Ops: the members summary (counts only)
+GET {{base}}/org/members/summary
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### C8. Ops: a PUSH MEMBERS campaign opening the event -> 201 DRAFT, audience_estimate >= 1
+POST {{base}}/org/campaigns
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"channel": "PUSH", "audience": "MEMBERS", "event_id": {{eventId}}, "title": "Derby samedi",
+ "body": "Les billets partent vite : réserve ta place dans l'app."}
+
+> {% client.global.set("pushCampaign", response.body.id); %}
+
+### C9. Ops: send now (no body) -> SCHEDULED. Wait about 35 s: the job snapshots it, the outbox sends it.
+POST {{base}}/org/campaigns/{{pushCampaign}}/send
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### C10. Ops: the list -> SENT, recipients 1, sent 1
+GET {{base}}/org/campaigns
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### C11. Fan: the inbox -> the campaign with the ATLAS FC organizer block
+GET {{base}}/fan/me/inbox
+Authorization: Bearer {{fanToken}}
+
+### C12. Ops: a WhatsApp EVENT_HOLDERS campaign (service info: every VALID holder of the event)
+POST {{base}}/org/campaigns
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"channel": "WHATSAPP", "audience": "EVENT_HOLDERS", "event_id": {{eventId}}, "title": "Ouverture des portes",
+ "body": "Ouverture des portes à 18 h"}
+
+> {% client.global.set("holdersCampaign", response.body.id); %}
+
+### C13. Ops: send it now; after about 35 s GET it: SENT, one row per VALID holder (the log adapter prints user ids)
+POST {{base}}/org/campaigns/{{holdersCampaign}}/send
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{}
+
+### C14. Ops: the campaign
+GET {{base}}/org/campaigns/{{holdersCampaign}}
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}

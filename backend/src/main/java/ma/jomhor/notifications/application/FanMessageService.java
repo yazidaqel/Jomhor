@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.common.web.ApiException;
+import ma.jomhor.crm.application.CampaignService;
+import ma.jomhor.crm.domain.Campaign;
 import ma.jomhor.notifications.domain.Delivery;
 import ma.jomhor.notifications.domain.FanMessage;
 import ma.jomhor.notifications.domain.FanMessage.Channel;
@@ -37,8 +39,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * ticket_deliveries retry policy ({@link Delivery#backoff}). Everything is rendered at send time, read in the row's
  * organizer: the recipient's phone and locale, the subject (ticket, member order, cash code) and the event. A subject
  * that no longer applies → FAILED STALE; no push provider → FAILED NOT_CONFIGURED; no live token → FAILED
- * NO_DEVICE.
- * Those three are final; any other error backs off. Also registers push tokens (PUT /fan/me/push-token).
+ * NO_DEVICE; a MEMBERS campaign recipient who left or opted out → FAILED OPTED_OUT.
+ * Those four are final; any other error backs off. Also registers push tokens (PUT /fan/me/push-token).
  */
 @Service
 public class FanMessageService {
@@ -50,6 +52,8 @@ public class FanMessageService {
     /** WhatsApp template names (plan lot-4 Q63); constants until BE-15 moves template ids to config. */
     static final String SPLIT_INVITE = "split_invite";
     static final String PAY_CODE = "pay_code";
+    static final String CLUB_NEWS = "club_news";
+    static final String EVENT_INFO = "event_info";
 
     private final FanMessages messages;
     private final PushTokens tokens;
@@ -58,6 +62,7 @@ public class FanMessageService {
     private final TicketService tickets;
     private final Inventory inventory;
     private final CashInstructions cash;
+    private final CampaignService campaigns;
     private final TicketMessenger messenger;
     private final ObjectProvider<PushSender> pushSender;
     private final TransactionTemplate tx;
@@ -68,7 +73,8 @@ public class FanMessageService {
 
     public FanMessageService(FanMessages messages, PushTokens tokens, UserService users, OrderService orders,
                              TicketService tickets, Inventory inventory, CashInstructions cash,
-                             TicketMessenger messenger, ObjectProvider<PushSender> pushSender,
+                             CampaignService campaigns, TicketMessenger messenger,
+                             ObjectProvider<PushSender> pushSender,
                              PlatformTransactionManager transactions,
                              @Value("${notifications.send-rate-per-second}") int ratePerSecond,
                              @Value("${jomhor.notifications.message-cron:*/5 * * * * *}") String cron,
@@ -80,6 +86,7 @@ public class FanMessageService {
         this.tickets = tickets;
         this.inventory = inventory;
         this.cash = cash;
+        this.campaigns = campaigns;
         this.messenger = messenger;
         this.pushSender = pushSender;
         this.tx = new TransactionTemplate(transactions);
@@ -182,9 +189,16 @@ public class FanMessageService {
                 return Outcome.finalError(FanMessage.NOT_CONFIGURED);
             }
         }
+        CampaignService.Message campaign = null;
+        if (m.kind() == FanMessage.Kind.CAMPAIGN) {
+            campaign = campaigns.message(m.organizerId(), m.campaignId(), m.userId());
+            if (campaign.optedOut()) {
+                return Outcome.finalError(FanMessage.OPTED_OUT);
+            }
+        }
         User user = users.get(m.userId());
         String locale = MessageCopy.locale(user.locale());
-        Content c = render(m, locale);
+        Content c = campaign == null ? render(m, locale) : campaign(campaign);
         if (c == null) {
             return Outcome.finalError(FanMessage.STALE);
         }
@@ -246,8 +260,17 @@ public class FanMessageService {
             case PAY_CODE -> payCode(org, m.orderId(), locale);
             case ORDER_PAID -> Content.push(MessageCopy.text(locale, "push.order_paid.title", Map.of()),
                     MessageCopy.text(locale, "push.order_paid.body", Map.of()), "/orders/" + m.orderId());
-            case CAMPAIGN -> throw new IllegalStateException("campaign messages come with BE-33");
+            case CAMPAIGN -> throw new IllegalStateException("rendered by campaign()");
         };
+    }
+
+    /**
+     * 04 §Campaigns Content: PUSH = the typed title and body, opening the event or the home screen; WHATSAPP =
+     * club_news (MEMBERS) or event_info (EVENT_HOLDERS) with [title, body]. Nothing about the recipient.
+     */
+    private static Content campaign(CampaignService.Message c) {
+        return new Content(c.title(), c.body(), c.eventId() == null ? "/" : "/events/" + c.eventId(),
+                c.audience() == Campaign.Audience.MEMBERS ? CLUB_NEWS : EVENT_INFO, List.of(c.title(), c.body()));
     }
 
     /** Stale unless the member order is RESERVED and still held (database clock). */

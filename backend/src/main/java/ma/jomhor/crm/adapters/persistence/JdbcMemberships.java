@@ -4,10 +4,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.UUID;
 import ma.jomhor.crm.application.Memberships;
 import ma.jomhor.crm.domain.Member;
+import ma.jomhor.notifications.application.PushTokens;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -106,6 +109,41 @@ class JdbcMemberships implements Memberships {
                         rs.getBoolean("attended")))
                 .list();
         return latest.reversed();
+    }
+
+    /** reachable_push: the push opt-in and a live token (PushTokens.liveTokenOf, as the PUSH MEMBERS estimate). */
+    @Override
+    public Counts counts(UUID org) {
+        return jdbc.sql("""
+                        select count(*) as members,
+                               count(*) filter (where m.joined_at > now() - interval '7 days') as joined_7d,
+                               count(*) filter (where m.marketing_push) as marketing_push,
+                               count(*) filter (where m.marketing_whatsapp) as marketing_whatsapp,
+                               count(*) filter (where m.marketing_push and\s"""
+                        + PushTokens.liveTokenOf("m.user_id") + """
+                               ) as reachable_push
+                        from memberships m
+                        where m.organizer_id = ? and m.left_at is null""")
+                .param(org)
+                .query((rs, n) -> new Counts(rs.getLong("members"), rs.getLong("joined_7d"),
+                        rs.getLong("marketing_push"), rs.getLong("marketing_whatsapp"), rs.getLong("reachable_push")))
+                .single();
+    }
+
+    @Override
+    public Map<Long, Long> membersByEventsAttended(UUID org) {
+        return jdbc.sql("""
+                        select a.attended, count(*) as members
+                        from (select (select count(distinct t.event_id) from tickets t
+                                      where t.organizer_id = m.organizer_id and t.holder_user_id = m.user_id
+                                        and\s""" + ADMITTED + """
+                                     ) as attended
+                              from memberships m
+                              where m.organizer_id = ? and m.left_at is null) a
+                        group by a.attended""")
+                .param(org)
+                .query((rs, n) -> Map.entry(rs.getLong("attended"), rs.getLong("members"))).list().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private static Member member(ResultSet rs, int n) throws SQLException {

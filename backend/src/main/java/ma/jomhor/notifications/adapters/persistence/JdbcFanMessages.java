@@ -50,13 +50,34 @@ class JdbcFanMessages implements FanMessages {
     }
 
     /**
+     * One CAMPAIGN row per user; a user already queued for the campaign is left as it is (the unique index
+     * (campaign_id, user_id)). ponytail: the ids travel as one in-memory array, fine to about 100k recipients; page the
+     * snapshot (or insert ... select the audience in SQL) beyond that.
+     */
+    @Override
+    public int enqueueCampaign(UUID org, UUID campaignId, FanMessage.Channel channel, Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return 0;
+        }
+        return jdbc.sql("""
+                        insert into fan_messages (organizer_id, user_id, channel, kind, campaign_id)
+                        select :org, u.id, cast(:channel as message_channel), 'CAMPAIGN', :campaign
+                        from unnest(cast(:users as uuid[])) as u(id)
+                        on conflict do nothing
+                        """)
+                .param("org", org).param("campaign", campaignId).param("channel", channel.name())
+                .param("users", userIds.toArray(UUID[]::new)).update();
+    }
+
+    /**
      * Claims across organizers (the job serves all of them); each row's organizer_id scopes what is read for it.
      * Transactional kinds go first, so a campaign never delays an invite or a pay code (04 §Campaigns Send).
      */
     @Override
     public List<FanMessage> claimDue(int limit) {
         return jdbc.sql("""
-                        select id, organizer_id, user_id, channel::text, kind::text, order_id, ticket_id, attempts
+                        select id, organizer_id, user_id, channel::text, kind::text, campaign_id, order_id, ticket_id,
+                               attempts
                         from fan_messages
                         where status = 'PENDING' and next_attempt_at <= now()
                         order by (kind = 'CAMPAIGN'), next_attempt_at
@@ -66,7 +87,8 @@ class JdbcFanMessages implements FanMessages {
                 .param("limit", limit)
                 .query((rs, n) -> new FanMessage(rs.getObject("id", UUID.class),
                         rs.getObject("organizer_id", UUID.class), rs.getObject("user_id", UUID.class), FanMessage.Channel.valueOf(rs.getString("channel")),
-                        FanMessage.Kind.valueOf(rs.getString("kind")), rs.getObject("order_id", UUID.class),
+                        FanMessage.Kind.valueOf(rs.getString("kind")), rs.getObject("campaign_id", UUID.class),
+                        rs.getObject("order_id", UUID.class),
                         rs.getObject("ticket_id", UUID.class), rs.getInt("attempts")))
                 .list();
     }

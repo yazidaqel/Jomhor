@@ -18,6 +18,9 @@ public interface FanMessages {
      */
     void enqueueOrders(UUID org, Collection<UUID> orderIds, FanMessage.Kind kind, List<FanMessage.Channel> channels);
 
+    /** One CAMPAIGN row per user on {@code channel}; users already queued for it are skipped. Rows added. */
+    int enqueueCampaign(UUID org, UUID campaignId, FanMessage.Channel channel, Collection<UUID> userIds);
+
     /**
      * Up to {@code limit} PENDING rows due now, transactional kinds before campaigns, oldest first, locked for the
      * caller's transaction ({@code for update skip locked}).
