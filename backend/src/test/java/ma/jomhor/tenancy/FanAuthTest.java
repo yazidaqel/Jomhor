@@ -16,9 +16,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -83,6 +85,36 @@ class FanAuthTest extends IntegrationTest {
         assertThat(second).isEqualTo(first);
         assertThat(jdbc.sql("select count(*) from users where phone_e164 = ?").param(phone).query(Integer.class).single())
                 .isEqualTo(1);
+    }
+
+    /** Lot 5 (04 /fan/auth/verify): the first fan verify sets users.verified_at, later ones keep it. */
+    @Test
+    void firstFanVerifySetsVerifiedAtAndALaterOneKeepsIt() throws Exception {
+        String phone = randomPhone();
+        // A holder typed by a buyer: the user exists but never logged in.
+        jdbc.sql("insert into users (phone_e164) values (?)").param(phone).update();
+        assertThat(verifiedAt(phone)).isNull();
+
+        login(phone);
+        assertThat(verifiedAt(phone)).isCloseTo(Instant.now(), within(1, ChronoUnit.MINUTES));
+
+        jdbc.sql("update users set verified_at = '2020-01-01T00:00:00Z' where phone_e164 = ?").param(phone).update();
+        login(phone);
+        assertThat(verifiedAt(phone)).isEqualTo(Instant.parse("2020-01-01T00:00:00Z"));
+    }
+
+    @Test
+    void aStaffVerifyDoesNotSetVerifiedAt() throws Exception {
+        String phone = randomPhone();
+        staff(organizer("Org " + UUID.randomUUID()), phone, "ADMIN", true);
+        requestOtp("/org/auth/otp", phone).andExpect(status().isAccepted());
+        verifyOtp("/org/auth/verify", phone, lastCode(phone)).andExpect(status().isOk());
+        assertThat(verifiedAt(phone)).isNull();
+    }
+
+    private Instant verifiedAt(String phone) {
+        return jdbc.sql("select verified_at from users where phone_e164 = ?").param(phone)
+                .query(OffsetDateTime.class).optional().map(OffsetDateTime::toInstant).orElse(null);
     }
 
     @Test

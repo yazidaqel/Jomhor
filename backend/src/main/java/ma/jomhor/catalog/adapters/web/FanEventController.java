@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import ma.jomhor.catalog.application.EventRooms;
 import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.common.web.ApiException;
@@ -23,9 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 class FanEventController {
 
     private final EventService events;
+    private final EventRooms rooms;
 
-    FanEventController(EventService events) {
+    FanEventController(EventService events, EventRooms rooms) {
         this.events = events;
+        this.rooms = rooms;
     }
 
     record VenueDto(String name, String city) {}
@@ -33,16 +36,24 @@ class FanEventController {
     /** 04 §Club directory: no id here, organizer_id sits beside it. */
     record OrganizerDto(String slug, String name, String crestUrl) {}
 
+    /** Lot 5 (04 §Fan): null without a room or once it has ENDED; eligibility null when no rule is set. */
+    record RoomDto(String status, Instant opensAt, EligibilityDto eligibility) {}
+
+    record EligibilityDto(Instant verifiedBefore, Instant memberJoinedBefore, Integer minEventsAttended) {}
+
     record EventDto(int id, UUID organizerId, OrganizerDto organizer, Event.Status status, Event.Type eventType,
                     String title, Instant startsAt, Instant doorsOpenAt, String timezone, VenueDto venue,
                     @JsonRawValue String metadata,
                     Instant saleStartsAt, Instant salesCloseAt, boolean onSale, boolean soldOut, Long fromPriceMad,
-                    int perAccountLimit) {
-        static EventDto of(Event.Listing e) {
+                    int perAccountLimit, RoomDto room) {
+        static EventDto of(Event.Listing e, EventRooms rooms) {
+            RoomDto room = rooms.publicRoom(e.id()).map(r -> new RoomDto(r.status(), r.opensAt(),
+                    r.eligibility() == null ? null : new EligibilityDto(r.eligibility().verifiedBefore(),
+                            r.eligibility().memberJoinedBefore(), r.eligibility().minEventsAttended()))).orElse(null);
             return new EventDto(e.id(), e.organizerId(),
                     new OrganizerDto(e.organizer().slug(), e.organizer().name(), e.organizer().crestUrl()), e.status(),
                     e.eventType(), e.title(), e.startsAt(), e.doorsOpenAt(), e.timezone(),
-                    new VenueDto(e.venueName(), e.venueCity()), e.metadata(), e.saleStartsAt(), e.salesCloseAt(), e.onSale(), e.soldOut(), e.fromPriceMad(), e.perAccountLimit());
+                    new VenueDto(e.venueName(), e.venueCity()), e.metadata(), e.saleStartsAt(), e.salesCloseAt(), e.onSale(), e.soldOut(), e.fromPriceMad(), e.perAccountLimit(), room);
         }
     }
 
@@ -66,13 +77,14 @@ class FanEventController {
         if (organizer != null && organizer.contains(null)) {
             throw new ApiException("BAD_REQUEST", HttpStatus.BAD_REQUEST, "Bad Request");
         }
-        return events.publicList(organizer == null ? List.of() : organizer, from).stream().map(EventDto::of).toList();
+        return events.publicList(organizer == null ? List.of() : organizer, from).stream()
+                .map(e -> EventDto.of(e, rooms)).toList();
     }
 
     @GetMapping("/fan/events/{id}")
     EventDetailDto get(@PathVariable int id) {
         EventService.PublicEvent e = events.publicEvent(id);
-        return new EventDetailDto(EventDto.of(e.event()), e.zones().stream().map(ZoneDto::of).toList(),
+        return new EventDetailDto(EventDto.of(e.event(), rooms), e.zones().stream().map(ZoneDto::of).toList(),
                 e.payment().methods(), e.payment().cashUntil());
     }
 }

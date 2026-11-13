@@ -17,6 +17,9 @@ public interface Accounts {
     /** The user with this phone, created on first login. */
     User upsertByPhone(String phone);
 
+    /** A successful fan OTP login: {@link #upsertByPhone}, and users.verified_at set if it never was. */
+    User fanLogin(String phone);
+
     Optional<User> findUser(UUID userId);
 
     /** Sets the fields given (null = unchanged; an empty display name clears it); the user after the change. */

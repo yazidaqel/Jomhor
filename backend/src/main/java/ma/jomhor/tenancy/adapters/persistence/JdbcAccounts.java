@@ -48,6 +48,16 @@ class JdbcAccounts implements Accounts {
                 .param(phone).query(JdbcAccounts::user).single();
     }
 
+    @Override
+    public User fanLogin(String phone) {
+        jdbc.sql("""
+                        insert into users (phone_e164, verified_at) values (?, now())
+                        on conflict (phone_e164) do update set verified_at = now() where users.verified_at is null""")
+                .param(phone).update();
+        return jdbc.sql("select " + USER_COLUMNS + " from users where phone_e164 = ?")
+                .param(phone).query(JdbcAccounts::user).single();
+    }
+
     // Set by ops via SQL (plan Q54): read defensively, a malformed entry is left out rather than failing the page.
     @Override
     public List<CashPoint> cashPoints(UUID organizerId) {

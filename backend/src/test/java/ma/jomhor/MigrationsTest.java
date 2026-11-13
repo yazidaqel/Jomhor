@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,11 +19,65 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV22Apply() {
+    void v1ToV23Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22");
+                        "17", "18", "19", "20", "21", "22", "23");
+    }
+
+    /**
+     * V23: users.verified_at is backfilled with the user's earliest fan session (the statement of the migration file,
+     * re-run on this test's users only); a user who never logged in stays null.
+     */
+    @Test
+    void verifiedAtBackfillIsTheEarliestSession() throws Exception {
+        String sql;
+        try (var in = getClass().getResourceAsStream("/db/migration/V23__waiting_rooms.sql")) {
+            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        int start = sql.indexOf("update users u");
+        String backfill = sql.substring(start, sql.indexOf(';', start));
+
+        UUID fan = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        UUID holder = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        jdbcTemplate.update("insert into fan_sessions (user_id, created_at, expires_at) values "
+                + "(?, '2026-03-01T10:00:00Z', now()), (?, '2026-01-15T08:00:00Z', now()), (?, '2026-06-01T00:00:00Z', now())",
+                fan, fan, fan);
+        jdbcTemplate.update(backfill + " and u.id in (?, ?)", fan, holder);
+
+        assertThat(jdbcTemplate.queryForObject("select verified_at = '2026-01-15T08:00:00Z' from users where id = ?",
+                Boolean.class, fan)).isTrue();
+        assertThat(jdbcTemplate.queryForObject("select verified_at from users where id = ?", Object.class, holder))
+                .isNull();
+    }
+
+    /** V23: one room per event, the 03 ranges, and admitted_through never above ranked_count. */
+    @Test
+    void waitingRoomsChecks() {
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        Integer event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""",
+                Integer.class, org, venue, new byte[32]);
+        jdbcTemplate.update("insert into waiting_rooms (organizer_id, event_id) values (?, ?)", org, event);
+        assertThat(jdbcTemplate.queryForMap("select status::text as status, pre_queue_min, admission_rate_per_min "
+                + "from waiting_rooms where event_id = ?", event))
+                .containsEntry("status", "SCHEDULED").containsEntry("pre_queue_min", 30)
+                .containsEntry("admission_rate_per_min", 500);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "insert into waiting_rooms (organizer_id, event_id) values (?, ?)", org, event))
+                .isInstanceOf(DuplicateKeyException.class);
+        for (String set : new String[] {"pre_queue_min = 1441", "admission_rate_per_min = 0",
+                "admission_rate_per_min = 6001", "min_account_age_days = 0", "min_events_attended = 51",
+                "admitted_through = 1"}) {
+            assertThatThrownBy(() -> jdbcTemplate.update("update waiting_rooms set " + set + " where event_id = ?",
+                    event)).as(set).isInstanceOf(DataIntegrityViolationException.class);
+        }
     }
 
     /** V22: a CAMPAIGN row needs its campaign and only it has one; EVENT_HOLDERS needs an event; one row per user. */

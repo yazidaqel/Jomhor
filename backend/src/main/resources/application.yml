@@ -93,6 +93,10 @@ sales:
     # close; a split is refused when sales close sooner than this. The fan copy says "2 h" literally (Q109).
     hold: ${SALES_SPLIT_HOLD:2h}
 
+rooms:
+  # On-sale waiting room (docs/04-api.md §Waiting room): each instance re-reads the live rooms at most this often.
+  memo-ttl: ${ROOMS_MEMO_TTL:1s}
+
 notifications:
   push:
     # Push adapter (docs/04-api.md §Notifications): 'log' = dev/staging, refused under prod; 'fcm' comes with BE-36.
