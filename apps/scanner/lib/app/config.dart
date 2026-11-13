@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 
 /// Build-time configuration: `flutter run --dart-define=API_BASE_URL=https://api.jomhor.ma/v1`.
@@ -28,11 +26,15 @@ abstract final class AppConfig {
     );
   }
 
-  /// 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16; IPv4 literals only.
+  /// 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16; dotted-decimal IPv4 literals only. Parsed by hand: dart:io must
+  /// stay off the scan path.
   static bool _isPrivateIPv4(String host) {
-    final ip = InternetAddress.tryParse(host);
-    if (ip == null || ip.type != InternetAddressType.IPv4) return false;
-    final [a, b, ...] = ip.rawAddress;
+    final parts = host.split('.');
+    if (parts.length != 4 || !parts.every(_octet.hasMatch)) return false;
+    final [a, b, _, _] = parts.map(int.parse).toList();
     return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168);
   }
+
+  /// 0-255, no sign, no leading zero.
+  static final _octet = RegExp(r'^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$');
 }
