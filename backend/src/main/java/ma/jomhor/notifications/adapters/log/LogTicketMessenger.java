@@ -23,6 +23,12 @@ class LogTicketMessenger implements TicketMessenger {
                 message.pdf().length);
     }
 
+    /** The template name and the recipient's user id only: never the phone or the parameters (plan lot-4 Q63). */
+    @Override
+    public void send(Template template) {
+        log.info("[dev WhatsApp] template {} -> user {}", template.name(), template.userId());
+    }
+
     /** +212612345678 → +212*******78: the country code and the last two digits. */
     static String mask(String phone) {
         return phone.length() < 7 ? "***" : phone.substring(0, 4) + "*".repeat(phone.length() - 6)

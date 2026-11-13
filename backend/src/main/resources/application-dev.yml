@@ -38,3 +38,7 @@ payments:
   return-url:
     web: ${PAYMENTS_RETURN_URL_WEB:http://localhost:3000/orders/{order_id}}
     app: ${PAYMENTS_RETURN_URL_APP:jomhor-fan://orders/{order_id}}
+
+notifications:
+  push:
+    provider: ${NOTIFICATIONS_PUSH_PROVIDER:log} # logs path + token tail; refused under prod

@@ -11,6 +11,7 @@ import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.HolderNames;
 import ma.jomhor.common.web.ApiException;
 import ma.jomhor.gate.application.ScanService;
+import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.tenancy.application.AuthService;
 import ma.jomhor.tenancy.application.UserService;
@@ -40,19 +41,21 @@ public class TicketTransferService {
     private final EventService events;
     private final UserService users;
     private final TicketDeliveryService deliveries;
+    private final FanMessageQueue queue;
     private final ScanService scans;
     private final AuditLog audit;
     private final JsonMapper json;
     private final AuthService auth;
 
     public TicketTransferService(Tickets tickets, TicketService issuer, EventService events, UserService users,
-                                 TicketDeliveryService deliveries, ScanService scans, AuditLog audit,
-                                 JsonMapper json, AuthService auth) {
+                                 TicketDeliveryService deliveries, FanMessageQueue queue, ScanService scans,
+                                 AuditLog audit, JsonMapper json, AuthService auth) {
         this.tickets = tickets;
         this.issuer = issuer;
         this.events = events;
         this.users = users;
         this.deliveries = deliveries;
+        this.queue = queue;
         this.scans = scans;
         this.audit = audit;
         this.json = json;
@@ -61,7 +64,8 @@ public class TicketTransferService {
 
     /**
      * To the account of {@code toPhone} (created if new), named {@code name}; one WhatsApp delivery of the new ticket
-     * to the recipient. The caller's own phone → 422 on to_phone, reason SELF (a re-issue).
+     * and one TICKET_RECEIVED push to the recipient. The caller's own phone → 422 on to_phone, reason SELF (a
+     * re-issue).
      */
     @Transactional
     public Transferred transfer(UUID caller, UUID ticketId, String toPhone, String name) {
@@ -77,13 +81,16 @@ public class TicketTransferService {
         UUID newId = replace(t, to, holderName);
         Tickets.Transfer tr = tickets.insertTransfer(t.organizerId(), t.id(), newId, caller, to);
         deliveries.enqueue(t.organizerId(), List.of(newId));
-        // BE-30: queue TICKET_RECEIVED push here
+        queue.ticketReceived(t.organizerId(), newId);
         audit.user(t.organizerId(), caller, "ticket.transfer", t.id().toString(), json.writeValueAsString(Map.of(
                 "transfer_id", tr.id().toString(), "new_ticket_id", newId.toString(), "to_user_id", to.toString())));
         return new Transferred(tr.id(), HolderNames.label(holderName), tr.transferredAt());
     }
 
-    /** Lost or replaced phone: the same checks, to the caller with the same name. No delivery. Returns the new id. */
+    /**
+     * Lost or replaced phone: the same checks, to the caller with the same name. No delivery, no push. Returns the new
+     * id.
+     */
     @Transactional
     public UUID reissue(UUID caller, UUID sessionId, UUID ticketId) {
         Ticket.Locked t = lockOpen(caller, ticketId);

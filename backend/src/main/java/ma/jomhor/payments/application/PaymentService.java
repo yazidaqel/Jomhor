@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.web.ApiException;
+import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.payments.application.CardGateway.CallbackVerdict;
 import ma.jomhor.payments.application.CardGateway.Checkout;
 import ma.jomhor.payments.application.CardGateway.HttpCallback;
@@ -64,6 +65,7 @@ public class PaymentService {
     private final OrderService orders;
     private final CardGateway gateway;
     private final PaymentOptions options;
+    private final FanMessageQueue queue;
     private final AuditLog audit;
     private final JsonMapper json;
     private final TransactionTemplate tx;
@@ -71,7 +73,8 @@ public class PaymentService {
     private final Map<Order.Channel, String> returnUrls;
 
     public PaymentService(Payments payments, OrderService orders, CardGateway gateway, PaymentOptions options,
-                          AuditLog audit, JsonMapper json, PlatformTransactionManager transactions,
+                          FanMessageQueue queue, AuditLog audit, JsonMapper json,
+                          PlatformTransactionManager transactions,
                           @Value("${payments.public-base-url}") String baseUrl,
                           @Value("${payments.return-url.web}") String webReturnUrl,
                           @Value("${payments.return-url.app}") String appReturnUrl) {
@@ -79,6 +82,7 @@ public class PaymentService {
         this.orders = orders;
         this.gateway = gateway;
         this.options = options;
+        this.queue = queue;
         this.audit = audit;
         this.json = json;
         this.tx = new TransactionTemplate(transactions);
@@ -160,6 +164,7 @@ public class PaymentService {
         }
         Payment p = CashCode.issue(CashCode::draw, code -> payments.insertCashPending(org, order.id(), code,
                 order.totalMad()));
+        queue.payCode(org, order.id()); // 04 §Notifications PAY_CODE: the first code only (a later one adds nothing)
         return new CashStarted(p.id(), p.payCode(), until, p.amountMad());
     }
 

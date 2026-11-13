@@ -21,6 +21,7 @@ import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.application.Inventory.SalePrice;
 import ma.jomhor.common.HolderNames;
 import ma.jomhor.common.web.ApiException;
+import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.sales.application.Orders.Expired;
 import ma.jomhor.sales.domain.Order;
@@ -111,6 +112,7 @@ public class OrderService {
     private final CashInstructions cashInstructions;
     private final UserService users;
     private final TicketDeliveryService deliveries;
+    private final FanMessageQueue queue;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
     private final Duration splitHold;
@@ -122,7 +124,7 @@ public class OrderService {
      */
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         CashInstructions cashInstructions, UserService users, TicketDeliveryService deliveries,
-                        PlatformTransactionManager transactions,
+                        FanMessageQueue queue, PlatformTransactionManager transactions,
                         @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
                         @Value("${sales.split.hold}") Duration splitHold,
                         @Value("${payments.return-url.web}") String payUrl) {
@@ -133,6 +135,7 @@ public class OrderService {
         this.cashInstructions = cashInstructions;
         this.users = users;
         this.deliveries = deliveries;
+        this.queue = queue;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
         this.splitHold = splitHold;
@@ -414,6 +417,7 @@ public class OrderService {
     @Transactional(propagation = Propagation.MANDATORY)
     public Settlement settle(UUID orderId, Order.PaymentMethod method, String paymentRef) {
         Order o = orders.lock(orderId).orElseThrow().order();
+        Order.Status before = o.status();
         // Lock order: the order row → its member rows → buyer lock → categories (reReserve). Taken before any category,
         // so an expiry pass holding a member while it waits for a category can't wait on us in a circle.
         orders.lockMembers(o.organizerId(), o.id());
@@ -430,8 +434,11 @@ public class OrderService {
         // 04 §Split pay Hold: the members' own deadline starts now (an expired member stays expired, §Late).
         List<UUID> invited = orders.extendMembers(o.organizerId(), o.id(), splitHold,
                 inventory.saleEvent(o.eventId()).orElseThrow().refundCutoffAt());
-        // BE-30: queue SPLIT_INVITE (WHATSAPP + PUSH) for each extended member order id (invited)
-        // BE-30: ORDER_PAID push when the order was AWAITING_CASH
+        queue.splitInvites(o.organizerId(), invited); // 04 §Notifications SPLIT_INVITE, once per member and channel
+        // ORDER_PAID (plan lot-4 Q116): a code-holding order paid by any method, or a late success reviving it.
+        if ((before == Order.Status.AWAITING_CASH || before == Order.Status.EXPIRED) && o.userId() != null) {
+            queue.orderPaid(o.organizerId(), o.id());
+        }
         return Settlement.PAID;
     }
 

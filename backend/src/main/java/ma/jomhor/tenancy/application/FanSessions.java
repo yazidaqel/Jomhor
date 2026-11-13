@@ -15,6 +15,6 @@ public interface FanSessions {
 
     void revokeAll(UUID userId);
 
-    /** Every session of the user but {@code keep} (lost-phone re-issue). */
+    /** Every session of the user but {@code keep} (lost-phone re-issue). Revoking also deletes the push tokens. */
     void revokeOthers(UUID keep, UUID userId);
 }

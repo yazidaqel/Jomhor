@@ -18,11 +18,24 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV20Apply() {
+    void v1ToV21Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20");
+                        "17", "18", "19", "20", "21");
+    }
+
+    /** V21: an order kind needs its order (a CHECK runs before the foreign keys), and is queued once per channel. */
+    @Test
+    void fanMessagesNeedTheirSubjectAndAreUniquePerOrder() {
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind)
+                values (gen_random_uuid(), gen_random_uuid(), 'WHATSAPP', 'SPLIT_INVITE')"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_subject");
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from pg_indexes where tablename = 'fan_messages'
+                  and indexdef like 'CREATE UNIQUE INDEX%(order_id, kind, channel) WHERE%'""",
+                Integer.class)).isEqualTo(1);
     }
 
     /** V20: an attempt returns to APP or WEB only (a CHECK runs before the foreign keys, so no rows are needed). */
@@ -122,7 +135,8 @@ class MigrationsTest extends IntegrationTest {
                                     and c.column_name = 'organizer_id')
                 """, String.class);
         assertThat(withoutOrganizerId)
-                .containsExactlyInAnyOrder("organizers", "users", "otp_challenges", "fan_sessions", "flyway_schema_history");
+                .containsExactlyInAnyOrder("organizers", "users", "otp_challenges", "fan_sessions", "push_tokens",
+                        "flyway_schema_history");
     }
 
     @Test

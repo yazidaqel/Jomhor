@@ -10,6 +10,7 @@ import com.jayway.jsonpath.JsonPath;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import ma.jomhor.notifications.application.PushSender;
 import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.tenancy.application.OtpSender;
 import org.mockito.ArgumentCaptor;
@@ -28,7 +29,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Full app (test profile: simulated card gateway) on one shared Postgres 18 container, test secrets, a mock OtpSender
- * and a mock TicketMessenger.
+ * a mock TicketMessenger and a mock PushSender.
  */
 @ActiveProfiles("test")
 @Import(OtpSendCounter.class)
@@ -55,6 +56,9 @@ public abstract class IntegrationTest {
 
     @MockitoBean
     protected TicketMessenger ticketMessenger;
+
+    @MockitoBean
+    protected PushSender pushSender;
 
     @Autowired
     protected MockMvc mvc;
