@@ -1323,4 +1323,205 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get profilePushEnable => 'فعّل';
+
+  @override
+  String queueOpensAt(String time) {
+    return 'صف الانتظار من $time';
+  }
+
+  @override
+  String get queueLoginNow => 'دخل دابا';
+
+  @override
+  String get queueJoin => 'دخل للصف';
+
+  @override
+  String get queueResume => 'رجع لبلاصتي';
+
+  @override
+  String get chipQueue => 'صف الانتظار';
+
+  @override
+  String get roomHighDemand => 'بيع عليه طلب كبير · صف الانتظار';
+
+  @override
+  String roomEligibility(String rules) {
+    return 'خاصة بالفانز المتحقق منهم: $rules';
+  }
+
+  @override
+  String roomVerifiedBefore(String date) {
+    return 'حساب متحقق منو قبل $date';
+  }
+
+  @override
+  String roomMemberBefore(String date) {
+    return 'عضو من قبل $date';
+  }
+
+  @override
+  String roomMinEvents(int n) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: '$n ماتشات فالملعب', one: 'ماتش واحد فالملعب');
+    return '$_temp0';
+  }
+
+  @override
+  String get queueTitle => 'صف الانتظار';
+
+  @override
+  String get queuePlaceKept => 'بلاصتك محفوظة';
+
+  @override
+  String get queueJoining => 'كنربطوك بالصف…';
+
+  @override
+  String queueDrawAt(String time) {
+    return 'القرعة مع $time';
+  }
+
+  @override
+  String queueDrawText(String time) {
+    return 'كل اللي كاين قبل $time عندو نفس الفرصة: الترتيب كيتدار بالقرعة. من بعد، اللي جا الأول كيدوز الأول.';
+  }
+
+  @override
+  String queueInRoom(int n) {
+    return '$n فان فالصف';
+  }
+
+  @override
+  String get queueSeconds => 'ثواني';
+
+  @override
+  String get queueRankingTitle => 'كنحطو البلايص';
+
+  @override
+  String get queueRanking => 'بلاصتك جاية فشي ثواني.';
+
+  @override
+  String get queuePositionLabel => 'بلاصتك';
+
+  @override
+  String queuePosition(int n) {
+    return 'رقم $n';
+  }
+
+  @override
+  String queueAhead(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n فان قدامك',
+      one: 'فان واحد قدامك',
+      zero: 'حتى واحد ما قدامك',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueWait(String time) {
+    return 'الانتظار المتوقع · $time';
+  }
+
+  @override
+  String get queueWaitLess => 'أقل من دقيقة';
+
+  @override
+  String queueWaitMin(int n) {
+    return 'تقريبا $n دقيقة';
+  }
+
+  @override
+  String get queueWaitHour => 'كثر من ساعة';
+
+  @override
+  String get queuePaused => 'الدخول متوقف · بلاصتك محفوظة';
+
+  @override
+  String get queueKeepPlace => 'تقدر تسد التطبيق: بلاصتك محفوظة';
+
+  @override
+  String queueLimit(int n) {
+    return 'الحد $n تذاكر للحساب · تذاكر بالسمية';
+  }
+
+  @override
+  String queueRemaining(int n) {
+    return 'باقي $n بلاصة';
+  }
+
+  @override
+  String get queueSoldOut => 'كلشي محجوز دابا · يقدرو يتحررو شي بلايص';
+
+  @override
+  String get queueVerified => 'فان متحقق منو';
+
+  @override
+  String get queueTurnTitle => 'جات نوبتك';
+
+  @override
+  String queueTurnLeft(String time) {
+    return 'عندك $time باش تحجز';
+  }
+
+  @override
+  String get queueChoose => 'ختار بلايصي';
+
+  @override
+  String get queueExpiredTitle => 'فاتتك النوبة';
+
+  @override
+  String get queueExpiredBody => 'بلاصة جديدة كترجعك للآخر ديال الصف.';
+
+  @override
+  String get queueRejoin => 'خود بلاصة جديدة';
+
+  @override
+  String get queueOffline => 'ما كاينش الاتصال · بلاصتك محفوظة';
+
+  @override
+  String get queueProgress => 'التقدم فالصف';
+
+  @override
+  String get queueNotEligibleTitle => 'البيع خاص بالفانز المتحقق منهم';
+
+  @override
+  String queueAccountTooNew(String date) {
+    return 'الحساب تحقق منو من بعد $date';
+  }
+
+  @override
+  String queueNotMember(String date) {
+    return 'خاص بالأعضاء اللي تسجلو قبل $date';
+  }
+
+  @override
+  String queueNotEnoughEvents(int n, int attended) {
+    return 'خاصك $n ماتشات فالملعب · عندك $attended';
+  }
+
+  @override
+  String get queueDeviceLimit => 'بزاف ديال الحسابات فهاد التيليفون لهاد البيع';
+
+  @override
+  String queueRateLimited(int s) {
+    return 'بزاف ديال الفانز فهاد الريزو · محاولة جديدة من هنا $s ث';
+  }
+
+  @override
+  String get queueRateLimitedAgain => 'بزاف ديال الفانز فهاد الريزو. عاود من بعد شوية.';
+
+  @override
+  String get queueNotOpenTitle => 'الصف مازال ما تحلش';
+
+  @override
+  String get queueNotOpen => 'خلي هاد الشاشة محلولة: غادي تدخل للصف بوحدك.';
+
+  @override
+  String get queueClosed => 'البيع سالا لهاد الحدث.';
+
+  @override
+  String turnBar(String time) {
+    return 'نوبتك · $time';
+  }
 }

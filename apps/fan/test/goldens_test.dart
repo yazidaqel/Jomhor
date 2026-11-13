@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/app.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
+import 'package:jomhor_fan/features/queue/queue_screen.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/app_theme.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
@@ -19,6 +20,7 @@ import 'club_test.dart' show ClubBackend, loyaltyJson, memberJson;
 import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
+import 'queue_test.dart' show RoomSale, roomJson;
 import 'split_pay_test.dart' show SplitBackend, buyerId, karimId, memberId, omarId, saraId;
 import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
 import 'transfer_test.dart' show openTicketJson, transferredJson;
@@ -31,7 +33,8 @@ import 'transfer_test.dart' show openTicketJson, transferredJson;
 /// FL-19: screen 5 gate side and "Tu es dedans". FL-20: screen 7 (two member cards, a non-member, the join sheet)
 /// and the member strip on screen 1. FL-21: screen 4 with a friend paying their own place, screen 9 initiator (2/4)
 /// and member (to pay, released). FL-22: screen 10 and the bell with its unread dot on screen 1 and the top bar
-/// (bell then avatar at the end side, the left in AR). Recorded on Linux with the docker command at the top of goldens.dart.
+/// (bell then avatar at the end side, the left in AR). FL-26: screen 12 (pre-queue, waiting, the turn, not eligible)
+/// and screen 2 with a room. Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -633,5 +636,96 @@ void main() {
         await snap('$locale-$name');
       });
     }
+
+    /// FL-26: screen 12 and screen 2 with a room, on their own preferences (the install id). [location] opens; the
+    /// room's answers are set by [arrange]. The light of the pre-queue dots loops, so these never wait to settle.
+    Future<void> room(WidgetTester tester, String location, void Function(RoomSale sale) arrange) async {
+      await phone(tester);
+      final before = SharedPreferencesAsyncPlatform.instance;
+      SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+      addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+      final sale = RoomSale(TestClock(DateTime.utc(2027, 2, 20, 12)));
+      arrange(sale);
+      final c = await pumpJomhor(
+        tester,
+        backend: sale.handle,
+        tokens: MemoryTokenStore('jwt'),
+        clock: sale.clock,
+        locale: Locale(locale),
+        overrides: [
+          initialLocaleProvider.overrideWithValue(locale),
+          wakelockProvider.overrideWithValue(({required on}) async {}),
+        ],
+      );
+      c.read(routerProvider).go(location);
+      for (var i = 0; i < 8; i++) {
+        await tester.pump();
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+
+    const rule = {'verified_before': '2027-02-13T12:30:00Z', 'member_joined_before': null, 'min_events_attended': 3};
+
+    testWidgets('$locale · screen 12 pre-queue', (tester) async {
+      await room(tester, '/events/1/queue', (sale) {
+        sale.joins.add(() => sale.answer(sale.q(inRoom: 1204), 201));
+      });
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-12-pre-file');
+    });
+
+    testWidgets('$locale · screen 12 waiting', (tester) async {
+      await room(tester, '/events/1/queue', (sale) {
+        sale
+          ..room = roomJson(status: 'OPEN', eligibility: rule)
+          ..joins.add(() => sale.answer(sale.q(status: 'WAITING', position: 2400, rate: 500, wait: 288), 201))
+          ..polls.add(() => sale.answer(sale.q(status: 'WAITING', position: 1204, rate: 500, wait: 150)));
+      });
+      await tester.pump(const Duration(seconds: 5));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump();
+      }
+      await tester.pump(const Duration(milliseconds: 400));
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-12-attente');
+    });
+
+    testWidgets('$locale · screen 12 your turn', (tester) async {
+      await room(tester, '/events/1/queue', (sale) {
+        sale
+          ..room = roomJson(status: 'OPEN')
+          ..joins.add(() => sale.answer(sale.q(status: 'WAITING', position: 3, rate: 500, wait: 1), 201))
+          ..polls.add(() => sale.answer(sale.q(status: 'ADMITTED', turn: const Duration(minutes: 10), pollAfter: 0)));
+      });
+      await tester.pump(const Duration(seconds: 5));
+      for (var i = 0; i < 8; i++) {
+        await tester.pump();
+      }
+      await tester.pump(const Duration(milliseconds: 600));
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-12-ton-tour');
+    });
+
+    testWidgets('$locale · screen 12 not eligible', (tester) async {
+      await room(tester, '/events/1/queue', (sale) {
+        sale
+          ..room = roomJson(eligibility: rule)
+          ..joins.add(
+            () => sale.refusal(409, 'NOT_ELIGIBLE', {
+              'reason': 'ACCOUNT_TOO_NEW',
+              'verified_before': '2027-02-13T12:30:00Z',
+            }),
+          );
+      });
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-12-non-eligible');
+    });
+
+    testWidgets('$locale · screen 2 with a room', (tester) async {
+      await room(tester, '/events/1', (sale) => sale.room = roomJson(eligibility: rule));
+      await tester.pumpAndSettle();
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-2-file-attente');
+    });
   }
 }

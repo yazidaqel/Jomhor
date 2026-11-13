@@ -1256,4 +1256,218 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get profilePushEnable => 'Turn on';
+
+  @override
+  String queueOpensAt(String time) {
+    return 'Waiting room from $time';
+  }
+
+  @override
+  String get queueLoginNow => 'Log in now';
+
+  @override
+  String get queueJoin => 'Join the queue';
+
+  @override
+  String get queueResume => 'Back to my place';
+
+  @override
+  String get chipQueue => 'Waiting room';
+
+  @override
+  String get roomHighDemand => 'High-demand sale · waiting room';
+
+  @override
+  String roomEligibility(String rules) {
+    return 'Verified fans only: $rules';
+  }
+
+  @override
+  String roomVerifiedBefore(String date) {
+    return 'account verified before $date';
+  }
+
+  @override
+  String roomMemberBefore(String date) {
+    return 'member since before $date';
+  }
+
+  @override
+  String roomMinEvents(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n matches at the stadium',
+      one: '1 match at the stadium',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get queueTitle => 'Waiting room';
+
+  @override
+  String get queuePlaceKept => 'Your place is kept';
+
+  @override
+  String get queueJoining => 'Joining the queue…';
+
+  @override
+  String queueDrawAt(String time) {
+    return 'Draw at $time';
+  }
+
+  @override
+  String queueDrawText(String time) {
+    return 'Everyone here before $time has the same chance: the order is drawn at random. After that, first come, first served.';
+  }
+
+  @override
+  String queueInRoom(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n fans in the queue',
+      one: '1 fan in the queue',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get queueSeconds => 'Sec';
+
+  @override
+  String get queueRankingTitle => 'Placing you';
+
+  @override
+  String get queueRanking => 'Your position arrives in a few seconds.';
+
+  @override
+  String get queuePositionLabel => 'Your position';
+
+  @override
+  String queuePosition(int n) {
+    return 'No. $n';
+  }
+
+  @override
+  String queueAhead(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n fans ahead of you',
+      one: '1 fan ahead of you',
+      zero: 'Nobody ahead of you',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String queueWait(String time) {
+    return 'Estimated wait · $time';
+  }
+
+  @override
+  String get queueWaitLess => 'less than a minute';
+
+  @override
+  String queueWaitMin(int n) {
+    return 'about $n min';
+  }
+
+  @override
+  String get queueWaitHour => 'more than an hour';
+
+  @override
+  String get queuePaused => 'Admission paused · your place is kept';
+
+  @override
+  String get queueKeepPlace => 'You can close the app: your place is kept';
+
+  @override
+  String queueLimit(int n) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: '$n tickets', one: '1 ticket');
+    return 'Limit $_temp0 per account · named tickets';
+  }
+
+  @override
+  String queueRemaining(int n) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: '$n places left', one: '1 place left');
+    return '$_temp0';
+  }
+
+  @override
+  String get queueSoldOut => 'Everything is reserved for now · places may free up';
+
+  @override
+  String get queueVerified => 'Verified fan';
+
+  @override
+  String get queueTurnTitle => 'It\'s your turn';
+
+  @override
+  String queueTurnLeft(String time) {
+    return 'You have $time to book';
+  }
+
+  @override
+  String get queueChoose => 'Choose my seats';
+
+  @override
+  String get queueExpiredTitle => 'Your turn has passed';
+
+  @override
+  String get queueExpiredBody => 'A new place puts you at the back of the queue.';
+
+  @override
+  String get queueRejoin => 'Get a new place';
+
+  @override
+  String get queueOffline => 'Offline · your place is kept';
+
+  @override
+  String get queueProgress => 'Progress in the queue';
+
+  @override
+  String get queueNotEligibleTitle => 'Sale reserved for verified fans';
+
+  @override
+  String queueAccountTooNew(String date) {
+    return 'Account verified after $date';
+  }
+
+  @override
+  String queueNotMember(String date) {
+    return 'Reserved for members who joined before $date';
+  }
+
+  @override
+  String queueNotEnoughEvents(int n, int attended) {
+    return 'You need $n matches at the stadium · you have $attended';
+  }
+
+  @override
+  String get queueDeviceLimit => 'Too many accounts on this phone for this sale';
+
+  @override
+  String queueRateLimited(int s) {
+    return 'Lots of fans on this network · trying again in $s s';
+  }
+
+  @override
+  String get queueRateLimitedAgain => 'Lots of fans on this network. Try again in a moment.';
+
+  @override
+  String get queueNotOpenTitle => 'The queue is not open yet';
+
+  @override
+  String get queueNotOpen => 'Keep this screen open: you will join the queue automatically.';
+
+  @override
+  String get queueClosed => 'Sales are closed for this event.';
+
+  @override
+  String turnBar(String time) {
+    return 'Your turn · $time';
+  }
 }

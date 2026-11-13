@@ -15,6 +15,7 @@ import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
 import 'package:jomhor_fan/features/inbox/inbox_screen.dart';
 import 'package:jomhor_fan/features/profile/profile_screen.dart';
+import 'package:jomhor_fan/features/queue/queue_screen.dart';
 import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
@@ -28,7 +29,7 @@ bool needsSession(String path) =>
     path.startsWith('/profile') ||
     path.startsWith('/orders') ||
     path == '/inbox' ||
-    RegExp('^/events/[^/]+/(zones|checkout)').hasMatch(path);
+    RegExp('^/events/[^/]+/(zones|checkout|queue)').hasMatch(path);
 
 /// `jomhor-fan://tickets` exactly (the web shop's "Ouvrir dans l'app"); nothing else rides on that host.
 bool isTicketsLink(Uri uri) =>
@@ -102,6 +103,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/events/:id',
         builder: (context, state) => EventScreen(id: int.tryParse(state.pathParameters['id']!) ?? -1),
         routes: [
+          // Screen 12 (Lot 5): the waiting room, login-gated like buying.
+          GoRoute(
+            path: 'queue',
+            builder: (context, state) => QueueScreen(eventId: int.tryParse(state.pathParameters['id']!) ?? -1),
+          ),
           GoRoute(
             path: 'zones',
             builder: (context, state) => ZonesScreen(eventId: int.tryParse(state.pathParameters['id']!) ?? -1),

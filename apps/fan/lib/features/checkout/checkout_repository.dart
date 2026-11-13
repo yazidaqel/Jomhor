@@ -10,14 +10,17 @@ class CheckoutRepository {
   final ApiClient _api;
 
   /// Holds the places for 8 min. Returns the order and the server time of the answer (`Date`), so the
-  /// countdown runs on server time.
+  /// countdown runs on server time. [admissionToken]: the fan's turn in the event's waiting room (Lot 5), sent as
+  /// `X-Admission-Token`.
   Future<(FanOrder, DateTime?)> reserve({
     required int eventId,
     required String priceCategoryId,
     required List<HolderInput> holders,
+    String? admissionToken,
   }) async {
     final res = await _api.postResponse(
       '/fan/orders',
+      headers: {'X-Admission-Token': ?admissionToken},
       body: {
         'event_id': eventId,
         'channel': 'APP',

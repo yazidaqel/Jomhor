@@ -84,21 +84,24 @@ class ApiClient {
   }
 
   /// For public endpoints: never sends the session token.
-  Future<Object?> getPublic(String path, {Map<String, Object>? query}) => _body(getPublicResponse(path, query: query));
+  /// [headers] carry a credential of their own when needed (`X-Queue-Token`), never in the URL.
+  Future<Object?> getPublic(String path, {Map<String, Object>? query, Map<String, String>? headers}) =>
+      _body(getPublicResponse(path, query: query, headers: headers));
 
   /// [getPublic] plus the server's `Date` header, for reads whose meaning depends on server time.
-  Future<ApiResponse> getPublicResponse(String path, {Map<String, Object>? query}) =>
-      _send('GET', path, query: query, auth: false);
+  Future<ApiResponse> getPublicResponse(String path, {Map<String, Object>? query, Map<String, String>? headers}) =>
+      _send('GET', path, query: query, auth: false, headers: headers);
 
   Future<Object?> post(String path, {Object? body}) {
     if (path.startsWith('/fan/auth/')) throw ArgumentError.value(path, 'path', 'public endpoint: use postPublic');
     return _body(postResponse(path, body: body));
   }
 
-  /// [post] plus the server's `Date` header (e.g. to run a hold countdown on server time).
-  Future<ApiResponse> postResponse(String path, {Object? body}) {
+  /// [post] plus the server's `Date` header (e.g. to run a hold countdown on server time). [headers]: extra
+  /// request headers (`X-Admission-Token`).
+  Future<ApiResponse> postResponse(String path, {Object? body, Map<String, String>? headers}) {
     if (path.startsWith('/fan/auth/')) throw ArgumentError.value(path, 'path', 'public endpoint: use postPublic');
-    return _send('POST', path, body: body, auth: true);
+    return _send('POST', path, body: body, auth: true, headers: headers);
   }
 
   /// For public endpoints (OTP request and verify): never sends the session token.
@@ -121,11 +124,13 @@ class ApiClient {
     required bool auth,
     Map<String, Object>? query,
     Object? body,
+    Map<String, String>? headers,
   }) async {
     // An empty map would still write a bare `?` (`/fan/events?`): no query at all then.
     final uri = Uri.parse('$baseUrl$path');
     final request = http.Request(method, query == null || query.isEmpty ? uri : uri.replace(queryParameters: query))
-      ..headers['Accept'] = 'application/json';
+      ..headers['Accept'] = 'application/json'
+      ..headers.addAll(headers ?? const {});
     final token = auth ? await _tokens.read() : null;
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
     if (body != null) {

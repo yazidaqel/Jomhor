@@ -17,6 +17,7 @@ import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
+import 'package:jomhor_fan/features/queue/queue_store.dart';
 
 /// What screen 4 is for: one price category of one event, `qty` places (from screen 3).
 typedef CheckoutArgs = ({int eventId, String priceCategoryId, int qty});
@@ -229,6 +230,7 @@ class CheckoutController extends Notifier<CheckoutState> {
       if (!ref.mounted) return null;
       _startHold(order, serverDate);
     } on ApiError catch (e) {
+      if (e.code == 'ADMISSION_REQUIRED' && ref.mounted) await _dropAdmission();
       if (ref.mounted) state = _failed(e, holders);
       return null;
     } on Object {
@@ -301,12 +303,33 @@ class CheckoutController extends Notifier<CheckoutState> {
     }
   }
 
+  /// The fan's admission token for this event while the waiting room gave one (Lot 5); null otherwise.
+  Future<String?> _admission() async {
+    try {
+      return (await ref.read(queuePassesProvider.future))[args.eventId]?.admissionToken;
+    } on Object {
+      return null;
+    }
+  }
+
+  /// `ADMISSION_REQUIRED`: the token is gone, expired or not this fan's; screen 12 asks the room again.
+  Future<void> _dropAdmission() async {
+    final passes = ref.read(queuePassesProvider.notifier);
+    final pass = (await ref.read(queuePassesProvider.future))[args.eventId];
+    if (pass != null) await passes.put(args.eventId, pass.withoutAdmission);
+  }
+
   /// `SALE_BUSY` answers wait `retry_after_s` (+ jitter up to 3 s) with a visible countdown, then the same
-  /// request goes again. No queue position exists, so none is shown.
+  /// request goes again (with the same admission token, docs/04-api.md §On-sale).
   Future<(FanOrder, DateTime?)> _reserveWhenNotBusy(List<HolderInput> holders) async {
     while (true) {
       try {
-        return await _repo.reserve(eventId: args.eventId, priceCategoryId: args.priceCategoryId, holders: holders);
+        return await _repo.reserve(
+          eventId: args.eventId,
+          priceCategoryId: args.priceCategoryId,
+          holders: holders,
+          admissionToken: await _admission(),
+        );
       } on ApiError catch (e) {
         if (e.code != 'SALE_BUSY') rethrow;
         final after = switch (e.details['retry_after_s']) {
