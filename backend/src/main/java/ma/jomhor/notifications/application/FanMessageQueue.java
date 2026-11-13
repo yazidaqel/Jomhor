@@ -46,4 +46,10 @@ public class FanMessageQueue {
     public void orderPaid(UUID org, UUID orderId) {
         messages.enqueueOrders(org, List.of(orderId), Kind.ORDER_PAID, List.of(Channel.PUSH));
     }
+
+    /** A campaign's audience snapshot: one row per user (the job, docs/04-api.md §Campaigns). Rows added. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int campaign(UUID org, UUID campaignId, Channel channel, Collection<UUID> userIds) {
+        return messages.enqueueCampaign(org, campaignId, channel, userIds);
+    }
 }

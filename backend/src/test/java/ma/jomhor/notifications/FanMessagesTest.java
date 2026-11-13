@@ -810,10 +810,16 @@ class FanMessagesTest extends PaymentTest {
         device(f);
         receivedRows(s, f, 10);
         UUID user = user(f.phone());
+        UUID campaignId = jdbc.sql("""
+                        insert into campaigns (organizer_id, channel, audience, title, body, status, created_by)
+                        select organizer_id, 'PUSH', 'MEMBERS', 'Titre', 'Corps', 'SENDING', id from staff
+                        where organizer_id = ? limit 1
+                        returning id""").param(s.org().org()).query(UUID.class).single();
         UUID campaign = jdbc.sql("""
-                        insert into fan_messages (organizer_id, user_id, channel, kind, created_at, next_attempt_at)
-                        values (?, ?, 'PUSH', 'CAMPAIGN', now() - interval '1 hour', now() - interval '1 hour')
-                        returning id""").params(s.org().org(), user).query(UUID.class).single();
+                        insert into fan_messages (organizer_id, user_id, channel, kind, campaign_id, created_at,
+                                                  next_attempt_at)
+                        values (?, ?, 'PUSH', 'CAMPAIGN', ?, now() - interval '1 hour', now() - interval '1 hour')
+                        returning id""").params(s.org().org(), user, campaignId).query(UUID.class).single();
         try {
             assertThat(messages.deliverDue(5)).isEqualTo(5);
             verify(pushSender, times(5)).send(any());
@@ -825,6 +831,7 @@ class FanMessagesTest extends PaymentTest {
             assertThat(attempts(c)).isZero(); // the oldest row, yet after every transactional one
         } finally {
             jdbc.sql("delete from fan_messages where id = ?").param(campaign).update();
+            jdbc.sql("delete from campaigns where id = ?").param(campaignId).update();
         }
     }
 }

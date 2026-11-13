@@ -1,7 +1,9 @@
 package ma.jomhor.crm.application;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.common.AuditLog;
@@ -29,6 +31,12 @@ public class MembershipService {
     public record Tier(String code, String name) {}
 
     public record NextTier(String code, String name, int minEvents) {}
+
+    /** GET /org/members/summary: counts only, no name or phone. */
+    public record Summary(long members, @JsonProperty("joined_7d") long joined7d, long marketingPush,
+                          long marketingWhatsapp, long reachablePush, List<TierCount> tiers) {}
+
+    public record TierCount(String code, String name, long members) {}
 
     private final Memberships memberships;
     private final OrganizerService organizers;
@@ -90,6 +98,20 @@ public class MembershipService {
         memberships.lock(org);
         memberships.leave(org, userId)
                 .ifPresent(id -> audit.user(org, userId, "membership.leave", id.toString(), null));
+    }
+
+    /**
+     * 04 GET /org/members/summary: live members' counts, and every tier of the organizer (by min_events, fr names,
+     * zeros included) with its members, each placed by events attended as /fan/me/membership does.
+     */
+    public Summary summary(UUID org) {
+        List<LoyaltyTier> tiers = organizers.loyaltyTiers(org);
+        Memberships.Counts n = memberships.counts(org);
+        Map<Long, Long> byAttended = memberships.membersByEventsAttended(org);
+        return new Summary(n.members(), n.joined7d(), n.marketingPush(), n.marketingWhatsapp(), n.reachablePush(),
+                tiers.stream().map(t -> new TierCount(t.code(), Loyalty.name(t, "fr"), byAttended.entrySet().stream()
+                        .filter(e -> Loyalty.tier(tiers, e.getKey()).equals(t)).mapToLong(Map.Entry::getValue).sum()))
+                        .toList());
     }
 
     /** The audit payload: the two booleans, nothing else. */

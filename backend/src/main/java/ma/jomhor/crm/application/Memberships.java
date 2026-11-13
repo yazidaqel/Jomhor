@@ -2,6 +2,7 @@ package ma.jomhor.crm.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.crm.domain.Member;
@@ -35,6 +36,14 @@ public interface Memberships {
 
     /** The organizer's {@code limit} latest CLOSED events (starts_at, id), oldest first. */
     List<PastEvent> lastEvents(UUID org, UUID userId, int limit);
+
+    /** Live members (left_at null) of the organizer; reachablePush = push opt-in and a live push token. */
+    record Counts(long members, long joined7d, long marketingPush, long marketingWhatsapp, long reachablePush) {}
+
+    Counts counts(UUID org);
+
+    /** Live members by their events attended (as {@link #eventsAttended}): attended → members. */
+    Map<Long, Long> membersByEventsAttended(UUID org);
 
     record PastEvent(int eventId, String title, String eventType, Instant startsAt, String timezone,
                      boolean attended) {}

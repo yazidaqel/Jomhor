@@ -36,12 +36,7 @@ class JdbcPushTokens implements PushTokens {
 
     @Override
     public List<String> live(UUID userId) {
-        return jdbc.sql("""
-                        select t.token from push_tokens t
-                        join fan_sessions s on s.id = t.session_id and s.user_id = t.user_id
-                        where t.user_id = :user and s.revoked_at is null and s.expires_at > now()
-                        order by t.updated_at, t.id
-                        """)
+        return jdbc.sql("select p.token from " + LIVE_JOIN + " where p.user_id = :user order by p.updated_at, p.id")
                 .param("user", userId).query(String.class).list();
     }
 

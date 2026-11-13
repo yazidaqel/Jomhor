@@ -396,7 +396,7 @@ Rules: copy comes from backend message bundles in the recipient's `users.locale`
 
 | Rule | Value |
 | --- | --- |
-| Audience | `MEMBERS`: members with `left_at` null and the channel's opt-in (`marketing_push` / `marketing_whatsapp`); marketing. `EVENT_HOLDERS`: users holding a `VALID` ticket of `event_id`, member or not; service information about that event only (lot-4 Q62). PUSH also needs ≥ 1 live push token of this organizer. |
+| Audience | `MEMBERS`: members with `left_at` null and the channel's opt-in (`marketing_push` / `marketing_whatsapp`); marketing. `EVENT_HOLDERS`: users holding a `VALID` ticket of `event_id`, member or not; service information about that event only (lot-4 Q62). PUSH also needs ≥ 1 live push token of the user. |
 | Send | Every 30 s the job takes due `SCHEDULED` campaigns (row lock, skip locked). It sets `SENDING` and `started_at` and snapshots the audience into `fan_messages`, one row per user (`on conflict do nothing`), in one transaction. The outbox drains at most `notifications.send-rate-per-second` (default 20) across kinds, transactional first. When no row of the campaign is `PENDING`, the campaign becomes `SENT` and `finished_at` is set. A user who has opted out or left by send time is skipped: `FAILED` `OPTED_OUT`. |
 | Content | PUSH: `title` and `body` as typed; tapping opens `/events/{event_id}`, or the home screen. WHATSAPP: template `club_news` (MEMBERS) or `event_info` (EVENT_HOLDERS) with `title` and `body` as parameters, in the recipient's locale (Q63). Nothing about the recipient goes in the payload. |
 | Inbox | PUSH campaign rows sent to a user are listed by `GET /fan/me/inbox`. |

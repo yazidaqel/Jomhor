@@ -1,0 +1,113 @@
+### Lot 4 demo, fan side (IntelliJ HTTP client). BE-35 adds the rest of the exit flow above this section.
+#
+# Start the backend with the dev profile (dev seed: ATLAS FC, Ops Dev +212600000003, fan Yassine +212600000010 who
+# holds a ticket of a demo event; dev uses the log push sender, which prints the path and the token's tail):
+#   docker compose up -d && SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# OTP codes are printed by the dev log sender ([dev OTP] +2126... -> 123456), or fixed by JOMHOR_DEV_FIXED_OTP:
+# paste them into @fanCode / @opsCode. Put an ON_SALE (or CLOSED) event of ATLAS FC in @eventId (GET /fan/events).
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@fanPhone = +212600000010
+@opsPhone = +212600000003
+@fanCode = 000000
+@opsCode = 000000
+@eventId = 1
+
+### ---------- Campaigns and the inbox (BE-33) ----------
+
+### C1. Fan: ask for a code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{fanPhone}}"}
+
+### C2. Fan: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{fanPhone}}", "code": "{{fanCode}}"}
+
+> {% client.global.set("fanToken", response.body.token); %}
+
+### C3. Fan: a fake push token for this session (the log sender accepts any token) -> 204
+PUT {{base}}/fan/me/push-token
+Authorization: Bearer {{fanToken}}
+Content-Type: application/json
+
+{"token": "dev-fake-{{$random.uuid}}", "platform": "android"}
+
+### C4. Fan: join ATLAS FC with the push opt-in on -> 201 (200 if already a member)
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{fanToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": true, "marketing_whatsapp": false}
+
+### C5. Ops: ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### C6. Ops: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{opsCode}}"}
+
+> {% client.global.set("opsToken", response.body.token); %}
+
+### C7. Ops: the members summary (counts only)
+GET {{base}}/org/members/summary
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### C8. Ops: a PUSH MEMBERS campaign opening the event -> 201 DRAFT, audience_estimate >= 1
+POST {{base}}/org/campaigns
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"channel": "PUSH", "audience": "MEMBERS", "event_id": {{eventId}}, "title": "Derby samedi",
+ "body": "Les billets partent vite : réserve ta place dans l'app."}
+
+> {% client.global.set("pushCampaign", response.body.id); %}
+
+### C9. Ops: send now (no body) -> SCHEDULED. Wait about 35 s: the job snapshots it, the outbox sends it.
+POST {{base}}/org/campaigns/{{pushCampaign}}/send
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### C10. Ops: the list -> SENT, recipients 1, sent 1
+GET {{base}}/org/campaigns
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### C11. Fan: the inbox -> the campaign with the ATLAS FC organizer block
+GET {{base}}/fan/me/inbox
+Authorization: Bearer {{fanToken}}
+
+### C12. Ops: a WhatsApp EVENT_HOLDERS campaign (service info: every VALID holder of the event)
+POST {{base}}/org/campaigns
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"channel": "WHATSAPP", "audience": "EVENT_HOLDERS", "event_id": {{eventId}}, "title": "Ouverture des portes",
+ "body": "Ouverture des portes à 18 h"}
+
+> {% client.global.set("holdersCampaign", response.body.id); %}
+
+### C13. Ops: send it now; after about 35 s GET it: SENT, one row per VALID holder (the log adapter prints user ids)
+POST {{base}}/org/campaigns/{{holdersCampaign}}/send
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{}
+
+### C14. Ops: the campaign
+GET {{base}}/org/campaigns/{{holdersCampaign}}
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
