@@ -33,6 +33,13 @@
 | opt-in | consentement | الموافقة | — |
 | follow | suivre | تابع | A club whose events the fan sees first ("Mes clubs"); kept on the device |
 | club directory | annuaire des clubs | لائحة الفرق | The listed organizers (with a slug) |
+| waiting room | file d'attente | طابور الانتظار | fans join before the sale, then come in turn |
+| draw | tirage au sort | القرعة | random order of everyone who joined before the sale opened |
+| position | position | ترتيبك | — |
+| your turn | ton tour | دورك | 10 min to reserve |
+| admission token | jeton d'accès | رمز الدخول | Internal (never shown to fans) |
+| verified fan | fan vérifié | مشجع موثّق | meets this event's rule (account age, membership, matches attended) |
+| pre-queue | pré-file | قبل الفتح | — |
 
 ## Scan result codes
 

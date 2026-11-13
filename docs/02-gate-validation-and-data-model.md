@@ -136,7 +136,7 @@ Server (PostgreSQL):
 | manifests | Signed snapshots | id, organizer\_id, event\_id, version, built\_at, row\_count, signature (Ed25519 over the text payload), body (gzip) |
 | scans | Append-only gate log | scan\_id (UUIDv7, PK), seq (server arrival order), organizer\_id, event\_id, ticket\_id, device\_id, gate\_id, staff\_id, direction (IN, OUT), result, token\_version, device\_time, received\_at, override\_reason, supervisor\_id |
 | staff | Back-office staff, gate staff & supervisors | id, organizer\_id, user\_id (OTP login, nullable), name, role, pin\_hash (PIN verifier, GATE/SUPERVISOR) |
-| users | Fan / staff identity (platform-wide, no organizer\_id) | id, phone\_e164, display\_name, locale |
+| users | Fan / staff identity (platform-wide, no organizer\_id) | id, phone\_e164, display\_name, locale, verified\_at (first fan OTP login; on-sale account age) |
 | otp\_challenges | Phone OTP (platform-wide) | id, phone\_e164, audience (fan, org), ip, code\_hash, attempts, expires\_at |
 | fan\_sessions | Revocable fan login sessions (platform-wide) | id (JWT sid), user\_id, expires\_at, revoked\_at |
 | ticket\_deliveries | WhatsApp delivery outbox | id, organizer\_id, ticket\_id, status (PENDING, SENT, FAILED), attempts, next\_attempt\_at |
@@ -144,6 +144,8 @@ Server (PostgreSQL):
 | push\_tokens | FCM tokens of the Jomhor fan app (platform identity, every club) | id, user\_id, session\_id, token, platform (android, ios), updated\_at |
 | campaigns | Push or WhatsApp campaign | id, organizer\_id, channel (PUSH, WHATSAPP), audience (MEMBERS, EVENT\_HOLDERS), event\_id, title, body, status (DRAFT, SCHEDULED, SENDING, SENT, CANCELLED), scheduled\_at, created\_by, started\_at, finished\_at |
 | fan\_messages | Push and WhatsApp outbox other than ticket PDFs | id, organizer\_id, user\_id, channel, kind (TICKET\_RECEIVED, SPLIT\_INVITE, PAY\_CODE, ORDER\_PAID, CAMPAIGN), campaign\_id, order\_id, ticket\_id, status, attempts, next\_attempt\_at, last\_error |
+| waiting\_rooms | High-demand on-sale room, one per event (Lot 5) | id, organizer\_id, event\_id (unique), status (SCHEDULED, PRE\_QUEUE, OPEN, PAUSED, ENDED), pre\_queue\_min, admission\_rate\_per\_min, min\_account\_age\_days, member\_joined\_before, min\_events\_attended, joined\_count, ranked\_count, admitted\_through, measured\_rate\_per\_min, sold\_out, last\_tick\_at, drawn\_at |
+| queue\_entries | One account's place in a room; deleted 30 days after the event | id, organizer\_id, room\_id, user\_id, device\_hash, ip\_hash (HMACs, never the raw values), draw\_key, joined\_at, rank, admitted\_at |
 
 Indexes that matter: `scans (event_id, ticket_id, device_time)` for canonical-first resolution; `scans (event_id, seq)` for `used_since`; `scans (event_id, gate_id, device_time)` for the live dashboard; `tickets (event_id, status)` for manifest builds; a GIN index on `events.metadata` only if type-specific search is needed. A partial unique index on `scans (ticket_id, direction) WHERE result = 'OK'` is deliberately not used, because the first `OK` must be chosen by device\_time after the fact, not by arrival order.
 
@@ -188,7 +190,7 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | Ticket transferred or re-issued after its holder entered | Refused when the server holds an admitted scan (`OK`/`OVERRIDE`) for the ticket (409 `TICKET_NOT_VALID`, reason `ADMITTED`) | An entry scan not yet synced when the transfer is asked (scanner offline): the new ticket can admit a second person; doors open after T0 − 90 for most events, and B12 shows the chain |
 | Fan phone clock tampered | Server time offset pushed to the app; ±1 slot tolerance | None practical |
 | Replay of an old static QR at the next event | event\_id in the token and a new K\_e per event | None |
-| Bots on on-sale day | Not a gate problem: on-sale queue, per-account limits, payment-first reservation. Separate spec | — |
+| Bots on on-sale day | Waiting room (04 §Waiting room): login to join, one entry per account, random draw for early arrivals, admission token checked before the database, per-event eligibility (account age, membership, attendance), per-device cap, in-app per-IP limits (OTP sends, joins) and a per-entry poll limit, per-account limits, payment-first reservation | Farms of real phone numbers verified before the eligibility date; narrowed by membership/attendance rules, named tickets and the transfer audit |
 
 ## Capacity sizing & match-day runbook
 
