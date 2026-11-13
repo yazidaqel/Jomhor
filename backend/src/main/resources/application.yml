@@ -15,6 +15,11 @@ spring:
   application:
     name: jomhor
   task:
+    scheduling:
+      pool:
+        # Every @Scheduled job (order expiry, deliveries, fan messages, campaigns, manifest build, room tick) shares this
+        # pool: with one thread a slow manifest build would hold the 1 s room tick back.
+        size: ${SCHEDULING_POOL_SIZE:4}
     execution:
       # Keep Boot's applicationTaskExecutor (and unqualified @Async on it) next to the dedicated otpSendExecutor.
       mode: force
@@ -96,6 +101,19 @@ sales:
 rooms:
   # On-sale waiting room (docs/04-api.md §Waiting room): each instance re-reads the live rooms at most this often.
   memo-ttl: ${ROOMS_MEMO_TTL:1s}
+  # Signs queue and admission tokens and keys the device and IP hashes: >= 32 bytes, from env only, never JWT_SECRET.
+  token-secret: ${ROOMS_TOKEN_SECRET}
+  # The room tick (draw, ranking, admission) runs this long after the previous run ends, on every instance.
+  tick: ${ROOMS_TICK:1s}
+  # A fan's turn: the admission token lasts this long from the first poll that saw it (capped at sales close).
+  admission-window: ${ROOMS_ADMISSION_WINDOW:10m}
+  # Entries of other accounts with the same device_id in a room at or above this → QUEUE_DEVICE_LIMIT (plan Q146).
+  device-limit: ${ROOMS_DEVICE_LIMIT:3}
+  # Queue entries are deleted this long after their event's starts_at (plan Q155).
+  retention: ${ROOMS_RETENTION:30d}
+  # New or moved-back entries of one room from one client IP in 5 min at or above this → 429 (plan Q147); 0 = off.
+  # Generous on purpose: mobile CGNAT puts many fans behind one IP.
+  ip-limit-5m: ${ROOMS_IP_LIMIT_5M:300}
 
 notifications:
   push:

@@ -60,7 +60,7 @@ class FanInboxApiTest extends CrmTest {
         Club unlisted = club();
         Fan f = fan();
         Fan other = fan();
-        Instant now = Instant.now();
+        Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS); // Postgres rounds, not truncates
         int e = event(listed, "ON_SALE");
         UUID older = campaign(unlisted, "PUSH", null, "Ancien");
         row(unlisted, older, f.id(), "PUSH", "SENT", null, now.minusSeconds(60));

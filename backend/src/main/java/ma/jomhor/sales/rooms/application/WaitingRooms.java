@@ -1,5 +1,6 @@
 package ma.jomhor.sales.rooms.application;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,4 +27,24 @@ public interface WaitingRooms {
 
     /** Every organizer's rooms not ENDED (the memo). */
     List<WaitingRoom> live();
+
+    // ---------- the room tick (04 §Waiting room Tick): by room id, each row carrying its organizer ----------
+
+    /** What the tick reads and writes of a room; the event's times are read without a lock. */
+    record Tick(UUID id, UUID organizerId, int eventId, Status status, int preQueueMin, int admissionRatePerMin,
+                Instant saleStartsAt, Instant refundCutoffAt, int joinedCount, int rankedCount, int admittedThrough,
+                int measuredRatePerMin, Instant rateMarkAt, int rateMarkThrough, boolean soldOut, Instant lastTickAt,
+                Instant drawnAt) {}
+
+    /** Ids of every organizer's rooms not ENDED. */
+    List<UUID> liveIds();
+
+    /**
+     * The room unless ENDED, its row locked {@code for no key update skip locked}: empty when another instance holds it
+     * (or an organizer write does), so one instance ticks a room at a time. Never locks the event row.
+     */
+    Optional<Tick> lockForTick(UUID roomId);
+
+    /** Writes the tick's columns (everything but the organizer's configuration). */
+    void saveTick(Tick t);
 }

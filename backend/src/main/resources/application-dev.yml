@@ -25,6 +25,9 @@ jomhor:
     # Dev-only Ed25519 key (PKCS#8, base64), generated for local use; never set outside dev.
     manifest-signing-key: ${GATE_MANIFEST_SIGNING_KEY:MC4CAQAwBQYDK2VwBCIEIAQON3mtI2Z6nUSu5xqHCU9/Hp69MFlvEcDZIMiRZQYA}
 
+rooms:
+  token-secret: ${ROOMS_TOKEN_SECRET:dev-only-rooms-token-secret-not-for-prod}
+
 payments:
   card:
     provider: ${PAYMENTS_CARD_PROVIDER:fake}

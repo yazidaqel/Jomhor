@@ -1,5 +1,6 @@
 package ma.jomhor.tenancy.application;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,9 @@ public interface Accounts {
     User fanLogin(String phone);
 
     Optional<User> findUser(UUID userId);
+
+    /** users.verified_at (the first fan OTP login); empty when never set or no such user. */
+    Optional<Instant> verifiedAt(UUID userId);
 
     /** Sets the fields given (null = unchanged; an empty display name clears it); the user after the change. */
     Optional<User> updateProfile(UUID userId, String displayName, String locale);

@@ -47,6 +47,7 @@ public class WaitingRoomService {
     public record Put(boolean created, View view) {}
 
     private final WaitingRooms rooms;
+    private final QueueEntries entries;
     private final RoomMemo memo;
     private final EventService events;
     private final Orders orders;
@@ -55,10 +56,12 @@ public class WaitingRoomService {
     private final TransactionTemplate tx;
     private final TransactionTemplate snapshot;
 
-    WaitingRoomService(WaitingRooms rooms, RoomMemo memo, EventService events, Orders orders, AuditLog audit,
+    WaitingRoomService(WaitingRooms rooms, QueueEntries entries, RoomMemo memo, EventService events, Orders orders,
+                       AuditLog audit,
                        @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
                        PlatformTransactionManager transactions) {
         this.rooms = rooms;
+        this.entries = entries;
         this.memo = memo;
         this.events = events;
         this.orders = orders;
@@ -148,7 +151,7 @@ public class WaitingRoomService {
     }
 
     /**
-     * {@code waiting} = the ranked fans not yet admitted plus the unranked ones, from the counts of the last tick.
+     * {@code waiting} = the ranked fans not yet admitted (counts of the last tick) plus the entries not ranked yet.
      * {@code paid} as GET /sales (places in PAID orders); {@code quota} and {@code remaining} over the price categories.
      */
     private Figures figures(UUID org, WaitingRoom r) {
@@ -160,10 +163,7 @@ public class WaitingRoomService {
             sold += p.sold();
         }
         long remaining = Math.max(0, quota - sold);
-        // ponytail: unranked = joined_count - ranked_count from the room row (queue_entries arrives with BE-41); a rejoin
-        // after an expired turn keeps its old rank counted, so BE-41 counts the unranked entries instead.
-        long waiting = Math.max(0, r.rankedCount() - r.admittedThrough())
-                + Math.max(0, r.joinedCount() - r.rankedCount());
+        long waiting = Math.max(0, r.rankedCount() - r.admittedThrough()) + entries.unranked(org, r.id());
         int rate = r.measuredRatePerMin();
         Long drain = rate == 0 ? null : (waiting * 60 + rate - 1) / rate;
         return new Figures(r.joinedCount(), waiting, r.admittedThrough(), rate, orders.activeHolds(org, r.eventId()),
@@ -205,11 +205,12 @@ public class WaitingRoomService {
         return new Config(preQueue, rate, rule);
     }
 
-    /** {admission_rate_per_min} and the rule; no fan data. */
+    /** {pre_queue_min, admission_rate_per_min} and the rule; no fan data. */
     private static String payload(Config c) {
         Rule r = c.rule();
-        return ("{\"admission_rate_per_min\": %d, \"min_account_age_days\": %s, \"member_joined_before\": %s, "
-                + "\"min_events_attended\": %s}").formatted(c.admissionRatePerMin(), r.minAccountAgeDays(),
+        return ("{\"pre_queue_min\": %d, \"admission_rate_per_min\": %d, \"min_account_age_days\": %s, "
+                + "\"member_joined_before\": %s, \"min_events_attended\": %s}").formatted(c.preQueueMin(),
+                        c.admissionRatePerMin(), r.minAccountAgeDays(),
                         r.memberJoinedBefore() == null ? null : "\"" + r.memberJoinedBefore() + "\"",
                         r.minEventsAttended());
     }

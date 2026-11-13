@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.InstantSource;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import ma.jomhor.sales.rooms.domain.WaitingRoom;
@@ -15,7 +16,8 @@ import org.springframework.stereotype.Component;
 /**
  * Per-instance copy of every room not ENDED (docs/04-api.md §Waiting room Memo), reloaded by one statement at most
  * once per {@code rooms.memo-ttl} whatever the number of readers. A cache, never a source of truth: it may be one
- * TTL behind the database (01 §Deployment). A write on this instance calls {@link #invalidate()} after its commit.
+ * TTL behind the database (01 §Deployment). A write on this instance calls {@link #invalidate()} after its commit; a
+ * reload already running then is not kept (generation check), so the next read on this instance sees the write.
  */
 @Component
 public class RoomMemo {
@@ -28,6 +30,7 @@ public class RoomMemo {
     private final InstantSource clock;
     private final Duration ttl;
     private volatile Snapshot snapshot = STALE;
+    private final AtomicLong generation = new AtomicLong();
 
     @Autowired
     RoomMemo(WaitingRooms rooms, @Value("${rooms.memo-ttl}") Duration ttl) {
@@ -47,6 +50,7 @@ public class RoomMemo {
 
     /** The next read reloads. */
     public void invalidate() {
+        generation.incrementAndGet();
         snapshot = STALE;
     }
 
@@ -58,10 +62,13 @@ public class RoomMemo {
         synchronized (this) {
             s = snapshot;
             if (!fresh(s)) {
+                long g = generation.get();
                 Instant now = clock.instant();
                 s = new Snapshot(rooms.live().stream()
                         .collect(Collectors.toUnmodifiableMap(WaitingRoom::eventId, Function.identity())), now);
-                snapshot = s;
+                if (generation.get() == g) { // else invalidated while loading: this read may miss that write
+                    snapshot = s;
+                }
             }
             return s.rooms();
         }

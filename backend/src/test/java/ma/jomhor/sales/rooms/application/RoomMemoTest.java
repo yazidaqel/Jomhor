@@ -2,6 +2,7 @@ package ma.jomhor.sales.rooms.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -67,5 +68,25 @@ class RoomMemoTest extends IntegrationTest {
         memo.invalidate();
         memo.get(open);
         verify(counted, times(3)).live();
+    }
+
+    /** A write committed while a reload runs: that reload isn't kept, so the next read on this instance sees it. */
+    @Test
+    void anInvalidationDuringAReloadMakesTheNextReadReloadAgain() {
+        UUID org = organizer("Club " + UUID.randomUUID());
+        int open = roomOf(org, "OPEN");
+        WaitingRooms counted = mock(WaitingRooms.class, delegatesTo(rooms));
+        RoomMemo[] memo = new RoomMemo[1];
+        doAnswer(call -> {
+            var loaded = rooms.live();
+            memo[0].invalidate(); // the write commits after the reload's statement
+            return loaded;
+        }).doAnswer(call -> rooms.live()).when(counted).live();
+        memo[0] = new RoomMemo(counted, () -> Instant.parse("2099-04-01T10:00:00Z"), Duration.ofSeconds(1));
+
+        assertThat(memo[0].get(open)).isPresent();
+        memo[0].get(open);
+        memo[0].get(open);
+        verify(counted, times(2)).live();
     }
 }

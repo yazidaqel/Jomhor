@@ -102,9 +102,9 @@ class WaitingRoomOrgApiTest extends OrgApiTest {
         assertThat(audit).hasSize(1);
         assertThat(audit.getFirst().get("actor_type")).isEqualTo("STAFF");
         Map<String, Object> payload = JsonPath.read((String) audit.getFirst().get("payload"), "$");
-        assertThat(payload.keySet()).containsExactlyInAnyOrder("admission_rate_per_min", "min_account_age_days",
-                "member_joined_before", "min_events_attended");
-        assertThat(payload).containsEntry("admission_rate_per_min", 500);
+        assertThat(payload.keySet()).containsExactlyInAnyOrder("pre_queue_min", "admission_rate_per_min",
+                "min_account_age_days", "member_joined_before", "min_events_attended");
+        assertThat(payload).containsEntry("pre_queue_min", 30).containsEntry("admission_rate_per_min", 500);
     }
 
     @Test
@@ -124,7 +124,8 @@ class WaitingRoomOrgApiTest extends OrgApiTest {
         assertThat((Integer) JsonPath.read(json, "$.room.eligibility.min_events_attended")).isEqualTo(3);
         Map<String, Object> payload = JsonPath.read((String) audits(s.event(), "room.update").getFirst().get("payload"),
                 "$");
-        assertThat(payload).containsOnly(Map.entry("admission_rate_per_min", 800), Map.entry("min_account_age_days", 7),
+        assertThat(payload).containsOnly(Map.entry("pre_queue_min", 0), Map.entry("admission_rate_per_min", 800),
+                Map.entry("min_account_age_days", 7),
                 Map.entry("member_joined_before", "2099-01-01T00:00:00Z"), Map.entry("min_events_attended", 3));
     }
 
@@ -264,6 +265,15 @@ class WaitingRoomOrgApiTest extends OrgApiTest {
                 update waiting_rooms set status = 'OPEN', joined_count = 50, ranked_count = 40, admitted_through = 25,
                                          measured_rate_per_min = 10, drawn_at = '2099-04-01T10:00:00Z'
                 where event_id = ?""").param(s.event()).update();
+        // 10 entries the tick has not ranked yet.
+        for (int i = 0; i < 10; i++) {
+            UUID u = jdbc.sql("insert into users (phone_e164) values (?) returning id").param(randomPhone())
+                    .query(UUID.class).single();
+            jdbc.sql("""
+                    insert into queue_entries (organizer_id, room_id, user_id, device_hash, ip_hash, draw_key)
+                    select organizer_id, id, ?, ?, ?, 0 from waiting_rooms where event_id = ?""")
+                    .params(u, new byte[32], new byte[32], s.event()).update();
+        }
         setSold(s.price(), 10);
         UUID fan = jdbc.sql("insert into users (phone_e164) values (?) returning id").param(randomPhone())
                 .query(UUID.class).single();
@@ -273,7 +283,7 @@ class WaitingRoomOrgApiTest extends OrgApiTest {
 
         String json = body(call(s.admin(), get("/org/events/" + s.event() + "/room")).andExpect(status().isOk()));
         Map<String, Object> f = JsonPath.read(json, "$.room.figures");
-        // waiting = (40 - 25) ranked + (50 - 40) unranked; drain = 25 × 60 / 10
+        // waiting = (40 - 25) ranked + 10 unranked entries; drain = 25 × 60 / 10
         assertThat(f).containsEntry("joined", 50).containsEntry("waiting", 25).containsEntry("admitted", 25)
                 .containsEntry("admitted_last_min", 10).containsEntry("active_holds", 1).containsEntry("quota", 100)
                 .containsEntry("remaining", 90).containsEntry("sold_out", false).containsEntry("estimated_drain_s", 150);

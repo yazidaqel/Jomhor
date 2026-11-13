@@ -1,5 +1,6 @@
 package ma.jomhor.tenancy.application;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -31,6 +32,11 @@ public class UserService {
     public User get(UUID userId) {
         return accounts.findUser(userId)
                 .orElseThrow(() -> new ApiException("UNAUTHORIZED", HttpStatus.UNAUTHORIZED, "Unknown user"));
+    }
+
+    /** When the account first logged in as a fan (on-sale eligibility, 04 §Waiting room); null = never. */
+    public Instant verifiedAt(UUID userId) {
+        return accounts.verifiedAt(userId).orElse(null);
     }
 
     /** null = unchanged; "" clears display_name (04 conventions); else display_name per §Holder names. */

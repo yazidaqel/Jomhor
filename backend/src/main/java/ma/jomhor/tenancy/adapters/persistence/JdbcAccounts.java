@@ -2,6 +2,8 @@ package ma.jomhor.tenancy.adapters.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -149,6 +151,12 @@ class JdbcAccounts implements Accounts {
     public Optional<User> findUser(UUID userId) {
         return jdbc.sql("select " + USER_COLUMNS + " from users where id = ?")
                 .param(userId).query(JdbcAccounts::user).optional();
+    }
+
+    @Override
+    public Optional<Instant> verifiedAt(UUID userId) {
+        return jdbc.sql("select verified_at from users where id = ?").param(userId)
+                .query((rs, n) -> rs.getObject(1, OffsetDateTime.class)).optional().map(OffsetDateTime::toInstant);
     }
 
     @Override

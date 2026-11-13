@@ -50,6 +50,8 @@ import tools.jackson.databind.json.JsonMapper;
  * GET /fan/organizers, /fan/organizers/{slug}, /fan/events and /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
  * server, so an Authorization header sent there is ignored rather than checked, and without the default
  * no-store cache headers (04: public reads carry no cache headers; the authenticated chains keep them).
+ * GET /fan/queue sits there too: its only credential is the X-Queue-Token room token, checked by the sales module
+ * (04 §Waiting room); it sets its own no-store.
  * A fan token is accepted only if its {@code sid} names an active fan_sessions row of its subject (one primary-key
  * lookup, run after signature, expiry and audience pass); no sid, revoked or expired → 401 (plan Q13).
  */
@@ -75,13 +77,14 @@ class SecurityConfig {
         return decoder(AuthService.ENROL, jwt -> OAuth2TokenValidatorResult.success());
     }
 
-    /** Exactly the four public reads; anything else under /fan (other methods, deeper paths) falls to fanChain. */
+    /** Exactly the four public reads and the queue poll; anything else under /fan falls to fanChain. */
     @Bean
     @Order(0)
     SecurityFilterChain publicFanChain(HttpSecurity http) {
         return stateless(http)
                 .securityMatchers(m -> m.requestMatchers(HttpMethod.GET,
-                        "/fan/organizers", "/fan/organizers/{slug}", "/fan/events", "/fan/events/{id}"))
+                        "/fan/organizers", "/fan/organizers/{slug}", "/fan/events", "/fan/events/{id}",
+                        "/fan/queue"))
                 .headers(h -> h.cacheControl(c -> c.disable()))
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
                 .build();

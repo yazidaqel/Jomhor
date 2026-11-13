@@ -8,9 +8,9 @@ import java.util.UUID;
  * An event's on-sale waiting room (docs/04-api.md §Waiting room) with its event's {@code saleStartsAt}. The counts
  * are written by the room tick. Never carries fan data.
  */
-public record WaitingRoom(UUID id, int eventId, Status status, Instant saleStartsAt, Config config, int joinedCount,
-                          int rankedCount, int admittedThrough, int measuredRatePerMin, boolean soldOut,
-                          Instant drawnAt) {
+public record WaitingRoom(UUID id, UUID organizerId, int eventId, Status status, Instant saleStartsAt, Config config,
+                          int joinedCount, int rankedCount, int admittedThrough, int measuredRatePerMin,
+                          boolean soldOut, Instant drawnAt) {
 
     public enum Status {
         SCHEDULED, PRE_QUEUE, OPEN, PAUSED, ENDED;

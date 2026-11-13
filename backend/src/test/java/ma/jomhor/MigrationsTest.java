@@ -19,11 +19,11 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV23Apply() {
+    void v1ToV24Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22", "23");
+                        "17", "18", "19", "20", "21", "22", "23", "24");
     }
 
     /**
@@ -78,6 +78,42 @@ class MigrationsTest extends IntegrationTest {
             assertThatThrownBy(() -> jdbcTemplate.update("update waiting_rooms set " + set + " where event_id = ?",
                     event)).as(set).isInstanceOf(DataIntegrityViolationException.class);
         }
+    }
+
+    /** V24: one entry per account per room, one rank per room, 32-byte hashes, positive ranks, organizer required. */
+    @Test
+    void queueEntriesChecks() {
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        Integer event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""",
+                Integer.class, org, venue, new byte[32]);
+        var room = jdbcTemplate.queryForObject(
+                "insert into waiting_rooms (organizer_id, event_id) values (?, ?) returning id", UUID.class, org, event);
+        String insert = "insert into queue_entries (organizer_id, room_id, user_id, device_hash, ip_hash, draw_key, rank) "
+                + "values (?, ?, ?, ?, ?, 7, ?)";
+        var one = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        var two = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        byte[] hash = new byte[32];
+        jdbcTemplate.update(insert, org, room, one, hash, hash, 1);
+        assertThat(jdbcTemplate.queryForObject("select joined_at is not null and admitted_at is null "
+                + "from queue_entries where user_id = ?", Boolean.class, one)).isTrue();
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, room, one, hash, hash, null))
+                .isInstanceOf(DuplicateKeyException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, room, two, hash, hash, 1))
+                .isInstanceOf(DuplicateKeyException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, room, two, new byte[16], hash, null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, room, two, hash, new byte[33], null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, org, room, two, hash, hash, 0))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(insert, null, room, two, hash, hash, null))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     /** V22: a CAMPAIGN row needs its campaign and only it has one; EVENT_HOLDERS needs an event; one row per user. */

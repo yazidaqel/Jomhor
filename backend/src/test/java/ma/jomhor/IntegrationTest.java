@@ -32,7 +32,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * a mock TicketMessenger and a mock PushSender.
  */
 @ActiveProfiles("test")
-@Import(OtpSendCounter.class)
+@Import({OtpSendCounter.class, StatementCounter.class})
 @SpringBootTest(properties = {IntegrationTest.JWT_SECRET, IntegrationTest.OTP_SECRET, IntegrationTest.EVENT_KEY_MASTER})
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
@@ -68,6 +68,9 @@ public abstract class IntegrationTest {
 
     @Autowired
     OtpSendCounter sendCounter;
+
+    @Autowired
+    protected StatementCounter statements;
 
     /** A fresh Moroccan mobile number, so tests never share a rate-limit window. */
     protected static String randomPhone() {

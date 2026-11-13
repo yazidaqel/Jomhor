@@ -65,6 +65,16 @@ public class MembershipService {
                 memberships.lastEvents(org, userId, LAST_EVENTS)));
     }
 
+    /** When the fan joined the organizer's club, if a member now (on-sale eligibility); null = not a member. */
+    public Instant liveMemberSince(UUID org, UUID userId) {
+        return memberships.find(org, userId).filter(Member::live).map(Member::joinedAt).orElse(null);
+    }
+
+    /** Events attended at this organizer, as /fan/me/membership counts them (on-sale eligibility). */
+    public long eventsAttended(UUID org, UUID userId) {
+        return memberships.eventsAttended(org, userId);
+    }
+
     /**
      * PUT: join (or rejoin) → true (201); already a live member → opt-ins set, false (200). The organizer's membership
      * lock serializes PUT and DELETE per club: one number draw, no retry, and each audit row matches what its statement
