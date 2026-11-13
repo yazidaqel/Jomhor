@@ -34,6 +34,7 @@ Live canvas: https://claude.ai/artifact/RZdBe8HCqJUDBhB61S55mt
    member's paid check settles in once in the group view; a newly attended event's dot fills
    once; the hold-to-confirm fill on a transfer counts as a progress indicator. No decorative
    loops (progress indicators excepted), no parallax. All of it off under reduced motion.
+   Lot 5 adds: on the waiting room, a straight row of twelve dots fills as the queue moves. At the fan's turn its amber twelfth swells once, with a success haptic. It is a progress indicator, never the J mark. Before the draw, a light runs along the row as the indeterminate indicator. The position figure rolls when it changes.
 7. FR first, AR with true RTL mirroring (leading icons flip, numbers stay LTR), EN.
 
 ## Components
@@ -71,6 +72,7 @@ Icons: 1.8 px stroke, round caps, 20–22 px. No emoji anywhere.
 | 9 | Groupe | — | `/orders/:id` (split variant) | After a split order; push / link for members |
 | 10 | Notifications | — | `/inbox` | Bell on screen 1 |
 | 11 | Clubs | — | `/clubs` | First launch (skippable); Profil → Mes clubs |
+| 12 | File d'attente | — | `/events/:id/queue` | Screen 1 hero / screen 2 CTA while a room is active |
 
 Not mocked yet (Lot 1/4): OTP login, wallet list, transfer flow, order status (cash
 code), membership, profile, gate map. Follow the same components.
@@ -162,6 +164,7 @@ card moves under the zones, CTA becomes sticky bottom bar).
 | W5 | Mes billets | — | `/me/tickets` | Client, OTP login; PDF download; "Ouvrir dans l'app" deep link |
 | W6 | Billet PDF | — | `/api/tickets/[id]/pdf` (proxy, `no-store`) | Server-generated A4 + wallet-size, static QR |
 | W7 | Club | — | `/[club]` | SSR per request; backend reads cached 60 s |
+| W8 | File d'attente | — | `/[club]/events/[slug]/queue` | SSR shell (event header from the cached detail) + client poller calling the API directly |
 
 W2 details: header (crest + club name, nav Matchs / Abonnements / Mes billets / Aide,
 language switch, Se connecter); hero with competition label (fallback "À l'affiche"), 64–80 px uppercase title,
@@ -204,6 +207,7 @@ toggle, organizer switcher (organizer name), user menu (name, role, Se déconnec
 | B8 | Finance | — | `/finance` (settlements, invoices, payouts) | 5 |
 | B9 | Fans · CRM | — | `/crm` (segments, export, campaigns) | 4–5 |
 | B10 | Lieux | — | `/settings/venues/:id` (zones table, gates table, gate → zone checkbox matrix) | 0 |
+| B13 | Salle d'attente | — | `/events/:id/room` | 5 |
 
 Lot 0 scope of B2: tabs Général, Tarifs & quotas, Portes & zones (venue matrix, read-only;
 per-event override comes in Lot 2). Règles shows only ré-entrée, billets max par compte and gel
@@ -314,6 +318,7 @@ Screens that carry the founder's "wow" bar (inside principles 3, 6 and 7 and `BR
 | 9 · Groupe | "2/4 payées" in display type rolls up as friends pay. Each friend's check settles in once, and initials avatars make the group feel like people, not rows. "Relancer sur WhatsApp" is one tap with the copy prefilled. The member side opens on the event hero with one line: "Yazid A. t'a gardé une place". |
 | 1 · Accueil between matches | The countdown digits roll, the member strip shows tier and matchs at a glance, and the bell has a live inbox: reasons to open the app on a Tuesday. |
 | Arabic everywhere | True RTL done right is the differentiator against incumbents: Cairo display headings, Darija voice ("راك داخل"), mirrored layouts, codes and prices kept LTR in isolates, no broken letter-spacing. Every wow screen ships FR + AR goldens. |
+| 12 · File d'attente | The brand's twelve dots become the fan's walk into the stadium: they light one by one as the queue moves, and the amber twelfth (the supporter who completes the team) swells at "C'est ton tour". The position is a real rank, rolling down in display type, with an honest wait from the measured rate. Before the sale, one plain sentence explains the draw, so arriving early isn't a race. Calm, dark, nothing flashing; leave and come back, your place is kept. FR + AR goldens. |
 
 Under reduced motion, every Lot 4 motion is off (instant states). There are no decorative loops, no parallax, and no gradients or shadows on the brand mark.
 
@@ -335,6 +340,24 @@ These override the screen specs above (see `docs/plans/multi-club.md`).
 | W1 `/` | The screen 1 chip row as links (`/?club=mine`, `/?club=<slug>`, `/?club=all`; the selected one has `aria-current="page"`); event cards with the club line; "Suivre" is a small form button in `Tout`. Under the list, a "Clubs" strip: crest 56 + name per listed club, scrolling sideways on phones, wrapping on desktop, each → `/<slug>`. |
 | W7 `/<slug>` | Header block: crest 64, club name (h1, uppercase display), "Suivre" / "Suivi". Then the club's events as W1 cards, or the screen 1 empty state with "Voir tout" → `/?club=all`. OG image: crest stand-in + club name + lockup. |
 | W2 | The club line above the title links to `/<slug>`. |
+
+## Lot 5 adjustments
+
+These override the screen specs above (see `docs/plans/lot-5.md`).
+
+| Where | Change |
+| --- | --- |
+| Screen 1 hero / calendar | With `room`: `SCHEDULED` → CTA disabled "File d'attente dès {opens_at}" (+ "Connecte-toi maintenant" when signed out); `PRE_QUEUE`/`OPEN`/`PAUSED` → "Rejoindre la file", or "Reprendre ma place" when the phone holds a queue token for the event. Chip "File d'attente" = the room is open. |
+| Screen 2 | Rules banner + "Vente à forte demande · file d'attente"; with `eligibility`, one line "Réservée aux fans vérifiés: compte vérifié avant le {date} · membre depuis le {date} · {n} matchs au stade" (only the parts set). Sticky CTA as screen 1. Zone rows read-only until admitted. |
+| 12 · File d'attente, pré-file | Header: back ("Ta place est gardée" toast) + event line (crest 20, title, date). Label "TIRAGE AU SORT À {time}", countdown tiles to `sale_starts_at` (server-time corrected). One paragraph: "Tous ceux qui sont là avant {time} ont la même chance: l'ordre est tiré au sort. Après, premier arrivé, premier servi." "{in_room} fans dans la file" (rolls). Twelve dots, the light running along them (indeterminate). |
+| 12 · waiting | Display 88 "N° {position}" (Barlow, rolls), "{position − 1} fans devant toi", "Attente estimée · environ {n} min" (Q165; `PAUSED` → "Admission en pause · ta place est gardée"). Twelve dots, determinate: lit = ⌊12 × (1 − position ÷ first position seen)⌋, capped at 11 until the turn (the first position is stored on the phone). Info rows: "Tu peux fermer l'app: ta place est gardée", "Limite {n} billets par compte · billets nominatifs", "Il reste {remaining} places", or with `sold_out` "Tout est réservé pour l'instant · des places peuvent se libérer". "Fan vérifié" chip (check icon) when the event has a rule. Screen kept awake while visible. |
+| 12 · ton tour | The amber twelfth swells (≤ 420 ms), success haptic, display "C'EST TON TOUR", "Tu as {mm:ss} pour réserver" counting to `admission.expires_at`, primary CTA "Choisir mes places" → screen 3. |
+| 12 · other states | `EXPIRED`: "Ton tour est passé" + "Reprendre une place" (joins again, at the back). `ENDED` → straight to screen 3. `NOT_ELIGIBLE`: outlined panel "Vente réservée aux fans vérifiés" + the reason ("Compte vérifié après le {date}", "Réservée aux membres inscrits avant le {date}", "Il faut {n} matchs au stade · tu en as {attended}"). `QUEUE_DEVICE_LIMIT`: "Trop de comptes sur ce téléphone pour cette vente". `QUEUE_RATE_LIMITED` `IP`: "Beaucoup de fans sur ce réseau · nouvel essai dans {n} s", then one automatic retry at `retry_after_s`; `POLL`: silent, next poll at `retry_after_s`. Offline: last state + "Hors ligne · ta place est gardée". |
+| Screen 3 / 4 | While admitted, a slim bar "Ton tour · {mm:ss}" above the content. `ADMISSION_REQUIRED` → back to screen 12. Screen 4: the "CIN vérifiée" badge is removed (Q145). |
+| W2 | With `room`: the summary aside becomes the room panel (same states as screen 1, flipping at `opens_at` on the client). Zone cards show prices and remaining but are disabled with "Accès par la file" until admitted. "Rejoindre la file" → `/login?next=…/queue` when signed out. |
+| W8 | Two columns: room states as screen 12 (twelve dots, position, wait, turn countdown) + event aside. Polls the API directly at `poll_after_s`, pauses when the tab is hidden. At the turn: "Choisir mes places" → W2 with the zone picker enabled → W3. |
+| B2 Règles | "File d'attente · {status}" + link "Gérer" → B13. |
+| B13 Salle d'attente | **Not configured:** card "Vente à forte demande" (one paragraph) + form: "Ouverture de la file" (minutes before the sale, 0–1440, default 30, with the computed time in the venue zone), "Cadence d'admission" (fans/min, default 500, helper "≈ {orders}/min · complet en ~{min} min", an estimate from quota ÷ 2.6 ÷ (rate × 0.7)), switch "Fans vérifiés" revealing "Compte vérifié depuis au moins {n} jours" (default 7), "Membre inscrit avant le" (date), "Au moins {n} matchs au stade", at least one when on. **Live:** status badge (Programmée · Pré-file, tirage à {time} · En cours · En pause · Terminée), KPI cards (Dans la file · Admis · Achats en cours {active_holds}/{max} · Places restantes {remaining}/{quota} · Cadence {admitted_last_min}/min · File vidée dans ~{min}), rate input + "Appliquer" (confirm), "Pause"/"Reprendre", "Terminer la file" (confirm: "Les fans achètent sans file. Irréversible."). Refetch every 2 s while not `ENDED`. FINANCE read-only. |
 
 ## Theming per organizer
 

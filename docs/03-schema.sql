@@ -43,7 +43,9 @@ create table users (
   phone_e164    text not null unique,
   display_name  text,
   locale        text not null default 'fr',
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  verified_at   timestamptz   -- first successful fan OTP login (POST /fan/auth/verify); null = never logged in (e.g. a holder
+                              -- typed by a buyer). Account age for on-sale eligibility (docs/04-api.md §Waiting room)
 );
 
 create type staff_role as enum ('ADMIN','OPS','GATE','SUPERVISOR','FINANCE','CASHIER');
@@ -256,6 +258,53 @@ create table passes (
   created_at    timestamptz not null default now()
 );
 -- a pass materialises as one tickets row per event in the series (order channel APP, method FREE)
+
+-- ---------- sales: waiting rooms (Lot 5) ----------
+create type room_status as enum ('SCHEDULED','PRE_QUEUE','OPEN','PAUSED','ENDED');
+
+create table waiting_rooms (                          -- high-demand on-sale (docs/04-api.md §Waiting room); one per event in Lot 5 step 1
+  id                      uuid primary key default gen_random_uuid(),
+  organizer_id            uuid not null references organizers(id),
+  event_id                integer not null unique references events(id),
+  status                  room_status not null default 'SCHEDULED',
+  pre_queue_min           smallint not null default 30 check (pre_queue_min between 0 and 1440),
+                          -- joins open at events.sale_starts_at - pre_queue_min; joins before sale_starts_at are drawn at random
+  admission_rate_per_min  integer not null default 500 check (admission_rate_per_min between 1 and 6000),
+  min_account_age_days    smallint check (min_account_age_days between 1 and 365),  -- eligibility, each null = not required:
+  member_joined_before    timestamptz,                                              --   verified_at <= sale_starts_at - n days;
+  min_events_attended     smallint check (min_events_attended between 1 and 50),    --   member since before; events attended
+  joined_count            integer not null default 0,     -- written by the room tick
+  ranked_count            integer not null default 0,     -- entries with a rank: ranks are 1..ranked_count
+  admitted_through        integer not null default 0,     -- ranks <= this are admitted
+  measured_rate_per_min   integer not null default 0,     -- admitted over the last full minute
+  rate_mark_at            timestamptz,
+  rate_mark_through       integer not null default 0,
+  sold_out                boolean not null default false, -- every category remaining = 0 at the last tick
+  last_tick_at            timestamptz,
+  drawn_at                timestamptz,
+  created_at              timestamptz not null default now(),
+  constraint waiting_rooms_admitted check (admitted_through <= ranked_count)
+);
+create index on waiting_rooms (status) where status <> 'ENDED';
+
+create table queue_entries (                          -- one per account per room; sub of the queue token
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  room_id       uuid not null references waiting_rooms(id),
+  user_id       uuid not null references users(id),
+  device_hash   bytea not null check (length(device_hash) = 32),  -- HMAC-SHA256(rooms secret, device_id); never the raw id
+  ip_hash       bytea not null check (length(ip_hash) = 32),      -- HMAC-SHA256(rooms secret, "ip|" + client IP via trusted proxies); never the raw IP
+  draw_key      bigint not null,                      -- 8 CSPRNG bytes drawn at join; orders the draw; never returned
+  joined_at     timestamptz not null default now(),   -- a rejoin after an expired turn resets it (back of the queue)
+  rank          integer check (rank > 0),             -- dense per room, set by the room tick; null until ranked
+  admitted_at   timestamptz,                          -- first poll that saw rank <= admitted_through; the turn ends 10 min later
+  unique (room_id, user_id),
+  unique (room_id, rank)
+);
+create index on queue_entries (room_id, joined_at) where rank is null;
+create index on queue_entries (room_id, device_hash);
+create index on queue_entries (room_id, ip_hash, joined_at);   -- per-IP join limit (docs/04-api.md §Waiting room)
+-- Rows are deleted 30 days after the event's starts_at (rooms.retention).
 
 -- ---------- point of sale ----------
 create table pos_sessions (
