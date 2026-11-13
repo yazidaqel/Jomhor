@@ -2,10 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jomhor_scanner/app/config.dart';
 
 void main() {
-  void accepts(String url, {required bool debug}) =>
-      expect(() => AppConfig.checkApiUrl(debug: debug, baseUrl: url), returnsNormally, reason: url);
-  void rejects(String url, {required bool debug}) =>
-      expect(() => AppConfig.checkApiUrl(debug: debug, baseUrl: url), throwsStateError, reason: url);
+  void accepts(String url, {required bool debug}) => expect(
+    () => AppConfig.checkApiUrl(debug: debug, baseUrl: url),
+    returnsNormally,
+    reason: url,
+  );
+  void rejects(String url, {required bool debug}) => expect(
+    () => AppConfig.checkApiUrl(debug: debug, baseUrl: url),
+    throwsStateError,
+    reason: url,
+  );
 
   const lan = [
     'http://192.168.8.148:8090/v1',
