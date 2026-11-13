@@ -341,5 +341,19 @@
   "memberKept": "{label} خلا ليك بلاصة",
   "memberKeptAnon": "صاحبك خلا ليك بلاصة",
   "memberExpired": "البلاصة تطلقات",
-  "homeMemberTitle": "البلاصة ديالك كتسناك · قبل {time}"
+  "homeMemberTitle": "البلاصة ديالك كتسناك · قبل {time}",
+
+  "inboxTitle": "الإشعارات",
+  "inboxBell": "الإشعارات",
+  "inboxBellUnread": "الإشعارات · ميساجات جداد",
+  "inboxEmpty": "حتى حاجة دابا",
+  "inboxJustNow": "دابا",
+  "inboxMinutesAgo": "{count, plural, =1{هادي دقيقة} =2{هادي جوج دقايق} few{هادي {count} دقايق} other{هادي {count} دقيقة}}",
+  "inboxHoursAgo": "{count, plural, =1{هادي ساعة} =2{هادي جوج سوايع} few{هادي {count} سوايع} other{هادي {count} ساعة}}",
+  "inboxDaysAgo": "{count, plural, =1{البارح} =2{هادي جوج أيام} few{هادي {count} أيام} other{هادي {count} يوم}}",
+  "profilePushTitle": "الإشعارات",
+  "profilePushBody": "التذاكر لي توصلك، الخلاص والميساجات ديال فرقك",
+  "profilePushOn": "مفعّلين",
+  "profilePushDenied": "فعّلهم من الإعدادات ديال التيليفون",
+  "profilePushEnable": "فعّل"
 }

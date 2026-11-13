@@ -30,7 +30,8 @@ import 'transfer_test.dart' show openTicketJson, transferredJson;
 /// left-to-right isolates. Multi-club (FL-23..25): screen 11, the club chips on screen 1, the club line on tickets.
 /// FL-19: screen 5 gate side and "Tu es dedans". FL-20: screen 7 (two member cards, a non-member, the join sheet)
 /// and the member strip on screen 1. FL-21: screen 4 with a friend paying their own place, screen 9 initiator (2/4)
-/// and member (to pay, released). Recorded on Linux with the docker command at the top of goldens.dart.
+/// and member (to pay, released). FL-22: screen 10 and the bell with its unread dot on screen 1 and the top bar
+/// (bell then avatar at the end side, the left in AR). Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -73,6 +74,10 @@ void main() {
 
     testWidgets('$locale · screen 1 Accueil', (tester) async {
       await phone(tester);
+      // Its own preferences (FL-22: the inbox's last visit), dropped after.
+      final before = SharedPreferencesAsyncPlatform.instance;
+      SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+      addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
       final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
       Future<http.Response> backend(http.Request r) async => switch ((r.method, r.url.path)) {
         ('GET', '/v1/fan/organizers') => json([clubJson(), tensiftJson]),
@@ -105,6 +110,10 @@ void main() {
           'member': r.url.queryParameters['organizer'] == testOrganizer ? memberJson() : null,
           'loyalty': loyaltyJson(tier: locale == 'ar' ? 'وفي' : 'Fidèle'),
         }),
+        // FL-22: a message newer than the last visit (none yet): the bell's dot.
+        ('GET', '/v1/fan/me/inbox') => json({
+          'messages': [inboxJson()],
+        }),
         _ => apiError(404, 'NOT_FOUND'),
       };
       await pumpJomhor(
@@ -126,8 +135,24 @@ void main() {
         // The CTA price is an LTR isolate: "50 DH", never "DH 50".
         expect(find.text('شري بلايصك · من \u206650\u00A0DH\u2069'), findsOneWidget);
       }
+      expect(find.byKey(const Key('home.bell.dot')), findsOneWidget);
       await snap('$locale-1-accueil');
       expectLockupAtStart(tester, find.byType(BrandBar));
+      // FL-22: the bell, then the avatar, at the end side (the left in AR); the dot at the bell's top-end corner.
+      final (bell, avatar, lockup, dot) = (
+        tester.getRect(find.byKey(const Key('home.bell'))),
+        tester.getRect(find.byKey(const Key('home.profile'))),
+        tester.getRect(find.byType(JomhorLockup)),
+        tester.getRect(find.byKey(const Key('home.bell.dot'))),
+      );
+      if (locale == 'ar') {
+        expect((avatar.right <= bell.left, bell.right <= lockup.left), (true, true));
+        expect(dot.center.dx, lessThan(bell.center.dx));
+      } else {
+        expect((lockup.right <= bell.left, bell.right <= avatar.left), (true, true));
+        expect(dot.center.dx, greaterThan(bell.center.dx));
+      }
+      expect(dot.center.dy, lessThan(bell.center.dy));
       // The same bar alone, on the ground colour it sits on in the app.
       final bar = tester.widget<BrandBar>(find.byType(BrandBar));
       // FL-20: the member strip under "Mon billet", scrolled into view above the nav.
@@ -172,6 +197,58 @@ void main() {
         ),
       );
       await expectLater(find.byKey(const Key('topbar')), matchesGoldenFile('goldens/$locale-topbar.png'));
+    });
+
+    // FL-22: screen 10, one inbox across clubs, each row led by its club line.
+    testWidgets('$locale · screen 10 Notifications', (tester) async {
+      await phone(tester);
+      final before = SharedPreferencesAsyncPlatform.instance;
+      SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+      addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+      final ar = locale == 'ar';
+      Future<http.Response> backend(http.Request r) async => switch ((r.method, r.url.path)) {
+        ('GET', '/v1/fan/me/inbox') => json({
+          'messages': [
+            inboxJson(
+              title: ar ? 'البيبان كيتحلو مع 17:00' : 'Ouverture des portes à 17 h',
+              body: ar
+                  ? 'أجي بكري: كاين نشاط فالمدرج الشمالي قبل الماتش.'
+                  : 'Viens tôt : animations en tribune Nord avant le match.',
+              sentAt: '2027-02-20T11:48:00Z',
+            ),
+            inboxJson(
+              id: 'c0000000-0000-4000-8000-000000000002',
+              club: tensiftJson,
+              title: ar ? 'التذاكر ديال الديربي حلات' : 'Billetterie du derby ouverte',
+              body: ar ? 'الديربي نهار 20 مارس. شري بلاصتك دابا.' : "Le derby, c'est le 20 mars. Prends ta place.",
+              eventId: 3,
+              sentAt: '2027-02-20T09:00:00Z',
+            ),
+            inboxJson(
+              id: 'c0000000-0000-4000-8000-000000000003',
+              title: ar ? 'شكرا على الموسم' : 'Merci pour la saison',
+              body: ar ? 'نتلاقاو فغشت.' : 'Rendez-vous en août pour la reprise.',
+              eventId: null,
+              sentAt: '2027-02-16T18:00:00Z',
+            ),
+          ],
+        }),
+        _ => json(<Object?>[]),
+      };
+      final c = await pumpJomhor(
+        tester,
+        backend: backend,
+        tokens: MemoryTokenStore('jwt'),
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+      );
+      c.read(routerProvider).go('/inbox');
+      await tester.pumpAndSettle();
+      if (ar) {
+        expectArabicRules(tester);
+        expect(find.text('هادي 12 دقيقة'), findsOneWidget);
+      }
+      await snap('$locale-10-notifications');
     });
 
     testWidgets('$locale · screen 11 Tes clubs (first launch, one club followed)', (tester) async {

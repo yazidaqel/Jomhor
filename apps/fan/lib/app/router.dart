@@ -13,6 +13,7 @@ import 'package:jomhor_fan/features/clubs/clubs_screen.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
+import 'package:jomhor_fan/features/inbox/inbox_screen.dart';
 import 'package:jomhor_fan/features/profile/profile_screen.dart';
 import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
@@ -26,6 +27,7 @@ bool needsSession(String path) =>
     path.startsWith('/club/') ||
     path.startsWith('/profile') ||
     path.startsWith('/orders') ||
+    path == '/inbox' ||
     RegExp('^/events/[^/]+/(zones|checkout)').hasMatch(path);
 
 /// `jomhor-fan://tickets` exactly (the web shop's "Ouvrir dans l'app"); nothing else rides on that host.
@@ -94,6 +96,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/clubs', builder: (context, state) => const ClubsScreen()),
+      // Screen 10, full screen, from the bell.
+      GoRoute(path: '/inbox', builder: (context, state) => const InboxScreen()),
       GoRoute(
         path: '/events/:id',
         builder: (context, state) => EventScreen(id: int.tryParse(state.pathParameters['id']!) ?? -1),

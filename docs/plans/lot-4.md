@@ -522,6 +522,8 @@ Under reduced motion, every Lot 4 motion is off (instant states). There are no d
 | blocked | BE-15 | backend | messaging adapters | As in Lot 1, plus the four templates | As in Lot 1 | **Q2, Q63** | 2 |
 | exit | — | orchestrator + founder | — | Demo per §1 on staging with a Lot 2 scanner; Darija review sign-off | `Lot4FanFlowTest` + client checks green; manual demo | all non-blocked | — |
 
+With BE-36 (FL-22 follow-ups, wave 4 review): an Android default notification channel (`default_notification_channel_id`, channel created at startup with a localized name, so pushes don't land in FCM's English "Miscellaneous") and the iOS `Runner.entitlements` `aps-environment` (needs the Apple account, Q25); then a manual check on a real device (background, killed-app tap, APNs).
+
 `reviewer` runs after every builder task. Day 11: founder wow review on a staging build (screens 5 and 7, FR and AR).
 
 ### Lanes and critical path (working days, before review loops)

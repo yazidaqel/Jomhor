@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Push (lot-4 Q126): asked after the first purchase or a join with push on, never at launch. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- No backup or device transfer: the session token (and later tickets and K_t) stay on this device. -->
     <application
@@ -46,6 +48,13 @@
                 <data android:scheme="jomhor-fan" android:host="tickets"/>
             </intent-filter>
         </activity>
+        <!-- Push notifications (FCM): the 12-dot mark, tinted with the Jomhor accent. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_jomhor" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/jomhor_accent" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -341,5 +341,19 @@
   "memberKept": "{label} kept you a seat",
   "memberKeptAnon": "A friend kept you a seat",
   "memberExpired": "The seat was released",
-  "homeMemberTitle": "Your seat is waiting · before {time}"
+  "homeMemberTitle": "Your seat is waiting · before {time}",
+
+  "inboxTitle": "Notifications",
+  "inboxBell": "Notifications",
+  "inboxBellUnread": "Notifications · new messages",
+  "inboxEmpty": "Nothing yet",
+  "inboxJustNow": "Just now",
+  "inboxMinutesAgo": "{count, plural, =1{1 min ago} other{{count} min ago}}",
+  "inboxHoursAgo": "{count, plural, =1{1 h ago} other{{count} h ago}}",
+  "inboxDaysAgo": "{count, plural, =1{yesterday} other{{count} days ago}}",
+  "profilePushTitle": "Notifications",
+  "profilePushBody": "Tickets you receive, payments and news from your clubs",
+  "profilePushOn": "On",
+  "profilePushDenied": "Turn them on in your phone settings",
+  "profilePushEnable": "Turn on"
 }

@@ -1208,4 +1208,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String homeMemberTitle(String time) {
     return 'Your seat is waiting · before $time';
   }
+
+  @override
+  String get inboxTitle => 'Notifications';
+
+  @override
+  String get inboxBell => 'Notifications';
+
+  @override
+  String get inboxBellUnread => 'Notifications · new messages';
+
+  @override
+  String get inboxEmpty => 'Nothing yet';
+
+  @override
+  String get inboxJustNow => 'Just now';
+
+  @override
+  String inboxMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count min ago', one: '1 min ago');
+    return '$_temp0';
+  }
+
+  @override
+  String inboxHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count h ago', one: '1 h ago');
+    return '$_temp0';
+  }
+
+  @override
+  String inboxDaysAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count days ago', one: 'yesterday');
+    return '$_temp0';
+  }
+
+  @override
+  String get profilePushTitle => 'Notifications';
+
+  @override
+  String get profilePushBody => 'Tickets you receive, payments and news from your clubs';
+
+  @override
+  String get profilePushOn => 'On';
+
+  @override
+  String get profilePushDenied => 'Turn them on in your phone settings';
+
+  @override
+  String get profilePushEnable => 'Turn on';
 }

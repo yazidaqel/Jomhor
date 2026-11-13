@@ -1254,4 +1254,73 @@ class AppLocalizationsAr extends AppLocalizations {
   String homeMemberTitle(String time) {
     return 'البلاصة ديالك كتسناك · قبل $time';
   }
+
+  @override
+  String get inboxTitle => 'الإشعارات';
+
+  @override
+  String get inboxBell => 'الإشعارات';
+
+  @override
+  String get inboxBellUnread => 'الإشعارات · ميساجات جداد';
+
+  @override
+  String get inboxEmpty => 'حتى حاجة دابا';
+
+  @override
+  String get inboxJustNow => 'دابا';
+
+  @override
+  String inboxMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'هادي $count دقيقة',
+      few: 'هادي $count دقايق',
+      two: 'هادي جوج دقايق',
+      one: 'هادي دقيقة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String inboxHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'هادي $count ساعة',
+      few: 'هادي $count سوايع',
+      two: 'هادي جوج سوايع',
+      one: 'هادي ساعة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String inboxDaysAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'هادي $count يوم',
+      few: 'هادي $count أيام',
+      two: 'هادي جوج أيام',
+      one: 'البارح',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get profilePushTitle => 'الإشعارات';
+
+  @override
+  String get profilePushBody => 'التذاكر لي توصلك، الخلاص والميساجات ديال فرقك';
+
+  @override
+  String get profilePushOn => 'مفعّلين';
+
+  @override
+  String get profilePushDenied => 'فعّلهم من الإعدادات ديال التيليفون';
+
+  @override
+  String get profilePushEnable => 'فعّل';
 }

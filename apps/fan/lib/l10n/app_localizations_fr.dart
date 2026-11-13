@@ -1216,4 +1216,52 @@ class AppLocalizationsFr extends AppLocalizations {
   String homeMemberTitle(String time) {
     return 'Ta place t\'attend · avant $time';
   }
+
+  @override
+  String get inboxTitle => 'Notifications';
+
+  @override
+  String get inboxBell => 'Notifications';
+
+  @override
+  String get inboxBellUnread => 'Notifications · nouveaux messages';
+
+  @override
+  String get inboxEmpty => 'Rien pour l\'instant';
+
+  @override
+  String get inboxJustNow => 'À l\'instant';
+
+  @override
+  String inboxMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'il y a $count min', one: 'il y a 1 min');
+    return '$_temp0';
+  }
+
+  @override
+  String inboxHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'il y a $count h', one: 'il y a 1 h');
+    return '$_temp0';
+  }
+
+  @override
+  String inboxDaysAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'il y a $count j', one: 'hier');
+    return '$_temp0';
+  }
+
+  @override
+  String get profilePushTitle => 'Notifications';
+
+  @override
+  String get profilePushBody => 'Billets reçus, paiements et messages de tes clubs';
+
+  @override
+  String get profilePushOn => 'Activées';
+
+  @override
+  String get profilePushDenied => 'Active-les dans les réglages du téléphone';
+
+  @override
+  String get profilePushEnable => 'Activer';
 }

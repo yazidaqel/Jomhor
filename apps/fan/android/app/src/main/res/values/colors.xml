@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0B0F1A</color>
+    <!-- design/tokens.json accent: the push notification tint. -->
+    <color name="jomhor_accent">#F5B700</color>
 </resources>

@@ -13,6 +13,7 @@ import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
+import 'package:jomhor_fan/features/inbox/inbox.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
 import 'package:jomhor_fan/features/tickets/my_ticket_strip.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
@@ -43,7 +44,9 @@ class HomeScreen extends ConsumerWidget {
         color: JomhorColors.accent,
         backgroundColor: JomhorColors.surface,
         onRefresh: () {
-          ref.invalidate(pendingCashProvider);
+          ref
+            ..invalidate(pendingCashProvider)
+            ..invalidate(inboxProvider);
           // A failed directory read stays until invalidated: retry it with the events.
           if (ref.read(clubsProvider).hasError) ref.invalidate(clubsProvider);
           return ref.refresh(upcomingEventsProvider.future);
@@ -331,28 +334,59 @@ class _CashStrip extends ConsumerWidget {
   }
 }
 
-/// The Jomhor lockup ([BrandBar]) and the fan's avatar (Profil). The bell (notifications) is Lot 4.
-class _TopBar extends StatelessWidget {
+/// The Jomhor lockup ([BrandBar]) at the start; the bell (screen 10, signed in only, lot-4 Q121) and the fan's
+/// avatar (Profil) at the end. The bell carries an 8 px accent dot while a message is newer than the last visit.
+class _TopBar extends ConsumerWidget {
   const new({required this.initials});
 
   final String? initials;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
+    final unread = ref.watch(unreadProvider);
     return BrandBar(
-      trailing: IconButton(
-        key: const Key('home.profile'),
-        tooltip: l.homeOpenProfile,
-        onPressed: () => context.go('/profile'),
-        icon: switch (initials) {
-          final i? => Text(
-            i,
-            textScaler: TextScaler.noScaling,
-            style: JomhorType.cta.copyWith(fontSize: 14, color: JomhorColors.text),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (ref.watch(sessionProvider))
+            IconButton(
+              key: const Key('home.bell'),
+              tooltip: unread ? l.inboxBellUnread : l.inboxBell,
+              onPressed: () => context.push('/inbox'),
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.notifications_none_rounded, size: 24),
+                  if (unread)
+                    const PositionedDirectional(
+                      top: 1,
+                      end: 1,
+                      child: SizedBox.square(
+                        key: Key('home.bell.dot'),
+                        dimension: 8,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: JomhorColors.accent, shape: BoxShape.circle),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          IconButton(
+            key: const Key('home.profile'),
+            tooltip: l.homeOpenProfile,
+            onPressed: () => context.go('/profile'),
+            icon: switch (initials) {
+              final i? => Text(
+                i,
+                textScaler: TextScaler.noScaling,
+                style: JomhorType.cta.copyWith(fontSize: 14, color: JomhorColors.text),
+              ),
+              null => const Icon(Icons.person_outline_rounded, size: 20),
+            },
           ),
-          null => const Icon(Icons.person_outline_rounded, size: 20),
-        },
+        ],
       ),
     );
   }

@@ -14,6 +14,7 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/api/token_store.dart';
 import 'package:jomhor_fan/core/clock.dart';
+import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
@@ -197,4 +198,117 @@ class _DisposeWithTreeState extends State<_DisposeWithTree> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// A push provider the test drives: [refresh], [foreground] and [opened] emit, [launch] is the cold-start message,
+/// and every call is recorded in [calls] (and in [log], when a test shares one with its backend to check ordering).
+class FakePushMessaging implements PushMessaging {
+  new({this.currentToken = 'fcm-token-1', this.status = PushPermission.notAsked, this.launch, List<String>? log})
+    : log = log ?? [];
+
+  String? currentToken;
+  PushPermission status;
+
+  /// What the fan answers to the prompt; refused → [status] becomes denied (the settings, as the real mapping).
+  bool grant = true;
+  PushMessage? launch;
+  final List<String> log;
+  final calls = <String>[];
+  final refresh = StreamController<String>.broadcast();
+  final foreground = StreamController<PushMessage>.broadcast();
+  final opened = StreamController<PushMessage>.broadcast();
+
+  int count(String call) => calls.where((c) => c == call).length;
+
+  void _call(String name) {
+    calls.add(name);
+    log.add('push.$name');
+  }
+
+  @override
+  Future<String?> token() async {
+    _call('token');
+    return currentToken;
+  }
+
+  @override
+  Stream<String> get onTokenRefresh => refresh.stream;
+
+  @override
+  Stream<PushMessage> get onForeground => foreground.stream;
+
+  @override
+  Stream<PushMessage> get onOpened => opened.stream;
+
+  @override
+  Future<PushMessage?> initialMessage() async {
+    _call('initialMessage');
+    return launch;
+  }
+
+  @override
+  Future<PushPermission> permission() async {
+    _call('permission');
+    return status;
+  }
+
+  @override
+  Future<PushPermission> requestPermission() async {
+    _call('requestPermission');
+    return status = grant ? PushPermission.granted : PushPermission.denied;
+  }
+
+  @override
+  Future<void> deleteToken() async {
+    _call('deleteToken');
+    currentToken = null;
+  }
+}
+
+/// A `GET /fan/me/inbox` row (docs/04-api.md): the campaign id, the club's `organizer` block (with its id), and
+/// `event_id` null for a campaign without an event.
+Map<String, Object?> inboxJson({
+  String id = 'c0000000-0000-4000-8000-000000000001',
+  Map<String, Object?>? club,
+  String title = 'Ouverture des portes à 17 h',
+  String body = 'Viens tôt : animations en tribune Nord avant le match.',
+  int? eventId = 1,
+  String sentAt = '2027-02-20T11:00:00Z',
+}) {
+  final c = club ?? clubJson();
+  return {
+    'id': id,
+    'organizer': {'id': c['id'], 'slug': c['slug'], 'name': c['name'], 'crest_url': c['crest_url']},
+    'title': title,
+    'body': body,
+    'event_id': eventId,
+    'sent_at': sentAt,
+  };
+}
+
+/// `PUT /fan/me/push-token` (→ 204) and `GET /fan/me/inbox` in front of [backend]; the PUT bodies are kept in
+/// [tokenPuts], and [inbox] (or [inboxStatus], an error) answers the inbox.
+class PushBackend {
+  new(this.backend, {List<String>? log}) : log = log ?? [];
+
+  final Future<http.Response> Function(http.Request request) backend;
+  final List<String> log;
+  final tokenPuts = <Map<String, Object?>>[];
+  List<Map<String, Object?>> inbox = [];
+  int? inboxStatus;
+  int inboxReads = 0;
+
+  Future<http.Response> handle(http.Request r) async {
+    log.add('${r.method} ${r.url.path}');
+    switch ((r.method, r.url.path)) {
+      case ('PUT', '/v1/fan/me/push-token'):
+        tokenPuts.add(jsonDecode(r.body) as Map<String, Object?>);
+        return http.Response('', 204);
+      case ('GET', '/v1/fan/me/inbox'):
+        inboxReads++;
+        if (inboxStatus case final status?) return apiError(status, status == 401 ? 'UNAUTHORIZED' : 'INTERNAL');
+        return json({'messages': inbox});
+    }
+    return await backend(r);
+  }
 }

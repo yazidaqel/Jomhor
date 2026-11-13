@@ -2072,6 +2072,84 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Ta place t\'attend · avant {time}'**
   String homeMemberTitle(String time);
+
+  /// Screen 10 title.
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications'**
+  String get inboxTitle;
+
+  /// Accueil bell tooltip and screen-reader label.
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications'**
+  String get inboxBell;
+
+  /// Bell tooltip while the accent dot shows (a message newer than the last visit).
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications · nouveaux messages'**
+  String get inboxBellUnread;
+
+  /// Screen 10 empty state.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rien pour l\'instant'**
+  String get inboxEmpty;
+
+  /// Inbox row time, under a minute ago.
+  ///
+  /// In fr, this message translates to:
+  /// **'À l\'instant'**
+  String get inboxJustNow;
+
+  /// Inbox row time.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{il y a 1 min} other{il y a {count} min}}'**
+  String inboxMinutesAgo(int count);
+
+  /// Inbox row time.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{il y a 1 h} other{il y a {count} h}}'**
+  String inboxHoursAgo(int count);
+
+  /// Inbox row time, in whole days.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count, plural, =1{hier} other{il y a {count} j}}'**
+  String inboxDaysAgo(int count);
+
+  /// Profil row: the phone's push permission (lot-4 Q123).
+  ///
+  /// In fr, this message translates to:
+  /// **'Notifications'**
+  String get profilePushTitle;
+
+  /// Profil row subtitle before the permission is asked.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billets reçus, paiements et messages de tes clubs'**
+  String get profilePushBody;
+
+  /// Profil row subtitle: permission granted.
+  ///
+  /// In fr, this message translates to:
+  /// **'Activées'**
+  String get profilePushOn;
+
+  /// Profil row subtitle: permission refused; only the OS settings can turn it on.
+  ///
+  /// In fr, this message translates to:
+  /// **'Active-les dans les réglages du téléphone'**
+  String get profilePushDenied;
+
+  /// Profil row button: asks for the push permission.
+  ///
+  /// In fr, this message translates to:
+  /// **'Activer'**
+  String get profilePushEnable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

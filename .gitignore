@@ -6,6 +6,9 @@
 *.key
 *.jks
 *.keystore
+# Firebase client config: built from dart-defines (lot-4 Q119), never committed
+google-services.json
+GoogleService-Info.plist
 
 # IDE / OS
 .idea/

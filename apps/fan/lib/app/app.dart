@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:jomhor_fan/app/launch_splash.dart';
 import 'package:jomhor_fan/app/locale.dart';
 import 'package:jomhor_fan/app/router.dart';
+import 'package:jomhor_fan/core/push/push.dart';
+import 'package:jomhor_fan/core/push/push_banner.dart';
 import 'package:jomhor_fan/features/checkout/checkout_repository.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
+import 'package:jomhor_fan/features/inbox/inbox.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
@@ -21,6 +24,7 @@ class JomhorApp extends ConsumerStatefulWidget {
 
 class _JomhorAppState extends ConsumerState<JomhorApp> {
   late final AppLifecycleListener _lifecycle;
+  StreamSubscription<PushMessage>? _opened;
 
   /// Matchday mode was checked for this launch or resume.
   var _matchdayChecked = false;
@@ -38,9 +42,28 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
           ..invalidate(upcomingEventsProvider)
           ..invalidate(eventDetailProvider)
           ..invalidate(ticketsProvider)
-          ..invalidate(pendingCashProvider);
+          ..invalidate(pendingCashProvider)
+          ..invalidate(inboxProvider)
+          ..invalidate(pushPermissionProvider);
       },
     );
+    // A tapped notification (docs/04-api.md §Notifications, push wire): only the whitelisted paths open.
+    final push = ref.read(pushMessagingProvider);
+    if (push != null) {
+      _opened = push.onOpened.listen(_openPush);
+      // Cold start from a notification: after the first frame, once the router has its first location.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          if (await push.initialMessage() case final m? when mounted) _openPush(m);
+        } on Object {
+          // No launch message.
+        }
+      });
+    }
+  }
+
+  void _openPush(PushMessage m) {
+    if (pushPathOf(m.data) case final path?) openPushPath(ref, path);
   }
 
   /// Matchday mode (docs/02 §Fan app design direction): from T0 − 4 h the app opens straight on the next
@@ -58,11 +81,13 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    unawaited(_opened?.cancel());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(pushRegistrarProvider);
     // Only settled data: a reload (resume) first emits the previous snapshot, whose clock may have stopped
     // during deep sleep; checking it would latch the mode before the re-anchored snapshot arrives.
     ref.listen(ticketsProvider, (_, next) {
@@ -77,7 +102,8 @@ class _JomhorAppState extends ConsumerState<JomhorApp> {
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       routerConfig: ref.watch(routerProvider),
-      builder: (context, child) => ref.watch(launchSplashProvider) ? LaunchSplash(child: child!) : child!,
+      builder: (context, child) =>
+          PushBannerHost(child: ref.watch(launchSplashProvider) ? LaunchSplash(child: child!) : child!),
     );
   }
 }

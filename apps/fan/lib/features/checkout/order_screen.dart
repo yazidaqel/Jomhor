@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
+import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/checkout/cash_order.dart';
 import 'package:jomhor_fan/features/checkout/group_view.dart';
 import 'package:jomhor_fan/features/checkout/member_pay.dart';
@@ -17,13 +18,34 @@ import 'package:jomhor_fan/ui/motion.dart';
 
 /// After the card page (or the `jomhor-fan://orders/{id}` deep link): waits for PAID, then the
 /// success card slides in. An AWAITING_CASH order shows its code ([CashOrder]). The ticket itself is FL-7 (Billets).
-class OrderScreen extends ConsumerWidget {
+///
+/// The first PAID order on this phone asks for the push permission (lot-4 Q126), whatever the variant: a paid group
+/// initiator (screen 9), a friend's paid place or a plain order.
+class OrderScreen extends ConsumerStatefulWidget {
   const new({required this.orderId, super.key});
 
   final String orderId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrderScreen> createState() => _OrderScreenState();
+}
+
+class _OrderScreenState extends ConsumerState<OrderScreen> {
+  var _paidSeen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual(orderStatusProvider(widget.orderId), fireImmediately: true, (_, next) {
+      if (_paidSeen || !(next.value?.order.paid ?? false)) return;
+      _paidSeen = true;
+      unawaited(maybeAskPermission(ref.read(pushMessagingProvider)));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orderId = widget.orderId;
     final l = AppLocalizations.of(context);
     final status = ref.watch(orderStatusProvider(orderId));
     final rePay = ref.watch(rePayProvider(orderId));
