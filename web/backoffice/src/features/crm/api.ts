@@ -43,10 +43,28 @@ export type Campaign = CampaignRow & { body: string; audience_estimate: number }
 export const CAMPAIGN_REFETCH_MS = 10_000
 
 export const useMembersSummary = () => useOrgQuery<MembersSummary>(['members', 'summary'], '/org/members/summary')
-// Polls only while a campaign is draining: its sent / failed counts move then, and nothing else does.
+/**
+ * How far ahead of the browser clock a SCHEDULED row still counts as due: one 30 s job period plus clock skew. A
+ * send-now stores the server's now(), which a browser running behind would otherwise read as a future time.
+ */
+export const DUE_SLACK_MS = 60_000
+
+/**
+ * P100: a campaign is moving while it drains (SENDING) or waits for the job (every 30 s) to pick it up (SCHEDULED and
+ * due, e.g. right after "Envoyer maintenant"). `now`: the caller's clock (tests control it).
+ */
+export const isMoving = (rows: CampaignRow[] | undefined, now: number) =>
+  !!rows?.some(
+    (c) => c.status === 'SENDING' || (c.status === 'SCHEDULED' && c.scheduled_at !== null && Date.parse(c.scheduled_at) <= now + DUE_SLACK_MS),
+  )
+
+// Polls only while a campaign moves; its status and counts change then, and nothing else does.
+// ponytail: evaluated after each fetch, so a row scheduled more than DUE_SLACK_MS ahead starts polling on the next
+// refetch after it falls due (focus, a write), not on its own; a browser clock behind the server's by more than
+// DUE_SLACK_MS misses a send-now the same way. Tick a clock here if that lag matters.
 export const useCampaigns = () =>
   useOrgQuery<CampaignRow[]>(['campaigns'], '/org/campaigns', {
-    refetchInterval: (q) => (q.state.data?.some((c) => c.status === 'SENDING') ? CAMPAIGN_REFETCH_MS : false),
+    refetchInterval: (q) => (isMoving(q.state.data, Date.now()) ? CAMPAIGN_REFETCH_MS : false),
   })
 export const useCampaign = (id: string | undefined) =>
   useOrgQuery<Campaign>(['campaigns', id], path('org', 'campaigns', id ?? ''), { enabled: !!id })
