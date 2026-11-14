@@ -154,10 +154,10 @@ public class OrderService {
      * queue (429 SALE_BUSY), per-account limit (409: the buyer, then each split member), the live room's eligibility
      * rule for each split {@code pays} member (409 NOT_ELIGIBLE whose details are {@code field} alone: no reason or
      * rule figure about another phone's account), quota (409 SOLD_OUT). Holder phones' accounts are found or created
-     * before
-     * any lock (they roll back with the order; the response is the same either way, so it can't be used to probe
-     * whether a phone has an account). The buyer locks (buyer and members) are taken before the limits are read, so
-     * parallel orders of one account are counted one after the other.
+     * before any lock (they roll back with the order). A member's refusal carries only {@code field}, never why, but
+     * pass or fail is still a yes/no signal: whether that phone has an account meeting the room's rule (a phone with
+     * no account gets a fresh one, which an account-age rule refuses). The buyer locks (buyer and members) are taken
+     * before the limits are read, so parallel orders of one account are counted one after the other.
      *
      * <p>Split pay (04 §Split pay Orders): one reservation for every place; the buyer's order holds the places
      * without {@code pays}, and each distinct {@code pays} phone gets a member order of its places, RESERVED until

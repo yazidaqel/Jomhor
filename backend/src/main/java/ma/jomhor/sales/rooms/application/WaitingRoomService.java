@@ -105,8 +105,9 @@ public class WaitingRoomService {
             WaitingRoom current = rooms.find(org, eventId).orElseThrow();
             boolean onlyRate = current.config().preQueueMin() == c.preQueueMin()
                     && current.config().rule().equals(c.rule());
-            if (status.get() == Status.ENDED || (status.get() != Status.SCHEDULED && !onlyRate)) {
-                throw roomStatus(status.get());
+            Status now = current.statusAt(orders.now()); // a late tick doesn't reopen the rules once joins are open
+            if (now == Status.ENDED || (now != Status.SCHEDULED && !onlyRate)) {
+                throw roomStatus(now);
             }
             rooms.update(org, eventId, c);
             audit.staff(org, userId, "room.update", String.valueOf(eventId), payload(c));

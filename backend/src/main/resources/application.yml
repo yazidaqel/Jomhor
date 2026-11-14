@@ -1,6 +1,9 @@
 server:
   servlet:
     context-path: /v1 # docs/04-api.md base; every audience (/fan, /org, /gate, /payments) sits under it
+  # On SIGTERM: readiness goes OUT_OF_SERVICE, new connections are refused, in-flight requests finish (up to
+  # spring.lifecycle.timeout-per-shutdown-phase), then the jobs and the pool stop (plan lot-5 P107).
+  shutdown: graceful
   # Client IP (per-IP OTP and queue-join limits) = Tomcat RemoteIpValve: X-Forwarded-For is believed only from a peer
   # matching internal-proxies, else the TCP peer is the client. TRUSTED_PROXIES_REGEX is required outside dev/test
   # (startup check in ClientIpConfig; never Spring's private-range regex): the shop and any load balancer in front.
@@ -14,12 +17,19 @@ server:
 spring:
   application:
     name: jomhor
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   task:
     scheduling:
       pool:
         # Every @Scheduled job (order expiry, deliveries, fan messages, campaigns, manifest build, room tick) shares this
         # pool: with one thread a slow manifest build would hold the 1 s room tick back.
         size: ${SCHEDULING_POOL_SIZE:4}
+      # On shutdown a running job finishes before the pool goes: a fan-message run cut off mid-way would roll back
+      # sends that already went out, and they would go again.
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
     execution:
       # Keep Boot's applicationTaskExecutor (and unqualified @Async on it) next to the dedicated otpSendExecutor.
       mode: force
@@ -28,6 +38,9 @@ spring:
     url: ${DB_URL}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
+    hikari:
+      # Per instance: N instances hold N × this on Postgres, so keep N × DB_POOL_SIZE under its max_connections.
+      maximum-pool-size: ${DB_POOL_SIZE:20}
   jackson:
     property-naming-strategy: SNAKE_CASE
     # Integers stay integers (money is centimes): 50.5 or "5000" for an int/long field is a 422, not a coercion.
@@ -35,6 +48,19 @@ spring:
       accept-float-as-int: false
     mapper:
       allow-coercion-of-scalars: false
+
+# Health only, public, no details (plan lot-5 §4.6): a load balancer checks /v1/actuator/health/readiness, a process
+# manager /v1/actuator/health/liveness. No other actuator endpoint is exposed.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
 
 jomhor:
   # >= 32 bytes each, from env only. Startup fails if missing or short.

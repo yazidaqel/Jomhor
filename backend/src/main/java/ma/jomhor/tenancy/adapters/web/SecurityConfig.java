@@ -45,8 +45,9 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Four stateless chains. /fan/** needs a JWT with aud=fan, /org/** one with aud=org (same HS256 key,
  * the audience is what separates them); /fan/auth/** and /org/auth/** are open. Everything else is
- * closed except /payments/** (gateway-facing, verified per provider) and /gate/** (scanners: no token, every request
- * is checked by the gate module's device-signature filter, 04 §Gate auth). 401/403 bodies use the 04 shape.
+ * closed except /payments/** (gateway-facing, verified per provider), /gate/** (scanners: no token, every request
+ * is checked by the gate module's device-signature filter, 04 §Gate auth) and GET /actuator/health/** (status only,
+ * for load balancers). 401/403 bodies use the 04 shape.
  * GET /fan/organizers, /fan/organizers/{slug}, /fan/events and /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
  * server, so an Authorization header sent there is ignored rather than checked, and without the default
  * no-store cache headers (04: public reads carry no cache headers; the authenticated chains keep them).
@@ -112,7 +113,9 @@ class SecurityConfig {
     @Order(3)
     SecurityFilterChain otherChain(HttpSecurity http) {
         return stateless(http)
-                .authorizeHttpRequests(a -> a.requestMatchers("/payments/**", "/gate/**", "/error").permitAll().anyRequest().denyAll())
+                .authorizeHttpRequests(a -> a.requestMatchers("/payments/**", "/gate/**", "/error").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                        .anyRequest().denyAll())
                 .build();
     }
 

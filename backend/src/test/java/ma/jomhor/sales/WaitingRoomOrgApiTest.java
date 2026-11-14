@@ -207,6 +207,21 @@ class WaitingRoomOrgApiTest extends OrgApiTest {
         assertThat(audits(s.event(), "room.update")).hasSize(1);
     }
 
+    /** Opened by time but not yet ticked: the rules are already frozen (WaitingRoom.statusAt). */
+    @Test
+    void aRoomOpenByTimeWithALateTickStillRefusesRuleChanges() throws Exception {
+        Setup s = onSale();
+        putRoom(s.admin(), s.event(), "{}").andExpect(status().isCreated());
+        jdbc.sql("update events set sale_starts_at = now() + interval '10 minutes' where id = ?").param(s.event())
+                .update(); // pre-queue (30 min) opened 20 min ago; the room row still says SCHEDULED
+        assertThat(jdbc.sql("select status::text from waiting_rooms where event_id = ?").param(s.event())
+                .query(String.class).single()).isEqualTo("SCHEDULED");
+
+        roomStatus(putRoom(s.admin(), s.event(), "{\"pre_queue_min\": 45}"), "PRE_QUEUE");
+        roomStatus(putRoom(s.admin(), s.event(), "{\"eligibility\": {\"min_account_age_days\": 7}}"), "PRE_QUEUE");
+        putRoom(s.admin(), s.event(), "{\"admission_rate_per_min\": 800}").andExpect(status().isOk());
+    }
+
     @Test
     void pauseResumeEndTransitionsAndAudits() throws Exception {
         Setup s = onSale();

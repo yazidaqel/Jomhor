@@ -46,6 +46,8 @@ public record WaitingRoom(UUID id, UUID organizerId, int eventId, Status status,
     /**
      * The status by time (04 ADMISSION_REQUIRED: fail closed): a room still SCHEDULED at or after {@link #opensAt}
      * because the tick hasn't caught up counts as PRE_QUEUE, or OPEN when it has no pre-queue. Else the stored status.
+     * ponytail: callers on the request path pass the app clock while the tick and the sale window use Postgres's, so
+     * the two agree only as far as NTP keeps them; pass the database clock if their skew ever matters.
      */
     public Status statusAt(Instant now) {
         if (status != Status.SCHEDULED || now.isBefore(opensAt())) {
