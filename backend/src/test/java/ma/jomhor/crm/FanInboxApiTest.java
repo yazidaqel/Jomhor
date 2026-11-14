@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,7 +61,7 @@ class FanInboxApiTest extends CrmTest {
         Club unlisted = club();
         Fan f = fan();
         Fan other = fan();
-        Instant now = Instant.now();
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS); // Postgres rounds, not truncates
         int e = event(listed, "ON_SALE");
         UUID older = campaign(unlisted, "PUSH", null, "Ancien");
         row(unlisted, older, f.id(), "PUSH", "SENT", null, now.minusSeconds(60));
@@ -93,7 +94,7 @@ class FanInboxApiTest extends CrmTest {
         assertThat((Object) JsonPath.read(json, "$.messages[1].organizer.slug")).isNull();
         assertThat((Object) JsonPath.read(json, "$.messages[1].organizer.crest_url")).isNull();
         assertThat(Instant.parse(JsonPath.read(json, "$.messages[1].sent_at")))
-                .isEqualTo(now.minusSeconds(60).truncatedTo(java.time.temporal.ChronoUnit.MICROS));
+                .isEqualTo(now.minusSeconds(60).truncatedTo(ChronoUnit.MICROS));
     }
 
     @Test

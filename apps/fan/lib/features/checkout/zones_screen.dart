@@ -9,6 +9,7 @@ import 'package:jomhor_fan/features/checkout/zone_pick.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
+import 'package:jomhor_fan/features/queue/queue_screen.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -28,16 +29,23 @@ class ZonesScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text(l.chooseZone)),
-      body: detail.when(
-        loading: () => ListView(
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(JomhorSpace.xl),
-          children: const [SkeletonList(rows: 4)],
-        ),
-        error: (e, _) => Center(
-          child: ErrorPanel(error: e, onRetry: () => ref.invalidate(eventDetailProvider(eventId))),
-        ),
-        data: (d) => _Body(detail: d, now: now),
+      body: Column(
+        children: [
+          AdmissionBar(eventId: eventId),
+          Expanded(
+            child: detail.when(
+              loading: () => ListView(
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(JomhorSpace.xl),
+                children: const [SkeletonList(rows: 4)],
+              ),
+              error: (e, _) => Center(
+                child: ErrorPanel(error: e, onRetry: () => ref.invalidate(eventDetailProvider(eventId))),
+              ),
+              data: (d) => _Body(detail: d, now: now),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: switch (detail) {
         AsyncData(:final value) => _Footer(event: value.event, now: now),

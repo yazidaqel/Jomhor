@@ -1,10 +1,13 @@
 server:
   servlet:
     context-path: /v1 # docs/04-api.md base; every audience (/fan, /org, /gate, /payments) sits under it
-  # Client IP (per-IP OTP throttle) = Tomcat RemoteIpValve: X-Forwarded-For is believed only from a peer matching
-  # internal-proxies, else the TCP peer is the client. TRUSTED_PROXIES_REGEX is required outside dev/test (startup
-  # check in ClientIpConfig; never Spring's private-range regex): the shop and ALB private subnets (plan §7
-  # "Client IP trust chain"). Empty = trust no proxy.
+  # On SIGTERM: readiness goes OUT_OF_SERVICE, new connections are refused, in-flight requests finish (up to
+  # spring.lifecycle.timeout-per-shutdown-phase), then the jobs and the pool stop (plan lot-5 P107).
+  shutdown: graceful
+  # Client IP (per-IP OTP and queue-join limits) = Tomcat RemoteIpValve: X-Forwarded-For is believed only from a peer
+  # matching internal-proxies, else the TCP peer is the client. TRUSTED_PROXIES_REGEX is required outside dev/test
+  # (startup check in ClientIpConfig; never Spring's private-range regex): the shop and any load balancer in front.
+  # Empty = trust no proxy.
   forward-headers-strategy: native
   tomcat:
     remoteip:
@@ -14,7 +17,19 @@ server:
 spring:
   application:
     name: jomhor
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   task:
+    scheduling:
+      pool:
+        # Every @Scheduled job (order expiry, deliveries, fan messages, campaigns, manifest build, room tick) shares this
+        # pool: with one thread a slow manifest build would hold the 1 s room tick back.
+        size: ${SCHEDULING_POOL_SIZE:4}
+      # On shutdown a running job finishes before the pool goes: a fan-message run cut off mid-way would roll back
+      # sends that already went out, and they would go again.
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
     execution:
       # Keep Boot's applicationTaskExecutor (and unqualified @Async on it) next to the dedicated otpSendExecutor.
       mode: force
@@ -23,6 +38,9 @@ spring:
     url: ${DB_URL}
     username: ${DB_USER}
     password: ${DB_PASSWORD}
+    hikari:
+      # Per instance: N instances hold N × this on Postgres, so keep N × DB_POOL_SIZE under its max_connections.
+      maximum-pool-size: ${DB_POOL_SIZE:20}
   jackson:
     property-naming-strategy: SNAKE_CASE
     # Integers stay integers (money is centimes): 50.5 or "5000" for an int/long field is a 422, not a coercion.
@@ -30,6 +48,19 @@ spring:
       accept-float-as-int: false
     mapper:
       allow-coercion-of-scalars: false
+
+# Health only, public, no details (plan lot-5 §4.6): a load balancer checks /v1/actuator/health/readiness, a process
+# manager /v1/actuator/health/liveness. No other actuator endpoint is exposed.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
 
 jomhor:
   # >= 32 bytes each, from env only. Startup fails if missing or short.
@@ -44,6 +75,10 @@ jomhor:
     # Manifest v1 is built at T0 - lead (plan lot-2 Q43; the dry run may use 6h); GET /gate/events shows
     # manifest_available_at = starts_at - lead.
     manifest-lead: ${GATE_MANIFEST_LEAD:3h}
+  cors:
+    # The web shop's origin (scheme://host[:port]): the only one allowed to poll GET /fan/queue from a browser
+    # (docs/04-api.md §Fan, plan Q152). Empty = no browser origin allowed.
+    shop-origin: ${SHOP_ORIGIN:}
   crests:
     # docs/04-api.md §Club directory: settings.crest_url reaches fans only under this https prefix (ends in /), else
     # null. Jomhor's own asset host (S3 + CloudFront eu-west-3, plan multi-club Q72).
@@ -93,6 +128,25 @@ sales:
     # close; a split is refused when sales close sooner than this. The fan copy says "2 h" literally (Q109).
     hold: ${SALES_SPLIT_HOLD:2h}
 
+rooms:
+  # On-sale waiting room (docs/04-api.md §Waiting room): each instance re-reads the live rooms at most this often.
+  memo-ttl: ${ROOMS_MEMO_TTL:1s}
+  # Signs queue and admission tokens and keys the device and IP hashes: >= 32 bytes, from env only, never JWT_SECRET.
+  token-secret: ${ROOMS_TOKEN_SECRET}
+  # The room tick (draw, ranking, admission) runs this long after the previous run ends, on every instance.
+  tick: ${ROOMS_TICK:1s}
+  # A fan's turn: the admission token lasts this long from the first poll that saw it (capped at sales close).
+  admission-window: ${ROOMS_ADMISSION_WINDOW:10m}
+  # Entries of other accounts with the same device_id in a room at or above this → QUEUE_DEVICE_LIMIT (plan Q146).
+  device-limit: ${ROOMS_DEVICE_LIMIT:3}
+  # Queue entries are deleted this long after their event's starts_at (plan Q155).
+  retention: ${ROOMS_RETENTION:30d}
+  # New or moved-back entries of one room from one client IP in 5 min at or above this → 429 (plan Q147); 0 = off.
+  # Generous on purpose: mobile CGNAT puts many fans behind one IP.
+  ip-limit-5m: ${ROOMS_IP_LIMIT_5M:300}
+  # One GET /fan/queue per entry per this, per instance, in memory (plan Q147) → 429 QUEUE_RATE_LIMITED POLL.
+  poll-min-interval: ${ROOMS_POLL_MIN_INTERVAL:1s}
+
 notifications:
   push:
     # Push adapter (docs/04-api.md §Notifications): 'log' = dev/staging, refused under prod; 'fcm' comes with BE-36.
@@ -102,12 +156,13 @@ notifications:
   send-rate-per-second: ${NOTIFICATIONS_SEND_RATE_PER_SECOND:20}
 
 otp:
-  # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14). Mobile CGNAT puts many fans behind one IP:
-  # keep the fan limits loose and watch them on on-sale day. Org over its limit still answers 202.
+  # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14, lot-5 Q148). Mobile CGNAT puts many fans behind one
+  # IP, and a pre-queue brings them all at once: the fan limits stay loose, per-phone limits are the real guard. Org
+  # over its limit still answers 202.
   per-ip:
     fan:
-      sends-10m: ${OTP_PER_IP_FAN_10M:20}
-      sends-24h: ${OTP_PER_IP_FAN_24H:200}
+      sends-10m: ${OTP_PER_IP_FAN_10M:60}
+      sends-24h: ${OTP_PER_IP_FAN_24H:600}
     org:
       sends-10m: ${OTP_PER_IP_ORG_10M:5}
       sends-24h: ${OTP_PER_IP_ORG_24H:20}

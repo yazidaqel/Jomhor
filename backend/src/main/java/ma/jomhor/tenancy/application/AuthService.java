@@ -63,10 +63,13 @@ public class AuthService {
         }
     }
 
-    /** A new fan session on every login; its id is the token's {@code sid}, its expiry the token's. */
+    /**
+     * A new fan session on every login; its id is the token's {@code sid}, its expiry the token's. The first one sets
+     * users.verified_at (the account age of on-sale eligibility, docs/04-api.md §Waiting room).
+     */
     public Session fanVerify(String phone, String code) {
         otp.verify(phone, FAN, code);
-        return session(accounts.upsertByPhone(phone), List.of(), FAN, FAN_TTL);
+        return session(accounts.fanLogin(phone), List.of(), FAN, FAN_TTL);
     }
 
     public boolean fanSessionActive(UUID sessionId, UUID userId) {

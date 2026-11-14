@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { eventAt } from '@/lib/clubs'
+import { currentSession } from '@/lib/http'
 import { getI18n } from '@/lib/i18n/server'
 import { formatDateTime } from '@/lib/time'
 import { EventView } from './event-view'
@@ -36,6 +37,8 @@ export default async function EventPage({ params }: Props) {
   const p = await params
   const [{ e, path }, { d }] = await Promise.all([load(p), getI18n()])
   if (`/${p.club}/events/${p.slug}` !== path) permanentRedirect(path)
+  // Signed in or not (the room panel's way to W8); the session itself never leaves the server.
+  const signedIn = e.room ? !!(await currentSession()) : false
   // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
-  return <EventView e={e} now={Date.now()} d={d} />
+  return <EventView e={e} now={Date.now()} d={d} signedIn={signedIn} />
 }

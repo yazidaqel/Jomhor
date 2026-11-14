@@ -9,11 +9,11 @@ export type Result = { ok: boolean; status: number; data: Record<string, unknown
  * JSON request to a shop route handler. Network failure → status 0 and code `NETWORK`; an abort of `signal`
  * rethrows (the caller stopped caring: "Annuler" or leaving the page).
  */
-export async function postJson(path: string, body?: unknown, method = 'POST', signal?: AbortSignal): Promise<Result> {
+export async function postJson(path: string, body?: unknown, method = 'POST', signal?: AbortSignal, headers?: Record<string, string>): Promise<Result> {
   try {
     const res = await fetch(path, {
       method,
-      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      headers: body === undefined ? headers : { 'content-type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
     })
@@ -31,8 +31,9 @@ export const errorCode = (r: Result) => (typeof r.data?.code === 'string' ? r.da
 export function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) return reject(signal.reason)
-    const t = setTimeout(resolve, ms)
-    signal.addEventListener('abort', () => (clearTimeout(t), reject(signal.reason)), { once: true })
+    const onAbort = () => (clearTimeout(t), reject(signal.reason))
+    const t = setTimeout(() => (signal.removeEventListener('abort', onAbort), resolve()), ms)
+    signal.addEventListener('abort', onAbort, { once: true })
   })
 }
 
@@ -80,7 +81,7 @@ export type Placed =
   | { kind: 'held'; orderId: string }
 
 /**
- * W3: create the order (SALE_BUSY → wait and retry), unless `existingId` names one already created, then pay it with
+ * W3: create the order (SALE_BUSY → wait and retry; `admission` = the W8 token, sent as `X-Admission-Token`), unless `existingId` names one already created, then pay it with
  * `method`. `redirect` = go to the hosted page (card, wallet); `cash` = the code was issued, show the order page;
  * `payFailed` = the order exists (places held, until `reservedUntil` when created here) but /pay failed; `failed` = no order; `held` = the order exists and
  * `signal` aborted after it was created (never paid nor followed, but not lost: its page can show it). An abort while
@@ -91,12 +92,13 @@ export async function placeOrder(
   method: PayMethod,
   onWait: (seconds: number) => void,
   signal: AbortSignal,
-  { random = Math.random, existingId }: { random?: () => number; existingId?: string } = {},
+  { random = Math.random, existingId, admission }: { random?: () => number; existingId?: string; admission?: string } = {},
 ): Promise<Placed> {
   let orderId = existingId
   let reservedUntil: string | null | undefined // the hold of an order created here
   if (!orderId) {
-    const created = await withBusyRetry(() => postJson('/api/orders', order, 'POST', signal), onWait, signal, random)
+    const headers = admission ? { 'x-admission-token': admission } : undefined
+    const created = await withBusyRetry(() => postJson('/api/orders', order, 'POST', signal, headers), onWait, signal, random)
     if (!created.ok) return { kind: 'failed', result: created }
     orderId = String(created.data!.id)
     reservedUntil = typeof created.data!.reserved_until === 'string' ? created.data!.reserved_until : null

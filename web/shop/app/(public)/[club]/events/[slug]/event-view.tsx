@@ -1,20 +1,47 @@
 import Link from 'next/link'
 import { ViewTransition } from 'react'
+import { eventPath } from '@/lib/clubs'
 import { saleState, type ShopEventDetail } from '@/lib/events'
 import { fmt, type Dict } from '@/lib/i18n'
-import { countdown, formatDateTime, formatTime } from '@/lib/time'
+import { loginUrl } from '@/lib/orders'
+import { countdown, formatDate, formatDateTime, formatShortDate, formatTime } from '@/lib/time'
 import { Watermark } from '../../../../brand'
 import { BackIcon, CalendarIcon, CardIcon, PinIcon, QrIcon, TicketIcon } from '../../../../icons'
 import { CountdownTiles } from '../../../countdown'
 import { ClubLine } from '../../../event-list'
 import { kicker, SaleChip, saleLabel } from '../../../sale'
-import { ZonePicker } from './ZonePicker'
+import { ZonePicker, type RoomView } from './ZonePicker'
 
 const chip = 'flex items-center gap-2 rounded-chip border border-border bg-ground px-3 py-2 text-sm'
 const rise = 'motion-safe:animate-rise stagger'
 
-/** W2 · Page événement: hero (server) + zone grid and summary (client, ZonePicker). */
-export function EventView({ e, now, d }: { e: ShopEventDetail; now: number; d: Dict }) {
+/** The W2 room panel's server part (DESIGN Lot 5): labels in the venue time zone, the way to W8. */
+function roomView(e: ShopEventDetail, now: number, d: Dict, signedIn: boolean): RoomView | null {
+  const path = e.room && eventPath(e)
+  if (!e.room || !path) return null
+  const { opens_at, eligibility: el, status } = e.room
+  const tz = e.timezone
+  const sameDay = formatDate(opens_at, tz, d.meta.intl) === formatDate(new Date(now).toISOString(), tz, d.meta.intl)
+  const time = sameDay ? formatTime(opens_at, tz, d.meta.intl) : formatDateTime(opens_at, tz, d.meta.intl)
+  const rules = el && [
+    el.verified_before && fmt(d.room.verifiedBefore, { date: formatShortDate(el.verified_before, tz, d.meta.intl) }),
+    el.member_joined_before && fmt(d.room.memberBefore, { date: formatShortDate(el.member_joined_before, tz, d.meta.intl) }),
+    el.min_events_attended !== null && fmt(d.room.minEvents, { n: el.min_events_attended }),
+  ].filter(Boolean)
+  const queue = `${path}/queue`
+  return {
+    status,
+    opensAt: opens_at,
+    opensLabel: fmt(d.room.opensAt, { time }),
+    rules: rules?.length ? fmt(d.room.eligibility, { rules: rules.join(' · ') }) : null,
+    join: signedIn ? queue : loginUrl(queue),
+    signedIn,
+    now,
+  }
+}
+
+/** W2 · Page événement: hero (server) + zone grid and summary (client, ZonePicker); Lot 5: the room panel. */
+export function EventView({ e, now, d, signedIn = false }: { e: ShopEventDetail; now: number; d: Dict; signedIn?: boolean }) {
   const state = saleState(e, now)
   const label = kicker(d, e)
   const venue = e.venue.city ? `${e.venue.name}, ${e.venue.city}` : e.venue.name
@@ -72,7 +99,8 @@ export function EventView({ e, now, d }: { e: ShopEventDetail; now: number; d: D
         zones={e.zones}
         limit={e.per_account_limit}
         closed={state === 'ON_SALE' ? null : saleLabel(d, e, state)}
-        copy={{ event: d.event, order: d.order, meta: d.meta }}
+        room={roomView(e, now, d, signedIn)}
+        copy={{ event: d.event, order: d.order, meta: d.meta, room: d.room }}
       >
         <ul className="grid gap-3 rounded-control border border-border bg-surface p-4 text-body-small text-text-secondary sm:grid-cols-3">
           {(

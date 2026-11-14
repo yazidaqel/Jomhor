@@ -46,7 +46,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class FanMessageService {
 
     private static final Logger log = LoggerFactory.getLogger(FanMessageService.class);
-    static final int BATCH = 50;
     /** The default job period ({@code *}/5 s), also used when the cron is off ("-": tests call deliverDue). */
     static final Duration DEFAULT_PERIOD = Duration.ofSeconds(5);
     /** WhatsApp template names (plan lot-4 Q63); constants until BE-15 moves template ids to config. */
@@ -115,23 +114,23 @@ public class FanMessageService {
         tokens.register(userId, sessionId, token, platform);
     }
 
-    /** One job run: at most notifications.send-rate-per-second × the job period (plan lot-4 Q127). */
+    /**
+     * One job run: at most notifications.send-rate-per-second × the job period (plan lot-4 Q127), across every
+     * instance (plan lot-5 P105).
+     */
     public int deliverDue() {
         return deliverDue(maxPerRun);
     }
 
-    /** Sends due messages in batches of 50 until a batch comes back short or {@code max} were claimed. */
+    /**
+     * One claim of up to {@code max} due rows, sent and committed in one transaction under the claim try-lock: an
+     * instance whose run starts meanwhile sends nothing, so N instances on the same tick still send at most {@code max}.
+     * ponytail: the lock lasts only as long as the run; an instance whose tick starts after another's run committed
+     * (clock skew longer than the run) sends its own {@code max} in the same period. Store the last claimed period in
+     * the database if a provider's rate limit ever trips on that.
+     */
     public int deliverDue(int max) {
-        int total = 0;
-        int claimed;
-        int limit;
-        do {
-            limit = Math.min(BATCH, max - total);
-            int batch = limit;
-            claimed = tx.execute(s -> deliverBatch(batch));
-            total += claimed;
-        } while (claimed == limit && total < max);
-        return total;
+        return tx.execute(s -> messages.tryLockClaim() ? deliverBatch(max) : 0);
     }
 
     /** What became of one row: sent (error null), or failed with a final or a retried error. */
@@ -149,7 +148,8 @@ public class FanMessageService {
 
     /**
      * As TicketDeliveryService: the claimed rows stay locked until the batch commits, so a parallel run skips them.
-     * ponytail: provider calls run inside the transaction (up to 50 per connection); claim-then-lease if that hurts.
+     * ponytail: provider calls run inside the transaction (a whole run on one connection); claim-then-lease if that
+     * hurts.
      */
     private int deliverBatch(int limit) {
         List<FanMessage> due = messages.claimDue(limit);

@@ -82,6 +82,7 @@ class Ed25519ManifestSignerTest {
                 "--" + IntegrationTest.OTP_SECRET,
                 "--" + IntegrationTest.EVENT_KEY_MASTER,
                 "--TRUSTED_PROXIES_REGEX=",
+                "--SHOP_ORIGIN=https://shop.test",
                 "--payments.card.provider=fake",
                 "--payments.public-base-url=http://localhost/v1",
                 "--payments.fake.secret=test-only-payments-fake-secret-0123456789",

@@ -8,6 +8,7 @@ import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/checkout/group_view.dart';
 import 'package:jomhor_fan/features/club/club_seen.dart';
 import 'package:jomhor_fan/features/inbox/inbox.dart';
+import 'package:jomhor_fan/features/queue/queue_store.dart';
 import 'package:jomhor_fan/features/tickets/gate_load.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,6 +61,7 @@ class Session extends Notifier<bool> {
         wipeGroupSeen(),
         wipeSeen(pushSentKey),
         wipeSeen(inboxSeenKey),
+        wipeQueuePasses(),
       ]);
     } on Object {
       // Storage failed: signed out for this run anyway (no button callback sees the error).

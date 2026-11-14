@@ -7,6 +7,10 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 export const formatDate = (iso: string, timeZone: string, locale: string) =>
   cap(new Intl.DateTimeFormat(locale, { timeZone, weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso)))
 
+/** → `6 févr.` (inside a sentence: no weekday, no capital). */
+export const formatShortDate = (iso: string, timeZone: string, locale: string) =>
+  new Intl.DateTimeFormat(locale, { timeZone, day: 'numeric', month: 'short' }).format(new Date(iso))
+
 /** → `20:00`. */
 export const formatTime = (iso: string, timeZone: string, locale: string) =>
   new Intl.DateTimeFormat(locale, { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso))

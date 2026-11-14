@@ -15,6 +15,8 @@ import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
 import 'package:jomhor_fan/features/inbox/inbox.dart';
 import 'package:jomhor_fan/features/profile/profile_controller.dart';
+import 'package:jomhor_fan/features/queue/queue_store.dart';
+import 'package:jomhor_fan/features/queue/room_cta.dart';
 import 'package:jomhor_fan/features/tickets/my_ticket_strip.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
@@ -392,7 +394,7 @@ class _TopBar extends ConsumerWidget {
   }
 }
 
-class _Hero extends StatelessWidget {
+class _Hero extends ConsumerWidget {
   const new({required this.event, required this.now, required this.view});
 
   final FanEvent event;
@@ -400,9 +402,12 @@ class _Hero extends StatelessWidget {
   final HomeView? view;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     final e = event;
+    // Lot 5: with a room, the CTA leads to the queue (or its opening time, or straight to the zones at the turn).
+    final room = roomCta(e, now, ref.watch(queuePassesProvider).value?[e.id]);
+    final roomPath = room == null ? null : roomCtaPath(e, room);
     final facts = factsLine(l, e.facts);
     final left = countdown(now, e.startsAt);
     final open = e.saleState(now) == SaleState.onSale;
@@ -494,9 +499,22 @@ class _Hero extends StatelessWidget {
                 const SizedBox(height: JomhorSpace.l),
                 FilledButton(
                   key: const Key('hero.cta'),
-                  onPressed: open ? openEvent : null,
-                  child: Text(ctaLabel(l, e, now), textAlign: TextAlign.center),
+                  onPressed: switch (room) {
+                    null => open ? openEvent : null,
+                    _ => roomPath == null ? null : () => context.push(roomPath),
+                  },
+                  child: Text(
+                    room == null ? ctaLabel(l, e, now) : roomCtaLabel(l, e, room, now),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
+                if (room == RoomCta.opensAt && !ref.watch(sessionProvider))
+                  TextButton(
+                    key: const Key('hero.login'),
+                    onPressed: () =>
+                        context.push(Uri(path: '/login', queryParameters: {'from': '/events/${e.id}'}).toString()),
+                    child: Text(l.queueLoginNow),
+                  ),
               ],
             ),
           ),
@@ -568,7 +586,7 @@ class _CalendarRow extends StatelessWidget {
     final (day, month) = venueDayMonth(e.startsAt, e.timezone, l.localeName);
     final facts = factsLine(l, e.facts);
     final clock = venueClock(e.startsAt, e.timezone, l.localeName);
-    final onSale = e.saleState(now) == SaleState.onSale;
+    final onSale = e.saleState(now) == SaleState.onSale || (e.room?.joinable(now) ?? false);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TapCard(

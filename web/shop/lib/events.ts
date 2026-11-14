@@ -37,7 +37,29 @@ export type ShopEvent = {
  * Lot 3: `payment_methods` = known methods in the 04 order (absent, a Lot 1 backend → card only); `cash_until` = when
  * cash stops being offered (refund cutoff − min window), null when the organizer has no cash set up.
  */
-export type ShopEventDetail = ShopEvent & { zones: Zone[]; payment_methods: PayMethod[]; cash_until: string | null }
+export type ShopEventDetail = ShopEvent & { zones: Zone[]; payment_methods: PayMethod[]; cash_until: string | null; room: Room | null }
+
+/**
+ * Lot 5 `room` (04 GET /fan/events): the event's waiting room while it is live, else null (none, or `ENDED`).
+ * `eligibility` null = no rule; each rule part null = not required.
+ */
+export type RoomStatus = 'SCHEDULED' | 'PRE_QUEUE' | 'OPEN' | 'PAUSED'
+export type Eligibility = { verified_before: string | null; member_joined_before: string | null; min_events_attended: number | null }
+export type Room = { status: RoomStatus; opens_at: string; eligibility: Eligibility | null }
+const ROOM_STATUSES: readonly string[] = ['SCHEDULED', 'PRE_QUEUE', 'OPEN', 'PAUSED']
+
+function toRoom(v: unknown): Room | null {
+  const r = (v && typeof v === 'object' ? v : {}) as Raw
+  const opens = str(r.opens_at)
+  if (!ROOM_STATUSES.includes(r.status as string) || !opens) return null
+  const el = r.eligibility && typeof r.eligibility === 'object' ? (r.eligibility as Raw) : null
+  const eligibility = el && { verified_before: str(el.verified_before), member_joined_before: str(el.member_joined_before), min_events_attended: int(el.min_events_attended) }
+  return {
+    status: r.status as RoomStatus,
+    opens_at: opens,
+    eligibility: eligibility && Object.values(eligibility).some((x) => x !== null) ? eligibility : null,
+  }
+}
 
 const methodsOf = (v: unknown): PayMethod[] => (Array.isArray(v) ? PAY_METHODS.filter((m) => v.includes(m)) : ['CARD'])
 
@@ -151,7 +173,7 @@ export const getEvent = cache(async (id: number, now = Date.now()): Promise<Shop
   let raw = await read(false)
   if (raw && windowContradicts(toEvent(raw), now)) raw = await read(true)
   if (!raw) return null
-  return { ...toEvent(raw), zones: (Array.isArray(raw.zones) ? (raw.zones as Raw[]) : []).map(toZone), payment_methods: methodsOf(raw.payment_methods), cash_until: str(raw.cash_until) }
+  return { ...toEvent(raw), zones: (Array.isArray(raw.zones) ? (raw.zones as Raw[]) : []).map(toZone), payment_methods: methodsOf(raw.payment_methods), cash_until: str(raw.cash_until), room: toRoom(raw.room) }
 })
 
 /** `ATLAS FC vs Rapid Oued` → `atlas-fc-vs-rapid-oued` (accents folded, at most 80 chars). */

@@ -16,6 +16,7 @@ import {
 import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
 import { errorCode, errorText, pageClock, placeOrder, postJson, type PayMethod, type Result } from '@/lib/order-client'
+import { parseAdmission, saveAdmission, storedAdmission } from '@/lib/queue'
 import { formatTime } from '@/lib/time'
 import { ClockIcon, TicketIcon } from '../../../icons'
 import { ctaText, METHOD_ICONS, MethodRows } from '../MethodRows'
@@ -52,6 +53,8 @@ export function CheckoutForm(props: {
   timezone: string
   /** When a code issued now would expire, already formatted in the venue time zone. */
   cashDeadline: string
+  /** W8 of this event: where 409 ADMISSION_REQUIRED (a live room, no valid turn) sends the fan. */
+  queueHref?: string | null
   copy: Copy
 }) {
   const { copy, qty } = props
@@ -130,7 +133,9 @@ export function CheckoutForm(props: {
         await postJson('/api/me', { display_name: v.holders[0]!.name }, 'PATCH', ctl.signal) // best effort
       }
       const order = { event_id: props.eventId, items: [{ price_category_id: props.priceCategoryId, qty, holders: v.holders }] }
-      const placed = await placeOrder(order, method, setWait, ctl.signal, { existingId: orderId ?? undefined })
+      // The W8 turn still running on server time, if any (the backend decides: ADMISSION_REQUIRED sends the fan to W8).
+      const admission = parseAdmission(storedAdmission(props.eventId), props.now + (clock.current?.() ?? 0))?.token
+      const placed = await placeOrder(order, method, setWait, ctl.signal, { existingId: orderId ?? undefined, admission })
       setWait(null)
       if (placed.kind === 'failed') return fail(placed.result)
       if (placed.kind === 'payFailed' && errorCode(placed.result) === 'METHOD_NOT_AVAILABLE' && !leaving.current) {
@@ -159,6 +164,10 @@ export function CheckoutForm(props: {
     setPending(false)
     if (errorCode(r) === 'UNAUTHORIZED') {
       return router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+    }
+    if (errorCode(r) === 'ADMISSION_REQUIRED' && props.queueHref) {
+      saveAdmission(props.eventId, null)
+      return router.push(props.queueHref)
     }
     const errs = rowErrorsFrom422(r)
     if (errs.some((e) => e?.pays === 'TOO_LATE')) {
