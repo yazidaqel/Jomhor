@@ -368,11 +368,13 @@ it('once started only the rate is editable; Appliquer confirms, then PUTs the ne
   expect(writes(calls)).toEqual([])
   await user.click(within(dialog).getByRole('button', { name: fr.room.form.apply }))
 
-  expect(await screen.findByText(i18n.t('room.applyConfirm.done', { rate: 800 }))).toBeTruthy()
+  const done = i18n.t('room.applyConfirm.done', { rate: 800 })
+  expect(await screen.findByText(done)).toBeTruthy()
   expect(writes(calls)).toEqual([
     { method: 'PUT', path: '/org/events/1/room', org: 'org-a', body: { pre_queue_min: 30, admission_rate_per_min: 800, eligibility: { min_account_age_days: 7 } } },
   ])
   await waitFor(() => expect(input(fr.room.form.rate).value).toBe('800'))
+  expect(screen.getAllByText(done)).toHaveLength(1) // one PUT, one toast, once settled
 })
 
 it.each([
