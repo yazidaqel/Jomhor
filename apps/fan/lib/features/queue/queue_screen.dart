@@ -103,8 +103,10 @@ class _QueueScreenState extends ConsumerState<QueueScreen> with SingleTickerProv
         now.status?.phase == QueuePhase.ended ||
         (now.error?.code == 'QUEUE_NOT_OPEN' && const {'ENDED', 'NO_ROOM'}.contains(now.error?.details['reason']));
     if (ended) return context.go('/events/${widget.eventId}/zones');
-    // The turn: the amber twelfth swells once, with a haptic (neither under reduced motion).
-    if (now.status?.phase == QueuePhase.admitted && before?.status?.phase != QueuePhase.admitted) {
+    // The turn: the amber twelfth swells once, with a haptic (neither under reduced motion). Only on the change
+    // itself: a screen opened on a turn already running stays still.
+    final was = before?.status?.phase;
+    if (now.status?.phase == QueuePhase.admitted && was != null && was != QueuePhase.admitted) {
       if (reduceMotion(context)) {
         _swell.value = 1;
       } else {
@@ -189,8 +191,10 @@ class _QueueScreenState extends ConsumerState<QueueScreen> with SingleTickerProv
     final left = status.admissionExpiresAt?.difference(serverNow);
     switch (status.phase) {
       case QueuePhase.preQueue:
-        final draw = l.ltr(venueClock(status.saleStartsAt, zone, l.localeName));
-        final t = status.saleStartsAt.difference(serverNow);
+        // The pre-queue always carries `sale_starts_at`; without it the draw reads as now.
+        final starts = status.saleStartsAt ?? serverNow;
+        final draw = l.ltr(venueClock(starts, zone, l.localeName));
+        final t = starts.difference(serverNow);
         final s = t.isNegative ? 0 : t.inSeconds;
         return [
           const Spacer(),
@@ -235,13 +239,22 @@ class _QueueScreenState extends ConsumerState<QueueScreen> with SingleTickerProv
           const Spacer(),
           const QueueDots(),
           const SizedBox(height: JomhorSpace.xxl),
-          Text(l.queueRankingTitle, textAlign: TextAlign.center, style: JomhorType.h1),
-          const SizedBox(height: JomhorSpace.s),
-          Text(
-            l.queueRanking,
-            textAlign: TextAlign.center,
-            style: JomhorType.body.copyWith(color: JomhorColors.textSecondary),
-          ),
+          if (status.phase == QueuePhase.paused)
+            Text(
+              l.queuePaused,
+              key: const Key('queue.wait'),
+              textAlign: TextAlign.center,
+              style: JomhorType.body.copyWith(color: JomhorColors.accentHover),
+            )
+          else ...[
+            Text(l.queueRankingTitle, textAlign: TextAlign.center, style: JomhorType.h1),
+            const SizedBox(height: JomhorSpace.s),
+            Text(
+              l.queueRanking,
+              textAlign: TextAlign.center,
+              style: JomhorType.body.copyWith(color: JomhorColors.textSecondary),
+            ),
+          ],
           const SizedBox(height: JomhorSpace.l),
           _InRoom(n: status.inRoom),
           const Spacer(),
@@ -663,7 +676,7 @@ class _QueueDotsState extends State<QueueDots> with SingleTickerProviderStateMix
     return Semantics(
       key: const Key('queue.dots'),
       label: l.queueProgress,
-      value: lit == null ? null : '$lit / 12',
+      value: lit == null ? null : l.queueProgressValue(lit),
       excludeSemantics: true,
       child: AnimatedBuilder(
         animation: Listenable.merge([_run, widget.swell]),

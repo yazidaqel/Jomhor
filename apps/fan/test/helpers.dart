@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -311,4 +312,104 @@ class PushBackend {
     }
     return await backend(r);
   }
+}
+
+/// The sale opens at 12:30 (UTC) on the test day; its room takes joins from 12:00, the test clock's start.
+const roomSaleStartsAt = '2027-02-20T12:30:00Z';
+const roomOpensAt = '2027-02-20T12:00:00Z';
+
+/// `room` of `GET /fan/events*` (docs/04-api.md §Fan, Lot 5).
+Map<String, Object?> roomJson({
+  String status = 'PRE_QUEUE',
+  String at = roomOpensAt,
+  Map<String, Object?>? eligibility,
+}) => {'status': status, 'opens_at': at, 'eligibility': eligibility};
+
+/// A fake backend for one event (id 1) with a waiting room; `/fan/queue` shaped as docs/04-api.md.
+class RoomSale {
+  new(this.clock, {this.serverSkew = Duration.zero});
+
+  final TestClock clock;
+
+  /// Server clock minus device clock.
+  final Duration serverSkew;
+  final requests = <http.Request>[];
+  Map<String, Object?>? room = roomJson();
+
+  /// Queued answers of POST /fan/queue (default: 201 in the pre-queue).
+  final joins = <http.Response Function()>[];
+
+  /// Answers of GET /fan/queue in turn; the last one repeats (default: the pre-queue).
+  final polls = <http.Response Function()>[];
+
+  /// Queued answers of POST /fan/orders (default: 409 ADMISSION_REQUIRED).
+  final orders = <http.Response Function()>[];
+
+  DateTime get serverNow => clock.now.add(serverSkew);
+
+  /// The `GET /fan/queue` shape.
+  Map<String, Object?> q({
+    String status = 'PRE_QUEUE',
+    int? position,
+    int inRoom = 120,
+    int rate = 0,
+    int? wait,
+    bool soldOut = false,
+    Duration? turn,
+    String token = 'qt-1',
+    int pollAfter = 5,
+  }) => {
+    'event_id': 1,
+    'status': status,
+    'sale_starts_at': roomSaleStartsAt,
+    'position': position,
+    'in_room': inRoom,
+    'rate_per_min': rate,
+    'estimated_wait_s': wait,
+    'sold_out': soldOut,
+    'admission': turn == null ? null : {'token': 'adm-1', 'expires_at': serverNow.add(turn).toIso8601String()},
+    'queue_token': token,
+    'poll_after_s': pollAfter,
+    'server_time': serverNow.toIso8601String(),
+  };
+
+  http.Response answer(Object? body, [int status = 200]) => http.Response.bytes(
+    utf8.encode(jsonEncode(body)),
+    status,
+    headers: {'content-type': 'application/json', 'date': HttpDate.format(serverNow)},
+  );
+
+  http.Response refusal(int status, String code, Map<String, Object?> details) =>
+      answer({'code': code, 'message': code, 'details': details}, status);
+
+  Map<String, Object?> event() => eventJson(
+    onSale: false,
+    saleStartsAt: roomSaleStartsAt,
+    zones: [
+      zoneJson(1, 'Tribune Nord', [(5000, 300)]),
+      zoneJson(2, 'Virage Sud', [(3000, 120)], seated: false),
+    ],
+  )..['room'] = room;
+
+  Future<http.Response> handle(http.Request r) async {
+    requests.add(r);
+    return switch ((r.method, r.url.path)) {
+      ('GET', '/v1/fan/events') => answer([event()..remove('zones')]),
+      ('GET', '/v1/fan/events/1') => answer(event()),
+      ('POST', '/v1/fan/queue') => joins.isEmpty ? answer(q(), 201) : joins.removeAt(0)(),
+      ('GET', '/v1/fan/queue') => switch (polls.length) {
+        0 => answer(q()),
+        1 => polls.first(),
+        _ => polls.removeAt(0)(),
+      },
+      ('GET', '/v1/fan/me') => answer({'id': 'u1', 'phone': '+212600000001', 'display_name': 'Yazid Aqel'}),
+      ('POST', '/v1/fan/orders') =>
+        orders.isEmpty ? refusal(409, 'ADMISSION_REQUIRED', {'reason': 'EXPIRED'}) : orders.removeAt(0)(),
+      _ => apiError(404, 'NOT_FOUND'),
+    };
+  }
+
+  List<http.Request> calls(String method, String path) => [
+    ...requests.where((r) => r.method == method && r.url.path == '/v1$path'),
+  ];
 }

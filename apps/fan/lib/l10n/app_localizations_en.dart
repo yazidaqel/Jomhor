@@ -1429,6 +1429,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get queueProgress => 'Progress in the queue';
 
   @override
+  String queueProgressValue(int lit) {
+    return '$lit of 12';
+  }
+
+  @override
   String get queueNotEligibleTitle => 'Sale reserved for verified fans';
 
   @override
@@ -1443,7 +1448,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String queueNotEnoughEvents(int n, int attended) {
-    return 'You need $n matches at the stadium · you have $attended';
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'You need $n matches at the stadium · you have $attended',
+      one: 'You need 1 match at the stadium · you have $attended',
+    );
+    return '$_temp0';
   }
 
   @override

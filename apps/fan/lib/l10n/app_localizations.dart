@@ -2391,6 +2391,12 @@ abstract class AppLocalizations {
   /// **'Progression dans la file'**
   String get queueProgress;
 
+  /// Screen-reader value of the twelve dots: how many are lit.
+  ///
+  /// In fr, this message translates to:
+  /// **'{lit} sur 12'**
+  String queueProgressValue(int lit);
+
   /// No description provided for @queueNotEligibleTitle.
   ///
   /// In fr, this message translates to:
@@ -2412,7 +2418,7 @@ abstract class AppLocalizations {
   /// No description provided for @queueNotEnoughEvents.
   ///
   /// In fr, this message translates to:
-  /// **'Il faut {n} matchs au stade · tu en as {attended}'**
+  /// **'{n, plural, =1{Il faut 1 match au stade · tu en as {attended}} other{Il faut {n} matchs au stade · tu en as {attended}}}'**
   String queueNotEnoughEvents(int n, int attended);
 
   /// No description provided for @queueDeviceLimit.

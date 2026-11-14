@@ -20,7 +20,6 @@ import 'club_test.dart' show ClubBackend, loyaltyJson, memberJson;
 import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
-import 'queue_test.dart' show RoomSale, roomJson;
 import 'split_pay_test.dart' show SplitBackend, buyerId, karimId, memberId, omarId, saraId;
 import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
 import 'transfer_test.dart' show openTicketJson, transferredJson;

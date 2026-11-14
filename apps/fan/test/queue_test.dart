@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
@@ -20,103 +21,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 
 import 'helpers.dart';
 
-/// The sale opens at 12:30 (UTC) on the test day; its room takes joins from 12:00, the test clock's start.
-const saleStartsAt = '2027-02-20T12:30:00Z';
-const opensAt = '2027-02-20T12:00:00Z';
 const zone = 'Africa/Casablanca';
-
-/// `room` of `GET /fan/events*` (docs/04-api.md §Fan, Lot 5).
-Map<String, Object?> roomJson({String status = 'PRE_QUEUE', String at = opensAt, Map<String, Object?>? eligibility}) =>
-    {'status': status, 'opens_at': at, 'eligibility': eligibility};
-
-/// A fake backend for one event (id 1) with a waiting room; `/fan/queue` shaped as docs/04-api.md.
-class RoomSale {
-  new(this.clock, {this.serverSkew = Duration.zero});
-
-  final TestClock clock;
-
-  /// Server clock minus device clock.
-  final Duration serverSkew;
-  final requests = <http.Request>[];
-  Map<String, Object?>? room = roomJson();
-
-  /// Queued answers of POST /fan/queue (default: 201 in the pre-queue).
-  final joins = <http.Response Function()>[];
-
-  /// Answers of GET /fan/queue in turn; the last one repeats (default: the pre-queue).
-  final polls = <http.Response Function()>[];
-
-  /// Queued answers of POST /fan/orders (default: 409 ADMISSION_REQUIRED).
-  final orders = <http.Response Function()>[];
-
-  DateTime get serverNow => clock.now.add(serverSkew);
-
-  /// The `GET /fan/queue` shape.
-  Map<String, Object?> q({
-    String status = 'PRE_QUEUE',
-    int? position,
-    int inRoom = 120,
-    int rate = 0,
-    int? wait,
-    bool soldOut = false,
-    Duration? turn,
-    String token = 'qt-1',
-    int pollAfter = 5,
-  }) => {
-    'event_id': 1,
-    'status': status,
-    'sale_starts_at': saleStartsAt,
-    'position': position,
-    'in_room': inRoom,
-    'rate_per_min': rate,
-    'estimated_wait_s': wait,
-    'sold_out': soldOut,
-    'admission': turn == null ? null : {'token': 'adm-1', 'expires_at': serverNow.add(turn).toIso8601String()},
-    'queue_token': token,
-    'poll_after_s': pollAfter,
-    'server_time': serverNow.toIso8601String(),
-  };
-
-  http.Response answer(Object? body, [int status = 200]) => http.Response.bytes(
-    utf8.encode(jsonEncode(body)),
-    status,
-    headers: {'content-type': 'application/json', 'date': HttpDate.format(serverNow)},
-  );
-
-  http.Response refusal(int status, String code, Map<String, Object?> details) =>
-      answer({'code': code, 'message': code, 'details': details}, status);
-
-  Map<String, Object?> event() => eventJson(
-    onSale: false,
-    saleStartsAt: saleStartsAt,
-    zones: [
-      zoneJson(1, 'Tribune Nord', [(5000, 300)]),
-      zoneJson(2, 'Virage Sud', [(3000, 120)], seated: false),
-    ],
-  )..['room'] = room;
-
-  Future<http.Response> handle(http.Request r) async {
-    requests.add(r);
-    return switch ((r.method, r.url.path)) {
-      ('GET', '/v1/fan/events') => answer([event()..remove('zones')]),
-      ('GET', '/v1/fan/events/1') => answer(event()),
-      ('POST', '/v1/fan/queue') => joins.isEmpty ? answer(q(), 201) : joins.removeAt(0)(),
-      ('GET', '/v1/fan/queue') => switch (polls.length) {
-        0 => answer(q()),
-        1 => polls.first(),
-        _ => polls.removeAt(0)(),
-      },
-      ('GET', '/v1/fan/me') => answer({'id': 'u1', 'phone': '+212600000001', 'display_name': 'Yazid Aqel'}),
-      ('POST', '/v1/fan/orders') =>
-        orders.isEmpty ? refusal(409, 'ADMISSION_REQUIRED', {'reason': 'EXPIRED'}) : orders.removeAt(0)(),
-      _ => apiError(404, 'NOT_FOUND'),
-    };
-  }
-
-  List<http.Request> calls(String method, String path) => [
-    ...requests.where((r) => r.method == method && r.url.path == '/v1$path'),
-  ];
-}
 
 void main() {
   late TestClock clock;
@@ -256,8 +161,8 @@ void main() {
       expect(sale.calls('GET', '/fan/queue'), hasLength(1));
     });
 
-    testWidgets('ENDED goes straight to screen 3 and stops', (tester) async {
-      sale.polls.add(() => sale.answer(sale.q(status: 'ENDED', pollAfter: 0)));
+    testWidgets('ENDED (without sale_starts_at) goes straight to screen 3 and stops', (tester) async {
+      sale.polls.add(() => sale.answer(sale.q(status: 'ENDED', pollAfter: 0)..['sale_starts_at'] = null));
       await start(tester);
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
@@ -312,6 +217,98 @@ void main() {
       expect(find.text(l.queueOffline), findsOneWidget);
       expect(find.byKey(const Key('queue.draw')), findsOneWidget);
     });
+
+    testWidgets('a reply that cannot be read: offline after a first answer, an error panel before it', (tester) async {
+      sale.polls.add(() => sale.answer({'status': 'WAITING'}));
+      await start(tester);
+      await tester.pump(const Duration(seconds: 5));
+      await flush(tester);
+      expect(find.text(l.queueOffline), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+      FlutterSecureStorage.setMockInitialValues({
+        'queue_passes': jsonEncode({'1': const QueuePass(queueToken: 'qt-9').toJson()}),
+      });
+      await start(tester, keepSecureStorage: true);
+      expect(find.byType(ErrorPanel), findsOneWidget);
+    });
+
+    testWidgets('a 401 joins again and the dots start over from the new first position', (tester) async {
+      sale.joins
+        ..add(() => sale.answer(sale.q(status: 'WAITING', position: 100, rate: 500, wait: 12)))
+        ..add(() => sale.answer(sale.q(status: 'WAITING', position: 40, rate: 500, wait: 5)));
+      sale.polls
+        ..add(() => sale.answer(sale.q(status: 'WAITING', position: 50, rate: 500, wait: 6)))
+        ..add(() => sale.refusal(401, 'UNAUTHORIZED', {}))
+        ..add(() => sale.answer(sale.q(status: 'WAITING', position: 40, rate: 500, wait: 5)));
+      await start(tester);
+      await tester.pump(const Duration(seconds: 5));
+      await flush(tester);
+      expect(litCount(tester), 6);
+      await tester.pump(const Duration(seconds: 5));
+      await flush(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(sale.calls('POST', '/fan/queue'), hasLength(2));
+      expect(text(tester, 'queue.position'), 'N° 40');
+      expect(litCount(tester), 0);
+    });
+  });
+
+  group('background', () {
+    void background(WidgetTester tester) => [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ].forEach(tester.binding.handleAppLifecycleStateChanged);
+    void foreground(WidgetTester tester) => [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ].forEach(tester.binding.handleAppLifecycleStateChanged);
+
+    testWidgets('no timed join at opens_at in the background; one on resume', (tester) async {
+      sale.joins.add(
+        () => sale.refusal(409, 'QUEUE_NOT_OPEN', {'reason': 'NOT_STARTED', 'opens_at': '2027-02-20T12:05:00Z'}),
+      );
+      await start(tester);
+      background(tester);
+      await tester.pump(const Duration(minutes: 10));
+      expect(sale.calls('POST', '/fan/queue'), hasLength(1));
+      foreground(tester);
+      await flush(tester);
+      expect(sale.calls('POST', '/fan/queue'), hasLength(2));
+    });
+
+    testWidgets('the IP retry countdown stops in the background and goes on after', (tester) async {
+      sale.joins.add(() => sale.refusal(429, 'QUEUE_RATE_LIMITED', {'reason': 'IP', 'retry_after_s': 3}));
+      await start(tester);
+      await tester.pump(const Duration(seconds: 1));
+      background(tester);
+      await tester.pump(const Duration(minutes: 1));
+      expect(sale.calls('POST', '/fan/queue'), hasLength(1));
+      foreground(tester);
+      await tester.pump();
+      expect(text(tester, 'queue.rateLimited'), 'Beaucoup de fans sur ce réseau · nouvel essai dans 2 s');
+      await tester.pump(const Duration(seconds: 2));
+      await flush(tester);
+      expect(sale.calls('POST', '/fan/queue'), hasLength(2));
+    });
+  });
+
+  testWidgets('the join at opens_at runs on server time', (tester) async {
+    // The server is 2 min ahead: opens_at 12:07 server time is 5 min away on the phone.
+    sale = RoomSale(clock, serverSkew: const Duration(minutes: 2));
+    sale.joins
+      ..add(() => sale.answer(sale.q(), 201))
+      ..add(() => sale.refusal(409, 'QUEUE_NOT_OPEN', {'reason': 'NOT_STARTED', 'opens_at': '2027-02-20T12:07:00Z'}));
+    sale.polls.add(() => sale.refusal(401, 'UNAUTHORIZED', {}));
+    await start(tester);
+    await tester.pump(const Duration(seconds: 5));
+    await flush(tester);
+    expect(sale.calls('POST', '/fan/queue'), hasLength(2));
+    await tester.pump(const Duration(minutes: 5));
+    await flush(tester);
+    expect(sale.calls('POST', '/fan/queue'), hasLength(3));
   });
 
   group('waiting', () {
@@ -358,6 +355,13 @@ void main() {
       expect(text(tester, 'queue.wait'), l.queuePaused);
       expect(find.byKey(const Key('queue.soldOut')), findsOneWidget);
       expect(find.byKey(const Key('queue.verified')), findsOneWidget);
+    });
+
+    testWidgets('paused before the rank: "Admission en pause", not "Placement en cours"', (tester) async {
+      sale.joins.add(() => sale.answer(sale.q(status: 'PAUSED', pollAfter: 15)));
+      await start(tester);
+      expect(text(tester, 'queue.wait'), l.queuePaused);
+      expect(find.text(l.queueRankingTitle), findsNothing);
     });
 
     test('wait copy: under a minute, n minutes, over an hour, none', () {
@@ -429,6 +433,16 @@ void main() {
       expect(felt, isEmpty);
     });
 
+    testWidgets('opened on a turn already running: no swell and no haptic', (tester) async {
+      final felt = haptics(tester);
+      sale.joins.add(() => sale.answer(sale.q(status: 'ADMITTED', turn: const Duration(minutes: 10), pollAfter: 0)));
+      await start(tester);
+      expect(find.byKey(const Key('queue.turn')), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 210));
+      expect(twelfthScale(tester), 1);
+      expect(felt, isEmpty);
+    });
+
     testWidgets('POST /fan/orders carries X-Admission-Token; ADMISSION_REQUIRED goes back to screen 12', (
       tester,
     ) async {
@@ -490,6 +504,11 @@ void main() {
       });
     }
 
+    test('NOT_ENOUGH_EVENTS copy is a plural', () {
+      expect(l.queueNotEnoughEvents(1, 0), 'Il faut 1 match au stade · tu en as 0');
+      expect(l.queueNotEnoughEvents(3, 2), 'Il faut 3 matchs au stade · tu en as 2');
+    });
+
     testWidgets('QUEUE_DEVICE_LIMIT', (tester) async {
       sale.joins.add(() => sale.refusal(409, 'QUEUE_DEVICE_LIMIT', {'limit': 3}));
       await start(tester);
@@ -526,6 +545,18 @@ void main() {
       await start(tester, keepSecureStorage: true);
       expect(sale.calls('POST', '/fan/queue'), isEmpty);
       expect(sale.calls('GET', '/fan/queue').single.headers['x-queue-token'], 'qt-1');
+    });
+
+    testWidgets('two puts in the same turn are both kept', (tester) async {
+      final container = await start(tester);
+      final passes = container.read(queuePassesProvider.notifier);
+      await Future.wait([
+        passes.put(7, const QueuePass(queueToken: 'qt-7')),
+        passes.put(8, const QueuePass(queueToken: 'qt-8')),
+      ]);
+      expect((await container.read(queuePassesProvider.future)).keys, containsAll([1, 7, 8]));
+      final saved = jsonDecode((await const FlutterSecureStorage().read(key: 'queue_passes'))!) as Map<String, Object?>;
+      expect(saved.keys, containsAll(['1', '7', '8']));
     });
 
     testWidgets('are wiped on logout', (tester) async {

@@ -98,9 +98,10 @@ class QueueController extends Notifier<QueueView> {
     }
   }
 
-  /// "Reprendre une place" after an expired turn: back of the queue, so the dots start over.
+  /// "Reprendre une place" after an expired turn: back of the queue, so the dots start over (the server clock offset
+  /// stays).
   Future<void> rejoin() async {
-    state = const QueueView();
+    state = QueueView(offset: state.offset);
     _ipRetried = false;
     await _passes.put(eventId, null);
     if (ref.mounted) await join();
@@ -112,10 +113,10 @@ class QueueController extends Notifier<QueueView> {
     return join();
   }
 
-  /// The app went to the background: no poll until [resume].
+  /// The app went to the background: no poll, timed join or automatic retry until [resume].
   void pause() {
     _background = true;
-    _next?.cancel();
+    _stop();
   }
 
   /// Back in front: one poll now, then the server's rhythm again.
@@ -126,6 +127,9 @@ class QueueController extends Notifier<QueueView> {
     switch (state.error) {
       case null when status != null && status.phase.polls:
         unawaited(_poll(status.queueToken));
+      // The automatic retry's countdown was stopped by [pause]: it goes on from where it was.
+      case final ApiError e when e.code == 'QUEUE_RATE_LIMITED' && state.retryIn != null:
+        _countDown(e, state.retryIn!);
       // The timed join (at `opens_at`, or after a failed first answer) was dropped by [pause]: ask again now.
       case ApiError(code: 'QUEUE_NOT_OPEN', details: {'reason': 'NOT_STARTED'}) || ApiError(status: 0):
         unawaited(join());
@@ -139,17 +143,20 @@ class QueueController extends Notifier<QueueView> {
     try {
       final status = await _repo.poll(token);
       if (ref.mounted) await _apply(status);
-    } on ApiError catch (e) {
+    } on Object catch (thrown) {
       if (!ref.mounted) return;
+      // A reply that can't be read counts as a server hiccup.
+      final e = thrown is ApiError
+          ? thrown
+          : const ApiError(status: 0, code: ApiError.unexpectedResponse, message: 'poll');
       if (e.code == 'QUEUE_RATE_LIMITED') {
         // `POLL`: silent, the next poll at `retry_after_s`.
         return _schedule(token, _retryAfter(e, 1));
       }
       if (e.status == 401) {
-        // Expired or purged entry: join again (the server returns the fan's entry if it still has one).
-        await _passes.put(eventId, null);
-        if (ref.mounted) await join();
-        return;
+        // Expired or purged entry: join again (the server returns the fan's entry if it still has one), at the back
+        // of the line as far as the dots know.
+        return await rejoin();
       }
       // Offline or a server hiccup: the last state stays, the place is kept, and we try again.
       state = QueueView(
@@ -160,8 +167,6 @@ class QueueController extends Notifier<QueueView> {
         error: state.status == null ? e : null,
       );
       _schedule(token, state.status?.pollAfterS.clamp(5, 30) ?? 5);
-    } on Object {
-      if (ref.mounted) _schedule(token, 5);
     }
   }
 
@@ -188,10 +193,27 @@ class QueueController extends Notifier<QueueView> {
     if (ref.mounted && s.phase.polls && s.pollAfterS > 0) _schedule(s.queueToken, s.pollAfterS);
   }
 
-  void _schedule(String token, int seconds) {
+  void _schedule(String token, int seconds) => _after(Duration(seconds: seconds), () => _poll(token));
+
+  /// The one timed call (a poll or a join), dropped in the background: [resume] asks again.
+  void _after(Duration wait, Future<void> Function() call) {
     _next?.cancel();
     if (_background) return;
-    _next = Timer(Duration(seconds: seconds), () => unawaited(_poll(token)));
+    _next = Timer(wait, () => unawaited(call()));
+  }
+
+  /// `QUEUE_RATE_LIMITED` `IP`: said with [left] seconds, then the automatic retry.
+  void _countDown(ApiError e, int left) {
+    _countdown?.cancel();
+    state = QueueView(
+      status: state.status,
+      firstPosition: state.firstPosition,
+      offset: state.offset,
+      error: e,
+      retryIn: left,
+    );
+    if (_background) return;
+    _countdown = Timer(const Duration(seconds: 1), () => left > 1 ? _countDown(e, left - 1) : unawaited(join()));
   }
 
   void _refused(ApiError e) {
@@ -200,36 +222,14 @@ class QueueController extends Notifier<QueueView> {
       case ('QUEUE_RATE_LIMITED', _) when !_ipRetried:
         // `IP`: said with the countdown, then one automatic retry.
         _ipRetried = true;
-        var left = _retryAfter(e, 60);
-        state = QueueView(
-          status: base.status,
-          firstPosition: base.firstPosition,
-          offset: base.offset,
-          error: e,
-          retryIn: left,
-        );
-        _countdown = Timer.periodic(const Duration(seconds: 1), (t) {
-          left--;
-          if (left > 0) {
-            state = QueueView(
-              status: base.status,
-              firstPosition: base.firstPosition,
-              offset: base.offset,
-              error: e,
-              retryIn: left,
-            );
-          } else {
-            t.cancel();
-            unawaited(join());
-          }
-        });
+        _countDown(e, _retryAfter(e, 60));
       case ('QUEUE_NOT_OPEN', 'NOT_STARTED'):
         state = base;
-        // Joins open at `opens_at`: try again then, spread by the jitter.
+        // Joins open at `opens_at` (server time): try again then, spread by the jitter.
         if (e.details['opens_at'] case final String at) {
-          final wait = DateTime.parse(at).difference(_now());
+          final wait = DateTime.parse(at).difference(state.serverNow(_now()));
           final jitter = ref.read(jitterProvider)(const Duration(seconds: 5));
-          _next = Timer((wait.isNegative ? Duration.zero : wait) + jitter, () => unawaited(join()));
+          _after((wait.isNegative ? Duration.zero : wait) + jitter, join);
         }
       case ('QUEUE_NOT_OPEN', 'ENDED' || 'NO_ROOM'):
         state = base;

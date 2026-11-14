@@ -82,28 +82,32 @@ class QueuePasses extends AsyncNotifier<Map<int, QueuePass>> {
     }
   }
 
-  /// Saves [pass] for [eventId]; null forgets it.
-  Future<void> put(int eventId, QueuePass? pass) async {
-    final all = {...await future};
-    if (all[eventId] == pass || !ref.mounted || !ref.read(sessionProvider)) return;
-    if (pass == null) {
-      all.remove(eventId);
-    } else {
-      all[eventId] = pass;
-    }
-    state = AsyncData(all);
-    final json = jsonEncode({for (final MapEntry(:key, :value) in all.entries) '$key': value.toJson()});
-    final container = ref.container;
-    // In order: a slow write never lands after a newer one.
-    await (_writing = _writing.then((_) async {
-      try {
-        await _storage.write(key: _key, value: json);
-        // A sign-out that ran during the write must not leave it behind.
-        if (!container.read(sessionProvider)) await wipeQueuePasses();
-      } on Object {
-        // Not saved: this run keeps it; after a restart the screen joins again.
+  /// Saves [pass] for [eventId]; null forgets it. Never throws.
+  ///
+  /// One put at a time, read to write: two puts in the same turn both land, and a slow write never lands after a
+  /// newer one.
+  Future<void> put(int eventId, QueuePass? pass) => _writing = _writing.then((_) => _put(eventId, pass));
+
+  Future<void> _put(int eventId, QueuePass? pass) async {
+    try {
+      final all = {...await future};
+      if (all[eventId] == pass || !ref.mounted || !ref.read(sessionProvider)) return;
+      if (pass == null) {
+        all.remove(eventId);
+      } else {
+        all[eventId] = pass;
       }
-    }));
+      state = AsyncData(all);
+      final container = ref.container;
+      await _storage.write(
+        key: _key,
+        value: jsonEncode({for (final MapEntry(:key, :value) in all.entries) '$key': value.toJson()}),
+      );
+      // A sign-out that ran during the write must not leave it behind.
+      if (!container.read(sessionProvider)) await wipeQueuePasses();
+    } on Object {
+      // Not saved: this run keeps it; after a restart the screen joins again.
+    }
   }
 }
 

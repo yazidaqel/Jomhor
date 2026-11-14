@@ -1483,6 +1483,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get queueProgress => 'التقدم فالصف';
 
   @override
+  String queueProgressValue(int lit) {
+    return '$lit من 12';
+  }
+
+  @override
   String get queueNotEligibleTitle => 'البيع خاص بالفانز المتحقق منهم';
 
   @override
@@ -1497,7 +1502,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String queueNotEnoughEvents(int n, int attended) {
-    return 'خاصك $n ماتشات فالملعب · عندك $attended';
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'خاصك $n ماتشات فالملعب · عندك $attended',
+      one: 'خاصك ماتش واحد فالملعب · عندك $attended',
+    );
+    return '$_temp0';
   }
 
   @override

@@ -37,13 +37,13 @@ class QueueStatus {
   const new({
     required this.eventId,
     required this.phase,
-    required this.saleStartsAt,
     required this.inRoom,
     required this.ratePerMin,
     required this.soldOut,
     required this.queueToken,
     required this.pollAfterS,
     required this.serverTime,
+    this.saleStartsAt,
     this.position,
     this.estimatedWaitS,
     this.admissionToken,
@@ -55,7 +55,10 @@ class QueueStatus {
     return QueueStatus(
       eventId: j['event_id']! as int,
       phase: QueuePhase.of(j['status']),
-      saleStartsAt: DateTime.parse(j['sale_starts_at']! as String).toUtc(),
+      saleStartsAt: switch (j['sale_starts_at']) {
+        final String t => DateTime.parse(t).toUtc(),
+        _ => null,
+      },
       position: j['position'] as int?,
       inRoom: j['in_room']! as int,
       ratePerMin: j['rate_per_min']! as int,
@@ -74,7 +77,9 @@ class QueueStatus {
 
   final int eventId;
   final QueuePhase phase;
-  final DateTime saleStartsAt;
+
+  /// Null once the room has `ENDED`; only the pre-queue reads it.
+  final DateTime? saleStartsAt;
 
   /// `rank − admitted_through` (≥ 1) once ranked and waiting.
   final int? position;
