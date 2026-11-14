@@ -98,6 +98,11 @@ class JdbcWaitingRooms implements WaitingRooms {
     }
 
     @Override
+    public Instant clock() {
+        return jdbc.sql("select clock_timestamp()").query(OffsetDateTime.class).single().toInstant();
+    }
+
+    @Override
     public Optional<Tick> lockForTick(UUID roomId) {
         return jdbc.sql("""
                         select r.id, r.organizer_id, r.event_id, r.status::text as status, r.pre_queue_min,

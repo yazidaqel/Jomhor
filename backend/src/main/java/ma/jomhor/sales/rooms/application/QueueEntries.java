@@ -26,8 +26,8 @@ public interface QueueEntries {
     long recentFromIp(UUID org, UUID roomId, byte[] ipHash, Duration window);
 
     /**
-     * The turn: admitted_at = coalesce(admitted_at, {@code at}) if the entry's rank is at most {@code admittedThrough};
-     * empty when it isn't (or the entry is gone).
+     * The turn: admitted_at = {@code at} if the entry's rank is at most {@code admittedThrough} and its turn hasn't
+     * started; empty otherwise (already admitted, not yet due, or gone), so a poll after the turn writes nothing.
      */
     Optional<QueueEntry> admit(UUID org, UUID roomId, UUID entryId, int admittedThrough, Instant at);
 

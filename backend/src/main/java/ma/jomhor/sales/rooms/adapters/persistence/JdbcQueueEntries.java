@@ -78,8 +78,8 @@ class JdbcQueueEntries implements QueueEntries {
     @Override
     public Optional<QueueEntry> admit(UUID org, UUID roomId, UUID entryId, int admittedThrough, Instant at) {
         return jdbc.sql("""
-                        update queue_entries set admitted_at = coalesce(admitted_at, ?)
-                        where organizer_id = ? and room_id = ? and id = ? and rank <= ?
+                        update queue_entries set admitted_at = ?
+                        where organizer_id = ? and room_id = ? and id = ? and rank <= ? and admitted_at is null
                         returning\s""" + COLUMNS)
                 .params(at.atOffset(ZoneOffset.UTC), org, roomId, entryId, admittedThrough)
                 .query(JdbcQueueEntries::entry).optional();

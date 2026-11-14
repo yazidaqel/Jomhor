@@ -37,6 +37,9 @@ public class RoomTokens {
     /** A verified queue token: {@code rank} null until ranked; {@code expiresAt} = the event's refund_cutoff_at. */
     public record Queue(UUID entryId, int eventId, Integer rank, Instant expiresAt) {}
 
+    /** A signed admission token's claims; its expiry is the caller's to check (EXPIRED vs INVALID). */
+    public record Admission(UUID userId, int eventId, Instant expiresAt) {}
+
     private final byte[] secret;
     private final MACSigner signer;
     private final MACVerifier verifier;
@@ -64,22 +67,41 @@ public class RoomTokens {
     /** Empty unless HS256 under this secret, {@code iss}, {@code aud} exactly queue, and {@code exp} after {@code now}. */
     public Optional<Queue> readQueue(String token, Instant now) {
         try {
-            SignedJWT jwt = SignedJWT.parse(token);
-            if (!JWSAlgorithm.HS256.equals(jwt.getHeader().getAlgorithm()) || !jwt.verify(verifier)) {
+            JWTClaimsSet c = verified(token, QUEUE);
+            if (c == null || !ISSUER.equals(c.getIssuer()) || !now.isBefore(c.getExpirationTime().toInstant())) {
                 return Optional.empty();
             }
-            JWTClaimsSet c = jwt.getJWTClaimsSet();
-            Date exp = c.getExpirationTime();
-            Integer evt = c.getIntegerClaim("evt");
-            if (!ISSUER.equals(c.getIssuer()) || !List.of(QUEUE).equals(c.getAudience()) || exp == null
-                    || !now.isBefore(exp.toInstant()) || evt == null || c.getSubject() == null) {
-                return Optional.empty();
-            }
-            return Optional.of(new Queue(UUID.fromString(c.getSubject()), evt, c.getIntegerClaim("rnk"),
-                    exp.toInstant()));
-        } catch (ParseException | JOSEException | IllegalArgumentException e) {
+            return Optional.of(new Queue(UUID.fromString(c.getSubject()), c.getIntegerClaim("evt"),
+                    c.getIntegerClaim("rnk"), c.getExpirationTime().toInstant()));
+        } catch (ParseException | IllegalArgumentException e) {
             return Optional.empty();
         }
+    }
+
+    /** Empty unless HS256 under this secret with {@code aud} exactly admission; an expired one is returned. */
+    public Optional<Admission> readAdmission(String token) {
+        try {
+            JWTClaimsSet c = verified(token, ADMISSION);
+            return c == null ? Optional.empty() : Optional.of(new Admission(UUID.fromString(c.getSubject()),
+                    c.getIntegerClaim("evt"), c.getExpirationTime().toInstant()));
+        } catch (ParseException | IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** The claims if HS256 under this secret, {@code aud} exactly {@code audience}, with exp, evt and sub; else null. */
+    private JWTClaimsSet verified(String token, String audience) throws ParseException {
+        SignedJWT jwt = SignedJWT.parse(token);
+        try {
+            if (!JWSAlgorithm.HS256.equals(jwt.getHeader().getAlgorithm()) || !jwt.verify(verifier)) {
+                return null;
+            }
+        } catch (JOSEException e) {
+            return null;
+        }
+        JWTClaimsSet c = jwt.getJWTClaimsSet();
+        return List.of(audience).equals(c.getAudience()) && c.getExpirationTime() != null
+                && c.getIntegerClaim("evt") != null && c.getSubject() != null ? c : null;
     }
 
     /** HMAC-SHA256(ROOMS_TOKEN_SECRET, {@code value}): 32 bytes, for "device|…" and "ip|…". */

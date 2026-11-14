@@ -45,6 +45,9 @@ public interface WaitingRooms {
      */
     Optional<Tick> lockForTick(UUID roomId);
 
+    /** The database's clock_timestamp(): the wall clock now, not the transaction's start (now()). */
+    Instant clock();
+
     /** Writes the tick's columns (everything but the organizer's configuration). */
     void saveTick(Tick t);
 }

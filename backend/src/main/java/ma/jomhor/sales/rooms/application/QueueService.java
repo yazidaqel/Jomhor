@@ -47,6 +47,7 @@ public class QueueService {
     private final QueueEntries entries;
     private final RoomMemo memo;
     private final RoomTokens tokens;
+    private final PollLimiter polls;
     private final Inventory inventory;
     private final UserService users;
     private final MembershipService memberships;
@@ -55,14 +56,15 @@ public class QueueService {
     private final int ipLimit5m;
     private final SecureRandom random = new SecureRandom();
 
-    QueueService(WaitingRooms rooms, QueueEntries entries, RoomMemo memo, RoomTokens tokens, Inventory inventory,
-                 UserService users, MembershipService memberships,
+    QueueService(WaitingRooms rooms, QueueEntries entries, RoomMemo memo, RoomTokens tokens, PollLimiter polls,
+                 Inventory inventory, UserService users, MembershipService memberships,
                  @Value("${rooms.admission-window}") Duration admissionWindow,
                  @Value("${rooms.device-limit}") int deviceLimit, @Value("${rooms.ip-limit-5m}") int ipLimit5m) {
         this.rooms = rooms;
         this.entries = entries;
         this.memo = memo;
         this.tokens = tokens;
+        this.polls = polls;
         this.inventory = inventory;
         this.users = users;
         this.memberships = memberships;
@@ -78,23 +80,24 @@ public class QueueService {
      * lock: racing joins can overshoot by those in flight.
      */
     public Joined join(UUID userId, int eventId, String deviceId, String clientIp) {
-        inventory.label(eventId).orElseThrow(() -> ApiException.notFound("Event not found"));
-        Inventory.SaleEvent sale = inventory.saleEvent(eventId).orElseThrow();
+        Inventory.SaleEvent sale = inventory.saleEvent(eventId).filter(e -> !e.draft())
+                .orElseThrow(() -> ApiException.notFound("Event not found"));
         UUID org = sale.organizerId();
         WaitingRoom room = rooms.find(org, eventId).orElseThrow(() -> notOpen("NO_ROOM", null));
-        if (room.status() == Status.SCHEDULED) {
+        Instant now = Instant.now();
+        Status status = room.statusAt(now); // a tick running late never keeps fans out once joins are open
+        if (status == Status.SCHEDULED) {
             throw notOpen("NOT_STARTED", room.opensAt());
         }
-        if (room.status() == Status.ENDED) {
+        if (status == Status.ENDED) {
             throw notOpen("ENDED", null);
         }
         if (sale.window() != Inventory.SaleWindow.OPEN && sale.window() != Inventory.SaleWindow.NOT_STARTED) {
             throw notOpen("CLOSED", null);
         }
-        checkEligible(org, userId, room);
+        checkEligible(org, userId, room, null);
         byte[] device = tokens.hash("device|" + deviceId);
         byte[] ip = tokens.hash("ip|" + clientIp);
-        Instant now = Instant.now();
         Instant cutoff = sale.refundCutoffAt();
         if (entries.devicePeers(org, room.id(), device, userId) >= deviceLimit) {
             throw new ApiException("QUEUE_DEVICE_LIMIT", HttpStatus.CONFLICT,
@@ -121,13 +124,18 @@ public class QueueService {
     }
 
     /**
-     * The poll. Missing, bad or expired token, or a purged entry → 401. A room no longer in the memo has ENDED. A
-     * ranked token still waiting reads nothing; an unranked one reads its entry; the turn writes admitted_at once.
+     * The poll. Missing, bad or expired token, or a purged entry → 401. Then the per-entry limit (QUEUE_RATE_LIMITED
+     * POLL, no SQL). A room no longer in the memo has ENDED. A ranked token still waiting reads nothing; an unranked
+     * one reads its entry; the turn writes admitted_at once.
      */
     public View poll(String token) {
         Instant now = Instant.now();
         RoomTokens.Queue q = (token == null ? Optional.<RoomTokens.Queue>empty() : tokens.readQueue(token, now))
                 .orElseThrow(QueueService::unauthorized);
+        if (!polls.allow(q.entryId())) {
+            throw new ApiException("QUEUE_RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Polling too fast",
+                    Map.of("reason", "POLL", "retry_after_s", polls.retryAfterS()));
+        }
         Optional<WaitingRoom> live = memo.get(q.eventId());
         if (live.isEmpty()) {
             Instant saleStartsAt = inventory.saleEvent(q.eventId()).map(Inventory.SaleEvent::saleStartsAt).orElse(null);
@@ -166,8 +174,9 @@ public class QueueService {
                       Instant now) {
         Integer rank = entry == null ? tokenRank : entry.rank();
         String queueToken = tokens.queue(entryId, room.eventId(), rank, cutoff);
-        int rate = room.status() == Status.PAUSED ? 0 : room.measuredRatePerMin();
-        int inRoom = room.status() == Status.PRE_QUEUE ? room.joinedCount()
+        Status status = room.statusAt(now);
+        int rate = status == Status.PAUSED ? 0 : room.measuredRatePerMin();
+        int inRoom = status == Status.PRE_QUEUE ? room.joinedCount()
                 : Math.max(0, room.rankedCount() - room.admittedThrough());
         if (entry != null && entry.admittedAt() != null) {
             Instant expiresAt = turnEnd(entry.admittedAt(), cutoff);
@@ -180,7 +189,7 @@ public class QueueService {
             return new View(room.eventId(), "EXPIRED", room.saleStartsAt(), null, inRoom, rate, null, room.soldOut(),
                     null, queueToken, 0, now);
         }
-        if (room.status() == Status.PRE_QUEUE) {
+        if (status == Status.PRE_QUEUE) {
             long toSale = Math.max(0, Duration.between(now, room.saleStartsAt()).toSeconds());
             int after = (int) Math.max(1, Math.min(30, toSale + ThreadLocalRandom.current().nextInt(21)));
             return new View(room.eventId(), "PRE_QUEUE", room.saleStartsAt(), null, inRoom, rate, null,
@@ -189,7 +198,7 @@ public class QueueService {
         Integer position = rank == null ? null : Math.max(1, rank - room.admittedThrough());
         Long wait = position == null || rate == 0 ? null : (position * 60L + rate - 1) / rate;
         int after = position == null ? 2 : jitter(wait != null && wait < 120 ? 5 : 15);
-        return new View(room.eventId(), room.status() == Status.PAUSED ? "PAUSED" : "WAITING", room.saleStartsAt(),
+        return new View(room.eventId(), status == Status.PAUSED ? "PAUSED" : "WAITING", room.saleStartsAt(),
                 position, inRoom, rate, wait, room.soldOut(), null, queueToken, after, now);
     }
 
@@ -208,8 +217,39 @@ public class QueueService {
         return e.admittedAt() != null && !now.isBefore(turnEnd(e.admittedAt(), cutoff));
     }
 
-    /** 04 §Waiting room Eligibility, against the event's organizer; the first rule failed is the reason. */
-    private void checkEligible(UUID org, UUID userId, WaitingRoom room) {
+    /**
+     * 04 POST /fan/orders admission step, decided from this instance's memo and the token's signature only (no SQL of
+     * the request; the memo reloads by itself once per TTL). No room, one ENDED, or one SCHEDULED before its
+     * opens_at: no token needed, empty. A live room (PRE_QUEUE, OPEN, PAUSED, or SCHEDULED past opens_at while the
+     * tick catches up: fail closed, by the memo row alone) needs the caller's admission token for this event, else 409
+     * ADMISSION_REQUIRED {@code MISSING}, {@code INVALID} (bad signature, another user or another event) or
+     * {@code EXPIRED}; it is returned for the split members' eligibility.
+     */
+    public Optional<WaitingRoom> requireAdmission(UUID userId, int eventId, String token) {
+        Instant now = Instant.now();
+        Optional<WaitingRoom> room = memo.get(eventId).filter(r -> r.statusAt(now).live());
+        if (room.isEmpty()) {
+            return room;
+        }
+        if (token == null || token.isBlank()) {
+            throw admissionRequired("MISSING");
+        }
+        RoomTokens.Admission a = tokens.readAdmission(token)
+                .filter(t -> t.eventId() == eventId && t.userId().equals(userId))
+                .orElseThrow(() -> admissionRequired("INVALID"));
+        if (!now.isBefore(a.expiresAt())) {
+            throw admissionRequired("EXPIRED");
+        }
+        return room;
+    }
+
+    /**
+     * 04 §Waiting room Eligibility, against the event's organizer; the first rule failed is the reason. {@code field}:
+     * null for the caller's own join (details: the reason and the rule's figures), else the holder path of a split
+     * {@code pays} member (04 POST /fan/orders, NOT_ELIGIBLE): the details are that path alone, no reason and no rule
+     * figure, so a buyer can't probe another phone's account age, membership or attendance.
+     */
+    public void checkEligible(UUID org, UUID userId, WaitingRoom room, String field) {
         Rule rule = room.config().rule();
         Map<String, Object> details = new LinkedHashMap<>();
         if (rule.minAccountAgeDays() != null) {
@@ -235,7 +275,8 @@ public class QueueService {
             }
         }
         if (!details.isEmpty()) {
-            throw new ApiException("NOT_ELIGIBLE", HttpStatus.CONFLICT, "Not eligible for this sale", details);
+            throw new ApiException("NOT_ELIGIBLE", HttpStatus.CONFLICT, "Not eligible for this sale",
+                    field == null ? details : Map.of("field", field));
         }
     }
 
@@ -246,6 +287,11 @@ public class QueueService {
             details.put("opens_at", opensAt.toString());
         }
         return new ApiException("QUEUE_NOT_OPEN", HttpStatus.CONFLICT, "The queue is not open", details);
+    }
+
+    private static ApiException admissionRequired(String reason) {
+        return new ApiException("ADMISSION_REQUIRED", HttpStatus.CONFLICT, "Your turn in the waiting room is needed",
+                Map.of("reason", reason));
     }
 
     private static ApiException unauthorized() {

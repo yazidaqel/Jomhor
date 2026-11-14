@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import java.util.function.Supplier;
 import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.sales.application.Orders;
@@ -37,28 +38,36 @@ public class RoomTicks {
     private final Orders orders;
     private final EventService events;
     private final AuditLog audit;
+    private final PollLimiter polls;
     private final long maxActiveHolds;
     private final Duration retention;
     private final TransactionTemplate tx;
     private volatile Instant lastPurge;
 
     RoomTicks(WaitingRooms rooms, QueueEntries entries, Orders orders, EventService events, AuditLog audit,
-              @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
+              PollLimiter polls, @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
               @Value("${rooms.retention}") Duration retention, PlatformTransactionManager transactions) {
         this.rooms = rooms;
         this.entries = entries;
         this.orders = orders;
         this.events = events;
         this.audit = audit;
+        this.polls = polls;
         this.maxActiveHolds = maxActiveHolds;
         this.retention = retention;
         this.tx = new TransactionTemplate(transactions);
     }
 
-    /** The job: every live room on the database clock (one clock for every instance), and the purge once a day. */
+    /**
+     * The job: this instance's poll limiter is swept first (whatever the tick does next), then every live room on the
+     * database clock (one clock for every instance): clock_timestamp() read once the room's row is locked, so a tick
+     * never starts from a time before the last one committed by another instance (last_tick_at never moves back; now()
+     * would be the transaction's start). Then the purge once a day.
+     */
     public void run() {
+        polls.sweep();
+        tickEach(rooms::clock);
         Instant now = orders.now();
-        tick(now);
         Instant last = lastPurge;
         if (last == null || !now.isBefore(last.plus(Duration.ofDays(1)))) {
             lastPurge = now;
@@ -66,11 +75,16 @@ public class RoomTicks {
         }
     }
 
-    /** One tick of every live room at {@code now}; a room that fails is logged and the others still tick. */
+    /** One tick of every live room at {@code now} (tests: a fixed clock). */
     public void tick(Instant now) {
+        tickEach(() -> now);
+    }
+
+    /** A room that fails is logged and the others still tick. */
+    private void tickEach(Supplier<Instant> clock) {
         for (UUID id : rooms.liveIds()) {
             try {
-                tx.executeWithoutResult(s -> rooms.lockForTick(id).ifPresent(r -> tick(r, now)));
+                tx.executeWithoutResult(s -> rooms.lockForTick(id).ifPresent(r -> tick(r, clock.get())));
             } catch (RuntimeException e) {
                 log.error("Room tick failed for room {}", id, e);
             }

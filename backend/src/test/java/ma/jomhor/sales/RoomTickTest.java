@@ -152,7 +152,8 @@ class RoomTickTest extends QueueFixture {
         assertThat((Integer) JsonPath.read(json, "$.poll_after_s")).isBetween(12, 18);
         String ranked = JsonPath.read(json, "$.queue_token");
 
-        before = statements.count(); // the memo was loaded by the poll above
+        memo.get(r.event()); // warm this instance's memo right before counting (it reloads once per memo-ttl)
+        before = statements.count();
         json = body(poll(ranked).andExpect(status().isOk()));
         assertThat(statements.count()).isEqualTo(before);
         assertThat((String) JsonPath.read(json, "$.status")).isEqualTo("WAITING");

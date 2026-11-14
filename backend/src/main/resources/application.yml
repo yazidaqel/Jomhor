@@ -1,10 +1,10 @@
 server:
   servlet:
     context-path: /v1 # docs/04-api.md base; every audience (/fan, /org, /gate, /payments) sits under it
-  # Client IP (per-IP OTP throttle) = Tomcat RemoteIpValve: X-Forwarded-For is believed only from a peer matching
-  # internal-proxies, else the TCP peer is the client. TRUSTED_PROXIES_REGEX is required outside dev/test (startup
-  # check in ClientIpConfig; never Spring's private-range regex): the shop and ALB private subnets (plan §7
-  # "Client IP trust chain"). Empty = trust no proxy.
+  # Client IP (per-IP OTP and queue-join limits) = Tomcat RemoteIpValve: X-Forwarded-For is believed only from a peer
+  # matching internal-proxies, else the TCP peer is the client. TRUSTED_PROXIES_REGEX is required outside dev/test
+  # (startup check in ClientIpConfig; never Spring's private-range regex): the shop and any load balancer in front.
+  # Empty = trust no proxy.
   forward-headers-strategy: native
   tomcat:
     remoteip:
@@ -49,6 +49,10 @@ jomhor:
     # Manifest v1 is built at T0 - lead (plan lot-2 Q43; the dry run may use 6h); GET /gate/events shows
     # manifest_available_at = starts_at - lead.
     manifest-lead: ${GATE_MANIFEST_LEAD:3h}
+  cors:
+    # The web shop's origin (scheme://host[:port]): the only one allowed to poll GET /fan/queue from a browser
+    # (docs/04-api.md §Fan, plan Q152). Empty = no browser origin allowed.
+    shop-origin: ${SHOP_ORIGIN:}
   crests:
     # docs/04-api.md §Club directory: settings.crest_url reaches fans only under this https prefix (ends in /), else
     # null. Jomhor's own asset host (S3 + CloudFront eu-west-3, plan multi-club Q72).
@@ -114,6 +118,8 @@ rooms:
   # New or moved-back entries of one room from one client IP in 5 min at or above this → 429 (plan Q147); 0 = off.
   # Generous on purpose: mobile CGNAT puts many fans behind one IP.
   ip-limit-5m: ${ROOMS_IP_LIMIT_5M:300}
+  # One GET /fan/queue per entry per this, per instance, in memory (plan Q147) → 429 QUEUE_RATE_LIMITED POLL.
+  poll-min-interval: ${ROOMS_POLL_MIN_INTERVAL:1s}
 
 notifications:
   push:
@@ -124,12 +130,13 @@ notifications:
   send-rate-per-second: ${NOTIFICATIONS_SEND_RATE_PER_SECOND:20}
 
 otp:
-  # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14). Mobile CGNAT puts many fans behind one IP:
-  # keep the fan limits loose and watch them on on-sale day. Org over its limit still answers 202.
+  # Per-IP sends per audience (04 §Fan /fan/auth/otp; plan Q14, lot-5 Q148). Mobile CGNAT puts many fans behind one
+  # IP, and a pre-queue brings them all at once: the fan limits stay loose, per-phone limits are the real guard. Org
+  # over its limit still answers 202.
   per-ip:
     fan:
-      sends-10m: ${OTP_PER_IP_FAN_10M:20}
-      sends-24h: ${OTP_PER_IP_FAN_24H:200}
+      sends-10m: ${OTP_PER_IP_FAN_10M:60}
+      sends-24h: ${OTP_PER_IP_FAN_24H:600}
     org:
       sends-10m: ${OTP_PER_IP_ORG_10M:5}
       sends-24h: ${OTP_PER_IP_ORG_24H:20}

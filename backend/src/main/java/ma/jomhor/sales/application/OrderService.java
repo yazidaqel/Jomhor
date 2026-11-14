@@ -25,6 +25,8 @@ import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.sales.application.Orders.Expired;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.sales.rooms.application.QueueService;
+import ma.jomhor.sales.rooms.domain.WaitingRoom;
 import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tickets.application.TicketService;
 import org.slf4j.Logger;
@@ -113,6 +115,7 @@ public class OrderService {
     private final UserService users;
     private final TicketDeliveryService deliveries;
     private final FanMessageQueue queue;
+    private final QueueService rooms;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
     private final Duration splitHold;
@@ -124,7 +127,7 @@ public class OrderService {
      */
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         CashInstructions cashInstructions, UserService users, TicketDeliveryService deliveries,
-                        FanMessageQueue queue, PlatformTransactionManager transactions,
+                        FanMessageQueue queue, QueueService rooms, PlatformTransactionManager transactions,
                         @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
                         @Value("${sales.split.hold}") Duration splitHold,
                         @Value("${payments.return-url.web}") String payUrl) {
@@ -136,6 +139,7 @@ public class OrderService {
         this.users = users;
         this.deliveries = deliveries;
         this.queue = queue;
+        this.rooms = rooms;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
         this.splitHold = splitHold;
@@ -143,9 +147,14 @@ public class OrderService {
     }
 
     /**
-     * Checks in this order: event (404, 409 EVENT_NOT_ON_SALE), items and holders (422, split pay included: per
-     * holder name, phone, pays; then NO_BUYER_PLACE; then TOO_LATE), queue (429 SALE_BUSY), per-account limit (409:
-     * the buyer, then each split member), quota (409 SOLD_OUT). Holder phones' accounts are found or created before
+     * Checks in this order (after the controller's body shape, 422 with no SQL): admission (409 ADMISSION_REQUIRED,
+     * while the event's waiting room is live, or still SCHEDULED past its opening: fail closed; from the room memo and
+     * the token's signature, before the transaction and any SQL of the request), event (404, 409 EVENT_NOT_ON_SALE),
+     * items and holders (422, split pay included: per holder name, phone, pays; then NO_BUYER_PLACE; then TOO_LATE),
+     * queue (429 SALE_BUSY), per-account limit (409: the buyer, then each split member), the live room's eligibility
+     * rule for each split {@code pays} member (409 NOT_ELIGIBLE whose details are {@code field} alone: no reason or
+     * rule figure about another phone's account), quota (409 SOLD_OUT). Holder phones' accounts are found or created
+     * before
      * any lock (they roll back with the order; the response is the same either way, so it can't be used to probe
      * whether a phone has an account). The buyer locks (buyer and members) are taken before the limits are read, so
      * parallel orders of one account are counted one after the other.
@@ -154,8 +163,15 @@ public class OrderService {
      * without {@code pays}, and each distinct {@code pays} phone gets a member order of its places, RESERVED until
      * the buyer's reserved_until.
      */
-    @Transactional
-    public View place(UUID userId, int eventId, Order.Channel channel, List<ItemRequest> items) {
+    public View place(UUID userId, int eventId, Order.Channel channel, String admissionToken,
+                      List<ItemRequest> items) {
+        WaitingRoom room = rooms.requireAdmission(userId, eventId, admissionToken).orElse(null);
+        return tx.execute(s -> placeAdmitted(userId, eventId, channel, items, room));
+    }
+
+    /** {@link #place} after admission; {@code room}: the live waiting room, or null. */
+    private View placeAdmitted(UUID userId, int eventId, Order.Channel channel, List<ItemRequest> items,
+                               WaitingRoom room) {
         Inventory.SaleEvent event = inventory.saleEvent(eventId)
                 .orElseThrow(() -> ApiException.notFound("Event not found"));
         if (event.window() != Inventory.SaleWindow.OPEN) {
@@ -201,6 +217,11 @@ public class OrderService {
             if (memberHeld + added > event.perAccountLimit()) {
                 throw new ApiException("PER_ACCOUNT_LIMIT", HttpStatus.CONFLICT, "Per-account limit reached",
                         Map.of("limit", event.perAccountLimit(), "held", memberHeld, "field", payer.getValue()));
+            }
+        }
+        if (room != null && room.config().rule().any()) { // the buyer passed it at join; holders without pays are in
+            for (var payer : payers.entrySet()) {          // the buyer's limit (plan Q149)
+                rooms.checkEligible(org, byPhone.get(payer.getKey()), room, payer.getValue());
             }
         }
 

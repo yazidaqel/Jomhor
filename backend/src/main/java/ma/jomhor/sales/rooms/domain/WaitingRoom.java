@@ -43,6 +43,17 @@ public record WaitingRoom(UUID id, UUID organizerId, int eventId, Status status,
         return saleStartsAt.minus(Duration.ofMinutes(config.preQueueMin()));
     }
 
+    /**
+     * The status by time (04 ADMISSION_REQUIRED: fail closed): a room still SCHEDULED at or after {@link #opensAt}
+     * because the tick hasn't caught up counts as PRE_QUEUE, or OPEN when it has no pre-queue. Else the stored status.
+     */
+    public Status statusAt(Instant now) {
+        if (status != Status.SCHEDULED || now.isBefore(opensAt())) {
+            return status;
+        }
+        return config.preQueueMin() == 0 ? Status.OPEN : Status.PRE_QUEUE;
+    }
+
     /** The account-age rule as a date: users.verified_at must be at or before it; null when not required. */
     public Instant verifiedBefore() {
         Integer days = config.rule().minAccountAgeDays();

@@ -30,10 +30,10 @@ public class Inventory {
     /**
      * What a sale needs to know about an event. {@code window} is computed on the database clock (now()):
      * OPEN = ON_SALE, now >= sale_starts_at (if set) and now < refund_cutoff_at (plan Q19, Q20). {@code quota} =
-     * Σ quota of its price categories.
+     * Σ quota of its price categories. {@code draft}: not visible to fans (04 GET /fan/events/{id} is a 404).
      */
     public record SaleEvent(UUID organizerId, SaleWindow window, Instant saleStartsAt, Instant refundCutoffAt,
-                            int perAccountLimit, long quota) {}
+                            int perAccountLimit, long quota, boolean draft) {}
 
     /** What a fan's order list shows of its event. */
     public record EventLabel(int id, String title, Instant startsAt, String timezone) {}
