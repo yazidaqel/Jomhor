@@ -84,7 +84,8 @@ function toRoom(v: unknown): Room | null {
   }
 }
 
-const methodsOf = (v: unknown): PayMethod[] => (Array.isArray(v) ? PAY_METHODS.filter((m) => v.includes(m)) : ['CARD'])
+/** Known methods in the 04 order; absent (a Lot 1 backend) → card only. Also products and product orders. */
+export const methodsOf = (v: unknown): PayMethod[] => (Array.isArray(v) ? PAY_METHODS.filter((m) => v.includes(m)) : ['CARD'])
 
 /** Seconds the backend response is reused (W1 list, W2 detail): DESIGN.md §Web shop. */
 export const LIST_REVALIDATE_S = 60

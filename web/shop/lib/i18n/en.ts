@@ -452,6 +452,7 @@ export const en: Dict = {
     membership: 'Member card · {price} · valid until {date}',
     buy: 'Buy',
     soldOut: 'Sold out',
+    closed: 'Sales closed',
     holder: 'Holder',
     holderHintPASS: 'The name printed on every ticket of your pass.',
     holderHintMEMBERSHIP: 'The name on your member card.',

@@ -3,16 +3,15 @@ import { notFound, redirect } from 'next/navigation'
 import { ApiError } from '@/lib/api'
 import { cashOptions } from '@/lib/checkout'
 import { eventPath } from '@/lib/clubs'
-import { getEvent, type ShopEventDetail } from '@/lib/events'
+import { getEvent, type Organizer, type ShopEventDetail } from '@/lib/events'
 import { currentSession } from '@/lib/http'
 import { fmt } from '@/lib/i18n'
 import { getI18n } from '@/lib/i18n/server'
 import { formatDh } from '@/lib/money'
 import type { OnlineMethod } from '@/lib/order-client'
 import { getOrder, loginUrl, orderNo, SAFE_ID, type OrderView } from '@/lib/orders'
-import { getProduct, productClub, productZone, type Product } from '@/lib/products'
+import { getProduct, passesPath } from '@/lib/products'
 import { formatDateTime } from '@/lib/time'
-import type { Club } from '@/lib/clubs'
 import { Crest } from '../../../brand'
 import { CashDetails } from './CashDetails'
 import { GroupProgress, slot } from './GroupProgress'
@@ -30,8 +29,9 @@ export async function generateMetadata(): Promise<Metadata> {
  * not the buyer's or unknown → 404. Split pay (Lot 4): a member's order still RESERVED with no attempt (or a FAILED
  * one) shows the member variant (event header, "{initiator_label} t'a gardé une place", MemberPay); the initiator's
  * PAID order gets the group progress block under it. Lot 5 step 3, a product order (`event_id` null, no event read): the
- * product where the event header goes (`GET /fan/products/{id}`, its listed club), and while RESERVED with no attempt
- * the method rows (ProductVariant); PAID says the pass is active or the member card up to date.
+ * product where the event header goes (`order.product`: its club, time zone and methods, even once off sale), and
+ * while RESERVED with no attempt the method rows (ProductVariant); PAID says the pass is active or the member card up
+ * to date; EXPIRED points back to W9.
  */
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -46,30 +46,26 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     if (e instanceof ApiError && e.status === 404) notFound()
     throw e
   }
-  const kind = order.product?.kind
-  const [e, product, { d }] = await Promise.all([
-    order.event_id === null ? null : getEvent(order.event_id),
-    order.product ? getProduct(order.product.id) : null,
-    getI18n(),
-  ])
-  const club = product && (await productClub(product))
+  const product = order.product
+  const kind = product?.kind
+  const [e, { d }] = await Promise.all([order.event_id === null ? null : getEvent(order.event_id), getI18n()])
   // A product order's place is not a ticket the buyer is told about ("tes amis…"): 0.
   const places = kind ? 0 : order.items.reduce((n, i) => n + i.qty, 0)
   const labels = order.items.flatMap((i) => i.labels)
   const when = e && `${formatDateTime(e.starts_at, e.timezone, d.meta.intl)} · ${e.venue.name}`
   // Card and wallet as alternatives to a code, or to pay again; wallet only if the event (or product) offers it.
-  const online = ((kind ? product : e)?.payment_methods ?? ['CARD']).filter((m): m is OnlineMethod => m !== 'CASH_AGENCY')
+  const online = ((product ?? e)?.payment_methods ?? ['CARD']).filter((m): m is OnlineMethod => m !== 'CASH_AGENCY')
   // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
   const now = Date.now()
   const p = d.passes
-  const productHead = order.product && { name: order.product.name, club, detail: product?.pass ? `${product.pass.zone.name} · ${product.pass.venue.name}` : p[order.product.kind] }
+  const productHead = product && { name: product.name, club: product.organizer, detail: p[product.kind] }
   const productPays =
     productHead &&
     order.status === 'RESERVED' &&
     order.reserved_until &&
     Date.parse(order.reserved_until) > now &&
     order.payment_status == null
-      ? { head: productHead, product, until: order.reserved_until }
+      ? { head: productHead, product, cash: await cashOf(product.id), until: order.reserved_until }
       : null
   const group = order.group
   const memberPays =
@@ -101,11 +97,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             }}
             now={now}
             places={places}
-            timezone={kind ? productZone(product) : (e?.timezone ?? null)}
-            eventHref={kind ? club && `/${club.slug}/passes` : e && eventPath(e)}
+            timezone={product ? product.timezone : (e?.timezone ?? null)}
+            eventHref={product ? passesPath(product.organizer) : e && eventPath(e)}
             methods={online}
             member={group?.role === 'MEMBER'}
-            {...(kind && { paidBody: kind === 'PASS' ? p.paidPASS : p.paidMEMBERSHIP, ticketsLink: kind === 'PASS' })}
+            product={kind && { paid: kind === 'PASS' ? p.paidPASS : p.paidMEMBERSHIP, expired: p.holdExpired, back: p.back, tickets: kind === 'PASS' }}
             copy={{ orderPage: d.orderPage, errors: d.errors, meta: d.meta, steps: d.steps }}
           >
             {order.cash && <CashDetails cash={order.cash} copy={d.orderPage} intl={d.meta.intl} />}
@@ -203,16 +199,33 @@ function MemberVariant({ e, label, until, order, now, d }: { e: ShopEventDetail;
   )
 }
 
-type Head = { name: string; club: Club | null; detail: string }
+type Head = { name: string; club: Organizer; detail: string }
+type OrderProduct = NonNullable<OrderView['product']>
 
-/** A product order's header (DESIGN Lot 5 step 3 W4): crest + club name when listed, the product name, zone and venue. */
+type Cash = { cash_until: string | null; sales_close_at: string | null }
+
+/**
+ * Cash needs the product's `cash_until` (and `sales_close_at`, which caps a code's hold), which only the live product
+ * read carries. Off sale (404) or unreadable → none: cash is dropped, card / wallet stay.
+ */
+async function cashOf(id: string): Promise<Cash> {
+  try {
+    const live = await getProduct(id)
+    return { cash_until: live?.cash_until ?? null, sales_close_at: live?.sales_close_at ?? null }
+  } catch (e) {
+    console.error('product read failed', id, e)
+    return { cash_until: null, sales_close_at: null }
+  }
+}
+
+/** A product order's header (DESIGN Lot 5 step 3 W4): crest + club name, the product name and its kind. */
 function ProductHead({ name, club, detail, size, title = false }: Head & { size: number; title?: boolean }) {
   const Name = title ? 'h1' : 'p'
   return (
     <div className={`flex items-center gap-4 ${title ? 'rounded-card border border-border bg-surface p-5 motion-safe:animate-rise' : 'rounded-control bg-ground p-3'}`}>
-      {club && <Crest club={club} size={size} />}
+      <Crest club={club} size={size} />
       <div className="flex min-w-0 flex-col gap-0.5">
-        {club && <bdi className="text-label uppercase text-text-secondary">{club.name}</bdi>}
+        <bdi className="text-label uppercase text-text-secondary">{club.name}</bdi>
         <Name className={`font-display uppercase leading-tight ${title ? 'text-h1' : 'text-xl font-bold'}`}>{name}</Name>
         <p className="text-body-small text-text-muted">{detail}</p>
       </div>
@@ -222,13 +235,13 @@ function ProductHead({ name, club, detail, size, title = false }: Head & { size:
 
 /**
  * W4 product order still RESERVED with no payment attempt (DESIGN Lot 5 step 3, as the split-pay member variant): the
- * product header, the amount, then MemberPay with the product's methods and hold copy. A product no longer readable (off
- * sale) offers card only, in Morocco's time zone.
+ * product header, the amount, then MemberPay with the order's product methods, time zone and hold copy. Cash only while
+ * the live product read gives its `cash_until` (none once off sale).
  */
-function ProductVariant({ head, product, until, order, now, d }: { head: Head; product: Product | null; until: string; order: OrderView; now: number; d: Dictionary }) {
+function ProductVariant({ head, product, cash, until, order, now, d }: { head: Head; product: OrderProduct; cash: Cash; until: string; order: OrderView; now: number; d: Dictionary }) {
   const p = d.passes
-  const tz = productZone(product)
-  const { methods, cashLate, cashUntil } = cashOptions(product ?? { payment_methods: ['CARD'], cash_until: null, sales_close_at: null }, now)
+  const tz = product.timezone
+  const { methods, cashLate, cashUntil } = cashOptions({ payment_methods: product.payment_methods, ...cash }, now)
   return (
     <>
       <ProductHead {...head} size={64} title />
@@ -254,7 +267,7 @@ function ProductVariant({ head, product, until, order, now, d }: { head: Head; p
           meta: d.meta,
         }}
       />
-      <p className="text-xs text-text-muted">{order.product?.kind === 'PASS' ? p.captionPASS : p.captionMEMBERSHIP}</p>
+      <p className="text-xs text-text-muted">{product.kind === 'PASS' ? p.captionPASS : p.captionMEMBERSHIP}</p>
     </>
   )
 }

@@ -1,5 +1,7 @@
 import 'server-only'
 import { api } from './api'
+import { methodsOf, toOrganizer, type Organizer } from './events'
+import type { PayMethod } from './order-client'
 
 // Fan orders (`/fan/orders*`), called with the session token from the httpOnly cookie. Bodies are rebuilt field by
 // field in both directions: the browser can't add fields the shop didn't mean to send, and gets back only these.
@@ -11,8 +13,11 @@ export type OrderView = {
   id: string
   /** Lot 5 step 3: null for a product order (season pass, membership). */
   event_id: number | null
-  /** Lot 5 step 3: what a product order sells; null on event orders. */
-  product: { id: string; kind: 'PASS' | 'MEMBERSHIP'; name: string } | null
+  /**
+   * Lot 5 step 3: what a product order sells, read from the product even once it is off sale: its club (crest + name,
+   * `slug` null when unlisted), the time zone of its dates and its methods. Null on event orders.
+   */
+  product: { id: string; kind: 'PASS' | 'MEMBERSHIP'; name: string; organizer: Organizer; timezone: string; payment_methods: PayMethod[] } | null
   status: string
   /** Absent until the backend sends it (04: PENDING / SUCCEEDED / FAILED, null before any /pay). */
   payment_status?: string | null
@@ -87,7 +92,15 @@ export function toOrderView(raw: unknown): OrderView {
 
 function toProduct(v: unknown): OrderView['product'] {
   const p = obj(v)
-  return typeof p.id === 'string' && (p.kind === 'PASS' || p.kind === 'MEMBERSHIP') ? { id: p.id, kind: p.kind, name: String(p.name ?? '') } : null
+  if (typeof p.id !== 'string' || (p.kind !== 'PASS' && p.kind !== 'MEMBERSHIP')) return null
+  return {
+    id: p.id,
+    kind: p.kind,
+    name: String(p.name ?? ''),
+    organizer: toOrganizer(p.organizer),
+    timezone: strOrNull(p.timezone) ?? 'Africa/Casablanca',
+    payment_methods: methodsOf(p.payment_methods),
+  }
 }
 
 const httpUrl = (v: unknown) => (typeof v === 'string' && URL.canParse(v) && /^https?:$/.test(new URL(v).protocol) ? v : null)
@@ -211,7 +224,7 @@ export const loginUrl = (next: string) => `/login?next=${encodeURIComponent(next
 /** W5 "Commandes en attente de paiement": an AWAITING_CASH order still payable, with its code. Nothing else. */
 export type PendingCashOrder = {
   id: string
-  /** Lot 5 step 3: a product order shows its product name, no date, Morocco's time zone (04 GET /fan/orders). */
+  /** Lot 5 step 3: a product order shows its product name and no date; its `timezone` is the product's (04 GET /fan/orders). */
   event: { title: string; starts_at: string | null; timezone: string }
   /** As shown: `JMH 4F7K 29` (formatPayCode). */
   code: string
@@ -240,7 +253,7 @@ export async function getPendingCash(token: string, now = Date.now()): Promise<P
       return {
         id: o.id as string,
         event: product
-          ? { title: String(product.name ?? ''), starts_at: null, timezone: 'Africa/Casablanca' }
+          ? { title: String(product.name ?? ''), starts_at: null, timezone: strOrNull(product.timezone) ?? 'Africa/Casablanca' }
           : { title: String(e.title), starts_at: String(e.starts_at), timezone: String(e.timezone) },
         code: formatPayCode(o.pay_code as string),
         amount_mad: o.total_mad as number,

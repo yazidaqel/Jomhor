@@ -454,6 +454,7 @@ export const ar: Dict = {
     membership: 'بطاقة العضو · {price} · صالحة حتى {date}',
     buy: 'شري',
     soldOut: 'كامل',
+    closed: 'البيع سالا',
     holder: 'صاحب الاشتراك',
     holderHintPASS: 'السمية اللي غادي تبان فكل تذكرة ديال الاشتراك ديالك.',
     holderHintMEMBERSHIP: 'السمية ديال بطاقة العضو ديالك.',

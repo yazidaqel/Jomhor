@@ -456,6 +456,7 @@ export const fr = {
     membership: 'Carte membre · {price} · valable jusqu’au {date}',
     buy: 'Acheter',
     soldOut: 'Complet',
+    closed: 'Vente terminée',
     holder: 'Titulaire',
     holderHintPASS: 'Le nom imprimé sur chaque billet de ton abonnement.',
     holderHintMEMBERSHIP: 'Le nom de ta carte membre.',
