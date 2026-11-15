@@ -304,7 +304,10 @@ class ProductOrderApiTest extends PaymentTest {
         call(cashier, post("/org/pos/sessions"), "{\"label\": \"Guichet\"}").andExpect(status().isCreated());
 
         String json = body(call(cashier, get("/org/pos/codes/" + code)).andExpect(status().isOk()));
+        assertKeys(json, "$", "order_id", "status", "payable", "reserved_until", "amount_mad", "places", "event", "holders",
+                "product", "reason");
         assertThat(JsonPath.<Object>read(json, "$.event")).isNull();
+        assertThat(JsonPath.<Object>read(json, "$.reason")).isNull();
         assertKeys(json, "$.product", "name");
         assertThat(JsonPath.<String>read(json, "$.product.name")).isEqualTo("Cotisation 2026-27");
         assertThat(JsonPath.<Integer>read(json, "$.places")).isEqualTo(1);
@@ -391,7 +394,8 @@ class ProductOrderApiTest extends PaymentTest {
                     .andExpect(jsonPath("$.details.paid_until").value(VALID_UNTIL));
         }
         call(t.club().admin(), get("/org/pos/codes/" + t.code())).andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("AWAITING_CASH")).andExpect(jsonPath("$.payable").value(false));
+                .andExpect(jsonPath("$.status").value("AWAITING_CASH")).andExpect(jsonPath("$.payable").value(false))
+                .andExpect(jsonPath("$.reason").value("MEMBERSHIP_PAID"));
 
         due(t.a());
         orderService.expireDue();

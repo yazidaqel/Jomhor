@@ -131,12 +131,14 @@ class JdbcMemberships implements Memberships {
                                count(*) filter (where m.marketing_whatsapp) as marketing_whatsapp,
                                count(*) filter (where m.marketing_push and\s"""
                         + PushTokens.liveTokenOf("m.user_id") + """
-                               ) as reachable_push
+                               ) as reachable_push,
+                               count(*) filter (where m.paid_until > now()) as paid
                         from memberships m
                         where m.organizer_id = ? and m.left_at is null""")
                 .param(org)
                 .query((rs, n) -> new Counts(rs.getLong("members"), rs.getLong("joined_7d"),
-                        rs.getLong("marketing_push"), rs.getLong("marketing_whatsapp"), rs.getLong("reachable_push")))
+                        rs.getLong("marketing_push"), rs.getLong("marketing_whatsapp"), rs.getLong("reachable_push"),
+                        rs.getLong("paid")))
                 .single();
     }
 

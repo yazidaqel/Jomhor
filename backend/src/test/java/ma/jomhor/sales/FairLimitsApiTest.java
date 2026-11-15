@@ -295,7 +295,8 @@ class FairLimitsApiTest extends PaymentTest {
 
     private static void membersOnly(ResultActions r, String field, Instant joinedBefore) throws Exception {
         String json = body(r.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("MEMBERS_ONLY")));
-        assertKeys(json, "$.details", "field", "member_joined_before");
+        assertKeys(json, "$.details", "field", "member_joined_before", "paid_required");
+        assertThat(JsonPath.<Boolean>read(json, "$.details.paid_required")).isFalse();
         assertThat(JsonPath.<String>read(json, "$.details.field")).isEqualTo(field);
         String before = JsonPath.read(json, "$.details.member_joined_before");
         assertThat(before == null ? null : Instant.parse(before)).isEqualTo(joinedBefore);

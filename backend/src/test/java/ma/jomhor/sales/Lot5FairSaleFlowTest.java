@@ -100,7 +100,8 @@ class Lot5FairSaleFlowTest extends QueueFixture {
         String refused = body(join(karim, event, "device-karim-000001", "10.60.0.1").andExpect(status().isConflict()));
         assertThat((String) JsonPath.read(refused, "$.code")).isEqualTo("NOT_ELIGIBLE");
         assertThat(JsonPath.<Map<String, Object>>read(refused, "$.details")).containsOnly(
-                Map.entry("reason", "NOT_MEMBER"), Map.entry("member_joined_before", PRESALE_CUTOFF));
+                Map.entry("reason", "NOT_MEMBER"), Map.entry("member_joined_before", PRESALE_CUTOFF),
+                Map.entry("paid_required", false));
 
         Fan yazid = fan();
         mvc.perform(put("/fan/me/membership").header("Authorization", "Bearer " + yazid.token())
@@ -193,7 +194,8 @@ class Lot5FairSaleFlowTest extends QueueFixture {
                 .andExpect(status().isConflict()));
         assertThat((String) JsonPath.read(membersOnly, "$.code")).isEqualTo("MEMBERS_ONLY");
         assertThat(JsonPath.<Map<String, Object>>read(membersOnly, "$.details")).containsOnly(
-                Map.entry("field", "items[0].holders[0]"), Map.entry("member_joined_before", saleStartsAt.toString()));
+                Map.entry("field", "items[0].holders[0]"), Map.entry("member_joined_before", saleStartsAt.toString()),
+                Map.entry("paid_required", false));
 
         // ---------- (7) Sara buys 4 for Hamza; a fourth friend's order naming Hamza: HOLDER ----------
         String hamza = randomPhone();

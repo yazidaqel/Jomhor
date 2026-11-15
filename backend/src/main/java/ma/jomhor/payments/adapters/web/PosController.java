@@ -80,7 +80,7 @@ class PosController {
     record ProductRef(String name) {}
 
     record CodeDto(UUID orderId, Order.Status status, boolean payable, Instant reservedUntil, long amountMad, int places,
-                   EventRef event, List<String> holders, ProductRef product) {}
+                   EventRef event, List<String> holders, ProductRef product, String reason) {}
 
     record CollectedDto(UUID orderId, Order.Status status, List<UUID> ticketIds) {}
 
@@ -150,7 +150,8 @@ class PosController {
         Order o = l.order();
         return new CodeDto(o.id(), o.status(), l.payable(), o.reservedUntil(), l.amountMad(), o.places(),
                 l.event() == null ? null : new EventRef(l.event().id(), l.event().title(), l.event().startsAt(),
-                        l.event().timezone()), l.holders(), l.productName() == null ? null : new ProductRef(l.productName()));
+                        l.event().timezone()), l.holders(), l.productName() == null ? null : new ProductRef(l.productName()),
+                l.reason());
     }
 
     @PostMapping("/org/pos/codes/{code}/collect")

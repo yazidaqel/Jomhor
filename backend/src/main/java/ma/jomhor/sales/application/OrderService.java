@@ -316,12 +316,17 @@ public class OrderService {
     }
 
     /**
-     * 04 POST /fan/orders Members-only: each place of a MEMBERS category is held by a live member of the organizer who
-     * joined before {@code saleStartsAt} (any live member when null), else 409 MEMBERS_ONLY on the first place that
-     * fails, with {@code member_joined_before}. Not checked at a till (plan lot-5 Q172).
+     * 04 POST /fan/orders Members-only: each place of a MEMBERS category is held by a member at T (04 §Products Member
+     * rule; T = {@code saleStartsAt}, else now; no joined cutoff when null), else 409 MEMBERS_ONLY on the first place
+     * that fails, with {@code member_joined_before} and {@code paid_required}. Not checked at a till (plan lot-5 Q172).
      */
     private void checkMembers(UUID org, Instant saleStartsAt, Map<UUID, SalePrice> prices, List<ItemRequest> items,
                               List<List<HolderRequest>> holders, Map<String, UUID> byPhone, UUID buyer) {
+        if (items.stream().noneMatch(it -> prices.get(it.priceCategoryId()).audience() == Event.Audience.MEMBERS)) {
+            return;
+        }
+        boolean paidRequired = memberships.paidRequired(org);
+        Instant at = saleStartsAt == null ? Instant.now() : saleStartsAt;
         Map<UUID, Boolean> member = new HashMap<>();
         for (int i = 0; i < items.size(); i++) {
             if (prices.get(items.get(i).priceCategoryId()).audience() != Event.Audience.MEMBERS) {
@@ -329,14 +334,13 @@ public class OrderService {
             }
             for (int j = 0; j < holders.get(i).size(); j++) {
                 String phone = holders.get(i).get(j).phone();
-                boolean ok = member.computeIfAbsent(phone == null ? buyer : byPhone.get(phone), account -> {
-                    Instant since = memberships.liveMemberSince(org, account);
-                    return since != null && (saleStartsAt == null || since.isBefore(saleStartsAt));
-                });
+                boolean ok = member.computeIfAbsent(phone == null ? buyer : byPhone.get(phone),
+                        account -> memberships.memberAt(org, account, saleStartsAt, at, paidRequired));
                 if (!ok) {
                     Map<String, Object> details = new LinkedHashMap<>();
                     details.put("field", "items[%d].holders[%d]".formatted(i, j));
                     details.put("member_joined_before", saleStartsAt == null ? null : saleStartsAt.toString());
+                    details.put("paid_required", paidRequired);
                     throw new ApiException("MEMBERS_ONLY", HttpStatus.CONFLICT, "Members-only price", details);
                 }
             }

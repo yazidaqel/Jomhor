@@ -304,7 +304,8 @@ class WaitingRoomFanApiTest extends QueueFixture {
                 .update();
         json = body(join(f, member.event()).andExpect(status().isConflict()));
         assertThat((Map<String, Object>) JsonPath.read(json, "$.details")).containsExactly(
-                Map.entry("reason", "NOT_MEMBER"), Map.entry("member_joined_before", "2099-01-01T00:00:00Z"));
+                Map.entry("reason", "NOT_MEMBER"), Map.entry("member_joined_before", "2099-01-01T00:00:00Z"),
+                Map.entry("paid_required", false));
         jdbc.sql("update memberships set left_at = null where user_id = ?").param(f.id()).update();
         join(f, member.event()).andExpect(status().isCreated());
 

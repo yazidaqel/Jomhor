@@ -15,7 +15,8 @@ class MembersSummaryApiTest extends CrmTest {
 
     private String summary(Club c) throws Exception {
         String json = body(call(caller(c.org(), "OPS"), get("/org/members/summary")).andExpect(status().isOk()));
-        assertKeys(json, "$", "members", "joined_7d", "marketing_push", "marketing_whatsapp", "reachable_push", "tiers");
+        assertKeys(json, "$", "members", "joined_7d", "marketing_push", "marketing_whatsapp", "reachable_push", "tiers",
+                "paid", "paid_required");
         List<Map<String, Object>> tiers = JsonPath.read(json, "$.tiers");
         assertThat(tiers).allSatisfy(t -> assertThat(t).containsOnlyKeys("code", "name", "members"));
         return json;

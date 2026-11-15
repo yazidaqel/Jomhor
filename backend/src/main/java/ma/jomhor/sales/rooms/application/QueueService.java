@@ -278,10 +278,11 @@ public class QueueService {
             }
         }
         if (details.isEmpty() && rule.memberJoinedBefore() != null) {
-            Instant since = memberships.liveMemberSince(org, userId);
-            if (since == null || !since.isBefore(rule.memberJoinedBefore())) {
+            boolean paidRequired = memberships.paidRequired(org); // 04 §Products Member rule: paid at the sale start
+            if (!memberships.memberAt(org, userId, rule.memberJoinedBefore(), room.saleStartsAt(), paidRequired)) {
                 details.put("reason", "NOT_MEMBER");
                 details.put("member_joined_before", rule.memberJoinedBefore().toString());
+                details.put("paid_required", paidRequired);
             }
         }
         if (details.isEmpty() && rule.minEventsAttended() != null) {

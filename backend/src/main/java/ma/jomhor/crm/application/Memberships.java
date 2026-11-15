@@ -40,8 +40,12 @@ public interface Memberships {
     /** The organizer's {@code limit} latest CLOSED events (starts_at, id), oldest first. */
     List<PastEvent> lastEvents(UUID org, UUID userId, int limit);
 
-    /** Live members (left_at null) of the organizer; reachablePush = push opt-in and a live push token. */
-    record Counts(long members, long joined7d, long marketingPush, long marketingWhatsapp, long reachablePush) {}
+    /**
+     * Live members (left_at null) of the organizer; reachablePush = push opt-in and a live push token; paid =
+     * paid_until after now.
+     */
+    record Counts(long members, long joined7d, long marketingPush, long marketingWhatsapp, long reachablePush,
+                  long paid) {}
 
     Counts counts(UUID org);
 

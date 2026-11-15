@@ -44,10 +44,11 @@ public class PosService {
 
     /**
      * What a till may see of a cash code (04 §Cash codes Reveals): no name, no phone. {@code event} null and
-     * {@code productName} set on a product order (04 §Point of sale, Lot 5 step 3).
+     * {@code productName} set on a product order; {@code reason} why it isn't payable, MEMBERSHIP_PAID or null
+     * (04 §Point of sale, Lot 5 step 3).
      */
     public record Lookup(Order order, boolean payable, long amountMad, Inventory.EventLabel event, String productName,
-                         List<String> holders) {
+                         List<String> holders, String reason) {
 
         /** The event title, or the product name. */
         public String title() {
@@ -158,12 +159,17 @@ public class PosService {
                 .orElseThrow(PosService::codeNotFound);
         View v = orders.inOrg(org, p.orderId()).orElseThrow();
         Order o = v.order();
-        boolean payable = o.status() == Order.Status.AWAITING_CASH && p.status() == Payment.Status.PENDING
-                && orders.holding(org, o.id()) && orders.membershipPaidUntil(o) == null;
+        boolean open = o.status() == Order.Status.AWAITING_CASH && p.status() == Payment.Status.PENDING
+                && orders.holding(org, o.id());
+        boolean membershipPaid = open && orders.membershipPaidUntil(o) != null;
+        boolean payable = open && !membershipPaid;
+        String reason = membershipPaid ? "MEMBERSHIP_PAID" : null;
         List<String> holders = o.items().stream().flatMap(i -> i.holders().stream())
                 .map(h -> HolderNames.label(h.name())).toList();
-        return o.eventId() == null ? new Lookup(o, payable, p.amountMad(), null, v.product().product().name(), holders)
-                : new Lookup(o, payable, p.amountMad(), inventory.label(o.eventId()).orElseThrow(), null, holders);
+        return o.eventId() == null ? new Lookup(o, payable, p.amountMad(), null, v.product().product().name(), holders,
+                reason)
+                : new Lookup(o, payable, p.amountMad(), inventory.label(o.eventId()).orElseThrow(), null, holders,
+                        reason);
     }
 
     /**

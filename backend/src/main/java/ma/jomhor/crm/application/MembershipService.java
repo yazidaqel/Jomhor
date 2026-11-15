@@ -23,9 +23,12 @@ public class MembershipService {
     /** 04: the 11 latest CLOSED events (the 12th dot is the next event, read elsewhere). */
     static final int LAST_EVENTS = 11;
 
-    public record View(MemberView member, LoyaltyView loyalty) {}
+    /** {@code paidRequired}: 04 §Products Member rule (Lot 5 step 3). */
+    public record View(MemberView member, LoyaltyView loyalty, boolean paidRequired) {}
 
-    public record MemberView(int number, Instant joinedAt, boolean marketingPush, boolean marketingWhatsapp) {}
+    /** {@code paidUntil}: null = never paid. */
+    public record MemberView(int number, Instant joinedAt, boolean marketingPush, boolean marketingWhatsapp,
+                             Instant paidUntil) {}
 
     public record LoyaltyView(long eventsAttended, Tier tier, NextTier nextTier, List<Memberships.PastEvent> lastEvents) {}
 
@@ -35,7 +38,8 @@ public class MembershipService {
 
     /** GET /org/members/summary: counts only, no name or phone. */
     public record Summary(long members, @JsonProperty("joined_7d") long joined7d, long marketingPush,
-                          long marketingWhatsapp, long reachablePush, List<TierCount> tiers) {}
+                          long marketingWhatsapp, long reachablePush, List<TierCount> tiers, long paid,
+                          boolean paidRequired) {}
 
     public record TierCount(String code, String name, long members) {}
 
@@ -43,12 +47,15 @@ public class MembershipService {
     private final OrganizerService organizers;
     private final UserService users;
     private final AuditLog audit;
+    private final MembershipProducts products;
 
-    MembershipService(Memberships memberships, OrganizerService organizers, UserService users, AuditLog audit) {
+    MembershipService(Memberships memberships, OrganizerService organizers, UserService users, AuditLog audit,
+                      MembershipProducts products) {
         this.memberships = memberships;
         this.organizers = organizers;
         this.users = users;
         this.audit = audit;
+        this.products = products;
     }
 
     /** The GET shape; loyalty for non-members too. Unknown organizer → 404. */
@@ -56,19 +63,31 @@ public class MembershipService {
         List<LoyaltyTier> tiers = organizers.loyaltyTiers(org);
         String locale = users.get(userId).locale();
         MemberView member = memberships.find(org, userId).filter(Member::live)
-                .map(m -> new MemberView(m.number(), m.joinedAt(), m.marketingPush(), m.marketingWhatsapp()))
+                .map(m -> new MemberView(m.number(), m.joinedAt(), m.marketingPush(), m.marketingWhatsapp(),
+                        m.paidUntil()))
                 .orElse(null);
         long attended = memberships.eventsAttended(org, userId);
         LoyaltyTier tier = Loyalty.tier(tiers, attended);
         LoyaltyTier next = Loyalty.next(tiers, attended);
         return new View(member, new LoyaltyView(attended, new Tier(tier.code(), Loyalty.name(tier, locale)),
                 next == null ? null : new NextTier(next.code(), Loyalty.name(next, locale), next.minEvents()),
-                memberships.lastEvents(org, userId, LAST_EVENTS)));
+                memberships.lastEvents(org, userId, LAST_EVENTS)), paidRequired(org));
     }
 
-    /** When the fan joined the organizer's club, if a member now (on-sale eligibility); null = not a member. */
-    public Instant liveMemberSince(UUID org, UUID userId) {
-        return memberships.find(org, userId).filter(Member::live).map(Member::joinedAt).orElse(null);
+    /** 04 §Products Member rule: the organizer has a MEMBERSHIP product (any status), so members need a cotisation. */
+    public boolean paidRequired(UUID org) {
+        return products.any(org);
+    }
+
+    /**
+     * 04 §Products Member rule, the caller passing {@link #paidRequired}: a live membership with joined_at before
+     * {@code joinedBefore} (null = no cutoff) and, when {@code paidRequired}, paid_until after {@code at}.
+     */
+    public boolean memberAt(UUID org, UUID userId, Instant joinedBefore, Instant at, boolean paidRequired) {
+        return memberships.find(org, userId).filter(Member::live)
+                .filter(m -> joinedBefore == null || m.joinedAt().isBefore(joinedBefore))
+                .filter(m -> !paidRequired || m.paidUntil() != null && m.paidUntil().isAfter(at))
+                .isPresent();
     }
 
     /** The fan's paid_until in the organizer's club (left or not), or null (never paid, or no membership). */
@@ -153,7 +172,7 @@ public class MembershipService {
         return new Summary(n.members(), n.joined7d(), n.marketingPush(), n.marketingWhatsapp(), n.reachablePush(),
                 tiers.stream().map(t -> new TierCount(t.code(), Loyalty.name(t, "fr"), byAttended.entrySet().stream()
                         .filter(e -> Loyalty.tier(tiers, e.getKey()).equals(t)).mapToLong(Map.Entry::getValue).sum()))
-                        .toList());
+                        .toList(), n.paid(), paidRequired(org));
     }
 
     /** The audit payload: the two booleans, nothing else. */
