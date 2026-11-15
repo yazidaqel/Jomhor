@@ -125,8 +125,8 @@ public interface Events {
     Optional<Event.ZoneAt> zoneAt(UUID org, int zoneId);
 
     /**
-     * The series' events at the venue, ON_SALE or GATES_OPEN, starts_at >= now() (database clock), by starts_at then
-     * id.
+     * The series' events at the venue, ON_SALE or GATES_OPEN, by starts_at then id; {@code upcoming}: only those with
+     * starts_at >= now() (database clock).
      */
-    List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId);
+    List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming);
 }

@@ -33,6 +33,15 @@ public interface Products {
     /** Public (GET /fan/products/{id}): the product by id alone, if on sale. */
     Optional<Product> onSale(UUID productId);
 
+    /**
+     * A PASS product's sold + 1 if it stays within its quota, in one row update (the row stays locked until the end of
+     * the transaction). False: the quota is reached, nothing written.
+     */
+    boolean take(UUID org, UUID productId);
+
+    /** Undoes {@link #take} in the same transaction: a PASS product's sold − 1. */
+    void giveBack(UUID org, UUID productId);
+
     /** Whether a pass ticket order (pass_id and event_id set) exists for the event. */
     boolean hasPassTickets(UUID org, int eventId);
 }

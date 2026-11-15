@@ -427,14 +427,14 @@ class JdbcEvents implements Events {
     }
 
     @Override
-    public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId) {
+    public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming) {
         return jdbc.sql("""
                         select id, title, event_type, starts_at from events
                         where organizer_id = :org and series_id = :series and venue_id = :venue
-                          and status in ('ON_SALE', 'GATES_OPEN') and starts_at >= now()
+                          and status in ('ON_SALE', 'GATES_OPEN') and (not :upcoming or starts_at >= now())
                         order by starts_at, id
                         """)
-                .param("org", org).param("series", seriesId).param("venue", venueId)
+                .param("org", org).param("series", seriesId).param("venue", venueId).param("upcoming", upcoming)
                 .query((rs, n) -> new Event.SeriesEvent(rs.getInt("id"), rs.getString("title"),
                         Event.Type.valueOf(rs.getString("event_type")), instant(rs, "starts_at")))
                 .list();

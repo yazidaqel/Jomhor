@@ -27,19 +27,22 @@ public class ProductOrderService {
     private final ProductService productService;
     private final Orders orders;
     private final MembershipService memberships;
+    private final PassService passes;
 
     ProductOrderService(Products products, ProductService productService, Orders orders,
-                        MembershipService memberships) {
+                        MembershipService memberships, PassService passes) {
         this.products = products;
         this.productService = productService;
         this.orders = orders;
         this.memberships = memberships;
+        this.passes = passes;
     }
 
     /**
      * Checks in 04 order: holder_name and installments (422), the product visible as GET /fan/products/{id} (404),
-     * now (database clock) before its sales_close_at (409 PRODUCT_NOT_ON_SALE), MEMBERSHIP already paid to its
-     * valid_until (409 MEMBERSHIP_PAID). The buyer holds the item.
+     * now (database clock) before its sales_close_at (409 PRODUCT_NOT_ON_SALE), a PASS's live pass and quota
+     * ({@link PassService#reserve}: 409 PASS_HELD, SOLD_OUT; the PENDING pass, sold + 1 and the order commit together),
+     * MEMBERSHIP already paid to its valid_until (409 MEMBERSHIP_PAID). The buyer holds the item.
      */
     @Transactional
     public OrderService.View place(UUID userId, UUID productId, Order.Channel channel, String holderName,
@@ -48,20 +51,23 @@ public class ProductOrderService {
         if (installments != null && installments != 1) {
             throw invalid("installments", "1 (in full)");
         }
-        // ponytail: PASS orders come with the pass lifecycle (plan lot-5 BE-53); until then a PASS product is a 404.
-        Product p = products.onSale(productId).filter(x -> x.kind() == Product.Kind.MEMBERSHIP)
-                .orElseThrow(() -> ApiException.notFound("Product not found"));
+        Product p = products.onSale(productId).orElseThrow(() -> ApiException.notFound("Product not found"));
         if (!orders.now().isBefore(p.salesCloseAt())) {
             throw new ApiException("PRODUCT_NOT_ON_SALE", HttpStatus.CONFLICT, "This product is no longer on sale",
                     Map.of("sales_close_at", p.salesCloseAt().toString()));
         }
         UUID org = p.organizerId();
-        Instant paidUntil = memberships.paidUntil(org, userId);
-        if (paidUntil != null && !paidUntil.isBefore(p.validUntil())) {
-            throw new ApiException("MEMBERSHIP_PAID", HttpStatus.CONFLICT, "Membership already paid",
-                    Map.of("paid_until", paidUntil.toString()));
+        UUID passId = null;
+        if (p.kind() == Product.Kind.PASS) {
+            passId = passes.reserve(p, userId, name).id();
+        } else {
+            Instant paidUntil = memberships.paidUntil(org, userId);
+            if (paidUntil != null && !paidUntil.isBefore(p.validUntil())) {
+                throw new ApiException("MEMBERSHIP_PAID", HttpStatus.CONFLICT, "Membership already paid",
+                        Map.of("paid_until", paidUntil.toString()));
+            }
         }
-        Order o = orders.insertProduct(org, userId, channel, null, new Order.Item(null, p.id(), 1, p.priceMad(),
+        Order o = orders.insertProduct(org, userId, channel, passId, new Order.Item(null, p.id(), 1, p.priceMad(),
                 List.of(new Order.Holder(name, userId))));
         return new OrderService.View(o, Map.of(), List.of(), null, null, null, productService.ofOrder(org, p.id()));
     }

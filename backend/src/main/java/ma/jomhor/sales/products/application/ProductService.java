@@ -180,12 +180,12 @@ public class ProductService {
         UUID org = p.organizerId();
         PassScope scope = scope(org, p);
         return new FanView(p, organizer, scope == null ? Venue.DEFAULT_TIMEZONE : scope.zone().timezone(), scope,
-                scope == null ? null : events.seriesEvents(org, p.seriesId(), scope.zone().venueId()),
+                scope == null ? null : events.seriesEvents(org, p.seriesId(), scope.zone().venueId(), true),
                 events.paymentOptions(org, p.salesCloseAt()));
     }
 
     /** The FKs and the create checks keep both of this organizer, so they are always found. */
-    private PassScope scope(UUID org, Product p) {
+    PassScope scope(UUID org, Product p) {
         return p.kind() != Product.Kind.PASS ? null : new PassScope(events.findSeries(org, p.seriesId()).orElseThrow(),
                 events.zoneAt(org, p.zoneId()).orElseThrow());
     }

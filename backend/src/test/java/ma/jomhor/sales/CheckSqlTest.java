@@ -10,15 +10,20 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import ma.jomhor.payments.PaymentTest;
+import ma.jomhor.sales.application.OrderService;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 
 /**
- * backend/loadtest/check.sql (plan lot-5 §5 BE-44): a clean sale has no row, and each of its eight checks fires, alone,
+ * backend/loadtest/check.sql (plan lot-5 §5 BE-44): a clean sale has no row, and each of its checks fires, alone,
  * on one crafted breach, each on a fresh event (the file is scoped by event_id: the shared test database holds other
  * classes' deliberate breaches; a product order's rows, by its ref). Also the definition of sold: a REFUNDED ticket on a PAID order counts one place less.
  */
 class CheckSqlTest extends QueueFixture {
+
+    @Autowired
+    OrderService orderService;
 
     /**
      * A sale with no breach, on a 3-place category (sold out): the fan's order A of 2 places is PAID (2 VALID tickets,
@@ -111,6 +116,48 @@ class CheckSqlTest extends QueueFixture {
                 select organizer_id, ?::uuid, event_id, zone_id, price_category_id, 'VALID' from tickets
                 where order_id = ?::uuid limit 1""", order, s.paid());
         assertThat(foundFor(order)).containsExactly("TICKETS_PLACES");
+    }
+
+    private String productOrder(Fan f, String product) throws Exception {
+        return JsonPath.read(body(mvc.perform(post("/fan/product-orders")
+                .header("Authorization", "Bearer " + f.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"product_id\": \"%s\", \"channel\": \"APP\", \"holder_name\": \"Nadia Berrada\"}"
+                        .formatted(product))).andExpect(status().isCreated())), "$.id");
+    }
+
+    /**
+     * BE-53: a pass product's sold = its passes that aren't CANCELLED. A paid, a pending and an expired purchase are
+     * clean, and the sale beside them too; sold drifted from them is a PRODUCT_SOLD row.
+     */
+    @Test
+    void aPassProductsSoldIsItsLivePasses() throws Exception {
+        Sale s = sale();
+        Caller a = s.room().admin();
+        String series = JsonPath.read(body(call(a, post("/org/series"),
+                "{\"name\": \"Saison\", \"starts_on\": \"2026-08-01\", \"ends_on\": \"2099-06-30\"}")
+                .andExpect(status().isCreated())), "$.id");
+        int zone = zone(a, venue(a, "Stade"), "EST");
+        String product = JsonPath.read(body(call(a, post("/org/products"), """
+                {"kind": "PASS", "name": "Abonnement", "price_mad": 150000, "quota": 5, "series_id": "%s",
+                 "zone_id": %d, "sales_close_at": "2099-06-30T22:00:00Z", "on_sale": true}""".formatted(series, zone))
+                .andExpect(status().isCreated())), "$.id");
+        String paid = productOrder(s.fan(), product);
+        callback(PaymentTest.approve(pay(s.fan(), paid), 150_000)).andExpect(status().isSeeOther());
+        String pending = productOrder(fan(), product);
+        String expired = productOrder(fan(), product);
+        sql("update orders set reserved_until = now() - interval '1 second' where id = ?::uuid", expired);
+        orderService.expireDue();
+        assertThat(jdbc.sql("select p.status::text from passes p join orders o on o.pass_id = p.id where o.id in "
+                        + "(?::uuid, ?::uuid, ?::uuid) order by array_position(array[?, ?, ?], o.id::text)")
+                .params(paid, pending, expired, paid, pending, expired).query(String.class).list())
+                .containsExactly("ACTIVE", "PENDING", "CANCELLED");
+        for (String ref : List.of(product, paid, pending, expired)) {
+            assertThat(foundFor(ref)).isEmpty();
+        }
+        assertThat(found(s)).isEmpty();
+
+        sql("update products set sold = sold + 1 where id = ?::uuid", product);
+        assertThat(foundFor(product)).containsExactly("PRODUCT_SOLD");
     }
 
     @Test

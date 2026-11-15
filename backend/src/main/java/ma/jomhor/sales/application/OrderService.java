@@ -27,6 +27,7 @@ import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.sales.application.Orders.Expired;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.sales.products.application.PassService;
 import ma.jomhor.sales.products.application.ProductService;
 import ma.jomhor.sales.products.domain.Product;
 import ma.jomhor.sales.rooms.application.QueueService;
@@ -53,8 +54,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * every holder account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till) → categories;
  * the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
  * ticket row → the recipient's users row → the recipient's per-account lock ({@link HolderLimit}) and no category.
- * A product order (04 §Products) takes no per-account lock and no category; settling a MEMBERSHIP one takes the
- * organizer's membership lock after the order row. So none of them waits in a circle.
+ * A product order (04 §Products) takes no per-account order lock and no category; settling a MEMBERSHIP one takes the
+ * organizer's membership lock after the order row. A PASS purchase takes the account's series lock → the product row
+ * → the pass; its late success the order row → the same ({@link PassService}); the expiry its order rows → the
+ * products (id order) → the passes. So none of them waits in a circle.
  */
 @Service
 public class OrderService {
@@ -127,6 +130,7 @@ public class OrderService {
     private final QueueService rooms;
     private final MembershipService memberships;
     private final ProductService products;
+    private final PassService passes;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
     private final Duration splitHold;
@@ -139,7 +143,7 @@ public class OrderService {
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         CashInstructions cashInstructions, UserService users, TicketDeliveryService deliveries,
                         FanMessageQueue queue, QueueService rooms, MembershipService memberships,
-                        ProductService products, PlatformTransactionManager transactions,
+                        ProductService products, PassService passes, PlatformTransactionManager transactions,
                         @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
                         @Value("${sales.split.hold}") Duration splitHold,
                         @Value("${payments.return-url.web}") String payUrl) {
@@ -154,6 +158,7 @@ public class OrderService {
         this.rooms = rooms;
         this.memberships = memberships;
         this.products = products;
+        this.passes = passes;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
         this.splitHold = splitHold;
@@ -550,7 +555,8 @@ public class OrderService {
      * EXPIRED (a late success, plan Q8) re-reserves the places under the buyer lock with the per-account
      * limit checked again. A product order (04 §Products) issues no ticket: a MEMBERSHIP one pays the membership
      * ({@link MembershipService#paid}); when it is already paid to that date the order is CANCELLED (it can't be
-     * charged again) and NOT_PAYABLE returned. Never throws for a business
+     * charged again) and NOT_PAYABLE returned. A PASS one activates its pass, or on a late success re-takes it
+     * ({@link PassService#paid}: else SOLD_OUT or PER_ACCOUNT_LIMIT, the order stays EXPIRED). Never throws for a business
      * outcome: the payment commits as SUCCEEDED either way, and anything but PAID is for a manual refund.
      */
     @Transactional(propagation = Propagation.MANDATORY)
@@ -569,9 +575,9 @@ public class OrderService {
             return Settlement.NOT_PAYABLE;
         }
         if (o.eventId() == null) {
-            if (!productPaid(o)) {
-                orders.cancel(o.organizerId(), o.id());
-                return Settlement.NOT_PAYABLE;
+            Settlement refused = productPaid(o, before == Order.Status.EXPIRED);
+            if (refused != null) {
+                return refused;
             }
             orders.markPaid(o.organizerId(), o.id(), method, paymentRef);
         } else {
@@ -621,17 +627,20 @@ public class OrderService {
     }
 
     /**
-     * What a paid product order gives (04 §Products): a MEMBERSHIP pays the buyer's membership up to its valid_until;
-     * false = already paid to that date (nothing written).
+     * What a paid product order gives (04 §Products, §Passes); null when given, else why not. A PASS: its pass
+     * ({@link PassService#paid}; a refusal leaves the order EXPIRED). A MEMBERSHIP pays the buyer's membership up to its
+     * valid_until; already paid to that date → the order CANCELLED, NOT_PAYABLE.
      */
-    private boolean productPaid(Order o) {
+    private Settlement productPaid(Order o, boolean expired) {
         Product p = products.product(o.organizerId(), o.productId());
-        // TODO(BE-53): replace this throw with the pass branch (activate at settle, re-take on a late success); PASS
-        // orders can't be placed until then.
-        if (p.kind() != Product.Kind.MEMBERSHIP) {
-            throw new IllegalStateException("product order " + o.id() + " of kind " + p.kind());
+        if (p.kind() == Product.Kind.PASS) {
+            return passes.paid(o.organizerId(), o.passId(), expired);
         }
-        return memberships.paid(o.organizerId(), o.userId(), p.id(), p.validUntil());
+        if (memberships.paid(o.organizerId(), o.userId(), p.id(), p.validUntil())) {
+            return null;
+        }
+        orders.cancel(o.organizerId(), o.id());
+        return Settlement.NOT_PAYABLE;
     }
 
     /** Takes the expired order's places again; null if done, else why not. A product order holds no place. */
@@ -701,6 +710,10 @@ public class OrderService {
                     e.hold().priceCategoryId(), orderIds, e);
             throw e;
         }
+        // 04 §Passes Lifecycle: a pass bought by an expired order → CANCELLED, sold − 1, in this transaction (once: the
+        // orders were flipped from RESERVED or AWAITING_CASH just now, under their row locks).
+        passes.cancelExpired(expired.stream().filter(d -> d.hold() == null).flatMap(d -> d.orderIds().stream())
+                .toList());
         return new Batch(due.size(), (int) expired.stream().flatMap(d -> d.orderIds().stream()).distinct().count());
     }
 

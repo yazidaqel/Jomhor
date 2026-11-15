@@ -412,9 +412,12 @@ public class EventService {
         return events.zoneAt(org, zoneId);
     }
 
-    /** 04 GET /fan/products {@code pass.events}: the series' published, upcoming events at the venue. */
-    public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId) {
-        return events.seriesEvents(org, seriesId, venueId);
+    /**
+     * The series' published (ON_SALE, GATES_OPEN) events at the venue: upcoming only for 04 GET /fan/products
+     * {@code pass.events}, all of them for GET /fan/passes {@code events}.
+     */
+    public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming) {
+        return events.seriesEvents(org, seriesId, venueId, upcoming);
     }
 
     /** 04 GET /fan/products {@code payment_methods}, {@code cash_until}: as an event's, closing at {@code salesCloseAt}. */

@@ -38,6 +38,17 @@ where p.sold <> coalesce(h.held, 0) + coalesce(h.paid, 0) - coalesce(r.n, 0)
 
 union all
 
+-- A pass product whose sold isn't its passes that aren't CANCELLED (docs/03-schema.sql products; a MEMBERSHIP sells
+-- no pass: 0). No event: ref = the product id.
+select 'PRODUCT_SOLD', null::integer, pr.id::text, format('sold %s, live passes %s', pr.sold, coalesce(n.n, 0))
+from products pr
+left join (select organizer_id, product_id, count(*) as n from passes where status <> 'CANCELLED'
+           group by organizer_id, product_id) n
+  on n.organizer_id = pr.organizer_id and n.product_id = pr.id
+where pr.sold <> coalesce(n.n, 0)
+
+union all
+
 -- Double charge: two SUCCEEDED payments on one order, neither marked payment.refund_required (audit target = the
 -- payment id).
 select 'DOUBLE_CHARGE', o.event_id, o.id::text,

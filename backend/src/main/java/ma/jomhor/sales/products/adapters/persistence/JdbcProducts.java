@@ -93,6 +93,19 @@ class JdbcProducts implements Products {
     }
 
     @Override
+    public boolean take(UUID org, UUID productId) {
+        return jdbc.sql("update products set sold = sold + 1 where organizer_id = :org and id = :id and kind = 'PASS'"
+                        + " and sold < quota")
+                .param("org", org).param("id", productId).update() == 1;
+    }
+
+    @Override
+    public void giveBack(UUID org, UUID productId) {
+        jdbc.sql("update products set sold = sold - 1 where organizer_id = :org and id = :id and kind = 'PASS'")
+                .param("org", org).param("id", productId).update();
+    }
+
+    @Override
     public boolean hasPassTickets(UUID org, int eventId) {
         return jdbc.sql("select exists (select 1 from orders where organizer_id = :org and event_id = :event"
                         + " and pass_id is not null)")
