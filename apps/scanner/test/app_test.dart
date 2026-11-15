@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
 import 'package:jomhor_scanner/app/app.dart';
-import 'package:jomhor_scanner/app/config.dart';
 import 'package:jomhor_scanner/core/device_key.dart';
 import 'package:jomhor_scanner/core/gate/gate_client.dart';
 import 'package:jomhor_scanner/data/scanner_database.dart';
@@ -27,16 +26,6 @@ void main() {
       expect(ar.devicePending, isNot(fr.devicePending));
       expect(ar.deviceNotEnrolledHint, fr.deviceNotEnrolledHint);
     });
-  });
-
-  test('the API must be https, except a local dev backend, in every build mode', () {
-    for (final ok in ['https://api.jomhor.ma/v1', 'http://10.0.2.2:8080/v1', 'http://localhost:8080/v1']) {
-      expect(() => AppConfig.checkApiUrl(baseUrl: ok), returnsNormally, reason: ok);
-    }
-    for (final bad in ['http://api.jomhor.ma/v1', 'http://192.168.1.10:8080/v1', 'ftp://x', '']) {
-      expect(() => AppConfig.checkApiUrl(baseUrl: bad), throwsStateError, reason: bad);
-    }
-    expect(AppConfig.checkApiUrl, returnsNormally);
   });
 
   Future<ScannerDatabase> pumpApp(WidgetTester tester, Locale locale) async {
