@@ -262,6 +262,17 @@ it.each(['fr', 'ar', 'en'] as const)('%s: 422 SELF → back to the phone field w
   expect(document.activeElement).toBe(el.querySelector('#transfer-phone'))
 })
 
+it('Lot 5: 409 PER_ACCOUNT_LIMIT HOLDER on to_phone → the holder-limit line under the phone field', async () => {
+  fetchMock
+    .mockResolvedValueOnce(json(200, { tickets: [ticket('t-1')] }))
+    .mockResolvedValueOnce(json(409, { code: 'PER_ACCOUNT_LIMIT', message: '', details: { reason: 'HOLDER', field: 'to_phone', limit: 4 } }))
+  await show()
+  await toConfirm()
+  await click(button(copy.transfer.confirm))
+  expect(el.querySelector('#transfer-phone-error')!.textContent).toBe('Ce numéro a atteint la limite de 4 billets pour cet événement')
+  expect(document.activeElement).toBe(el.querySelector('#transfer-phone'))
+})
+
 it.each<[string, number, Record<string, unknown>, string, boolean]>([
   ['TRANSFER_CLOSED (details.transfer_until)', 409, { code: 'TRANSFER_CLOSED', message: '', details: { transfer_until: '2026-02-07T17:00:00Z' } }, 'Transferts fermés 2 h avant le début', false],
   ['TRANSFER_CLOSED without transfer_until', 409, { code: 'TRANSFER_CLOSED', message: '', details: {} }, d.transfer.unavailable, false],

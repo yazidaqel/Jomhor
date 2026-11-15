@@ -4,7 +4,8 @@ import { eventPath } from '@/lib/clubs'
 import { saleState, type ShopEventDetail } from '@/lib/events'
 import { fmt, type Dict } from '@/lib/i18n'
 import { loginUrl } from '@/lib/orders'
-import { countdown, formatDate, formatDateTime, formatShortDate, formatTime } from '@/lib/time'
+import { nextLine, roomTime } from '@/lib/queue'
+import { countdown, formatDateTime, formatShortDate, formatTime } from '@/lib/time'
 import { Watermark } from '../../../../brand'
 import { BackIcon, CalendarIcon, CardIcon, PinIcon, QrIcon, TicketIcon } from '../../../../icons'
 import { CountdownTiles } from '../../../countdown'
@@ -15,22 +16,29 @@ import { ZonePicker, type RoomView } from './ZonePicker'
 const chip = 'flex items-center gap-2 rounded-chip border border-border bg-ground px-3 py-2 text-sm'
 const rise = 'motion-safe:animate-rise stagger'
 
-/** The W2 room panel's server part (DESIGN Lot 5): labels in the venue time zone, the way to W8. */
+/**
+ * The W2 room panel's server part (DESIGN Lot 5): the current phase's line ("{label} · {status}"), the next phase,
+ * the rule (matchs or événements by `event_type`, Q182), labels in the venue time zone, the way to W8.
+ */
 function roomView(e: ShopEventDetail, now: number, d: Dict, signedIn: boolean): RoomView | null {
   const path = e.room && eventPath(e)
   if (!e.room || !path) return null
-  const { opens_at, eligibility: el, status } = e.room
+  const { opens_at, eligibility: el, status, label } = e.room
   const tz = e.timezone
-  const sameDay = formatDate(opens_at, tz, d.meta.intl) === formatDate(new Date(now).toISOString(), tz, d.meta.intl)
-  const time = sameDay ? formatTime(opens_at, tz, d.meta.intl) : formatDateTime(opens_at, tz, d.meta.intl)
+  const intl = d.meta.intl
+  const time = roomTime(opens_at, tz, intl, now)
   const rules = el && [
-    el.verified_before && fmt(d.room.verifiedBefore, { date: formatShortDate(el.verified_before, tz, d.meta.intl) }),
-    el.member_joined_before && fmt(d.room.memberBefore, { date: formatShortDate(el.member_joined_before, tz, d.meta.intl) }),
-    el.min_events_attended !== null && fmt(d.room.minEvents, { n: el.min_events_attended }),
+    el.verified_before && fmt(d.room.verifiedBefore, { date: formatShortDate(el.verified_before, tz, intl) }),
+    el.member_joined_before && fmt(d.room.memberBefore, { date: formatShortDate(el.member_joined_before, tz, intl) }),
+    el.min_events_attended !== null && fmt(e.event_type === 'FOOTBALL_MATCH' ? d.room.minEvents : d.room.minEventsOther, { n: el.min_events_attended }),
   ].filter(Boolean)
   const queue = `${path}/queue`
+  const statusText = fmt(d.room.phase[status], { time: status === 'PRE_QUEUE' ? roomTime(e.room.sale_starts_at, tz, intl, now) : time })
   return {
     status,
+    phase: e.room.phase,
+    banner: label ? `${label} · ${statusText}` : null,
+    next: nextLine(d.room, e.room.next, tz, intl, now),
     opensAt: opens_at,
     opensLabel: fmt(d.room.opensAt, { time }),
     rules: rules?.length ? fmt(d.room.eligibility, { rules: rules.join(' · ') }) : null,
@@ -100,6 +108,7 @@ export function EventView({ e, now, d, signedIn = false }: { e: ShopEventDetail;
         limit={e.per_account_limit}
         closed={state === 'ON_SALE' ? null : saleLabel(d, e, state)}
         room={roomView(e, now, d, signedIn)}
+        membersNote={e.sale_starts_at ? fmt(d.event.membersNote, { date: formatShortDate(e.sale_starts_at, e.timezone, d.meta.intl) }) : d.event.membersNoteAny}
         copy={{ event: d.event, order: d.order, meta: d.meta, room: d.room }}
       >
         <ul className="grid gap-3 rounded-control border border-border bg-surface p-4 text-body-small text-text-secondary sm:grid-cols-3">

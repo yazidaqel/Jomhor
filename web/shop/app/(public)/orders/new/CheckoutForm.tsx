@@ -15,9 +15,9 @@ import {
 } from '@/lib/checkout'
 import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
-import { errorCode, errorText, pageClock, placeOrder, postJson, type PayMethod, type Result } from '@/lib/order-client'
+import { errorCode, errorText, holderLimitText, pageClock, placeOrder, postJson, type PayMethod, type Result } from '@/lib/order-client'
 import { parseAdmission, saveAdmission, storedAdmission } from '@/lib/queue'
-import { formatTime } from '@/lib/time'
+import { formatShortDate, formatTime } from '@/lib/time'
 import { ClockIcon, TicketIcon } from '../../../icons'
 import { ctaText, METHOD_ICONS, MethodRows } from '../MethodRows'
 
@@ -99,16 +99,22 @@ export function CheckoutForm(props: {
   const friends = hasFriendPhone(rows)
   const split = splitSummary(rows, props.unitMad)
   const set = (i: number, field: keyof Row, value: string | boolean) => setRows((r) => r.map((row, j) => (j === i ? { ...row, [field]: value } : row)))
+  // Lot 5 step 2: the holder's own refusals (DESIGN Lot 5 W3 holder rows), under the name on ticket 1, else the phone.
+  const holderError = (e: RowError | undefined) =>
+    e?.members
+      ? e.members.before
+        ? fmt(c.membersOnly, { date: formatShortDate(e.members.before, props.timezone, copy.meta.intl) })
+        : copy.errors.MEMBERS_ONLY
+      : e?.holder
+        ? holderLimitText(copy.errors, e.holder.limit)
+        : null
+  const nameError = (e: RowError | undefined, i: number) => (e?.name ? c.nameInvalid : i === 0 ? holderError(e) : null)
   const phoneError = (e: RowError | undefined) =>
     e?.phone
       ? c.phoneInvalid
       : e?.limit
         ? fmt(c.friendLimit, e.limit)
-        : e?.pays
-          ? e.pays === 'PHONE_REQUIRED'
-            ? c.paysPhoneRequired
-            : copy.errors.VALIDATION_FAILED
-          : null
+        : (holderError(e) ?? (e?.pays ? (e.pays === 'PHONE_REQUIRED' ? c.paysPhoneRequired : copy.errors.VALIDATION_FAILED) : null))
 
   function showErrors(errs: RowError[], consentMissing = false) {
     setRowErrors(errs)
@@ -204,13 +210,13 @@ export function CheckoutForm(props: {
               dir="auto"
               autoComplete={i === 0 ? 'name' : 'off'}
               placeholder={c.namePlaceholder}
-              aria-invalid={!!rowErrors[i]?.name}
-              aria-describedby={rowErrors[i]?.name ? `name-${i}-error` : undefined}
+              aria-invalid={!!nameError(rowErrors[i], i)}
+              aria-describedby={nameError(rowErrors[i], i) ? `name-${i}-error` : undefined}
               className={input}
             />
-            {rowErrors[i]?.name && (
+            {nameError(rowErrors[i], i) && (
               <p id={`name-${i}-error`} className="mt-1.5 text-body-small text-danger">
-                {c.nameInvalid}
+                {nameError(rowErrors[i], i)}
               </p>
             )}
           </div>

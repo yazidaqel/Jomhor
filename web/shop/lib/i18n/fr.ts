@@ -109,6 +109,9 @@ export const fr = {
     access: ' · QR scanné à la porte, aucune impression obligatoire',
     ogAlt: 'Billetterie : événement, date et lieu',
     back: 'Tous les matchs',
+    members: 'Membres',
+    membersNote: 'Tarif membres · inscrits avant le {date}',
+    membersNoteAny: 'Tarif membres · réservé aux membres du club',
   },
   steps: {
     label: 'Étapes de ta commande',
@@ -187,6 +190,17 @@ export const fr = {
     rateLimitedAgain: 'Beaucoup de fans sur ce réseau. Réessaie dans un instant.',
     closed: 'La vente est terminée pour cet événement.',
     retry: 'Réessayer',
+    minEventsOther: '{n} événements',
+    NOT_ENOUGH_EVENTS_OTHER: 'Il faut {n} événements · tu en as {attended}',
+    resume: 'Reprendre ma place',
+    next: 'Ensuite : {label} · file dès {time}',
+    nextDefault: 'Prochaine vente',
+    phase: {
+      SCHEDULED: 'file dès {time}',
+      PRE_QUEUE: 'tirage à {time}',
+      OPEN: 'file ouverte',
+      PAUSED: 'admission en pause',
+    },
   },
   checkout: {
     metaTitle: 'Tes billets',
@@ -242,6 +256,7 @@ export const fr = {
     splitFriends: '{m} place(s) payée(s) par tes amis',
     splitCaption: 'Tes amis ont 2 h après ton paiement',
     friendLimit: 'Cette personne a déjà {held} billet(s) pour cet événement : {limit} maximum par compte.',
+    membersOnly: 'Tarif réservé aux membres inscrits avant le {date}',
   },
   orderPage: {
     metaTitle: 'Ta commande',
@@ -435,5 +450,8 @@ export const fr = {
     METHOD_NOT_CONFIGURED: 'Ce moyen de paiement n’est pas proposé pour ce match.',
     generic: 'Une erreur est survenue. Réessaie.',
     NO_BUYER_PLACE: 'Garde au moins une place pour toi : tes amis ne peuvent pas payer toutes les places.',
+    HOLDER_LIMIT: 'Ce numéro a atteint la limite de {limit} billets pour cet événement',
+    HOLDER_LIMIT_ANY: 'Ce numéro a atteint la limite de billets pour cet événement',
+    MEMBERS_ONLY: 'Tarif réservé aux membres du club.',
   },
 }

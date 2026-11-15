@@ -7,8 +7,19 @@ import { normalizePhone } from './phone'
 
 /** `pays`: the friend pays their own place (04 §Split pay); only read from ticket 2 on, once a phone is typed. */
 export type Row = { name: string; phone: string; pays?: boolean }
-/** `pays`: the 422 reason on that row's `pays`; `limit`: that friend is over their own per-account limit (409). */
-export type RowError = { name?: boolean; phone?: boolean; pays?: string; limit?: { limit: number; held: number } }
+/**
+ * `pays`: the 422 reason on that row's `pays`; `limit`: that friend is over their own per-account limit (409).
+ * Lot 5 step 2: `holder` = the limit that row's holder account reached (409 PER_ACCOUNT_LIMIT `HOLDER`, never what it
+ * holds); `members` = a members price this holder can't take (409 MEMBERS_ONLY), `before` the join date or null.
+ */
+export type RowError = {
+  name?: boolean
+  phone?: boolean
+  pays?: string
+  limit?: { limit: number; held: number }
+  holder?: { limit: number | null }
+  members?: { before: string | null }
+}
 export type Holder = { name: string; phone?: string; pays?: true }
 
 /**
@@ -43,7 +54,9 @@ export function splitSummary(rows: Row[], unitMad: number) {
 /**
  * The rows an error answer marks. 422: `details.fields` keys `items[0].holders[j].name|phone|pays` (a `pays` one
  * carries `details.reason`: PHONE_REQUIRED, TOO_LATE). 409 PER_ACCOUNT_LIMIT with `details.field`
- * `items[0].holders[j]`: that friend is over their own limit. Other fields (`items` for NO_BUYER_PLACE) are ignored.
+ * `items[0].holders[j]`: that friend is over their own limit, or with `reason` HOLDER that holder's account would hold
+ * too many places; 409 MEMBERS_ONLY on `items[0].holders[j]`: a members price for a non-member. Other fields
+ * (`items` for NO_BUYER_PLACE) are ignored.
  */
 export function rowErrorsFrom422(r: Result): RowError[] {
   const errors: RowError[] = []
@@ -52,8 +65,19 @@ export function rowErrorsFrom422(r: Result): RowError[] {
     const m = /^items\[0\]\.holders\[(\d{1,2})\]\.(name|phone|pays)$/.exec(f)
     if (m) errors[Number(m[1])] = { ...errors[Number(m[1])], [m[2]!]: m[2] === 'pays' ? String(details.reason ?? 'INVALID') : true }
   }
-  const m = r.data?.code === 'PER_ACCOUNT_LIMIT' && typeof details.field === 'string' && /^items\[0\]\.holders\[(\d{1,2})\]$/.exec(details.field)
-  if (m) errors[Number(m[1])] = { ...errors[Number(m[1])], limit: { limit: Number(details.limit) || 0, held: Number(details.held) || 0 } }
+  const m = typeof details.field === 'string' && /^items\[0\]\.holders\[(\d{1,2})\]$/.exec(details.field)
+  const i = m ? Number(m[1]) : -1
+  if (m && r.data?.code === 'PER_ACCOUNT_LIMIT') {
+    errors[i] = {
+      ...errors[i],
+      ...(details.reason === 'HOLDER'
+        ? { holder: { limit: Number.isSafeInteger(details.limit) ? (details.limit as number) : null } }
+        : { limit: { limit: Number(details.limit) || 0, held: Number(details.held) || 0 } }),
+    }
+  }
+  if (m && r.data?.code === 'MEMBERS_ONLY') {
+    errors[i] = { ...errors[i], members: { before: typeof details.member_joined_before === 'string' ? details.member_joined_before : null } }
+  }
   return errors
 }
 
@@ -78,8 +102,9 @@ export const shouldSaveName = (name: string, displayName: string | null) => name
 /** The id of the first field to focus after errors (`name-0`, `phone-1`…), or null. */
 export function firstInvalid(errors: RowError[]): string | null {
   for (const [i, e] of errors.entries()) {
-    if (e?.name) return `name-${i}`
-    if (e?.phone || e?.limit || e?.pays) return `phone-${i}`
+    const holder = e?.holder ?? e?.members // shown under the name on ticket 1 (no phone field there), else the phone
+    if (e?.name || (i === 0 && holder)) return `name-${i}`
+    if (e?.phone || e?.limit || e?.pays || holder) return `phone-${i}`
   }
   return null
 }

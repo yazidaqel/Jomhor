@@ -107,6 +107,9 @@ export const ar: Dict = {
     access: ' · كيتسكانا رمز QR فالبوابة، ما خاصكش تطبع',
     ogAlt: 'التذاكر: الحدث، التاريخ والبلاصة',
     back: 'جميع الماتشات',
+    members: 'الأعضاء',
+    membersNote: 'ثمن الأعضاء · اللي تسجلو قبل {date}',
+    membersNoteAny: 'ثمن الأعضاء · غير لأعضاء النادي',
   },
   steps: {
     label: 'مراحل الطلب ديالك',
@@ -185,6 +188,17 @@ export const ar: Dict = {
     rateLimitedAgain: 'بزاف ديال الفانز فهاد الريزو. عاود من بعد شوية.',
     closed: 'البيع سالا لهاد الحدث.',
     retry: 'عاود',
+    minEventsOther: '{n} ديال الأحداث',
+    NOT_ENOUGH_EVENTS_OTHER: 'خاصك {n} ديال الأحداث · عندك {attended}',
+    resume: 'رجع لبلاصتي',
+    next: 'من بعد: {label} · الصف من {time}',
+    nextDefault: 'البيع الجاي',
+    phase: {
+      SCHEDULED: 'الصف من {time}',
+      PRE_QUEUE: 'القرعة مع {time}',
+      OPEN: 'الصف محلول',
+      PAUSED: 'الدخول متوقف',
+    },
   },
   checkout: {
     metaTitle: 'التذاكر ديالك',
@@ -240,6 +254,7 @@ export const ar: Dict = {
     splitFriends: '{m} بلاصة غادي يخلصوهم صحابك',
     splitCaption: 'صحابك عندهم 2 سوايع من بعد ما تخلص',
     friendLimit: 'هاد الشخص عندو {held} تذكرة فهاد الحدث: الماكسيموم {limit} لكل حساب.',
+    membersOnly: 'ثمن خاص بالأعضاء اللي تسجلو قبل {date}',
   },
   orderPage: {
     metaTitle: 'الطلب ديالك',
@@ -433,5 +448,8 @@ export const ar: Dict = {
     METHOD_NOT_CONFIGURED: 'طريقة الخلاص هادي ما كايناش لهاد الماتش.',
     generic: 'وقع شي مشكل. عاود.',
     NO_BUYER_PLACE: 'خلي على الأقل بلاصة وحدة ليك: صحابك ما يقدروش يخلصو جميع البلايص.',
+    HOLDER_LIMIT: 'هاد النمرة وصلات للحد ديال {limit} ديال التذاكر فهاد الحدث',
+    HOLDER_LIMIT_ANY: 'هاد النمرة وصلات للحد ديال التذاكر فهاد الحدث',
+    MEMBERS_ONLY: 'ثمن خاص بأعضاء النادي.',
   },
 }

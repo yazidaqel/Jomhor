@@ -92,6 +92,20 @@ it('"Se déconnecter" posts the logout, shows "Se connecter" and leaves a privat
   expect(login()).toBeDefined()
 })
 
+it('logging out forgets the waiting-room places and turns kept in this browser (Lot 5), and nothing else', async () => {
+  localStorage.setItem('jomhor.queue.12', '{"phase":1}')
+  sessionStorage.setItem('jomhor.queue-first.12', '40')
+  sessionStorage.setItem('jomhor.admission.12', '{"phase":1}')
+  localStorage.setItem('jomhor.admission.12', '{"phase":1}')
+  localStorage.setItem('other', 'kept')
+  fetchMock.mockResolvedValueOnce(json(200, { display_name: null })).mockResolvedValueOnce(new Response(null, { status: 204 }))
+  await show()
+  await act(async () => button(d.header.logout)!.click())
+  expect({ ...localStorage }).toEqual({ other: 'kept' })
+  expect(sessionStorage.length).toBe(0)
+  localStorage.clear()
+})
+
 it('a failed logout keeps the signed-in state (the cookie is still there) and says so', async () => {
   fetchMock.mockResolvedValueOnce(json(200, { display_name: 'Yazid Aqel' })).mockResolvedValueOnce(json(403, { code: 'FORBIDDEN' }))
   await show()

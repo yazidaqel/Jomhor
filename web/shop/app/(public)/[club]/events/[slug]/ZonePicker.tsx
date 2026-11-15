@@ -6,7 +6,7 @@ import type { RoomStatus, Zone } from '@/lib/events'
 import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
 import { mmss } from '@/lib/queue'
-import { useAdmission, useServerClock } from '@/lib/queue-hooks'
+import { useAdmission, useHeldPlace, useServerClock } from '@/lib/queue-hooks'
 import { ArrowIcon, CheckIcon } from '../../../../icons'
 
 type Copy = Pick<Dict, 'event' | 'order' | 'meta' | 'room'>
@@ -14,6 +14,12 @@ type Copy = Pick<Dict, 'event' | 'order' | 'meta' | 'room'>
 /** W2 room panel (DESIGN Lot 5): what the server knows, formatted in the venue time zone. */
 export type RoomView = {
   status: RoomStatus
+  /** The current sale phase (Lot 5 step 2): a place stored for it shows "Reprendre ma place"; a turn of another phase is none. */
+  phase: number
+  /** "Prévente membres · tirage à 15:30" when the phase has a label, else null. */
+  banner: string | null
+  /** "Ensuite : Vente générale · file dès …", or null. */
+  next: string | null
   opensAt: string
   /** "File d'attente dès 15:30". */
   opensLabel: string
@@ -37,6 +43,7 @@ const BARS = ['bg-zone-a', 'bg-zone-b', 'bg-zone-c']
  * `closed` = the sale status text when the sale isn't open; every card is disabled then.
  * `room` (Lot 5) = a live waiting room: until this tab holds a running W8 turn, cards show prices but are disabled
  * ("Accès par la file") and the summary becomes the room panel, which flips to "Rejoindre la file" at `opens_at`.
+ * A `MEMBERS` price shows the "Membres" chip and `membersNote`; nothing is pre-blocked (the server decides, Lot 5 step 2).
  */
 export function ZonePicker({
   eventId,
@@ -44,6 +51,7 @@ export function ZonePicker({
   limit,
   closed,
   room = null,
+  membersNote = '',
   copy,
   children,
 }: {
@@ -52,12 +60,15 @@ export function ZonePicker({
   limit: number
   closed: string | null
   room?: RoomView | null
+  /** "Tarif membres · inscrits avant le {date}". */
+  membersNote?: string
   copy: Copy
   children?: React.ReactNode
 }) {
   const [serverNow] = useServerClock(room?.now ?? 0, !!room)
-  const stored = useAdmission(eventId, serverNow)
-  const turn = room ? stored : null // a turn left from a room that has ended means nothing now
+  const stored = useAdmission(eventId, serverNow, room?.phase ?? 0)
+  const turn = room ? stored : null // a turn left from a room that has ended, or of another phase, means nothing now
+  const held = useHeldPlace(eventId, room?.phase ?? 0) && !!room?.signedIn // another fan's marker on a shared browser
   const gated = !!room && !turn
   const options = zones.flatMap((z, i) =>
     z.prices.map((p) => ({
@@ -102,6 +113,11 @@ export function ZonePicker({
                 <span className="flex items-center gap-2.5 pe-8">
                   <span aria-hidden="true" className={`h-7 w-2.5 rounded-[5px] ${soldOut ? 'bg-zone-disabled' : o.bar}`} />
                   <span className="text-base font-semibold">{o.zone}</span>
+                  {o.audience === 'MEMBERS' && (
+                    <span data-members className="rounded-pill border border-accent/50 px-2 py-0.5 text-caption font-semibold text-accent">
+                      {copy.event.members}
+                    </span>
+                  )}
                 </span>
                 {!soldOut && !closed && !gated && (
                   <span
@@ -114,6 +130,7 @@ export function ZonePicker({
                   </span>
                 )}
                 <span className={`text-body-small ${soldOut ? '' : 'text-text-muted'}`}>{o.detail}</span>
+                {o.audience === 'MEMBERS' && <span className="text-xs text-text-secondary">{membersNote}</span>}
                 {soldOut ? (
                   <span className="text-sm font-semibold">{copy.event.soldOut}</span>
                 ) : (
@@ -135,7 +152,7 @@ export function ZonePicker({
       </section>
 
       {gated && room ? (
-        <RoomPanel room={room} open={room.status !== 'SCHEDULED' || serverNow >= Date.parse(room.opensAt)} copy={copy.room} />
+        <RoomPanel room={room} open={room.status !== 'SCHEDULED' || serverNow >= Date.parse(room.opensAt)} held={held} copy={copy.room} />
       ) : (
         <aside
           aria-labelledby="order-title"
@@ -242,11 +259,12 @@ function Cta({ href, label, className }: { href: string | undefined; label: stri
 /**
  * The summary aside while a room gates the sale: one line on the room, the eligibility rule, and the CTA:
  * before `opens_at` disabled "File d'attente dès {time}" (+ "Connecte-toi maintenant" when signed out), then
- * "Rejoindre la file" → W8 (through the login when signed out). Phone width: the CTA is a sticky bottom bar.
+ * "Rejoindre la file" → W8 (through the login when signed out), or "Reprendre ma place" when this browser (signed in) has a
+ * place in the current phase. Lot 5 step 2: the phase line and the next phase. Phone width: the CTA is a sticky bottom bar.
  */
-function RoomPanel({ room, open, copy }: { room: RoomView; open: boolean; copy: Dict['room'] }) {
+function RoomPanel({ room, open, held, copy }: { room: RoomView; open: boolean; held: boolean; copy: Dict['room'] }) {
   const cta = (phone: boolean) => (
-    <Cta href={open ? room.join : undefined} label={open ? copy.join : room.opensLabel} className={phone ? 'flex w-full' : 'hidden md:flex'} />
+    <Cta href={open ? room.join : undefined} label={open ? (held ? copy.resume : copy.join) : room.opensLabel} className={phone ? 'flex w-full' : 'hidden md:flex'} />
   )
   return (
     <aside
@@ -254,7 +272,7 @@ function RoomPanel({ room, open, copy }: { room: RoomView; open: boolean; copy: 
       data-room={open ? 'open' : 'scheduled'}
       className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-accent/40 bg-surface p-5 shadow-2xl shadow-ground md:sticky md:top-24 md:max-w-[380px]"
     >
-      <p className="text-label uppercase text-accent">{copy.title}</p>
+      <p className="text-label uppercase text-accent">{room.banner ?? copy.title}</p>
       <h2 id="room-title" className="font-display text-h2 uppercase">
         {copy.panelTitle}
       </h2>
@@ -265,6 +283,7 @@ function RoomPanel({ room, open, copy }: { room: RoomView; open: boolean; copy: 
           {room.rules}
         </p>
       )}
+      {room.next && <p className="text-body-small text-text-muted">{room.next}</p>}
       {cta(false)}
       {!open && !room.signedIn && (
         <Link href={room.join} className="flex min-h-touch-min items-center justify-center text-body-small font-semibold text-accent hover:underline">

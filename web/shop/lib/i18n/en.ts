@@ -105,6 +105,9 @@ export const en: Dict = {
     access: ' · QR scanned at the gate, no printing needed',
     ogAlt: 'Tickets: event, date and venue',
     back: 'All matches',
+    members: 'Members',
+    membersNote: 'Members price · joined before {date}',
+    membersNoteAny: 'Members price · for club members only',
   },
   steps: {
     label: 'Your order steps',
@@ -183,6 +186,17 @@ export const en: Dict = {
     rateLimitedAgain: 'Lots of fans on this network. Try again in a moment.',
     closed: 'Sales are closed for this event.',
     retry: 'Try again',
+    minEventsOther: '{n} events',
+    NOT_ENOUGH_EVENTS_OTHER: 'You need {n} events · you have {attended}',
+    resume: 'Back to my place',
+    next: 'Next: {label} · queue from {time}',
+    nextDefault: 'Next sale',
+    phase: {
+      SCHEDULED: 'queue from {time}',
+      PRE_QUEUE: 'draw at {time}',
+      OPEN: 'queue open',
+      PAUSED: 'admission paused',
+    },
   },
   checkout: {
     metaTitle: 'Your tickets',
@@ -238,6 +252,7 @@ export const en: Dict = {
     splitFriends: '{m} seat(s) paid by your friends',
     splitCaption: 'Your friends have 2 h after you pay',
     friendLimit: 'This person already has {held} ticket(s) for this event: {limit} max per account.',
+    membersOnly: 'Members price: for members who joined before {date}',
   },
   orderPage: {
     metaTitle: 'Your order',
@@ -431,5 +446,8 @@ export const en: Dict = {
     METHOD_NOT_CONFIGURED: 'This payment method is not offered for this match.',
     generic: 'Something went wrong. Try again.',
     NO_BUYER_PLACE: 'Keep at least one seat for yourself: your friends can’t pay for every seat.',
+    HOLDER_LIMIT: 'This number has reached the limit of {limit} tickets for this event',
+    HOLDER_LIMIT_ANY: 'This number has reached the ticket limit for this event',
+    MEMBERS_ONLY: 'Members price: for club members only.',
   },
 }

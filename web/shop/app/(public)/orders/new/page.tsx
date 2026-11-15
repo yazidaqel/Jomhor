@@ -14,6 +14,7 @@ import { formatDateTime } from '@/lib/time'
 import { Crest } from '../../../brand'
 import { Steps } from '../../steps'
 import { CheckoutForm } from './CheckoutForm'
+import { TurnBar } from './TurnBar'
 
 export async function generateMetadata(): Promise<Metadata> {
   const { d } = await getI18n()
@@ -62,6 +63,8 @@ export default async function CheckoutPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-16">
+      {/* Lot 5: a live room gates the sale, so a running W8 turn shows above the content. */}
+      {e.room && <TurnBar eventId={e.id} phase={e.room.phase} now={now} text={d.room.turnBar} />}
       <section aria-labelledby="checkout-title" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
         <Steps current={2} copy={d.steps} />
         <h1 id="checkout-title" className="mt-4 font-display text-hero uppercase motion-safe:animate-rise sm:text-[56px]">
