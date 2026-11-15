@@ -45,6 +45,9 @@ import { CloseSessionDialog, OpenSessionDialog } from './SessionDialogs'
 // B11 Guichet (DESIGN §Lot 3 adjustments): the till session, a walk-up sale and a cash code's collect, each paid
 // order then opened in the print view. Sale and collect need the caller's open till (else 409 POS_SESSION_REQUIRED).
 
+/** Lot 5 step 3 (Q187): PASS places are issued by the pass job, never sold at a till (422 on the item). */
+const sellable = (prices: Price[]) => prices.filter((p) => p.audience !== 'PASS')
+
 /** Copy for a sale or collect error; PER_ACCOUNT_LIMIT says the cap. */
 function useErrorMessage() {
   const { t } = useTranslation()
@@ -183,7 +186,7 @@ function SaleForm({ events }: { events: EventSummary[] }) {
   }
 
   const submit = async (v: SaleValues) => {
-    const list = prices.data ?? []
+    const list = sellable(prices.data ?? [])
     const items = saleItems(list, v.qty, v.holders, v.same_name)
     const shown = list.reduce((sum, p) => sum + (v.qty[p.id] ?? 0) * p.price_mad, 0)
     saleId.current ??= crypto.randomUUID()
@@ -285,8 +288,9 @@ function Places({ eventId, form }: { eventId: string; form: UseFormReturn<SaleVa
     form.setValue('holders', Array.from({ length: placeCount(next) }, (_, i) => holders[i] ?? { name: '', phone: '' }))
   }
   const label = (p: Price) => t('pos.sale.priceName', { zone: p.zone.name, name: p.name })
+  const rows = sellable(prices.data)
   // Place i → its zone and category, in the order of the rows.
-  const places = prices.data.flatMap((p) => Array<string>(qty[p.id] ?? 0).fill(label(p)))
+  const places = rows.flatMap((p) => Array<string>(qty[p.id] ?? 0).fill(label(p)))
   const { errors } = form.formState
 
   return (
@@ -299,7 +303,7 @@ function Places({ eventId, form }: { eventId: string; form: UseFormReturn<SaleVa
           <p className={cn('text-xs tabular-nums', total >= limit ? 'font-medium text-foreground' : 'text-muted-foreground')}>{t('pos.sale.limit', { count: limit })}</p>
         </div>
         <ul className="flex flex-col divide-y rounded-lg border">
-          {prices.data.map((p) => (
+          {rows.map((p) => (
             <PriceRow key={p.id} price={p} label={label(p)} qty={qty[p.id] ?? 0} full={total >= limit} onQty={(q) => setQty(p.id, q)} locale={i18n.language} />
           ))}
         </ul>
@@ -438,7 +442,7 @@ function SaleSummary({ eventId, form, stop }: { eventId: string; form: UseFormRe
   const qty = useWatch({ control: form.control, name: 'qty' })
   const received = useWatch({ control: form.control, name: 'received' })
   const touched = !!form.formState.touchedFields.received
-  const total = (prices.data ?? []).reduce((sum, p) => sum + (qty[p.id] ?? 0) * p.price_mad, 0)
+  const total = sellable(prices.data ?? []).reduce((sum, p) => sum + (qty[p.id] ?? 0) * p.price_mad, 0)
   const change = received.trim() === '' ? undefined : changeDue(received, total)
   // The error waits for the field to be left, unless what is typed can no longer become an amount.
   const invalid = change === null && (touched || !DH_PREFIX.test(received.trim()))

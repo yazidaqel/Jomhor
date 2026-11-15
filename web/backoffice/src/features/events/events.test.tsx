@@ -128,6 +128,7 @@ const detail = (over: Partial<EventDetail> = {}): EventDetail => ({
   venue_id: 'v-1',
   timezone: CASA,
   series_id: null,
+  pass_tickets: false,
   event_type: 'FOOTBALL_MATCH',
   title: 'Atlas FC vs Rapid Oued',
   starts_at: '2026-11-14T19:00:00Z',
@@ -1166,4 +1167,18 @@ it('prices: PASS_PRICE lands on the price with its copy', async () => {
   await user.click(within(panel).getByRole('button', { name: fr.common.save }))
   expect(await within(panel).findByText(fr.events.prices.passPrice)).toBeTruthy()
   expect(within(panel).getByLabelText(fr.events.prices.price).getAttribute('aria-invalid')).toBe('true')
+})
+
+it('série: `pass_tickets` from the server → the select starts disabled with its tooltip; nothing is sent', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi('ADMIN', () => undefined, detail({ series_id: 's-1', pass_tickets: true }))
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  const select = screen.getByRole('combobox', { name: fr.events.series.label })
+  expect(select).toHaveProperty('disabled', true)
+  await waitFor(() => expect(select.textContent).toBe(seriesOption(SERIES[0]!)))
+  expect(screen.queryByRole('button', { name: fr.events.series.new })).toBeNull()
+  await user.hover(select.parentElement!)
+  expect((await screen.findByRole('tooltip')).textContent).toBe(fr.events.series.locked)
+  expect(writes(calls)).toEqual([])
 })

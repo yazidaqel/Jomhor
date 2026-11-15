@@ -26,6 +26,8 @@ export type EventDetail = {
   /** The venue's IANA zone: every wall time of this event is in it. */
   timezone: string
   series_id: string | null
+  /** Lot 5 step 3: pass tickets exist for this event, so `series_id` is fixed. */
+  pass_tickets: boolean
   event_type: EventType
   title: string
   starts_at: string

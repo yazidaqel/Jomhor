@@ -97,7 +97,9 @@ function EventEditor({ event }: { event?: EventDetail }) {
   })
   const [rowEditing, setRowEditing] = useState(false) // a price row is open on Tarifs & quotas
   const [publishRefused, setPublishRefused] = useState(false) // EVENT_NOT_EDITABLE on publish, shown on the page
-  const [seriesLocked, setSeriesLocked] = useState(false) // PASS_TICKETS: pass tickets exist, the series stays
+  // Pass tickets exist, so the series stays: from the server copy, or a PASS_TICKETS refusal (a ticket issued meanwhile).
+  const [lockedBy409, setLockedBy409] = useState(false)
+  const seriesLocked = !!event?.pass_tickets || lockedBy409
   const refusedAlert = useRef<HTMLParagraphElement>(null)
 
   // doors_open_at and sale_starts_at cannot be cleared (04-api §Organizer): once set, they stay required.
@@ -145,7 +147,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
     // Lot 5 step 3: pass tickets were issued for this event under its series, which can no longer change.
     if (e instanceof ApiError && e.code === 'EVENT_NOT_EDITABLE' && e.details.reason === 'PASS_TICKETS') {
       reveal(['series_id'])
-      setSeriesLocked(true)
+      setLockedBy409(true)
       form.resetField('series_id')
       return void toast.error(t('events.series.locked'), { id: 'series-locked' })
     }

@@ -56,6 +56,7 @@ const EVENT: EventDetail = {
   venue_id: 'v-1',
   timezone: CASA,
   series_id: null,
+  pass_tickets: false,
   event_type: 'FOOTBALL_MATCH',
   title: EVENTS[0]!.title,
   starts_at: STARTS,
@@ -790,4 +791,21 @@ it('B11 close: only the gap value is a live region', async () => {
   const live = [...dialog.querySelectorAll('[aria-live]')]
   expect(live).toHaveLength(1)
   expect(live[0]!.textContent).toBe(fr.pos.close.noGap)
+})
+
+it('B11 Vente: a PASS category (season-pass places, 0 DH) is never offered or sent at the till', async () => {
+  const user = userEvent.setup()
+  const pass: Price = { id: 'p-pass', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Abonnés', price_mad: 0, quota: 50, sold: 0, audience: 'PASS' }
+  const calls = stubApi({
+    '/org/events/1/prices': () => Response.json([...PRICES, pass]),
+    '/org/pos/orders': () => Response.json(SALE_ORDER, { status: 201 }),
+  })
+  renderApp('/pos')
+  await fillSale(user)
+  expect(screen.queryByRole('button', { name: i18n.t('pos.sale.more', { name: priceName(pass) }) })).toBeNull()
+  expect(screen.queryByText(priceName(pass))).toBeNull()
+  await user.click(submitSale(5_000))
+  await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/org/pos/orders')).toBe(true))
+  const post = calls.find((c) => c.method === 'POST' && c.path === '/org/pos/orders')!
+  expect((post.body as { items: { price_category_id: string }[] }).items.map((i) => i.price_category_id)).toEqual([SUD.id])
 })
