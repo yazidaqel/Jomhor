@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react'
+import { act, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { getRedirectStatusCodeFromError, getURLFromRedirectError } from 'next/dist/client/components/redirect'
@@ -234,6 +234,19 @@ describe('W2 waitlist panel (browser)', () => {
     expect(calls()).toEqual([`PUT ${API}`])
     expect(location.pathname + location.search).toBe(W2)
     expect(panel()!.getAttribute('data-waitlist')).toBe('joined')
+    expect(sessionStorage.length).toBe(0)
+  })
+
+  it('StrictMode (the dev server) runs the effect twice: the second run still joins (real run: the first PUT was aborted)', async () => {
+    markJoin(12)
+    history.replaceState(null, '', `${W2}?waitlist=1`)
+    const e = await detail()
+    fetchMock.mockReset()
+    fetchMock.mockImplementation(async (_, init) => (init?.method === 'PUT' ? json(201, WAITING) : json(200, { entry: null })))
+    await act(async () => root.render(<StrictMode>{EventView({ e, now: NOW, d: fr, signedIn: true })}</StrictMode>))
+    expect(calls()).toEqual([`PUT ${API}`, `PUT ${API}`]) // PUT is idempotent (04: already waiting → 200, unchanged)
+    expect(panel()!.getAttribute('data-waitlist')).toBe('joined')
+    expect(location.pathname + location.search).toBe(W2)
     expect(sessionStorage.length).toBe(0)
   })
 

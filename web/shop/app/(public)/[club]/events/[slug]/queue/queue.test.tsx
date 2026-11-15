@@ -430,6 +430,8 @@ describe('W8 room (client)', () => {
   it.each<[string, Record<string, unknown>, string]>([
     ['NOT_ELIGIBLE ACCOUNT_TOO_NEW', { code: 'NOT_ELIGIBLE', details: { reason: 'ACCOUNT_TOO_NEW', verified_before: '2026-01-25T12:30:05Z' } }, 'Vente réservée aux fans vérifiésCompte vérifié après le 25 janv.'],
     ['NOT_ENOUGH_EVENTS', { code: 'NOT_ELIGIBLE', details: { reason: 'NOT_ENOUGH_EVENTS', min_events_attended: 3, attended: 1 } }, 'Il faut 3 matchs au stade · tu en as 1'],
+    // The real-run body (Lot 5 step 2 presale, a non-member).
+    ['NOT_ELIGIBLE NOT_MEMBER', { code: 'NOT_ELIGIBLE', message: 'Not eligible for this sale', details: { reason: 'NOT_MEMBER', member_joined_before: '2026-01-25T12:30:05Z' } }, 'Vente réservée aux fans vérifiésRéservée aux membres inscrits avant le 25 janv.'],
     ['QUEUE_DEVICE_LIMIT', { code: 'QUEUE_DEVICE_LIMIT', details: { limit: 3 } }, fr.room.QUEUE_DEVICE_LIMIT],
     ['QUEUE_NOT_OPEN CLOSED', { code: 'QUEUE_NOT_OPEN', details: { reason: 'CLOSED' } }, fr.room.closed],
   ])('%s: says why, no retry', async (_, body, copy) => {

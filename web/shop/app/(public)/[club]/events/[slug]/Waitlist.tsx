@@ -53,12 +53,18 @@ export function WaitlistPanel({ view, copy }: { view: WaitlistView; copy: Copy }
     }
   }
 
+  // Decided once per mount: StrictMode (dev) runs the effect twice and its cleanup aborts the first PUT, so the second
+  // run must still join (PUT is idempotent) instead of re-reading the marker and the param the first run consumed.
+  const joinOnOpen = useRef<boolean | null>(null)
   useEffect(() => {
     if (!view.signedIn) return
     const stop = new AbortController()
-    const back = new URLSearchParams(location.search).has(JOIN_PARAM)
-    const join = takeJoin(view.eventId) && back // a crafted ?waitlist=1 without this tab's marker only reads
-    if (back) history.replaceState(history.state, '', location.pathname) // once: a reload doesn't join again
+    if (joinOnOpen.current === null) {
+      const back = new URLSearchParams(location.search).has(JOIN_PARAM)
+      joinOnOpen.current = takeJoin(view.eventId) && back // a crafted ?waitlist=1 without this tab's marker only reads
+      if (back) history.replaceState(history.state, '', location.pathname) // once: a reload doesn't join again
+    }
+    const join = joinOnOpen.current
     postJson(url, undefined, join ? 'PUT' : 'GET', stop.signal).then(
       (r) => (join || r.ok || r.status === 401) && apply(r), // a failed read stays quiet: the CTA joins anyway
       () => {}, // left the page
