@@ -146,7 +146,7 @@ export const fr = {
     viaQueue: 'Accès par la file',
     eligibility: 'Réservée aux fans vérifiés : {rules}',
     verifiedBefore: 'compte vérifié avant le {date}',
-    memberBefore: 'membre depuis le {date}',
+    memberBefore: 'membre inscrit avant le {date}',
     minEvents: '{n} matchs au stade',
     turnBar: 'Ton tour · {time}',
     back: "Retour à l'événement",

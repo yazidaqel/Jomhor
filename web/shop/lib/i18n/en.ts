@@ -142,7 +142,7 @@ export const en: Dict = {
     viaQueue: 'Access through the queue',
     eligibility: 'Verified fans only: {rules}',
     verifiedBefore: 'account verified before {date}',
-    memberBefore: 'member since before {date}',
+    memberBefore: 'joined before {date}',
     minEvents: '{n} matches at the stadium',
     turnBar: 'Your turn · {time}',
     back: 'Back to the event',
