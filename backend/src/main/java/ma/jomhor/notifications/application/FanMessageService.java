@@ -19,6 +19,7 @@ import ma.jomhor.payments.domain.CashCode;
 import ma.jomhor.sales.application.CashInstructions;
 import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.sales.waitlist.application.WaitlistService;
 import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tenancy.domain.User;
 import ma.jomhor.tickets.application.TicketService;
@@ -53,6 +54,7 @@ public class FanMessageService {
     static final String PAY_CODE = "pay_code";
     static final String CLUB_NEWS = "club_news";
     static final String EVENT_INFO = "event_info";
+    static final String WAITLIST_OPEN = "waitlist_open";
 
     private final FanMessages messages;
     private final PushTokens tokens;
@@ -62,6 +64,7 @@ public class FanMessageService {
     private final Inventory inventory;
     private final CashInstructions cash;
     private final CampaignService campaigns;
+    private final WaitlistService waitlist;
     private final TicketMessenger messenger;
     private final ObjectProvider<PushSender> pushSender;
     private final TransactionTemplate tx;
@@ -69,15 +72,17 @@ public class FanMessageService {
     private final TransactionTemplate perRow;
     private final int maxPerRun;
     private final String payUrl;
+    private final String shopOrigin;
 
     public FanMessageService(FanMessages messages, PushTokens tokens, UserService users, OrderService orders,
                              TicketService tickets, Inventory inventory, CashInstructions cash,
-                             CampaignService campaigns, TicketMessenger messenger,
+                             CampaignService campaigns, WaitlistService waitlist, TicketMessenger messenger,
                              ObjectProvider<PushSender> pushSender,
                              PlatformTransactionManager transactions,
                              @Value("${notifications.send-rate-per-second}") int ratePerSecond,
                              @Value("${jomhor.notifications.message-cron:*/5 * * * * *}") String cron,
-                             @Value("${payments.return-url.web}") String payUrl) {
+                             @Value("${payments.return-url.web}") String payUrl,
+                             @Value("${jomhor.cors.shop-origin}") String shopOrigin) {
         this.messages = messages;
         this.tokens = tokens;
         this.users = users;
@@ -86,6 +91,7 @@ public class FanMessageService {
         this.inventory = inventory;
         this.cash = cash;
         this.campaigns = campaigns;
+        this.waitlist = waitlist;
         this.messenger = messenger;
         this.pushSender = pushSender;
         this.tx = new TransactionTemplate(transactions);
@@ -93,6 +99,7 @@ public class FanMessageService {
         this.perRow.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
         this.maxPerRun = (int) Math.max(1, ratePerSecond * period(cron).toSeconds());
         this.payUrl = payUrl;
+        this.shopOrigin = shopOrigin;
     }
 
     /**
@@ -260,6 +267,7 @@ public class FanMessageService {
             case PAY_CODE -> payCode(org, m.orderId(), locale);
             case ORDER_PAID -> Content.push(MessageCopy.text(locale, "push.order_paid.title", Map.of()),
                     MessageCopy.text(locale, "push.order_paid.body", Map.of()), "/orders/" + m.orderId());
+            case WAITLIST_OPEN -> waitlistOpen(org, m.eventId(), m.userId(), locale);
             case CAMPAIGN -> throw new IllegalStateException("rendered by campaign()");
         };
     }
@@ -291,6 +299,22 @@ public class FanMessageService {
         List<String> params = List.of(label == null ? MessageCopy.text(locale, "friend", Map.of()) : label, e.title(),
                 amount, deadline, payUrl.replace("{order_id}", member.id().toString()));
         return new Content(title, body, "/orders/" + member.id(), SPLIT_INVITE, params);
+    }
+
+    /**
+     * Stale when the event is sold out again or no longer on sale (database clock), or the fan left the list. PUSH
+     * opens the event; WHATSAPP waitlist_open with [event title, {SHOP_ORIGIN}/events/{id}] (the shop 308s the bare
+     * id).
+     */
+    private Content waitlistOpen(UUID org, int eventId, UUID userId, String locale) {
+        Inventory.Availability a = inventory.availability(eventId).orElse(null);
+        if (a == null || !a.organizerId().equals(org) || !a.onSale() || a.soldOut()
+                || !waitlist.listed(org, eventId, userId)) {
+            return null;
+        }
+        return new Content(MessageCopy.text(locale, "push.waitlist_open.title", Map.of()),
+                MessageCopy.text(locale, "push.waitlist_open.body", Map.of("event", a.title())),
+                "/events/" + eventId, WAITLIST_OPEN, List.of(a.title(), shopOrigin + "/events/" + eventId));
     }
 
     /** Stale unless the order has a PENDING code: params [JMH XXXX XX, exact amount, deadline in the venue zone]. */

@@ -87,6 +87,11 @@ public class WaitingRoomService {
         snapshot.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
     }
 
+    /** A phase of the event that isn't ENDED (stored status, no lock): the waitlist stays closed (plan Q179). */
+    public boolean anyPhaseLeft(UUID org, int eventId) {
+        return rooms.list(org, eventId).stream().anyMatch(r -> r.status() != WaitingRoom.Status.ENDED);
+    }
+
     /** GET: the event's rooms by phase (empty when none). One snapshot for the rooms, holds, sales and stock. */
     public List<View> list(UUID org, int eventId) {
         return snapshot.execute(s -> {

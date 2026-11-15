@@ -39,12 +39,18 @@ public class Inventory {
     /** What a fan's order list shows of its event. */
     public record EventLabel(int id, String title, Instant startsAt, String timezone) {}
 
+    /**
+     * The event as GET /fan/events/{id} shows it, on the database clock: its organizer, title, {@code on_sale} and
+     * {@code sold_out} (every category with remaining 0).
+     */
+    public record Availability(UUID organizerId, String title, boolean onSale, boolean soldOut) {}
+
     /** docs/04-api.md EVENT_NOT_ON_SALE details.reason, plus OPEN. */
     public enum SaleWindow { OPEN, NOT_ON_SALE, NOT_STARTED, CLOSED }
 
-    /** A price category as a sale sees it, with its zone's name; priceMad in centimes. */
+    /** A price category as a sale sees it, with its zone's name; priceMad in centimes; remaining = quota − sold. */
     public record SalePrice(UUID id, int zoneId, String zoneName, String name, long priceMad,
-                            Event.Audience audience) {}
+                            Event.Audience audience, int remaining) {}
 
     /** {@code qty} places of a category held by orders, to give back. */
     public record Hold(UUID organizerId, int eventId, UUID priceCategoryId, int qty) {}
@@ -78,6 +84,11 @@ public class Inventory {
     /** Public: the event by id alone (not DRAFT). */
     public Optional<EventLabel> label(int eventId) {
         return events.listing(eventId).map(e -> new EventLabel(e.id(), e.title(), e.startsAt(), e.timezone()));
+    }
+
+    /** Public: the event by id alone; empty when DRAFT or unknown (the 404 of GET /fan/events/{id}). */
+    public Optional<Availability> availability(int eventId) {
+        return events.listing(eventId).map(e -> new Availability(e.organizerId(), e.title(), e.onSale(), e.soldOut()));
     }
 
     public List<SalePrice> prices(UUID org, int eventId) {
@@ -136,6 +147,7 @@ public class Inventory {
     }
 
     private static SalePrice sale(PriceCategory p) {
-        return new SalePrice(p.id(), p.zoneId(), p.zoneName(), p.name(), p.priceMad(), p.audience());
+        return new SalePrice(p.id(), p.zoneId(), p.zoneName(), p.name(), p.priceMad(), p.audience(),
+                Math.max(0, p.quota() - p.sold()));
     }
 }

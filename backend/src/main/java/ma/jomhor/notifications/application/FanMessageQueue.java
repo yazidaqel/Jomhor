@@ -1,7 +1,9 @@
 package ma.jomhor.notifications.application;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.notifications.domain.FanMessage.Channel;
 import ma.jomhor.notifications.domain.FanMessage.Kind;
@@ -45,6 +47,23 @@ public class FanMessageQueue {
     @Transactional(propagation = Propagation.MANDATORY)
     public void orderPaid(UUID org, UUID orderId) {
         messages.enqueueOrders(org, List.of(orderId), Kind.ORDER_PAID, List.of(Channel.PUSH));
+    }
+
+    /**
+     * The waitlist job picked these entries (docs/04-api.md §Waitlist): PUSH and WHATSAPP to each user, queued at the
+     * job's clock {@code at}.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void waitlistOpen(UUID org, int eventId, Collection<UUID> userIds, Instant at) {
+        if (!userIds.isEmpty()) {
+            messages.enqueueEvent(org, eventId, Kind.WAITLIST_OPEN, List.of(Channel.PUSH, Channel.WHATSAPP), userIds,
+                    at);
+        }
+    }
+
+    /** When the event's last WAITLIST_OPEN was queued (the waitlist cooldown; rejoins and leaves don't reset it). */
+    public Optional<Instant> lastWaitlistOpen(UUID org, int eventId) {
+        return messages.lastQueued(org, eventId, Kind.WAITLIST_OPEN);
     }
 
     /** A campaign's audience snapshot: one row per user (the job, docs/04-api.md §Campaigns). Rows added. */

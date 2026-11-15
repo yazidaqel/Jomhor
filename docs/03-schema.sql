@@ -488,6 +488,7 @@ create index on fan_messages (next_attempt_at) where status = 'PENDING';
 create unique index on fan_messages (campaign_id, user_id) where campaign_id is not null;          -- one per recipient
 create unique index on fan_messages (order_id, kind, channel) where kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID');  -- once
 create index on fan_messages (user_id, created_at desc) where kind = 'CAMPAIGN' and channel = 'PUSH';  -- inbox
+create index on fan_messages (event_id, created_at) where kind = 'WAITLIST_OPEN';  -- waitlist cooldown
 -- No unique index for WAITLIST_OPEN: waitlist_entries.notified_at, set in the same transaction, makes it once per wait.
 
 -- ---------- gate ----------

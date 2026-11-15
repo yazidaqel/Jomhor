@@ -19,11 +19,48 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV26Apply() {
+    void v1ToV28Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26");
+                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28");
+    }
+
+    /**
+     * V27 + V28: WAITLIST_OPEN needs its event and only it has one (a CHECK runs before the foreign keys); one waitlist
+     * entry per account per event, organizer required.
+     */
+    @Test
+    void waitlistOpenNeedsItsEventAndEntriesAreOnePerAccount() {
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind)
+                values (gen_random_uuid(), gen_random_uuid(), 'PUSH', 'WAITLIST_OPEN')"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_subject");
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind, order_id, event_id)
+                values (gen_random_uuid(), gen_random_uuid(), 'PUSH', 'ORDER_PAID', gen_random_uuid(), 1)"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_subject");
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('W') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        var event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""", Integer.class, org, venue,
+                new byte[32]);
+        var user = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind, event_id)
+                values (?, ?, 'WHATSAPP', 'WAITLIST_OPEN', ?)""", org, user, event);
+        String join = "insert into waitlist_entries (organizer_id, event_id, user_id) values (?, ?, ?)";
+        jdbcTemplate.update(join, org, event, user);
+        assertThatThrownBy(() -> jdbcTemplate.update(join, org, event, user)).isInstanceOf(DuplicateKeyException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(join, null, event, user))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from pg_indexes where tablename = 'fan_messages'
+                  and indexdef like 'CREATE INDEX%(event_id, created_at) WHERE (kind = ''WAITLIST_OPEN''::message_kind)'""",
+                Integer.class)).isEqualTo(1);
     }
 
     /**

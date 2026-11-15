@@ -147,6 +147,14 @@ rooms:
   # One GET /fan/queue per entry per this, per instance, in memory (plan Q147) → 429 QUEUE_RATE_LIMITED POLL.
   poll-min-interval: ${ROOMS_POLL_MIN_INTERVAL:1s}
 
+waitlist:
+  # Sold-out waitlist (docs/04-api.md §Waitlist): the notify job runs this long after the previous run ends.
+  tick: ${WAITLIST_TICK:30s}
+  # After a notice, the event's next notices wait this long (plan Q177).
+  cooldown: ${WAITLIST_COOLDOWN:10m}
+  # Entries are deleted this long after their event's starts_at (plan Q179).
+  retention: ${WAITLIST_RETENTION:30d}
+
 notifications:
   push:
     # Push adapter (docs/04-api.md §Notifications): 'log' = dev/staging, refused under prod; 'fcm' comes with BE-36.
