@@ -508,3 +508,373 @@ Zero SQL on a ranked poll is proven by BE-41's statement counter, not here.
 | 4 · Accreditations, invitations, promo codes | B7; `POST /org/events/{id}/invitations` (method `FREE`, zone counts, named); promo codes (amount in centimes or percent with integer rounding, per-code and per-account caps, valid per event or category) | `promo_codes`, order `discount_mad`, invitation batches |
 | 5 · Finance and CRM export | Daily settlement statements (03 `settlements`), VAT invoices (numbering, PDF), 48 h payouts, bank-deposit matching for till cash (02 threat model), `/org/crm/export.csv` (opt-ins from `memberships`, CNDP) | settlements, invoices, payouts; the CRM export row |
 
+## 10. Step 2 · Fair on-sale
+
+As of 2026-11-15 · owner: tech-lead · status: **draft for founder agreement**. Branch `feat/lot-5-fair-sale` from `main` (step 1 merged in #19). V24 is the latest migration, so step 2 starts at V25. Ids: Q167–Q183, P117–P128, BE-47–BE-50, FL-27–FL-28, WS-13–WS-14, BO-21.
+
+### 10.1 Scope and exit
+
+Scope (§9 row 2, §7):
+
+- **Rooms per phase:** a members presale, then the general sale. `unique (event_id)` is dropped, and each room gets a phase number, an optional label and its own sale start.
+- **Members-only price categories:** `price_categories.audience` `ALL|MEMBERS`, checked when an order is placed.
+- **The holder cap** (lot-1 Q18, Q150).
+- **The sold-out waitlist** ("Liste d'attente", screen 1), with a notification when places come back.
+- **Refunded places** no longer count toward the per-account limit (lot-3 Q52).
+- **Step-1 follow-ups:**
+  - the WS-12 follow-ups: the turn bar on W3, "Reprendre ma place" on W2, keep-awake on W8, and "matchs" vs "événements" in the copy;
+  - a wait estimate in the first minute after the draw;
+  - a shorter `poll_after_s` near the front.
+
+**What step 2 reuses:**
+
+- The waiting-room tick, memo, signed tokens and eligibility rules. A presale is simply a phase-1 room whose rule is `member_joined_before`.
+- The per-account advisory locks in `OrderService` (the holder cap adds accounts to the same lock set).
+- `MembershipService.liveMemberSince`.
+- The `fan_messages` outbox. The waitlist notice is one new kind, sent exactly like `SPLIT_INVITE`.
+- The `pg_try_advisory_xact_lock` job pattern (`ManifestBuildJob`, the fan-message claim).
+
+No new runtime component and no Kafka. Payzone stays simulated. No hosting-provider dependency.
+
+**Exit, demo-complete.** Locally, provider-free, against the dev backend:
+
+1. In B2, OPS adds a category "Tarif membres" (Accès: Membres) next to "Plein tarif".
+2. In B13, OPS sets up two phases:
+   - phase 1, "Prévente membres": rule "membre inscrit avant le" a date;
+   - phase 2, "Vente générale": its own sale start the next day.
+3. Screen 2 and W2 show "Prévente membres · tirage à {time}" and "Ensuite : Vente générale · file dès {time}".
+4. A non-member gets "Vente réservée aux fans vérifiés" plus the next-phase line. A member joins, is drawn, buys a member-price place, and pays (simulated).
+5. When phase 2's pre-queue opens, phase 1 ends by itself. The member's leftover presale token is refused (`ADMISSION_REQUIRED` `INVALID`). Every fan joins phase 2.
+6. In phase 2, a non-member picking "Tarif membres" gets "Tarif réservé aux membres inscrits avant le {date}" on that holder row.
+7. A fourth friend's order naming a phone that already holds 4 places gets "Ce numéro a atteint la limite de 4 billets".
+8. The event sells out and OPS ends the room. Screen 1 shows "Liste d'attente". Two fans join.
+9. An ADMIN refunds one ticket. Two things follow:
+   - the refunded buyer can buy one more place (Q52);
+   - within about 30 s, the oldest waitlisted fan gets "Des places se sont libérées" (push, plus WhatsApp in the simulated provider's log) and buys it.
+10. `check.sql` is clean.
+
+CI green on: `Lot5FairSaleFlowTest`, `FairLimitsApiTest`, `WaitlistApiTest`, `WaitlistJobTest`, the extended `MultiInstanceTest`, every step-1 test moved to `/rooms/1`, `apps/fan/test/queue_test.dart` and `waitlist_test.dart`, shop `queue.test.tsx` and `waitlist.test.tsx`, back-office `room.test.tsx`.
+
+### 10.2 What it builds on, spec refs
+
+| Area | State on `main` (58730e8) | Step 2 use |
+| --- | --- | --- |
+| Rooms | `waiting_rooms.event_id unique`. `WaitingRoom.saleStartsAt` comes from `events.sale_starts_at` (`JdbcWaitingRooms.SELECT`). `RoomMemo` maps event id → room. `QueueService.join` uses `rooms.find(org, event)`. `requireAdmission` filters the memo by `statusAt(now).live()`. Tokens carry `evt`, not the room | Phase-aware: effective start = `coalesce(r.starts_at, e.sale_starts_at)`; memo = event → rooms by phase; one domain function picks the **current phase**; tokens gain `rm` |
+| Tick | `RoomTicks.tick`: SCHEDULED → PRE_QUEUE → draw → OPEN; `measured_rate_per_min` stays 0 until the first re-mark at 60 s | + ends itself when the next phase's `opens_at` passes; seeds the measured rate at the draw |
+| Limits | `JdbcOrders.OWN_HELD` sums RESERVED/AWAITING_CASH/PAID places with refunded tickets still counted (`ponytail:` in `TicketAdminService`). `accounts` (buyer + `pays` members) are locked in UUID order before the limits are read | Subtract REFUNDED tickets; add every holder account to the lock set |
+| Membership | `MembershipService.liveMemberSince(org, user)`, used by room eligibility | Members-only check |
+| Notifications | `FanMessageQueue`, `fan_messages` with a subject constraint, the STALE rule, a rate-capped drain under advisory class 6, `/events/{id}` already a valid push path | New kind `WAITLIST_OPEN` with `event_id` |
+| Shop | Bare `/events/{id}` already 308s (`parseEventId`) | WhatsApp waitlist link |
+
+Spec refs:
+
+- `CLAUDE.md`: non-negotiables and conventions.
+- `docs/00-product.md`: §Why it can win ("Fairness"), §V1 in lots (Lot 5).
+- `docs/02`: §Data model, threat model "Bots on on-sale day" (line 193).
+- `docs/03`: `price_categories`, `order_items.holders`, `tickets`, `waiting_rooms`, `memberships`, `fan_messages`, `message_kind`.
+- `docs/04`:
+  - Errors: `EVENT_NOT_ON_SALE`, `PER_ACCOUNT_LIMIT`, `ADMISSION_REQUIRED`, `ROOM_STATUS`;
+  - §Fan: `/fan/events*`, `/fan/queue`, `POST /fan/orders`, transfer;
+  - §Fan order rules, §Split pay Limits, §Notifications, §Waiting room;
+  - §Organizer: prices, room rows, event PATCH, refund.
+- `docs/06`.
+- `design/DESIGN.md`: screens 1, 2, 3, 4, 8, 12; W2, W3, W8; B2, B13; Lot 1 adjustments (screen 1 "Liste d'attente → Lot 5"); Lot 5 adjustments.
+- Plans: lot-1 Q18; lot-3 Q52; lot-4 Q57, Q62; lot-5 Q143, Q149, Q150, Q154, Q156, Q165, §7.
+
+### 10.3 Open questions (each has a default, none blocks)
+
+| # | Question | Default for step 2 |
+| --- | --- | --- |
+| Q167 | Phase model | **Up to 5 rooms per event, numbered 1–5.** Phase 1 starts at `events.sale_starts_at`, as in step 1, and follows event PATCHes while `SCHEDULED`. Phase ≥ 2 has its own `starts_at`. Each phase is a full step-1 room: its own pre-queue, draw, rate and eligibility rule. **Current phase** = the latest phase whose `opens_at` has passed and that isn't `ENDED`; otherwise the earliest phase not `ENDED`. A phase ends by itself when the next phase's `opens_at` passes, so at most one phase sells at a time. Order rule: `opens_at(n) > sale_starts_at(n−1)` for consecutive phases that aren't `ENDED`. Phases are numbered contiguously. A phase entered by mistake is ended (step 1's "any but ENDED → ENDED"); there is no DELETE. |
+| Q168 | Phase label | **Optional free text, 1–40 characters**, shown to fans as typed ("Prévente membres"), like event titles (organizer content, one language). Null shows no label, and the next-phase line falls back to "Prochaine vente". Deriving names from the rule was rejected: every client would need the same fuzzy mapping (a general sale can carry an account-age rule too). |
+| Q169 | Between phases (presale ended early by hand, next phase not yet open), and presale tokens | **Orders are refused** with 409 `EVENT_NOT_ON_SALE` `NOT_STARTED` and `sale_starts_at` set to the next phase's start, decided from the memo with no SQL. Once an event has phases, nobody buys outside a room until the last phase ends. A presale admission token is **refused as soon as the next phase is current** (`rm` claim). An order already reserved keeps its 8-min hold. The presale's buying stops at the general sale's pre-queue opening, which B13 shows. |
+| Q170 | Members price: who must be a member? | **Each place of a `MEMBERS` category, through its holder.** A place without a phone is the buyer's. Otherwise a member could buy 4 member-price places for non-members. Split `pays` holders are holders like the others. Refusal: 409 `MEMBERS_ONLY` with the holder path, and no reason about another phone's account. That is the same yes/no signal Q149 accepted. |
+| Q171 | Members price with free membership (lot-4 Q57) | **A live membership whose `joined_at` < the event's `sale_starts_at`.** Joining the club during the sale doesn't unlock the price. No `sale_starts_at` (on sale from publish) means any live member counts. No per-category date column. Paid membership (step 3) can tighten this later. |
+| Q172 | Members price elsewhere | **POS:** not checked; the cashier checks the card. **`from_price_mad`:** the lowest remaining `ALL` price, so the public "dès" is a price anyone can pay; null if none is left. **`sold_out`:** unchanged (every category). **Waitlist `R`:** every category (`ponytail:` member-only leftovers notify non-members too). **Org prices:** `audience` editable at any time, applies to new orders (like the price). |
+| Q173 | Holder cap (lot-1 Q18, Q150) | **Yes, at `per_account_limit`, with no new column.** For each holder account in a request (the buyer's own places included), count: its places in `RESERVED`/`AWAITING_CASH` orders of the event (any buyer), plus its `VALID`/`BLOCKED` tickets of the event, plus the new places. The total must be ≤ the limit. Checked online at place and at transfer (recipient), so a farm can't pool tickets on one phone afterwards. Not checked at POS or on re-issue (count unchanged). **Exact:** holder accounts join the existing per-account lock set (UUID order); a transfer takes the recipient's lock after the ticket row. `ponytail:` a late success's re-reserve re-checks the buyer limit only, not holders (rare; it falls back to a manual refund otherwise). |
+| Q174 | Holder-cap refusal privacy | 409 `PER_ACCOUNT_LIMIT` with `details.reason` `HOLDER`, `field` and `limit`; **never `held`**. Pass/fail still says "this phone holds the limit" (accepted, as in Q149). |
+| Q175 | Refunded places (lot-3 Q52) | **A `REFUNDED` ticket of the caller's own `PAID` order no longer counts**, for the buyer limit and for a split member's own limit. The order stays `PAID`. Transfers change nothing (tickets move, orders don't). `check.sql`'s limit-breach check subtracts them too. The `TicketAdminService` `ponytail:` goes. |
+| Q176 | Waitlist: notify, or hold places for waitlisters? | **Notify only, no hold, no priority.** Notified fans buy like anyone, first come, first served. An offer/hold system (reserved place, accept window, cascade) is a different build. Copy is honest: "Premier arrivé, premier servi." |
+| Q177 | Waitlist: how many and how often | **One fan per released place** (`R` = Σ `remaining`), oldest `joined_at` first, at most 1,000 per run, then **10 min cooldown per event** (`waitlist.cooldown`). Each entry is notified once; joining again after a notice puts the fan at the back. `ponytail:` with about 2.6 places per order, some notified fans will find it gone. Lower the ratio if the club hears complaints. |
+| Q178 | Waitlist channels and clients | **PUSH + WHATSAPP** (template `waitlist_open`: event title + `{SHOP_ORIGIN}/events/{id}`), same pattern as `SPLIT_INVITE`. **App** (screens 1, 2) and **shop** (W2), because shop fans have no push. WhatsApp needs Meta template approval and is simulated until BE-36. |
+| Q179 | Waitlist vs rooms; retention | Join refused while any phase isn't `ENDED` (409 `WAITLIST_CLOSED` `ROOM`): the room is the queue (Q154). The notify job skips such events too. Rows are deleted on leave and 30 days after the event's `starts_at` (`waitlist.retention`). Data: user + event, already purchase-relationship data. Founder: mention "availability notices" in the CNDP declaration. |
+| Q180 | First-minute wait estimate (WS-12 real run) | **The tick seeds `measured_rate_per_min` with `admission_rate_per_min` at the room's first ranking tick** (the draw, or the opening when there's no pre-queue). Real measurement takes over at the 60 s re-mark. One line in `RoomTicks`, no new column. B13 "Cadence" shows the seed during that minute. |
+| Q181 | `poll_after_s` near the front | **`estimated_wait_s` < 20 → 2 s** (± 20 %); < 120 → 5; else 15. Extra load ≈ rate ÷ 3 fans polling every 2 s (≈ 85 req/s at 500/min), no SQL. The poll limiter (1 s) still holds. A fan admitted on the next tick learns it within about 2 s instead of about 17 s. |
+| Q182 | "matchs" vs "événements" in the eligibility copy | **By the event's `event_type`:** `FOOTBALL_MATCH` → "matchs au stade", else "événements". UI only. Same strings in app, shop and B13. |
+| Q183 | Per-phase quotas (e.g. presale capped at N places)? | **No.** Quotas stay per category. The organizer uses a `MEMBERS` category or edits quotas between phases. |
+
+### 10.4 Contract changes
+
+#### 10.4.1 Problems found
+
+| # | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| P117 | 03 `waiting_rooms` | `event_id unique`: one room per event, no presale | `phase`, `label`, `starts_at`, `unique (event_id, phase)` |
+| P118 | 04 `/org/events/{id}/room*` | Singular resource | `/org/events/{id}/rooms` and `/rooms/{phase}` (old paths removed) |
+| P119 | 04 `/fan/events*` `room` | One room, no phase info, no "what's next" | Current phase + `phase`, `label`, `sale_starts_at`, `next` |
+| P120 | 04 §Waiting room | Memo, tokens and admission assume one room | Current phase; `rm` claim on both tokens; auto-end; gap → `NOT_STARTED` |
+| P121 | 04 §Waiting room `poll_after_s`, Tick | No estimate in the first minute; 15 s polls at the front | Seed the measured rate; 2 s under 20 s of wait |
+| P122 | 03 `price_categories`, 04 prices, fan detail | No members-only price; `from_price_mad` could show a member price | `audience`; `from_price_mad` over `ALL` |
+| P123 | 04 POST `/fan/orders` | No members check | `MEMBERS_ONLY` |
+| P124 | 04 POST `/fan/orders`, transfer; 03 `order_items` | No holder cap (lot-1 Q18) | Holder limit; GIN index on `holders` |
+| P125 | 04 order rules, `JdbcOrders.OWN_HELD`, `check.sql` | Refunded places still count (lot-3 Q52) | Subtract REFUNDED tickets of PAID orders |
+| P126 | 03, 04 | No waitlist | `waitlist_entries`, `fan_messages.event_id`, `WAITLIST_OPEN`, `/fan/waitlist/{event_id}`, §Waitlist, `WAITLIST_CLOSED` |
+| P127 | `design/DESIGN.md` | Screen 1's "Liste d'attente" is unspecified; nothing for phases, members prices, holder errors; WS-12 follow-ups | §10.4.6 |
+| P128 | 02, 06, `EventLock` javadoc, config | New tables/columns, terms, advisory class 7 | §10.4.5 |
+| — | Football names / floats / PII in QR or tokens / gate path | Names: `phase`, `label`, `audience`, `waitlist_entries` (no football names; "matchs" only in UI copy by `event_type`). No new money column (a member price is a category's existing `price_mad` in centimes). `rm` is a room UUID: no phone, name or device id. WAITLIST_OPEN payload: title, body, path. Gate, scanner, manifest, `packages/core` untouched | OK |
+
+#### 10.4.2 `docs/03-schema.sql`
+
+```sql
+-- ---------- catalog: price_categories (add) ----------
+create type price_audience as enum ('ALL','MEMBERS');
+  audience      price_audience not null default 'ALL',  -- MEMBERS: each place held by a live member of the organizer who joined
+                                                         -- before events.sale_starts_at (docs/04-api.md POST /fan/orders)
+
+-- ---------- sales: order_items (add index) ----------
+create index on order_items using gin (holders jsonb_path_ops);  -- holder limit: places one account holds (docs/04-api.md POST /fan/orders)
+
+-- ---------- sales: waiting rooms (change) ----------
+create table waiting_rooms (                          -- high-demand on-sale (docs/04-api.md §Waiting room); one per phase of an event
+  ...
+  event_id                integer not null references events(id),   -- no longer unique (Lot 5 step 2)
+  phase                   smallint not null default 1 check (phase between 1 and 5),
+                          -- sale phases in order; a phase ends when the next one's opens_at passes
+  label                   text check (char_length(label) between 1 and 40),  -- shown to fans as typed ('Prévente membres'); null = none
+  starts_at               timestamptz,   -- this phase's sale start (its draw); null for phase 1 = events.sale_starts_at
+  ...
+  unique (event_id, phase),
+  constraint waiting_rooms_starts check ((phase = 1) = (starts_at is null))
+);
+
+-- ---------- sales: waitlist (new) ----------
+create table waitlist_entries (                       -- sold-out waitlist (docs/04-api.md §Waitlist); one per account per event
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  event_id      integer not null references events(id),
+  user_id       uuid not null references users(id),
+  joined_at     timestamptz not null default now(),   -- notice order; a join after a notice resets it (back of the list)
+  notified_at   timestamptz,                          -- set with the WAITLIST_OPEN messages, in one transaction
+  unique (event_id, user_id)
+);
+create index on waitlist_entries (event_id, notified_at, joined_at);
+-- Rows are deleted on leave and 30 days after the event's starts_at (waitlist.retention).
+
+-- ---------- notifications (change) ----------
+create type message_kind as enum ('TICKET_RECEIVED','SPLIT_INVITE','PAY_CODE','ORDER_PAID','CAMPAIGN','WAITLIST_OPEN');
+-- fan_messages, add:
+  event_id         integer references events(id),        -- WAITLIST_OPEN
+-- fan_messages_subject becomes:
+  constraint fan_messages_subject check (
+    (ticket_id is not null) = (kind = 'TICKET_RECEIVED')
+    and (order_id is not null) = (kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID'))
+    and (event_id is not null) = (kind = 'WAITLIST_OPEN'))
+-- No unique index for WAITLIST_OPEN: waitlist_entries.notified_at, set in the same transaction, makes it once per wait.
+```
+
+Flyway, one task per migration group:
+
+| File | Task | Content |
+| --- | --- | --- |
+| `V25__fair_limits.sql` | BE-47 | `price_audience`; `price_categories.audience` (existing rows `ALL`); GIN index on `order_items.holders` |
+| `V26__room_phases.sql` | BE-48 | `alter table waiting_rooms drop constraint waiting_rooms_event_id_key`; add `phase` (existing rooms = 1), `label`, `starts_at`; `unique (event_id, phase)`; `waiting_rooms_starts` |
+| `V27__message_kind_waitlist.sql` | BE-49 | `alter type message_kind add value 'WAITLIST_OPEN'`, **alone**: Postgres can't use a new enum value in the transaction that adds it |
+| `V28__waitlist.sql` | BE-49 | `waitlist_entries` + index; `fan_messages.event_id`; drop and re-add `fan_messages_subject` |
+
+The tenant allowlist stays at 5 (`waitlist_entries` carries `organizer_id`).
+
+#### 10.4.3 `docs/04-api.md`
+
+**Errors: add or replace**
+
+| Code | HTTP | When |
+| --- | --- | --- |
+| `EVENT_NOT_ON_SALE` | 409 | Append: "**Lot 5 step 2:** `NOT_STARTED` also between two phases (the current phase is `SCHEDULED`; §Waiting room Phases): `details.sale_starts_at` = that phase's sale start." |
+| `PER_ACCOUNT_LIMIT` | 409 | Append: "**Lot 5:** `details.reason` `HOLDER`: a holder account (the buyer's own places included), or a transfer's recipient, would hold more than `per_account_limit` places of the event. Then `details.field` (the holder path, or `to_phone`) and `details.limit` only, never `held`." |
+| `ADMISSION_REQUIRED` | 409 | `INVALID` becomes: "bad signature, another user, another event, or a room that isn't the event's current phase". |
+| `MEMBERS_ONLY` | 409 | A place of a `MEMBERS` price category whose holder isn't a live member of the organizer who joined before the event's `sale_starts_at`. `details.field` (the holder path), `details.member_joined_before` (the event's `sale_starts_at`, or null when it has none). |
+| `WAITLIST_CLOSED` | 409 | Waitlist join refused. `details.reason`: `NOT_SOLD_OUT` (places are left: buy), `ROOM` (a waiting-room phase isn't `ENDED`: use the room), `CLOSED` (the event isn't inside its sale window). |
+| `ROOM_STATUS` | 409 | "Room PUT …" → "Room phase PUT …"; otherwise unchanged, per phase. |
+
+**§Fan: replace or add rows**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/fan/events`, `/fan/events/{id}` | **Lot 5** `room` replaced by: `room: {phase, label, status, opens_at, sale_starts_at, eligibility, next: {phase, label, opens_at, sale_starts_at} \| null} \| null`. It describes the event's **current phase** (§Waiting room Phases), and is null when the event has no phase or every phase is `ENDED`. `sale_starts_at` and `opens_at` are that phase's. `next` is the following phase not `ENDED`. `eligibility` as before, from the phase's rule. **Lot 5 step 2:** the detail's `prices[]` + `audience: ALL\|MEMBERS`. `from_price_mad` = the lowest `price_mad` among categories with `remaining > 0` **and `audience = ALL`**, null if none. `sold_out` unchanged. |
+| POST | `/fan/queue` | Append: "**Lot 5 step 2:** joins the event's current phase. `QUEUE_NOT_OPEN`: `NO_ROOM` (no phase), `ENDED` (every phase `ENDED`), `NOT_STARTED` + `opens_at` (the current phase is `SCHEDULED`). An entry in an earlier phase doesn't carry over: the new phase creates a new entry." |
+| GET | `/fan/queue` | Append: "**Lot 5 step 2:** `ENDED` also when the token's room is no longer the event's current phase. Clients then re-read `GET /fan/events/{id}`: a `room` means the next phase (join it), null means buy without a room." |
+| POST | `/fan/orders` | **Lot 5** check list replaced: "Checks in order: the body's shape (422, no SQL); **admission** (from the per-instance memo and the token's signature, before any database read of the request): when the current phase is `PRE_QUEUE`, `OPEN` or `PAUSED`, header `X-Admission-Token` for that phase's room, else 409 `ADMISSION_REQUIRED`; when the current phase is `SCHEDULED`, 409 `EVENT_NOT_ON_SALE` `NOT_STARTED` with that phase's `sale_starts_at`; event (404); sale window (409 `EVENT_NOT_ON_SALE`); items and holders (422); queue (429 `SALE_BUSY`); per-account limit (409); **holder limit** (409 `PER_ACCOUNT_LIMIT` `HOLDER`); room eligibility of split `pays` members (409 `NOT_ELIGIBLE`, `details.field`); **members-only places** (409 `MEMBERS_ONLY`); quota (409 `SOLD_OUT`)." **Holder limit:** for each distinct holder account of the request (a place without `phone` is the buyer's), its places in `RESERVED`/`AWAITING_CASH` orders of the event, plus its `VALID`/`BLOCKED` tickets of the event, plus its places in this request, must be ≤ `per_account_limit`. `details.field` = that account's first place. **Members-only:** each place of a `MEMBERS` category is held by an account with a membership of the organizer, `left_at` null and `joined_at` < the event's `sale_starts_at` (any live member when it is null). `details.field` = the first such place that fails. Holder accounts are locked with the buyer's (per-account lock, UUID order), so both limits are exact. |
+| GET | `/fan/waitlist/{event_id}` | `{entry: {joined_at, notified_at} \| null}` for the caller. Event not visible as in `GET /fan/events/{id}` → 404. `Cache-Control: no-store`. |
+| PUT | `/fan/waitlist/{event_id}` | No body. Event not visible → 404. The event must be inside its sale window (`on_sale`), else 409 `WAITLIST_CLOSED` `CLOSED`; no waiting-room phase may be not `ENDED`, else `ROOM`; `sold_out` must be true, else `NOT_SOLD_OUT`. New → `201`. Already waiting (`notified_at` null) → `200`, unchanged. Already notified → moved to the back (`joined_at = now()`, `notified_at` null) → `201`. → the GET shape. Not audited. |
+| DELETE | `/fan/waitlist/{event_id}` | Leave: the row is deleted → `204` (idempotent; unknown event → 404). |
+| POST | `/fan/tickets/{id}/transfer` | Append: "**Lot 5:** the recipient's `VALID`/`BLOCKED` tickets of the event, plus its places in `RESERVED`/`AWAITING_CASH` orders, plus 1, must be ≤ `per_account_limit`, else 409 `PER_ACCOUNT_LIMIT` `HOLDER`, `details.field` `to_phone`. Read under the recipient's per-account lock, taken after the ticket row. Re-issue: unchanged." |
+
+**§Fan order rules: replace "Σ qty over the buyer's …" and append.** "The limit counts places in the buyer's `RESERVED`, `AWAITING_CASH` and `PAID` orders for the event, **minus the `REFUNDED` tickets of those `PAID` orders** (Lot 5 step 2; also for a split member's own limit). … Lot 5 step 2: no account **holds** more than `per_account_limit` places of an event, whoever bought them (holder limit, checked on fan orders and transfers; not at POS). POS sales check neither the holder limit nor `MEMBERS` categories."
+
+**§Notifications: add a row and extend the stale rule**
+
+| Kind | Trigger | Channels and content |
+| --- | --- | --- |
+| `WAITLIST_OPEN` | The waitlist job picks the entry (§Waitlist) | PUSH: "Des places se sont libérées · {event title}" → `/events/{event_id}`. WHATSAPP (template `waitlist_open`): event title + `{SHOP_ORIGIN}/events/{event_id}` (the shop 308s it). Once per wait (the entry's `notified_at`) |
+
+Stale rule, append: "WAITLIST_OPEN when the event is `sold_out` again or no longer `on_sale`."
+
+**New §Waitlist**
+
+| Rule | Value |
+| --- | --- |
+| Join | Logged-in fan, event on sale and `sold_out`, no waiting-room phase left that isn't `ENDED` (`PUT /fan/waitlist/{event_id}`). One entry per account per event. |
+| Notify | Every 30 s (`waitlist.tick`), for each event with waiting entries, in one transaction under `pg_try_advisory_xact_lock` (class 7, event id), so one instance handles an event per run. Skipped when: the event isn't `on_sale`; any phase isn't `ENDED`; or an entry of the event got its notice in the last `waitlist.cooldown` (10 min). R = Σ `remaining` over the event's categories, read without a lock. The `least(R, 1000)` oldest waiting entries (by `joined_at`, `id`) get `notified_at = now()` and one `WAITLIST_OPEN` per channel. No hold, no priority: notified fans buy like anyone. |
+| Retention | Deleted on leave and 30 days after the event's `starts_at` (`waitlist.retention`, daily). |
+| Privacy | The organizer sees no list (no back-office view in Lot 5). Payloads carry the event title and a link only. |
+
+**§Waiting room: add or replace**
+
+| Rule | Value |
+| --- | --- |
+| Phases (new) | An event has 0–5 rooms, one per **phase** (1, 2, …), contiguous. Phase 1's sale start is `events.sale_starts_at`; later phases have their own `starts_at`. `opens_at` = sale start − `pre_queue_min`. For consecutive phases not `ENDED`: `opens_at(n) > sale start(n−1)`. **Current phase** = the latest phase not `ENDED` whose `opens_at` has passed, else the earliest phase not `ENDED`. Joins, polls, admission and `/fan/events` `room` use the current phase. `label` is shown as typed. |
+| Lifecycle | Append: "→ `ENDED` also when the next phase's `opens_at` passes (the tick of that phase's room, audit `room.end` `{reason: NEXT_PHASE}`)." |
+| Tick | Append: "Each room ticks on its own row (it reads the next phase's `opens_at` without a lock). At the room's first ranking tick, `measured_rate_per_min` = `admission_rate_per_min` (a seed until the first 60 s re-mark)." |
+| Memo | Replace "event id → …" with "event id → its rooms not `ENDED`, by phase (each with `id`, `phase`, `label`, status, sale start, `pre_queue_min`, counts, `admission_rate_per_min`, rule)". The current phase is computed from the memo and the clock. |
+| Queue token | Claims + `rm` = room id. |
+| Admission | Admission token claims + `rm`. Acceptance: "iff the signature, `aud`, `evt` = the body's `event_id`, **`rm` = the current phase's room**, `sub` = the caller and `exp > now` all hold". |
+| `poll_after_s` | Replace the `WAITING` clause: "`WAITING` or `PAUSED`: `estimated_wait_s` < 20 → 2; < 120 → 5; else 15; ± 20 % jitter." |
+| Eligibility | "Checked at join" → "Checked at join, against the current phase's rule". |
+
+**§Organizer: role line.** `/org/events/{id}/room*` → `/org/events/{id}/rooms*`.
+
+**§Organizer: replace the three room rows**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/org/events/{id}/rooms` | `{rooms: [room]}` by `phase` (empty when none). `room` = step 1's shape + `phase`, `label`, `starts_at` (null for phase 1). `sale_starts_at` is the phase's. `figures` per room (`paid`, `quota`, `remaining`, `active_holds` stay event-wide). Unknown or other organizer's event → 404. |
+| PUT | `/org/events/{id}/rooms/{phase}` | Step 1's body + `label?` (trimmed, 1–40, null = none) + `starts_at` (required for `phase` ≥ 2; must be absent or null for phase 1, else 422 on `starts_at`). `phase` outside 1–5 → 404. Phase n ≥ 2 needs phase n−1 (422, `details.reason` `PHASE_ORDER`). `starts_at` in the future and before the event's `starts_at − 60 min` (422). The phase order of §Waiting room Phases (422 on `starts_at`, or `pre_queue_min`, `PHASE_ORDER`). Otherwise step 1's rules, per phase (after `SCHEDULED` only the rate may change; `label` and `starts_at` are frozen too). Audit `room.create` / `room.update` + `phase`, `label`, `starts_at`. |
+| POST | `/org/events/{id}/rooms/{phase}/pause` · `/resume` · `/end` | Step 1's rules, per phase. No such phase → 404. B13 warns before ending a phase while a later one is `SCHEDULED`: orders then wait for it (Q169). |
+| PATCH | `/org/events/{id}` | **Lot 5** sentence, per phase 1: "moving `sale_starts_at` while phase 1 is `PRE_QUEUE`, `OPEN` or `PAUSED` → 409 `EVENT_NOT_EDITABLE` `ROOM_STARTED`; while `SCHEDULED` it follows, and a move that breaks the phase order → 422 on `sale_starts_at`, `details.reason` `PHASE_ORDER`." |
+| GET, POST, PATCH | `/org/events/{id}/prices*` | + `audience: ALL\|MEMBERS` (POST optional, default `ALL`; PATCH any time, applies to new orders; another value → 422). |
+
+Gate, manifest, scans, token and vectors: unchanged.
+
+#### 10.4.4 Config (backend `application.yml`)
+
+`waitlist.tick` (30s), `waitlist.cooldown` (10m), `waitlist.retention` (30d). The WhatsApp link uses the existing `jomhor.cors.shop-origin` (`SHOP_ORIGIN`). No new secret.
+
+#### 10.4.5 `docs/02`, `docs/06`, `EventLock`
+
+| Where | Change |
+| --- | --- |
+| 02 §Data model | `price_categories` + `audience (ALL, MEMBERS)`; `waiting_rooms` "one per event" → "one per sale phase of an event", `event_id` (no longer unique) + `phase`, `label`, `starts_at`; new row `waitlist_entries` (id, organizer_id, event_id, user_id, joined_at, notified_at; one per account per event); `fan_messages` kind + `WAITLIST_OPEN`, + `event_id` |
+| 02:193 Bots | Defence + "a holder cap (no account holds more than `per_account_limit` places of an event, transfers included), members presale phases" |
+| 06 | waitlist · `liste d'attente` · قائمة الانتظار · "sold out: we tell you when places come back". presale · `prévente` · البيع المسبق. sale phase · `phase de vente` · مرحلة البيع. general sale · `vente générale` · البيع العام. members price · `tarif membres` · سعر الأعضاء · "for members who joined before the sale opened" |
+| `EventLock` javadoc (code, BE-49) | Class 7: the waitlist notify try-lock per event |
+
+#### 10.4.6 `design/DESIGN.md`
+
+**"Lot 5 adjustments", add rows:**
+
+| Where | Change |
+| --- | --- |
+| Screen 1 hero / calendar | `sold_out`, on sale, `room` null: CTA "Liste d'attente" (signed out → login, then join). On the list: an outlined CTA "Sur la liste d'attente" with a check icon; tap → sheet "On te prévient dès que des places se libèrent. Premier arrivé, premier servi." + "Quitter la liste". Calendar chip "Complet". With `room` and a `label`: the room CTA states as before, prefixed by the label ("Prévente membres · file dès {time}"). |
+| Screen 2 | Room banner line: "{label} · {status copy}". With `next`: one muted line "Ensuite : {next.label or 'Prochaine vente'} · file dès {next.opens_at}". Members categories: chip "Membres" on the row + caption "Tarif membres · inscrits avant le {sale_starts_at date}". Sold out: sticky CTA as screen 1's waitlist states + the info line "On te prévient par notification et WhatsApp". |
+| Screen 3 | A `MEMBERS` zone price shows the "Membres" chip; nothing is pre-blocked (the server decides). |
+| Screen 4 / W3 holder rows | `MEMBERS_ONLY` on a holder → under that row "Tarif réservé aux membres inscrits avant le {date}". `PER_ACCOUNT_LIMIT` `HOLDER` → "Ce numéro a atteint la limite de {limit} billets pour cet événement". |
+| Screen 8 Transférer | `PER_ACCOUNT_LIMIT` `HOLDER` on `to_phone` → the same line under the phone field. |
+| 12 · other states | `NOT_ELIGIBLE` with `room.next`: + "Ensuite : {next.label or 'Prochaine vente'} · file dès {date}". `ENDED` → re-read the event: `room` present → screen 2 (its CTA joins the next phase; no auto-join); null → screen 3. Eligibility copy by `event_type` (Q182). |
+| W2 | As screen 2, plus "Reprendre ma place" when the browser holds a queue token for the event. Waitlist states in the aside (as screen 1) when sold out. |
+| W3 | While admitted, the slim bar "Ton tour · {mm:ss}" above the content (as screen 4). |
+| W8 | Screen kept awake while visible (Wake Lock API; silently none where unsupported). `ENDED` as screen 12. |
+| B2 Tarifs & quotas | Column "Accès": select Tous · Membres (helper: "Membres inscrits avant l'ouverture de la vente"). B2 Règles: "File d'attente · {n} phase(s) · {current status}" + "Gérer". |
+| B13 Salle d'attente | **Phases:** one card per phase (N°, label, status badge, sale start and pre-queue time in the venue zone), the live KPIs of step 1 inside the card of the live phase, controls per phase. "Ajouter une phase" (until 5): the step-1 form + "Libellé" (optional, 40) + "Début de la vente" (phase ≥ 2, date-time in the venue zone). `PHASE_ORDER` → field error "Doit ouvrir après le début de la phase précédente". Ending a phase while a later one is scheduled: confirm "Les ventes restent fermées jusqu'à la phase suivante." Eligibility label by `event_type` (Q182). |
+
+### 10.5 Tasks
+
+#### Wave 0: orchestrator and founder (before any builder)
+
+| # | Owner | Area | Done |
+| --- | --- | --- | --- |
+| W0-1 | orchestrator | `docs/02`, `03`, `04`, `06`, `design/DESIGN.md` | §10.4 applied after the founder agrees |
+| W0-2 | orchestrator | git | `feat/lot-5-fair-sale` from `main`. No new CI job |
+| W0-3 | founder | — | The product calls (Q168–Q171, Q173, Q176–Q178, Q183). Club: member price per place or per buyer? Presale dates? Meta template `waitlist_open` once the WhatsApp provider exists (BE-36). CNDP: "availability notices" |
+
+#### Tasks
+
+`backend` is serial and on the critical path. ∥ rows run alongside, in disjoint folders. *(contract-first)* = the task starts on the §10.4 shapes with fixtures, and is done only after one run against the real endpoint. Every client task ships fr/ar/en strings (no hard-coded strings or colours). The fan app ships FR + AR goldens of the screens it touches.
+
+| Wave | # | Owner | Files / area | Task | Done = test | Blocked on |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | BE-47 | backend | V25; `backend/…/catalog` (`audience` on org prices and the fan detail, `from_price_mad`, `Inventory.SalePrice` + audience); `…/sales/application/OrderService` (holder accounts in the lock set, holder limit, `MEMBERS_ONLY` through `MembershipService`, javadoc lock order); `…/sales/adapters/persistence/JdbcOrders` (`OWN_HELD` minus REFUNDED tickets; holder count via `holders @>` + tickets); `…/tickets/application/TicketTransferService` (recipient lock + holder limit); `…/tickets/application/TicketAdminService` (drop the `ponytail:`); `backend/loadtest/check.sql` | Members prices, holder cap, Q52 | **`FairLimitsApiTest`.** (a) **Q52:** a buyer at 4/4 PAID, one ticket refunded → an order of 1 → 201, of 2 → 409 `PER_ACCOUNT_LIMIT` held 3. A split member's refunded ticket frees their own limit. A late success's re-reserve counts the same. (b) **Holder:** H holds 3 VALID tickets (bought by A) + 1 place in B's RESERVED order; C's order naming H → 409 `{reason: HOLDER, field: "items[0].holders[1]", limit: 4}`, key-set exactly that (no `held`). B's order expires → 201. CANCELLED (transferred away) and REFUNDED tickets don't count. The buyer's own places count. Two parallel orders naming the same new phone for 3 places each → exactly one 201. POS naming H at the limit → 201. (c) **Transfer** to H at the limit → 409 `HOLDER` `to_phone`; below → 201; re-issue unaffected. (d) **Members:** a non-member, a member who joined after `sale_starts_at`, a member who left → 409 `MEMBERS_ONLY` + `member_joined_before`; a member from before → 201. A member buyer naming a non-member on a `MEMBERS` place → 409 on that holder. An `ALL` place for the non-member in the same order is fine. No `sale_starts_at` → any live member. POS → 201. (e) **Prices:** POST defaults `ALL`, PATCH → `MEMBERS` visible on GET; bad value → 422; fan detail `audience`; `from_price_mad` ignores `MEMBERS` (null when no `ALL` place is left). `CheckSqlTest`: a refund-then-rebuy is no limit-breach row; a real breach still is. `MigrationsTest` V25: existing categories `ALL`, GIN index present. Every existing order, split, POS and transfer test green | W0-1 |
+| 1 ∥ | BO-21 | backoffice | `web/backoffice/src/features/room` (phases), `src/features/events` (Tarifs "Accès" column, Règles phases row), `src/i18n/fr.ts` | B13 phases, B2 audience | `room.test.tsx`: `GET /rooms` list → one card per phase; "Ajouter une phase" for phase 2 needs "Début de la vente" (zod) and sends `PUT /rooms/2` with `label`, `starts_at`; phase 1 sends no `starts_at`; `PHASE_ORDER` → field error; controls hit `/rooms/{phase}/…`; end-with-later-phase confirm copy; refetch 2 s only while a phase is live; FINANCE no writes; query keys include organizer and phase. Prices test: "Accès" select, PATCH sends `audience`. Règles: "{n} phase(s)". Eligibility label by `event_type`. No call to the old `/room` path left | BE-47, BE-48 *(contract-first)* |
+| 1 ∥ | FL-27 | flutter | `apps/fan/lib/features/queue`, `features/events` (screen 2 room line, next phase, members chip), `features/checkout` (holder-row errors), `features/tickets` (transfer sheet error), `l10n/*.arb`, `test/queue_test.dart`, `test/goldens_test.dart` | Phases, members prices, holder errors, copy by `event_type` | Fake API: screen 2 shows "{label} · …" and the `next` line (label null → "Prochaine vente"); `NOT_ELIGIBLE` panel + next-phase line; poll `ENDED` → re-reads the event: `room` present → screen 2 with "Rejoindre la file" (no POST made), null → screen 3; "Membres" chip + caption date; `MEMBERS_ONLY` and `PER_ACCOUNT_LIMIT` `HOLDER` map to the holder row by `field`; `HOLDER` on the transfer sheet's phone; "matchs" vs "événements" by `event_type` in `roomMinEvents`/`queueNotEnoughEvents`. Goldens fr + ar: screen 2 with presale + next, screen 3 with a members category, screen 4 holder-row errors | BE-47, BE-48 *(contract-first)* |
+| 1 ∥ | WS-13 | web-shop | `web/shop/app/(public)/[club]/events/[slug]/` (`event-view`, `ZonePicker`, `queue/QueueRoom.tsx`), `app/(public)/orders/new/` (turn bar, holder errors), `lib/queue.ts`, `lib/i18n/{fr,ar,en}.ts` | WS-12 follow-ups, phases, members prices, holder errors | `queue.test.tsx`: the W3 (`orders/new`) turn bar while admitted, counting to `expires_at`, absent otherwise; W2 "Reprendre ma place" when a queue token for the event is stored; W8 calls `navigator.wakeLock.request('screen')` while visible, releases on `visibilitychange` hidden and on unmount, no error when unsupported; copy by `event_type`; W2 label + `next` line; W8 `ENDED` → re-reads the event → W2 room panel or zone picker; "Membres" chip; `MEMBERS_ONLY` / `HOLDER` copy on the holder field by `field`. No JWT or K_t in HTML/RSC; `rtl.test` green | BE-47, BE-48 *(contract-first)* |
+| 2 | BE-48 | backend | V26; `backend/…/sales/rooms` (`WaitingRoom` + phase, label, startsAt, a static `current(rooms, now)`; `RoomMemo` event → rooms; `QueueService` join/poll/admission by the current phase; `RoomTokens` `rm`; `RoomTicks` self-end + rate seed + `poll_after_s` < 20 → 2; `JdbcWaitingRooms` effective start + next `opens_at`; `OrgRoomController` → `/rooms`, `/rooms/{phase}`); `…/catalog` (`EventRooms.PublicRoom` + phase, label, saleStartsAt, next; PATCH `PHASE_ORDER`); every step-1 test, `backend/http/lot5-onsale.http`, `backend/loadtest/k6/onsale.js` moved to `/rooms/1` | Rooms per phase + the WS-12 real-run follow-ups | `WaitingRoomOrgApiTest` (rewritten): `{rooms: []}`; PUT `/rooms/1` → 201 with `starts_at` null; `/rooms/1` with `starts_at` → 422; `/rooms/3` without 2 → 422 `PHASE_ORDER`; `/rooms/2` without `starts_at` → 422; `opens_at(2)` ≤ phase 1's start → 422 `PHASE_ORDER`; label 41 chars → 422; `/rooms/6` → 404; old `/room` → 404; controls per phase; event PATCH breaking the order → 422 `PHASE_ORDER`; FINANCE read, CASHIER 403, org B 404. `RoomTickTest` (fixed clock): at phase 2's `opens_at`, phase 1 ENDS once (one audit `room.end {reason: NEXT_PHASE}`), phase 2 goes `PRE_QUEUE` and draws at its own `starts_at` (ranks 1..n in its room); measured rate = configured at the draw, real after 60 s. `WaitingRoomFanApiTest`: phase 1 with a member rule → non-member `NOT_ELIGIBLE`; `room` = phase 1 with `next`; once phase 2 is current a join creates a new entry (201); a phase-1 token polls `ENDED`; token key-sets + `rm`; `poll_after_s` 2 / 5 / 15 at waits 10 / 60 / 300 s; `estimated_wait_s` non-null in the first minute. `AdmissionApiTest`: a phase-1 admission token once phase 2 is current → `INVALID`; gap (phase 1 ended, phase 2 `SCHEDULED`) → 409 `EVENT_NOT_ON_SALE` `NOT_STARTED` with phase 2's start and **zero SQL** (statement counter); all phases `ENDED` → no token needed; ranked poll still zero SQL. `FanEventApiTest`: `room` phase/label/next; null when every phase is `ENDED`. `MultiInstanceTest`: two instances at phase 2's `opens_at` → phase 1 ended once, one audit. `MigrationsTest` V26: step-1 rooms → phase 1, `starts_at` null. `Lot5OnSaleFlowTest`, `OnSaleTwoInstanceTest`, `CheckSqlTest` green on `/rooms/1`; k6 `onsale.js` 30 s smoke still passes | BE-47 |
+| 3 | BE-49 | backend | V27, V28; `backend/…/sales/waitlist` (new: `WaitlistService`, `FanWaitlistController`, `JdbcWaitlist`, `WaitlistJob` under try-lock class 7, daily purge); `…/notifications` (`WAITLIST_OPEN` kind, `FanMessageQueue.waitlistOpen`, push path, WhatsApp template params, STALE rule); `src/main/resources/messages*` (fr, ar, en); `common/EventLock` javadoc (class 7); `application.yml` (`waitlist.*`) | Waitlist + notice | `WaitlistApiTest`: GET `{entry: null}`; PUT with places left → 409 `WAITLIST_CLOSED` `NOT_SOLD_OUT`; sold out, on sale, no room → 201, again → 200 (same `joined_at`); a phase not `ENDED` → `ROOM`; after `refund_cutoff_at` → `CLOSED`; DRAFT or unknown → 404; no token → 401; DELETE → 204 twice; another user's entry never visible. `WaitlistJobTest` (fixed clock): 10 waiting; one 3-place order expires → the 3 oldest get `notified_at` and 2 `fan_messages` each (`WAITLIST_OPEN`, PUSH + WHATSAPP, `event_id` set); a run inside 10 min → nothing; after 10 min with 1 place → the 4th; a notified fan re-joining goes to the back (201); a live phase or a closed sale → nothing; purge at `starts_at` + 30 d. `FanMessageServiceTest`: push `/events/{id}`, fr/ar/en copy, payload key-set `{title, body, path}`; WhatsApp params `{title, link}` with `SHOP_ORIGIN`; `STALE` when sold out again or sales closed. `MultiInstanceTest`: both instances run the job at once → the R oldest notified exactly once. `MigrationsTest` V27/V28: allowlist still 5; `fan_messages_subject` accepts `WAITLIST_OPEN` only with `event_id` | BE-48 |
+| 3 ∥ | FL-28 | flutter | `apps/fan/lib/features/waitlist` (new: repository, controller), `features/events` (screen 1 hero + calendar chip, screen 2 sticky CTA), `l10n/*.arb`, `test/waitlist_test.dart`, `test/goldens_test.dart` | Screen 1 "Liste d'attente" | Fake API: sold out + on sale + `room` null → hero CTA "Liste d'attente"; signed out → login then PUT; on the list → outlined state, sheet, "Quitter la liste" → DELETE; each `WAITLIST_CLOSED` reason refreshes the event and shows its state; `sold_out` false → the normal CTA; a WAITLIST_OPEN push `/events/{id}` opens screen 2 (existing router); no polling of the waitlist (read on screen open). Goldens fr + ar: hero waitlist, on the list, screen 2 sold out | BE-49 *(contract-first)*; FL-27 (same `.arb` files) |
+| 3 ∥ | WS-14 | web-shop | `web/shop/app/(public)/[club]/events/[slug]/` (aside waitlist panel), `app/api/waitlist/[eventId]/route.ts` (new), `lib/waitlist.ts` (new), `lib/i18n/{fr,ar,en}.ts` | W2 waitlist | `waitlist.test.tsx`: W2 sold out → "Liste d'attente"; signed out → `/login?next=…`; route handler: cross-origin → 403, forwards the Bearer from the cookie, GET/PUT/DELETE pass-through; states and `WAITLIST_CLOSED` copy; `/events/{id}` (bare id, the WhatsApp link) → 308 to the canonical W2; renders in ar; `rtl.test` green | BE-49 *(contract-first)*; WS-13 (same i18n files) |
+| 4 | BE-50 | backend | `backend/src/test/…/Lot5FairSaleFlowTest`, `backend/http/lot5-fair-sale.http` | Exit flow | **`Lot5FairSaleFlowTest`:** an event with "Plein tarif" (`ALL`) and "Tarif membres" (`MEMBERS`); phase 1 "Prévente membres" (member before a date), phase 2 "Vente générale". In phase 1 a non-member is `NOT_ELIGIBLE` and sees `next`; a member is admitted and buys at the member price → tickets. Phase 2 opens → phase 1 `ENDED`, the presale token → `INVALID`. In phase 2 a non-member's member-price place → `MEMBERS_ONLY`; an order naming a phone at its limit → `HOLDER`; the event sells out; the room ends; two fans join the waitlist; an ADMIN refund frees the buyer's limit (Q52) and one place → the job notifies the oldest fan only; that fan buys; `check.sql` returns no rows | BE-49 |
+| exit | — | orchestrator + founder | — | Demo per §10.1 locally | All rows above green; manual demo | all |
+
+`reviewer` runs after every builder task. Backend runs serially: BE-47 → BE-48 → BE-49 → BE-50. Clients run on fixtures alongside and do their real run once BE-49 lands.
+
+**Cut order (if needed):**
+
+1. WS-14 (W2 waitlist; the app and WhatsApp still serve);
+2. the WhatsApp channel of `WAITLIST_OPEN` (push only);
+3. phase labels (null everywhere);
+4. the W8 Wake Lock.
+
+**Never cut:**
+
+- admission and the gap decided from the memo with zero SQL;
+- `rm` binding;
+- exact holder and buyer limits under the per-account locks;
+- members cutoff at `sale_starts_at`;
+- the waitlist notice once per wait across instances;
+- tenant scoping of `waitlist_entries`;
+- no PII in tokens or payloads;
+- the gate untouched.
+
+### 10.6 Review focus
+
+| Area | What the reviewer checks hardest |
+| --- | --- |
+| Current phase | One domain function used by the memo, join, poll, admission and `/fan/events` (no second copy in catalog). Admission and the gap rule from `RoomMemo` + the signature only (statement counter, including the `NOT_STARTED` path). `rm` checked on admission and poll. Each room's tick writes only its own row (the next phase's `opens_at` read without a lock). Auto-end audited once. Phase 1 still derives its start from the event |
+| Limits and locks | Holder accounts added to the existing `accounts` lock set before any limit is read (UUID order). Transfer: ticket row → recipient lock, never the reverse. The `OrderService` lock-order javadoc updated, with no new cycle (place, settle, expiry, refund, transfer). `OWN_HELD` subtracts only REFUNDED tickets of the user's own PAID orders. The holder count uses the GIN index (`holders @>`), not a scan of the event's orders. `PER_ACCOUNT_LIMIT` `HOLDER` details carry no `held`. Re-reserve's holder `ponytail:` present |
+| Members | Membership read through `MembershipService`, never crm's repository. Cutoff = the event's `sale_starts_at` (null → any live member). Checked per place via its holder. POS untouched. `from_price_mad` over `ALL` only. Error details about another phone carry only `field` + the public date |
+| Waitlist | Try-lock class 7 + the cooldown read inside it: two instances never notify the same event twice in a period (`MultiInstanceTest`). `notified_at` and the messages in one transaction. R read without locks; capped at 1,000. Join conditions in contract order. STALE at send. Push payload `{title, body, path}`; WhatsApp `{title, link}`; no phone or name. Purge. `organizer_id` on every statement |
+| Migrations | `ADD VALUE` alone in V27. Constraint name dropped correctly in V26 (`waiting_rooms_event_id_key`). Step-1 rooms → phase 1. 03 and 02 match the migrations |
+| Contract | Every new or changed 04 row has a contract test; the old `/room` path is gone from backend, BO, `http/`, k6; error codes and reasons exactly as 04 |
+| Clients | Rules decided by the server (no client-side membership or holder maths); errors mapped by `details.field`; `ENDED` re-reads the event (no auto-join); waitlist read on open, not polled; Wake Lock released; strings fr/ar/en; RTL mirrored with numbers LTR; goldens fr + ar |
+| Names / money / gate | No football names in tables or columns (copy by `event_type` is UI). No float. Zero diff under `…/gate`, scanner, `packages/core` |
+
+### 10.7 Risks
+
+| Risk | Mitigation |
+| --- | --- |
+| Free membership makes member prices easy to farm | Cutoff at the event's `sale_starts_at` (Q171); the presale phase can add account age; paid membership in step 3 |
+| An organizer ends the presale early and sales stop | By design (Q169); B13 confirm copy; OPS can resume nothing, so the copy says so; the next phase opens on time |
+| Presale fans mid-checkout when the general phase opens | Their 8-min hold stands; only new orders need the new phase's token; B13 shows when the presale stops (the next pre-queue opening) |
+| The holder cap blocks real groups (one parent holding the family's tickets) | Same number as `per_account_limit` (raise it per event); a clear message on the holder row; POS unaffected |
+| GIN index write cost on `order_items` at derby order rates | One GIN insert per order item, at about 10 orders/s; measured in the deferred §5.4 run; drop to a jsonb scan behind the `ponytail:` if it shows |
+| Waitlist notices disappoint (places gone) | One fan per place, cooldown, honest copy "Premier arrivé, premier servi"; ratio adjustable (Q177) |
+| WhatsApp template not approved / provider not live (BE-36) | Push still works; the WhatsApp row fails `NOT_CONFIGURED`, as today; shop-only fans wait for BE-36 |
+| Old room paths still called somewhere | BE-48 greps backend/http/k6; BO-21 removes the client; the reviewer checks |
+| More 409 shapes for clients to map | One mapping by `details.field` in each client; fixture tests per reason |
+
+### 10.8 Deliberately left out
+
+- **Per-phase quotas (Q183).** Waitlist offers, holds or priority (Q176). Waitlist per zone or category (the list is per event).
+- **Back-office waitlist view or counts.** Add a `waitlist` count to `/sales` when the club asks.
+- **Holder-limit column per event or category** (it reuses `per_account_limit`). Holder cap at POS and on a late success's re-reserve.
+- **Members price at POS.** Derived phase names (Q168). DELETE of a phase (end it instead).
+- **Push "C'est ton tour"** (Q153). CIN (Q145). Paid membership and passes (step 3). Promo codes (step 4).
+- **The FL-26 wow-review leftovers** (box shadow on the twelfth dot, display sizes as tokens): they stay with the founder wow review. Only the "matchs" wording is taken here (Q182).
+
+### 10.9 Carried forward (update §7)
+
+| Item | Lot | Note |
+| --- | --- | --- |
+| WS-12 follow-ups, WS-12 real-run follow-ups, rooms per phase, members prices, holder cap, waitlist, Q52 residual | done in step 2 | strike from §7 when merged |
+| Waitlist count in the back-office | when asked | §10.8 |
+| Holder limit re-checked on a late success | if it ever matters | `ponytail:` in `OrderService.reReserve` |
+| Member-only leftovers notifying non-members | if the club complains | `ponytail:` in `WaitlistJob` (R over every category) |
+| Meta template `waitlist_open` | with BE-36 | Q178 |
