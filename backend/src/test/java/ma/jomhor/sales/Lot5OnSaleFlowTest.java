@@ -6,8 +6,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -16,8 +14,6 @@ import java.util.UUID;
 import ma.jomhor.payments.PaymentTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * Lot 5 step 1 exit proof, backend side (plan lot-5 §1 Demo-complete (1)-(6), §5 BE-46): a room for verified accounts
@@ -173,22 +169,14 @@ class Lot5OnSaleFlowTest extends QueueFixture {
         order(second, r, null, 1).andExpect(status().isCreated());
 
         // ---------- check.sql: no oversell, double charge, limit breach or out-of-order admission ----------
-        assertThat(breaches(r)).isEmpty();
+        assertThat(breaches(r.event())).isEmpty();
         // It does see this event (BE-44's CheckSqlTest crafts every breach): the paid order flipped to EXPIRED keeps
         // its 2 VALID tickets and its SUCCEEDED card payment, and its places drop out of sold's count.
         jdbc.sql("update orders set status = 'EXPIRED' where id = ?::uuid").param(orderId).update();
-        assertThat(breaches(r)).extracting(b -> b.get("breach"))
+        assertThat(breaches(r.event())).extracting(b -> b.get("breach"))
                 .containsExactlyInAnyOrder("SOLD_MISMATCH", "TICKET_NOT_PAID", "CHARGED_NO_ORDER");
         jdbc.sql("update orders set status = 'PAID' where id = ?::uuid").param(orderId).update();
-        assertThat(breaches(r)).isEmpty();
-    }
-
-    /** loadtest/check.sql, scoped to the room's event (the file is one statement). */
-    private List<Map<String, Object>> breaches(Room r) throws Exception {
-        String check = Files.readString(Path.of("loadtest/check.sql")).strip();
-        assertThat(check).endsWith(";");
-        return jdbc.sql("select * from (" + check.substring(0, check.length() - 1) + "\n) c where event_id = ?")
-                .param(r.event()).query().listOfRows();
+        assertThat(breaches(r.event())).isEmpty();
     }
 
     // ---------- helpers ----------
@@ -208,21 +196,5 @@ class Lot5OnSaleFlowTest extends QueueFixture {
         String json = poll(f);
         assertThat((String) JsonPath.read(json, "$.status")).isEqualTo(status);
         assertThat((Integer) JsonPath.read(json, "$.position")).isEqualTo(position);
-    }
-
-    private ResultActions order(Fan f, Room r, String admission, int qty) throws Exception {
-        MockHttpServletRequestBuilder req = post("/fan/orders").header("Authorization", "Bearer " + f.token())
-                .contentType(MediaType.APPLICATION_JSON).content("""
-                        {"event_id": %d, "channel": "APP",
-                         "items": [{"price_category_id": "%s", "qty": %d, "holders": %s}]}"""
-                        .formatted(r.event(), r.price(), qty, holders(qty)));
-        return mvc.perform(admission == null ? req : req.header("X-Admission-Token", admission));
-    }
-
-    /** The simulated gateway's signed callback (PaymentTest#callback). */
-    private ResultActions callback(Map<String, String> fields) throws Exception {
-        var req = post("/payments/fake/callback").contentType(MediaType.APPLICATION_FORM_URLENCODED);
-        fields.forEach(req::param);
-        return mvc.perform(req);
     }
 }

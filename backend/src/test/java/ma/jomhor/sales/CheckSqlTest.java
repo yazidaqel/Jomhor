@@ -1,0 +1,128 @@
+package ma.jomhor.sales;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.jayway.jsonpath.JsonPath;
+import java.util.List;
+import java.util.UUID;
+import ma.jomhor.payments.PaymentTest;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+
+/**
+ * backend/loadtest/check.sql (plan lot-5 §5 BE-44): a clean sale has no row, and each of its eight checks fires, alone,
+ * on one crafted breach, each on a fresh event (the file is scoped by event_id: the shared test database holds other
+ * classes' deliberate breaches). Also the definition of sold: a REFUNDED ticket on a PAID order counts one place less.
+ */
+class CheckSqlTest extends QueueFixture {
+
+    /**
+     * A sale with no breach, on a 3-place category (sold out): the fan's order A of 2 places is PAID (2 VALID tickets,
+     * the approved card attempt and a second one left PENDING), order B of 1 place is RESERVED with a PENDING card
+     * attempt; the fan's room entry is unranked and the room ENDED (orders need no token).
+     */
+    private record Sale(Room room, Fan fan, String paid, String held) {}
+
+    private Sale sale() throws Exception {
+        Room r = room("{}", 3);
+        tick(OPENS);
+        Fan f = fan();
+        join(f, r.event()).andExpect(status().isCreated());
+        call(r.admin(), post("/org/events/" + r.event() + "/room/end")).andExpect(status().isOk());
+        memo.invalidate();
+        jdbc.sql("update events set sale_starts_at = now() - interval '1 minute' where id = ?").param(r.event())
+                .update();
+        String paid = JsonPath.read(body(order(f, r, null, 2).andExpect(status().isCreated())), "$.id");
+        String approved = pay(f, paid);
+        pay(f, paid);
+        callback(PaymentTest.approve(approved, 10_000)).andExpect(status().isSeeOther());
+        String held = JsonPath.read(body(order(f, r, null, 1).andExpect(status().isCreated())), "$.id");
+        pay(f, held);
+        assertThat(breaches(r.event())).isEmpty();
+        return new Sale(r, f, paid, held);
+    }
+
+    private String pay(Fan f, String orderId) throws Exception {
+        return JsonPath.read(body(mvc.perform(post("/fan/orders/" + orderId + "/pay")
+                .header("Authorization", "Bearer " + f.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"method\": \"CARD\"}")).andExpect(status().isOk())), "$.payment_id");
+    }
+
+    private List<Object> found(Sale s) throws Exception {
+        return breaches(s.room().event()).stream().map(b -> b.get("breach")).toList();
+    }
+
+    private void sql(String sql, Object... params) {
+        jdbc.sql(sql).params(params).update();
+    }
+
+    @Test
+    void eachCheckFiresOnItsOwnBreach() throws Exception {
+        // Oversell: both tickets of A transferred, and the old ones left VALID: 4 VALID tickets on a 3-place category.
+        Sale s = sale();
+        List<UUID> tickets = jdbc.sql("select id from tickets where order_id = ?::uuid").param(s.paid())
+                .query(UUID.class).list();
+        for (UUID t : tickets) {
+            mvc.perform(post("/fan/tickets/" + t + "/transfer").header("Authorization", "Bearer " + s.fan().token())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"to_phone\": \"%s\", \"name\": \"Nadia Berrada\"}".formatted(randomPhone())))
+                    .andExpect(status().isCreated());
+            sql("update tickets set status = 'VALID' where id = ?", t);
+        }
+        assertThat(found(s)).containsExactly("OVERSELL_TICKETS");
+
+        // sold drifted from held + paid.
+        s = sale();
+        sql("update price_categories set sold = sold - 1 where id = ?::uuid", s.room().price());
+        assertThat(found(s)).containsExactly("SOLD_MISMATCH");
+
+        // A REFUNDED ticket of a PAID order frees its place: sold not lowered is a mismatch, lowered is clean.
+        s = sale();
+        sql("update tickets set status = 'REFUNDED' where id = (select min(id::text)::uuid from tickets "
+                + "where order_id = ?::uuid)", s.paid());
+        assertThat(found(s)).containsExactly("SOLD_MISMATCH");
+        sql("update price_categories set sold = sold - 1 where id = ?::uuid", s.room().price());
+        assertThat(found(s)).isEmpty();
+
+        // Double charge: A's second card attempt succeeded too, and no payment.refund_required names it.
+        s = sale();
+        sql("update payments set status = 'SUCCEEDED' where order_id = ?::uuid and status = 'PENDING'", s.paid());
+        assertThat(found(s)).containsExactly("DOUBLE_CHARGE");
+
+        // Tickets ≠ places on a PAID order: one place moved from A to B (held + paid unchanged).
+        s = sale();
+        sql("update order_items set qty = 1, holders = jsonb_build_array(holders -> 0) where order_id = ?::uuid",
+                s.paid());
+        sql("update order_items set qty = 2, holders = holders || holders where order_id = ?::uuid", s.held());
+        assertThat(found(s)).containsExactly("TICKETS_PLACES");
+
+        // The account holds 3 places, the limit drops to 2.
+        s = sale();
+        sql("update events set per_account_limit = 2 where id = ?", s.room().event());
+        assertThat(found(s)).containsExactly("PER_ACCOUNT_LIMIT");
+
+        // A refunded order whose tickets stay VALID (sold follows the order, so only this check fires).
+        s = sale();
+        sql("update orders set status = 'REFUNDED' where id = ?::uuid", s.paid());
+        sql("update price_categories set sold = 1 where id = ?::uuid", s.room().price());
+        assertThat(found(s)).containsExactly("TICKET_NOT_PAID");
+
+        // Charged without an order: B's card attempt succeeded, B is still RESERVED.
+        s = sale();
+        sql("update payments set status = 'SUCCEEDED' where order_id = ?::uuid", s.held());
+        assertThat(found(s)).containsExactly("CHARGED_NO_ORDER");
+
+        // Admission out of rank order: an entry admitted without a rank, then ranked past admitted_through (0), then
+        // inside it (clean).
+        s = sale();
+        sql("update queue_entries set admitted_at = now() where room_id = ?", s.room().id());
+        assertThat(found(s)).containsExactly("ADMISSION_ORDER");
+        sql("update waiting_rooms set ranked_count = 1 where id = ?", s.room().id());
+        sql("update queue_entries set rank = 1 where room_id = ?", s.room().id());
+        assertThat(found(s)).containsExactly("ADMISSION_ORDER");
+        sql("update waiting_rooms set admitted_through = 1 where id = ?", s.room().id());
+        assertThat(found(s)).isEmpty();
+    }
+}

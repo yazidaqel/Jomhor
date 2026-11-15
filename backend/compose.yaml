@@ -1,4 +1,6 @@
 # Local dev database. Dev defaults only; override with env (DB_NAME, DB_USER, DB_PASSWORD, DB_PORT).
+# Profile `smoke` (loadtest/smoke.sh, plan lot-5 §5.5): two API instances on this database, api-1 on 8081, api-2 on
+# 8082. Plain `docker compose up` starts Postgres only.
 services:
   postgres:
     image: postgres:18
@@ -8,6 +10,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-jomhor}
     ports:
       - "127.0.0.1:${DB_PORT:-5435}:5432" # 5435: 5432 is often taken by another local Postgres
+    mem_limit: ${PG_MEM_LIMIT:-0} # 0 = no cap (dev); smoke.sh caps it
     healthcheck: # over TCP: the init-time server listens on the socket only, so it never looks ready too early
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 2s
@@ -16,6 +19,59 @@ services:
     volumes:
       # PG18 keeps its data in 18/docker under this mount; a volume created by postgres:16 needs `docker compose down -v` once.
       - pgdata:/var/lib/postgresql
+
+  # The boot jar (`gradlew bootJar` first) under staging,loadtest: the simulated card gateway, the log senders and the
+  # LoadSeeder. Every value here is a smoke-only stand-in, never a real secret.
+  api-1: &api
+    profiles: [smoke]
+    build:
+      context: .
+      dockerfile: loadtest/Dockerfile
+    image: jomhor-api:smoke
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: ${API_MEM_LIMIT:-768m} # heap = 70 % of it (loadtest/Dockerfile)
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - ./build/loadtest:/seed # api-1 writes the k6 seed file here
+    environment: &api-env
+      SPRING_PROFILES_ACTIVE: staging,loadtest
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-jomhor}
+      DB_USER: ${DB_USER:-jomhor}
+      DB_PASSWORD: ${DB_PASSWORD:-jomhor}
+      DB_POOL_SIZE: 20
+      JWT_SECRET: smoke-only-jwt-secret-not-for-prod-0001
+      OTP_SECRET: smoke-only-otp-secret-not-for-prod-0001
+      EVENT_KEY_MASTER: c21va2Utb25seS1ldmVudC1rZXktbWFzdGVyLTAwMDE= # base64 of "smoke-only-event-key-master-0001"
+      GATE_MANIFEST_SIGNING_KEY: MC4CAQAwBQYDK2VwBCIEIAQON3mtI2Z6nUSu5xqHCU9/Hp69MFlvEcDZIMiRZQYA # the dev-only key
+      ROOMS_TOKEN_SECRET: smoke-only-rooms-token-secret-not-for-prod
+      SHOP_ORIGIN: http://localhost:3000
+      # k6 reaches the API from the host or the compose network and plays the CDN: it sends X-Forwarded-For.
+      TRUSTED_PROXIES_REGEX: '10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}'
+      PAYMENTS_CARD_PROVIDER: fake
+      PAYMENTS_FAKE_SECRET: ${PAYMENTS_FAKE_SECRET:-smoke-only-payments-fake-secret-0001} # k6 signs callbacks with it
+      PUBLIC_BASE_URL: http://localhost:8081/v1
+      PAYMENTS_RETURN_URL_WEB: http://localhost:3000/orders/{order_id}
+      PAYMENTS_RETURN_URL_APP: jomhor-fan://orders/{order_id}
+      NOTIFICATIONS_PUSH_PROVIDER: log
+      JOMHOR_LOADTEST_SEED_FILE: /seed/seed.json
+      JOMHOR_LOADTEST_FANS: ${LOADTEST_FANS:-7000}
+      JOMHOR_LOADTEST_SALE_IN: ${LOADTEST_SALE_IN:-5m}
+      JOMHOR_LOADTEST_RATE: ${LOADTEST_RATE:-1000}
+
+  api-2:
+    <<: *api
+    depends_on:
+      api-1: # start order only; api-1 is ready once seeded, and smoke.sh waits for both
+        condition: service_started
+    ports:
+      - "127.0.0.1:8082:8080"
+    volumes: []
+    environment:
+      <<: *api-env
+      JOMHOR_LOADTEST_SEED_FILE: "" # api-1 seeds
 
 volumes:
   pgdata:

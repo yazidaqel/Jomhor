@@ -1,5 +1,6 @@
 package ma.jomhor.sales;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,8 +9,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import ma.jomhor.catalog.OrgApiTest;
@@ -19,6 +23,7 @@ import ma.jomhor.sales.rooms.application.RoomTicks;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
  * Waiting-room fixtures (docs/04-api.md §Waiting room): an ON_SALE event whose sale opens at {@link #SALE} (doors
@@ -118,5 +123,33 @@ abstract class QueueFixture extends OrgApiTest {
     static Map<String, Object> claims(String jwt) {
         return JsonPath.read(new String(Base64.getUrlDecoder().decode(jwt.split("\\.")[1]), StandardCharsets.UTF_8),
                 "$");
+    }
+
+    /** POST /fan/orders of {@code qty} places of the room's category, held by the buyer; the admission token if any. */
+    ResultActions order(Fan f, Room r, String admission, int qty) throws Exception {
+        MockHttpServletRequestBuilder req = post("/fan/orders").header("Authorization", "Bearer " + f.token())
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"event_id": %d, "channel": "APP",
+                         "items": [{"price_category_id": "%s", "qty": %d, "holders": %s}]}"""
+                        .formatted(r.event(), r.price(), qty, holders(qty)));
+        return mvc.perform(admission == null ? req : req.header("X-Admission-Token", admission));
+    }
+
+    /** The simulated gateway's signed callback (PaymentTest#callback). */
+    ResultActions callback(Map<String, String> fields) throws Exception {
+        var req = post("/payments/fake/callback").contentType(MediaType.APPLICATION_FORM_URLENCODED);
+        fields.forEach(req::param);
+        return mvc.perform(req);
+    }
+
+    /**
+     * loadtest/check.sql scoped to one event: the file is one statement, and the shared test database holds other
+     * classes' deliberate breaches.
+     */
+    List<Map<String, Object>> breaches(int eventId) throws Exception {
+        String check = Files.readString(Path.of("loadtest/check.sql")).strip();
+        assertThat(check).endsWith(";");
+        return jdbc.sql("select * from (" + check.substring(0, check.length() - 1) + "\n) c where event_id = ?")
+                .param(eventId).query().listOfRows();
     }
 }

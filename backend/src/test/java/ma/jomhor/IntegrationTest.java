@@ -84,6 +84,11 @@ public abstract class IntegrationTest {
      * Mockito stubs for OtpSender, TicketMessenger and PushSender (getBean them to stub). The caller closes it.
      */
     public static ConfigurableApplicationContext instance(String... args) {
+        return instance(POSTGRES, args);
+    }
+
+    /** {@link #instance(String...)} on another database (one that must not hold the shared container's data). */
+    public static ConfigurableApplicationContext instance(PostgreSQLContainer db, String... args) {
         var app = new SpringApplication(JomhorApplication.class);
         app.addInitializers(c -> {
             c.getBeanFactory().registerSingleton("stubOtpSender", mock(OtpSender.class));
@@ -91,9 +96,9 @@ public abstract class IntegrationTest {
             c.getBeanFactory().registerSingleton("stubPushSender", mock(PushSender.class));
         });
         List<String> all = new ArrayList<>(List.of("--spring.profiles.active=test", "--server.port=0",
-                "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
-                "--spring.datasource.username=" + POSTGRES.getUsername(),
-                "--spring.datasource.password=" + POSTGRES.getPassword(),
+                "--spring.datasource.url=" + db.getJdbcUrl(),
+                "--spring.datasource.username=" + db.getUsername(),
+                "--spring.datasource.password=" + db.getPassword(),
                 "--" + JWT_SECRET, "--" + OTP_SECRET, "--" + EVENT_KEY_MASTER));
         all.addAll(List.of(args));
         return app.run(all.toArray(String[]::new));
