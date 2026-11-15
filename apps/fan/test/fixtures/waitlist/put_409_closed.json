@@ -1,9 +1,8 @@
 {
- "source": "contract-first (docs/04-api.md §Waitlist, Lot 5 step 2): replace with a captured answer once BE-49 runs",
  "status": 409,
  "body": {
   "code": "WAITLIST_CLOSED",
-  "message": "The event is not on sale",
+  "message": "The waitlist is not open for this event",
   "details": {
    "reason": "CLOSED"
   }

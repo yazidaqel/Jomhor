@@ -1,5 +1,5 @@
 {
- "source": "contract-first (docs/04-api.md, Lot 5 step 2): replace with a captured answer once BE-47/BE-48 run",
+ "source": "design content for the goldens, in the shape of the FL-27 real run's test/fixtures/queue/event_room_presale_next.json (queue_test checks the shapes match)",
  "status": 200,
  "body": {
   "id": 15,

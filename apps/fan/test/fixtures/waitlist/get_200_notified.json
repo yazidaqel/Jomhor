@@ -1,10 +1,9 @@
 {
- "source": "contract-first (docs/04-api.md §Waitlist, Lot 5 step 2): replace with a captured answer once BE-49 runs",
  "status": 200,
  "body": {
   "entry": {
-   "joined_at": "2027-02-20T11:40:00Z",
-   "notified_at": "2027-02-20T11:55:00Z"
+   "joined_at": "2026-11-15T15:28:23.358741Z",
+   "notified_at": "2026-11-15T15:28:51.609228Z"
   }
  }
 }

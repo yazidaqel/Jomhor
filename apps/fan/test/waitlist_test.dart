@@ -6,11 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/app/session.dart';
+import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/waitlist/waitlist_controller.dart';
+import 'package:jomhor_fan/features/waitlist/waitlist_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -18,10 +21,11 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 
 import 'helpers.dart';
 
-/// A contract-first answer of `/fan/waitlist/{event_id}` (test/fixtures/waitlist, docs/04-api.md §Waitlist).
+/// An answer of `/fan/waitlist/{event_id}` captured in the FL-28 real run (test/fixtures/waitlist, 2026-11-15); a
+/// null body is the empty one the server sent (DELETE's 204).
 http.Response waitlistAnswer(String name) {
   final j = jsonDecode(File('test/fixtures/waitlist/$name.json').readAsStringSync()) as Map<String, Object?>;
-  return json(j['body'], j['status']! as int);
+  return j['body'] == null ? http.Response('', j['status']! as int) : json(j['body'], j['status']! as int);
 }
 
 /// Event 1 sold out, on sale, no room: screen 1's hero and screen 2 offer the waitlist.
@@ -56,7 +60,7 @@ class WaitlistSale {
       ('GET', '/v1/fan/events/1') => json(event),
       ('GET', '/v1/fan/waitlist/1') => waitlistAnswer(entry),
       ('PUT', '/v1/fan/waitlist/1') => puts.isEmpty ? waitlistAnswer('put_201_joined') : puts.removeAt(0)(),
-      ('DELETE', '/v1/fan/waitlist/1') => http.Response('', 204),
+      ('DELETE', '/v1/fan/waitlist/1') => waitlistAnswer('delete_204'),
       _ => apiError(404, 'NOT_FOUND'),
     };
   }
@@ -226,11 +230,57 @@ void main() {
   });
 
   testWidgets('already notified: "Liste d\'attente" again, and joining puts the fan at the back', (tester) async {
-    sale.entry = 'get_200_notified';
+    sale
+      ..entry = 'get_200_notified'
+      ..puts.add(() => waitlistAnswer('put_201_moved_back'));
     await start(tester);
     await tap(tester, 'hero.waitlist');
     expect(sale.calls('PUT', '/fan/waitlist/1'), hasLength(1));
     expect(find.byKey(const Key('hero.waitlistOn')), findsOneWidget);
+  });
+
+  testWidgets('already waiting (200, e.g. joined on the shop meanwhile): "Sur la liste d\'attente"', (tester) async {
+    sale.puts.add(() => waitlistAnswer('put_200_already'));
+    await start(tester);
+    await tap(tester, 'hero.waitlist');
+    expect(sale.calls('PUT', '/fan/waitlist/1'), hasLength(1));
+    expect(find.byKey(const Key('hero.waitlistOn')), findsOneWidget);
+  });
+
+  test('the real answers (FL-28 real run) read through the repository', () async {
+    late String answer;
+    final repo = WaitlistRepository(
+      ApiClient(
+        baseUrl: 'https://api.test/v1',
+        tokens: MemoryTokenStore('jwt'),
+        http: MockClient((_) async => waitlistAnswer(answer)),
+      ),
+    );
+    Future<WaitlistEntry?> read(String name, Future<WaitlistEntry?> Function(int) call) {
+      answer = name;
+      return call(1);
+    }
+
+    expect(await read('get_200_none', repo.get), isNull);
+    for (final name in ['get_200_waiting', 'put_201_joined', 'put_200_already', 'put_201_moved_back']) {
+      final e = (await read(name, name.startsWith('put') ? repo.join : repo.get))!;
+      expect((e.waiting, e.joinedAt.isUtc), (true, true), reason: name);
+    }
+    final notified = (await read('get_200_notified', repo.get))!;
+    expect((notified.waiting, notified.notifiedAt!.isAfter(notified.joinedAt)), (false, true));
+    answer = 'delete_204';
+    await repo.leave(1);
+    for (final reason in ['CLOSED', 'ROOM', 'NOT_SOLD_OUT']) {
+      answer = 'put_409_${reason.toLowerCase()}';
+      await expectLater(
+        repo.join(1),
+        throwsA(
+          isA<ApiError>()
+              .having((e) => (e.status, e.code), 'code', (409, 'WAITLIST_CLOSED'))
+              .having((e) => e.details['reason'], 'reason', reason),
+        ),
+      );
+    }
   });
 
   testWidgets('a failed join keeps the button and says so', (tester) async {

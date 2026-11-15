@@ -451,7 +451,8 @@ void main() {
       expect(felt, isEmpty);
     });
 
-    for (final reason in ['missing', 'invalid', 'invalid_other_user', 'expired']) {
+    // invalid_presale: phase 1's token once phase 2's pre-queue opened (FL-27 real run).
+    for (final reason in ['missing', 'invalid', 'invalid_other_user', 'expired', 'invalid_presale']) {
       testWidgets('POST /fan/orders carries X-Admission-Token; ADMISSION_REQUIRED ($reason, the real answer) goes back '
           'to screen 12', (tester) async {
         sale.orders.add(() => sale.real('admission_required_$reason'));
@@ -632,9 +633,24 @@ void main() {
     });
   });
 
-  group('sale phases, members prices, holder limits (FL-27, contract-first fixtures)', () {
+  group('sale phases, members prices, holder limits (FL-27 real run, test/fixtures/queue)', () {
+    // The real run (2026-11-15): phase 1 "Prévente membres" drew at presaleStart (also the members cutoff); phase 2
+    // "Vente générale" opened at generalOpens and drew at generalStart. Phase 1 was ended by hand right after the
+    // presale order: the gap, then phase 2's pre-queue.
+    const presaleStart = '2026-11-15T15:28:49Z';
+    const generalOpens = '2026-11-15T15:30:49Z';
+    const generalStart = '2026-11-15T15:33:49Z';
     Map<String, Object?> presale() => realAnswer('event_room_presale_next').body;
     Map<String, Object?> roomOf(Map<String, Object?> event) => {...event['room']! as Map<String, Object?>};
+    List<Map<String, Object?>> pricesOf(Map<String, Object?> event) => [
+      for (final p in ((event['zones']! as List<Object?>).single! as Map<String, Object?>)['prices']! as List<Object?>)
+        p! as Map<String, Object?>,
+    ];
+    String priceId(String audience) =>
+        pricesOf(presale()).firstWhere((p) => p['audience'] == audience)['price_category_id']! as String;
+
+    /// The phone's clock as the server's at that captured answer.
+    void at(String instant) => clock.now = DateTime.parse(instant);
     String day(String at) => venueDay(DateTime.parse(at), zone, 'fr');
     String when(String at) => venueWhen(DateTime.parse(at), zone, 'fr');
     String clockAt(String at) => venueClock(DateTime.parse(at), zone, 'fr');
@@ -644,21 +660,59 @@ void main() {
     String ctaText(WidgetTester tester) =>
         (tester.widget<FilledButton>(find.byKey(const Key('event.cta'))).child! as Text).data!;
 
-    test('the fixture reads: phase, label, next, members prices; "dès" is a price anyone can pay', () {
+    test('the real answers read: phase, label, next, members prices; "dès" is a price anyone can pay', () {
       final d = EventDetail.fromJson(presale(), fetchedAt: clock.now);
       final room = d.event.room!;
       expect((room.phase, room.label, room.status), (1, 'Prévente membres', 'PRE_QUEUE'));
-      expect(room.saleStartsAt, DateTime.utc(2027, 2, 20, 12, 30));
+      expect(
+        (room.saleStartsAt, room.eligibility!.memberJoinedBefore),
+        (DateTime.parse(presaleStart), DateTime.parse(presaleStart)),
+      );
       expect(
         (room.next!.phase, room.next!.label, room.next!.opensAt),
-        (2, 'Vente générale', DateTime.utc(2027, 2, 21, 9, 30)),
+        (2, 'Vente générale', DateTime.parse(generalOpens)),
       );
-      final nord = d.zones.first;
-      expect([for (final p in nord.prices) p.membersOnly], [false, true]);
-      expect((nord.hasMembersPrice, nord.firstOpen!.priceCategoryId, nord.fromPriceMad), (true, 'pc-1-0', 8000));
+      final est = d.zones.single;
+      expect([for (final p in est.prices) p.membersOnly], [false, true]);
+      expect((est.hasMembersPrice, est.firstOpen!.priceCategoryId, est.fromPriceMad), (true, priceId('ALL'), 5000));
+      // Phase 1 ended by hand: the gap reads phase 2 still SCHEDULED; then its pre-queue, with no phase after it.
+      for (final (name, status) in [('event_room_gap', 'SCHEDULED'), ('event_room_general', 'PRE_QUEUE')]) {
+        final r = EventDetail.fromJson(realAnswer(name).body, fetchedAt: clock.now).event.room!;
+        expect(
+          (r.phase, r.label, r.status, r.opensAt, r.saleStartsAt, r.eligibility, r.next),
+          (2, 'Vente générale', status, DateTime.parse(generalOpens), DateTime.parse(generalStart), null, null),
+          reason: name,
+        );
+      }
+      // The presale queue token, in the gap and once phase 2 opened: ENDED, nothing more to poll.
+      for (final name in ['poll_ended_gap', 'poll_ended_presale']) {
+        final q = QueueStatus.fromJson(realAnswer(name).body);
+        expect((q.phase, q.pollAfterS, q.admissionToken), (QueuePhase.ended, 0, null), reason: name);
+      }
+      // An order in the gap: the next phase's sale hasn't started.
+      final (:status, :body) = realAnswer('order_409_not_started_gap');
+      final details = body['details']! as Map<String, Object?>;
+      final gap = ApiError(status: status, code: body['code']! as String, message: '', details: details);
+      expect((apiErrorText(l, gap), details['sale_starts_at']), (l.errorNotStarted, generalStart));
       // A step-1 room (no phase fields) still reads as phase 1 without a next.
       final old = Room.fromJson(roomJson());
       expect((old.phase, old.label, old.next), (1, null, null));
+    });
+
+    test("the goldens' design answers (test/fixtures/goldens) have the real answers' shape", () {
+      // Every key path, list items merged: the goldens can't show a field the server doesn't send, or miss one.
+      // `metadata` is the organizer's free-form jsonb: not walked.
+      Set<String> paths(Object? v, [String at = '']) => switch (v) {
+        Map<String, Object?>() when at != '.metadata' => {
+          for (final MapEntry(:key, :value) in v.entries) ...paths(value, '$at.$key'),
+          at,
+        },
+        List<Object?>() => {for (final x in v) ...paths(x, '$at[]'), at},
+        _ => {at},
+      };
+      for (final name in ['event_room_presale_next', 'order_409_members_only']) {
+        expect(paths(realAnswer(name, dir: 'goldens').body), paths(realAnswer(name).body), reason: name);
+      }
     });
 
     test('"dès" counts only prices anyone can pay: members prices alone show none, screen 3 still starts on one', () {
@@ -675,6 +729,7 @@ void main() {
     testWidgets('screen 2: "{label} · tirage à", the next phase, the members chip and caption; the CTA has the label', (
       tester,
     ) async {
+      at('2026-11-15T15:26:52Z');
       sale
         ..detail = presale()
         ..room = roomOf(presale());
@@ -682,13 +737,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         roomBanner(tester),
-        'Prévente membres · tirage à ${clockAt('2027-02-20T12:30:00Z')}\n'
-        'Réservée aux fans vérifiés: membre inscrit avant le ${day('2027-02-20T12:30:00Z')}',
+        'Prévente membres · tirage à ${clockAt(presaleStart)}\n'
+        'Réservée aux fans vérifiés: membre inscrit avant le ${day(presaleStart)}',
       );
-      expect(text(tester, 'event.next'), 'Ensuite : Vente générale · file dès ${when('2027-02-21T09:30:00Z')}');
-      expect(find.byKey(const Key('zone.1.members')), findsOneWidget);
-      expect(find.byKey(const Key('zone.2.members')), findsNothing);
-      expect(text(tester, 'event.members'), 'Tarif membres · inscrits avant le ${day('2027-02-20T12:30:00Z')}');
+      expect(text(tester, 'event.next'), 'Ensuite : Vente générale · file dès ${clockAt(generalOpens)}');
+      expect(find.byKey(const Key('zone.2.members')), findsOneWidget);
+      expect(text(tester, 'event.members'), 'Tarif membres · inscrits avant le ${day(presaleStart)}');
       expect(ctaText(tester), 'Prévente membres · rejoindre la file');
     });
 
@@ -713,6 +767,7 @@ void main() {
     });
 
     testWidgets('NOT_ELIGIBLE with a next phase: the panel, then "Ensuite : …"', (tester) async {
+      at('2026-11-15T15:26:52Z');
       sale
         ..detail = presale()
         ..room = roomOf(presale())
@@ -720,60 +775,49 @@ void main() {
       await start(tester);
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const Key('queue.notEligible')), findsOneWidget);
-      expect(text(tester, 'queue.next'), 'Ensuite : Vente générale · file dès ${when('2027-02-21T09:30:00Z')}');
+      expect(text(tester, 'queue.next'), 'Ensuite : Vente générale · file dès ${clockAt(generalOpens)}');
     });
 
-    testWidgets('poll ENDED with a next phase: the event is read again, screen 2 says "Rejoindre la file", no join', (
+    /// Screen 12 in the presale, whose next poll answers [ended] while the event has become [event] (phase 2).
+    Future<ProviderContainer> presaleEnds(WidgetTester tester, String ended, String event) {
+      at(realAnswer(ended).body['server_time']! as String);
+      sale
+        ..detail = presale()
+        ..room = roomOf(presale())
+        ..polls.add(() {
+          sale
+            ..detail = realAnswer(event).body
+            ..room = roomOf(sale.detail!);
+          return sale.real(ended);
+        });
+      return start(tester);
+    }
+
+    testWidgets('poll ENDED once phase 2 opened: the event is read again, screen 2 offers its queue, no join', (
       tester,
     ) async {
-      sale.polls.add(() {
-        // The presale ended when the general sale's pre-queue opened: the current phase is now phase 2.
-        sale.room = {
-          'phase': 2,
-          'label': null,
-          'status': 'PRE_QUEUE',
-          'opens_at': '2027-02-20T12:00:00Z',
-          'sale_starts_at': '2027-02-20T12:30:00Z',
-          'eligibility': null,
-          'next': null,
-        };
-        return sale.answer(sale.q(status: 'ENDED', pollAfter: 0));
-      });
-      final container = await start(tester);
+      final container = await presaleEnds(tester, 'poll_ended_presale', 'event_room_general');
       final reads = sale.calls('GET', '/fan/events/1').length;
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
       expect(find.byType(QueueScreen), findsNothing);
       expect(sale.calls('GET', '/fan/events/1').length, greaterThan(reads));
       final cta = tester.widget<FilledButton>(find.byKey(const Key('event.cta')));
-      expect(((cta.child! as Text).data, cta.onPressed != null), ('Rejoindre la file', true));
+      expect(((cta.child! as Text).data, cta.onPressed != null), ('Vente générale · rejoindre la file', true));
       expect(sale.calls('POST', '/fan/queue'), hasLength(1), reason: 'the first join only: no automatic join');
       expect((await container.read(queuePassesProvider.future))[1], isNull);
       await tester.pump(const Duration(minutes: 1));
       expect(sale.calls('GET', '/fan/queue'), hasLength(1));
     });
 
-    testWidgets('poll ENDED with a next phase still SCHEDULED: screen 2, CTA "{label} · file dès" disabled', (
+    testWidgets('poll ENDED in the gap (phase 1 ended by hand, phase 2 SCHEDULED): "{label} · file dès" disabled', (
       tester,
     ) async {
-      const opens = '2027-02-20T14:00:00Z';
-      sale.polls.add(() {
-        sale.room = {
-          'phase': 2,
-          'label': 'Vente générale',
-          'status': 'SCHEDULED',
-          'opens_at': opens,
-          'sale_starts_at': '2027-02-20T14:30:00Z',
-          'eligibility': null,
-          'next': null,
-        };
-        return sale.answer(sale.q(status: 'ENDED', pollAfter: 0));
-      });
-      await start(tester);
+      await presaleEnds(tester, 'poll_ended_gap', 'event_room_gap');
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
       final cta = tester.widget<FilledButton>(find.byKey(const Key('event.cta')));
-      expect(((cta.child! as Text).data, cta.onPressed), ('Vente générale · file dès ${clockAt(opens)}', null));
+      expect(((cta.child! as Text).data, cta.onPressed), ('Vente générale · file dès ${clockAt(generalOpens)}', null));
       expect(sale.calls('POST', '/fan/queue'), hasLength(1));
     });
 
@@ -831,7 +875,7 @@ void main() {
           ..detail = presale()
           ..room = null
           ..orders.add(() => sale.real(fixture));
-        await start(tester, location: '/events/1/checkout?price=pc-1-1&qty=2');
+        await start(tester, location: '/events/1/checkout?price=${priceId('MEMBERS')}&qty=2');
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const Key('holder.1.name')), 'Sara Benali');
         await tester.enterText(find.byKey(const Key('holder.1.phone')), '0612345678');
@@ -850,7 +894,7 @@ void main() {
           -200,
           scrollable: find.byType(Scrollable).last,
         );
-        expect(text(tester, 'holder.$row.refusal'), copy(day('2027-02-20T12:30:00Z')));
+        expect(text(tester, 'holder.$row.refusal'), copy(day(presaleStart)));
         expect(find.byKey(Key('holder.${1 - row}.refusal'), skipOffstage: false), findsNothing);
         expect(find.byType(ErrorPanel), findsNothing);
       });

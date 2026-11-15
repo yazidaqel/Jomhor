@@ -1,0 +1,11 @@
+{
+ "status": 409,
+ "body": {
+  "code": "EVENT_NOT_ON_SALE",
+  "message": "Event is not on sale",
+  "details": {
+   "sale_starts_at": "2026-11-15T15:33:49Z",
+   "reason": "NOT_STARTED"
+  }
+ }
+}

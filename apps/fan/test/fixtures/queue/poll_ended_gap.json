@@ -1,0 +1,17 @@
+{
+ "status": 200,
+ "body": {
+  "event_id": 23,
+  "status": "ENDED",
+  "sale_starts_at": "2026-11-15T15:28:49Z",
+  "position": null,
+  "in_room": 0,
+  "rate_per_min": 0,
+  "estimated_wait_s": null,
+  "sold_out": false,
+  "admission": null,
+  "queue_token": "qt-real",
+  "poll_after_s": 0,
+  "server_time": "2026-11-15T15:28:52.839039400Z"
+ }
+}

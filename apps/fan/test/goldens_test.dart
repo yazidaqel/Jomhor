@@ -730,7 +730,7 @@ void main() {
     });
 
     // FL-27: a members presale with the general sale next, a members price, the holder-row refusals.
-    Map<String, Object?> presale() => realAnswer('event_room_presale_next').body;
+    Map<String, Object?> presale() => realAnswer('event_room_presale_next', dir: 'goldens').body;
 
     testWidgets('$locale · screen 2 presale with the next phase', (tester) async {
       await room(tester, '/events/1', (sale) {
@@ -760,15 +760,15 @@ void main() {
     });
 
     for (final (name, fixture, row) in [
-      ('4-membres', 'order_409_members_only', 0),
-      ('4-limite-titulaire', 'order_409_holder_limit', 1),
+      ('4-membres', ('order_409_members_only', 'goldens'), 0),
+      ('4-limite-titulaire', ('order_409_holder_limit', 'queue'), 1),
     ]) {
       testWidgets('$locale · screen $name', (tester) async {
         await room(tester, '/events/1/checkout?price=pc-1-1&qty=2', (sale) {
           sale
             ..detail = presale()
             ..room = null
-            ..orders.add(() => sale.real(fixture));
+            ..orders.add(() => sale.real(fixture.$1, dir: fixture.$2));
         });
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const Key('holder.1.name')), locale == 'ar' ? 'سارة بنعلي' : 'Sara Benali');

@@ -325,11 +325,10 @@ Map<String, Object?> roomJson({
   Map<String, Object?>? eligibility,
 }) => {'status': status, 'opens_at': at, 'eligibility': eligibility};
 
-/// An answer captured from the dev API in the FL-26 real run (2026-11-15), queue and admission tokens replaced by
-/// `qt-real` and `adm-real`; or, with a `source` line saying so, an answer written from the contract before the
-/// backend could be captured (Lot 5 step 2).
-({int status, Map<String, Object?> body}) realAnswer(String name) {
-  final j = jsonDecode(File('test/fixtures/queue/$name.json').readAsStringSync()) as Map<String, Object?>;
+/// An answer captured from the dev API in the FL-26 and FL-27 real runs (2026-11-15), queue and admission tokens
+/// replaced by `qt-real` and `adm-real`. [dir] `goldens`: design content in the shape of a captured answer.
+({int status, Map<String, Object?> body}) realAnswer(String name, {String dir = 'queue'}) {
+  final j = jsonDecode(File('test/fixtures/$dir/$name.json').readAsStringSync()) as Map<String, Object?>;
   return (status: j['status']! as int, body: j['body']! as Map<String, Object?>);
 }
 
@@ -396,9 +395,9 @@ class RoomSale {
   http.Response refusal(int status, String code, Map<String, Object?> details) =>
       answer({'code': code, 'message': code, 'details': details}, status);
 
-  /// An answer of the real API (test/fixtures/queue, FL-26 real run), served for event 1.
-  http.Response real(String name) {
-    final (:status, :body) = realAnswer(name);
+  /// An answer of the real API (test/fixtures/queue, FL-26 and FL-27 real runs), served for event 1.
+  http.Response real(String name, {String dir = 'queue'}) {
+    final (:status, :body) = realAnswer(name, dir: dir);
     if (body case {'event_id': _}) body['event_id'] = 1;
     return answer(body, status);
   }
