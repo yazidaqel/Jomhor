@@ -43,6 +43,7 @@ import {
   useEvent,
   useEventMutation,
   type EventDetail,
+  type EventWrite,
   type EventForm,
   type EventValues,
 } from './api'
@@ -114,7 +115,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
     values: event && toForm(event),
     resetOptions: { keepDirtyValues: true, keepErrors: true },
   })
-  const save = useEventMutation()
+  const save = useEventMutation<EventWrite>()
   const { errors, isDirty } = form.formState
   const [type, venueId] = useWatch({ control: form.control, name: ['event_type', 'venue_id'] })
   const metadataKeys = METADATA_KEYS[type]
@@ -129,12 +130,15 @@ function EventEditor({ event }: { event?: EventDetail }) {
       if (fields.some((f) => !RULES_FIELDS.includes(f.split('.')[0]!))) setTab('general')
       else if (fields.length) setTab('rules')
     })
-  const onSaved = (e: EventDetail) => {
+  /** A write's answer has no `pass_tickets`, which a write never changes: the cached one stays (false on create). */
+  const cacheEvent = (e: EventWrite) =>
+    queryClient.setQueryData<EventDetail>(['org', organizerId, 'events', String(e.id)], (old) => ({ ...e, pass_tickets: old?.pass_tickets ?? false }))
+  const onSaved = (e: EventWrite) => {
     if (event) {
       form.reset(toForm(e)) // nothing dirty any more, before `values` follows the new server copy
       toast.success(t('events.saved'), { id: 'event-saved' }) // a second save replaces the toast
     }
-    queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
+    cacheEvent(e)
     if (!event) void navigate(`/events/${encodeURIComponent(e.id)}`)
   }
   const onError = (e: unknown) => {
@@ -223,7 +227,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
                 event={event}
                 dirty={unsaved}
                 onPublished={(e) => {
-                  queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
+                  cacheEvent(e)
                   setPublishRefused(false)
                   toast.success(t('events.publish.done'))
                 }}
@@ -502,7 +506,7 @@ function PublishAction({
 }: {
   event: EventDetail
   dirty: boolean
-  onPublished: (e: EventDetail) => void
+  onPublished: (e: EventWrite) => void
   /** EVENT_NOT_EDITABLE: the event is no longer a draft, so this button (and its dialog) is about to go. */
   onRefused: () => void
   /** Where focus goes after that refusal: the publish button it would return to is about to unmount. */
@@ -511,7 +515,7 @@ function PublishAction({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const refused = useRef(false)
-  const publish = useEventMutation()
+  const publish = useEventMutation<EventWrite>()
   return (
     <AlertDialog
       open={open}

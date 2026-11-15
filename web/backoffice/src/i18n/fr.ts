@@ -282,6 +282,7 @@ export const fr = {
       audienceHint: "Membres inscrits avant l'ouverture de la vente",
       passHint: 'Places des abonnés de la série · jamais vendues',
       passPrice: 'Les places Abonnés sont toujours à 0 DH.',
+      passSold: "Des places de cette catégorie sont déjà vendues : l'accès ne peut plus passer à Abonnés ni en sortir.",
       audienceHintSr: ' ({{hint}})',
       capacity: 'Capacité zone',
       zoneUsage: '{{used, number}} / {{capacity, number}}',

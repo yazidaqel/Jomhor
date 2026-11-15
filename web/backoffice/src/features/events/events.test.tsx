@@ -12,7 +12,7 @@ import type { Venue, VenueDetail } from '@/features/venues/api'
 import { createQueryClient } from '@/lib/queryClient'
 import { session } from '@/lib/session'
 import { formatDh } from '@/lib/money'
-import type { EventDetail, EventSummary, Price, Series } from './api'
+import type { EventDetail, EventSummary, EventWrite, Price, Series } from './api'
 import { formatDay, offsetLabel, utcToWall, wallToUtc } from '@/lib/time'
 
 beforeAll(() => {
@@ -146,7 +146,9 @@ const detail = (over: Partial<EventDetail> = {}): EventDetail => ({
 const SERIES: Series[] = [{ id: 's-1', name: 'Saison 2026-27', starts_on: '2026-08-15', ends_on: '2027-06-30' }]
 
 type Call = { method: string; path: string; org: string | null; body: unknown }
-type Handler = (call: Call) => Response | undefined
+type Handler = (call: Call) => Response | Promise<Response> | undefined
+/** An event write's answer, as the real API sends it: the detail without `pass_tickets` (GET only). */
+const written = (e: EventDetail) => Object.fromEntries(Object.entries(e).filter(([k]) => k !== 'pass_tickets')) as EventWrite
 
 /** /org/me, venues, the event list and event 1 (`event`); POST answers event 99, PATCH merges into 1. `handler` answers first. */
 function stubApi(role: Role = 'ADMIN', handler: Handler = () => undefined, event = detail()) {
@@ -169,8 +171,8 @@ function stubApi(role: Role = 'ADMIN', handler: Handler = () => undefined, event
       if (key === 'GET /org/series') return Response.json(SERIES)
       if (key === 'GET /org/events') return Response.json(LIST)
       if (key === 'GET /org/events/1') return Response.json(event)
-      if (key === 'PATCH /org/events/1') return Response.json((event = { ...event, ...(call.body as Partial<EventDetail>) }))
-      if (key === 'POST /org/events') return Response.json({ ...detail(), ...(call.body as object), id: 99, status: 'DRAFT' }, { status: 201 })
+      if (key === 'PATCH /org/events/1') return Response.json(written((event = { ...event, ...(call.body as Partial<EventDetail>) })))
+      if (key === 'POST /org/events') return Response.json(written({ ...detail(), ...(call.body as object), id: 99, status: 'DRAFT' }), { status: 201 })
       if (key === 'GET /org/events/99') return Response.json({ ...detail(), id: 99 })
       if (key === 'GET /org/events/1/prices') return Response.json([])
       if (key === 'GET /org/venues/v-1') return Response.json({ ...VENUES[0], zones: [], gates: [] })
@@ -566,7 +568,7 @@ function stubB2(role: Role = 'ADMIN', handler: Handler = () => undefined, initia
       }
       if (key === 'POST /org/events/1/publish') {
         event = { ...event, status: 'ON_SALE', refund_cutoff_at: '2026-11-14T18:00:00Z' }
-        return Response.json(event)
+        return Response.json(written(event))
       }
       return undefined
     },
@@ -1153,6 +1155,44 @@ it('prices: "Accès · Abonnés" fixes the price at 0 with its helper and sends 
   const chip = `${fr.events.prices.audiences.PASS}${i18n.t('events.prices.audienceHintSr', { hint: fr.events.prices.passHint })}`
   const row = (await within(panel).findByText('Abonnés saison', { selector: 'td' })).closest('tr')!
   expect(cellTexts(row)[2]).toBe(chip)
+})
+
+it('série: a save answers without `pass_tickets` (GET only) → the select stays locked until the refetch lands', async () => {
+  const user = userEvent.setup()
+  let gets = 0
+  stubApi(
+    'ADMIN',
+    // The refetch after the save never lands: only the PATCH answer can have touched the cache.
+    (c) => (c.method === 'GET' && c.path === '/org/events/1' && ++gets > 1 ? new Promise<Response>(() => {}) : undefined),
+    detail({ series_id: 's-1', pass_tickets: true }),
+  )
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  await user.clear(field(fr.events.form.title))
+  await user.type(field(fr.events.form.title), 'Atlas FC vs Rapid Oued (J11)')
+  await user.click(saveDraft())
+  expect(await screen.findByText(fr.events.saved)).toBeTruthy()
+  expect(gets).toBe(2)
+  expect(screen.getByRole('combobox', { name: fr.events.series.label })).toHaveProperty('disabled', true)
+})
+
+it('prices: PASS_SOLD (real answer) lands on the access with its copy', async () => {
+  const user = userEvent.setup()
+  stubB2('ADMIN', (c) =>
+    c.method === 'PATCH'
+      ? Response.json(
+          { code: 'VALIDATION_FAILED', message: 'Invalid request body', details: { reason: 'PASS_SOLD', fields: { audience: "can't move to or from PASS once places are sold" } } },
+          { status: 422 },
+        )
+      : undefined,
+  )
+  renderApp('/events/1')
+  const panel = await openTab(user, fr.events.tabs.prices)
+  await user.click(await within(panel).findByRole('button', { name: i18n.t('events.prices.editLabel', { name: 'Plein tarif' }) }))
+  await pick(user, fr.events.prices.audience, fr.events.prices.audiences.PASS)
+  await user.click(within(panel).getByRole('button', { name: fr.common.save }))
+  expect(await within(panel).findByText(fr.events.prices.passSold)).toBeTruthy()
+  expect(within(panel).getByRole('combobox', { name: fr.events.prices.audience }).getAttribute('aria-invalid')).toBe('true')
 })
 
 it('prices: PASS_PRICE lands on the price with its copy', async () => {

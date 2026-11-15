@@ -830,7 +830,7 @@ it('B11 Code cash: a product code shows the product, not an event; "Encaisser" c
   const user = userEvent.setup()
   let collected = false
   const calls = stubApi({
-    '/org/pos/codes/4F7K29': () => Response.json(collected ? { ...PRODUCT_LOOKUP, status: 'PAID', payable: false, reserved_until: null } : PRODUCT_LOOKUP),
+    '/org/pos/codes/4F7K29': () => Response.json(collected ? { ...PRODUCT_LOOKUP, status: 'PAID', payable: false } : PRODUCT_LOOKUP), // real: reserved_until kept once PAID
     '/org/pos/codes/4F7K29/collect': () => {
       collected = true
       return Response.json({ order_id: PRODUCT_LOOKUP.order_id, status: 'PAID', ticket_ids: [] })

@@ -41,6 +41,8 @@ export type EventDetail = {
   metadata: Record<string, unknown>
   created_at: string
 }
+/** What an event POST, PATCH or publish answers: the detail without `pass_tickets` (04: GET only). */
+export type EventWrite = Omit<EventDetail, 'pass_tickets'>
 
 /**
  * Lot 5 step 2: MEMBERS = each place held by a live member who joined before the sale opened (04 POST /fan/orders).
@@ -161,7 +163,7 @@ export const emptyForm = (): EventForm => ({
   metadata: { opponent: '', competition: '', headliner: '', matchday: '' },
 })
 
-export const toForm = (e: EventDetail): EventForm => ({
+export const toForm = (e: EventWrite): EventForm => ({
   event_type: e.event_type,
   title: e.title,
   starts_at: utcToWall(e.starts_at, e.timezone),

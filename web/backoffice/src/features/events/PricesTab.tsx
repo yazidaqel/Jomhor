@@ -220,6 +220,9 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
     // Lot 5 step 3: a PASS category is always free (422 on price_mad, reason PASS_PRICE).
     if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'PASS_PRICE')
       form.setError('price_mad', { message: t('events.prices.passPrice') })
+    // Step 3: the access can't move to or from Abonnés once places of the category are sold (reason PASS_SOLD).
+    if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'PASS_SOLD')
+      form.setError('audience', { message: t('events.prices.passSold') })
     // A name already used for this zone: 422 on `name` with `details.reason` NAME_TAKEN (04-api). Any other 422 on
     // `name` keeps the generic field copy.
     if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'NAME_TAKEN')
@@ -288,7 +291,13 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
                   }}
                   disabled={save.isPending}
                 >
-                  <SelectTrigger ref={field.ref} onBlur={field.onBlur} aria-label={t('events.prices.audience')} aria-describedby={`${formId}-audience-hint`}>
+                  <SelectTrigger
+                    ref={field.ref}
+                    onBlur={field.onBlur}
+                    aria-label={t('events.prices.audience')}
+                    aria-invalid={!!errors.audience}
+                    aria-describedby={cn(`${formId}-audience-hint`, errors.audience && `${formId}-audience-error`)}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -303,6 +312,11 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
                 <FieldDescription id={`${formId}-audience-hint`} className={audience === 'ALL' ? 'sr-only' : 'text-xs whitespace-normal'}>
                   {t(HINT[audience])}
                 </FieldDescription>
+                {errors.audience && (
+                  <FieldError id={`${formId}-audience-error`} className="whitespace-normal">
+                    {errors.audience.message}
+                  </FieldError>
+                )}
               </div>
             )}
           />

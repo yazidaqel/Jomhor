@@ -87,7 +87,7 @@ const MEMBERSHIP: Product = {
   sales_close_at: '2027-05-31T22:00:00Z',
   quota: null,
   sold: 0,
-  valid_until: endOfDay('2027-06-30'),
+  valid_until: '2027-06-30T22:59:59Z', // as the real API stores the end of 30 June (no milliseconds)
   series: null,
   zone: null,
 }
@@ -114,7 +114,7 @@ const PASS_DETAIL: ProductDetail = {
       { event_id: 3, title: 'Atlas FC vs Raja', starts_at: '2026-12-12T19:00:00Z', status: 'DRAFT', issued: 0, expected: 3, pass_remaining: 3 },
     ],
   },
-  refunds_required: [{ payment_id: 'pay-9', order_id: 'ord-9', amount_mad: 150000, reason: 'SOLD_OUT', at: '2026-11-10T12:00:00Z' }],
+  refunds_required: [{ payment_id: 'pay-9', order_id: 'ord-9', amount_mad: 150000, reason: 'SOLD_OUT', at: '2026-11-10T12:00:00.813700Z' }], // microseconds, as the real API sends `at`
 }
 
 type Call = { method: string; path: string; org: string | null; body: unknown }

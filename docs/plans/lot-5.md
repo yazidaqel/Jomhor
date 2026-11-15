@@ -1459,3 +1459,4 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 | B14 "Émission en cours" stays on screen past an event's `transfer_until`, when the pass job will never issue again; show "Non émis" then | when polishing B14 | BO-22 review |
 | BE-55 must: read a pass ticket's zone unfiltered (`publicEvent` now drops PASS-only zones, which `TicketService` PDF/heldBy/slips use); take `for share` on the event row when issuing pass tickets so it serialises with the event PATCH's `PASS_TICKETS` check | BE-55 | BE-51 report |
 | 3b (Q198): decide whether a suspended pass blocks a pass ticket already transferred to someone else (BE-55 shows `pass_id` only to the pass holder) | 3b plan | BE-55 review |
+| B14 MEMBERSHIP `paid_members` counts the whole organizer, so a club with two membership products sees the same figure on both; per-product count if a club ever sells two | when asked | BO-22 real run |
