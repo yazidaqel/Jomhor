@@ -548,9 +548,7 @@ No new runtime component and no Kafka. Payzone stays simulated. No hosting-provi
 6. In phase 2, a non-member picking "Tarif membres" gets "Tarif réservé aux membres inscrits avant le {date}" on that holder row.
 7. A fourth friend's order naming a phone that already holds 4 places gets "Ce numéro a atteint la limite de 4 billets".
 8. The event sells out and OPS ends the room. Screen 1 shows "Liste d'attente". Two fans join.
-9. An ADMIN refunds one ticket. Two things follow:
-   - the refunded buyer can buy one more place (Q52);
-   - within about 30 s, the oldest waitlisted fan gets "Des places se sont libérées" (push, plus WhatsApp in the simulated provider's log) and buys it.
+9. An ADMIN refunds one ticket. The refunded ticket no longer counts toward the buyer's limit (Q52: two more places → `PER_ACCOUNT_LIMIT` `held` 3). Within about 30 s, the oldest waitlisted fan gets "Des places se sont libérées" (push, plus WhatsApp in the simulated provider's log) and buys the place. OPS then releases one more place: no second notice inside the 10 min cooldown, and the refunded buyer buys it.
 10. `check.sql` is clean.
 
 CI green on: `Lot5FairSaleFlowTest`, `FairLimitsApiTest`, `WaitlistApiTest`, `WaitlistJobTest`, the extended `MultiInstanceTest`, every step-1 test moved to `/rooms/1`, `apps/fan/test/queue_test.dart` and `waitlist_test.dart`, shop `queue.test.tsx` and `waitlist.test.tsx`, back-office `room.test.tsx`.
