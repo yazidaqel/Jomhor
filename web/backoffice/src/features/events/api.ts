@@ -40,8 +40,20 @@ export type EventDetail = {
   created_at: string
 }
 
+/** Lot 5 step 2: MEMBERS = each place held by a live member who joined before the sale opened (04 POST /fan/orders). */
+export const PRICE_AUDIENCES = ['ALL', 'MEMBERS'] as const
+export type PriceAudience = (typeof PRICE_AUDIENCES)[number]
 /** `zone`: read-only (Lot 3), so a till can tell two zones' "Plein tarif" apart without the venue (CASHIER can't read it). */
-export type Price = { id: string; zone_id: number; zone: { code: string; name: string }; name: string; price_mad: number; quota: number; sold: number }
+export type Price = {
+  id: string
+  zone_id: number
+  zone: { code: string; name: string }
+  name: string
+  price_mad: number
+  quota: number
+  sold: number
+  audience: PriceAudience
+}
 
 export const useEvents = () => useOrgQuery<EventSummary[]>(['events'], '/org/events')
 export const useEvent = (id: string) => useOrgQuery<EventDetail>(['events', id], path('org', 'events', id))

@@ -34,11 +34,14 @@ public class RoomTokens {
     static final String QUEUE = "queue";
     static final String ADMISSION = "admission";
 
-    /** A verified queue token: {@code rank} null until ranked; {@code expiresAt} = the event's refund_cutoff_at. */
-    public record Queue(UUID entryId, int eventId, Integer rank, Instant expiresAt) {}
+    /**
+     * A verified queue token: {@code roomId} = its phase's room; {@code rank} null until ranked; {@code expiresAt} =
+     * the event's refund_cutoff_at.
+     */
+    public record Queue(UUID entryId, int eventId, UUID roomId, Integer rank, Instant expiresAt) {}
 
     /** A signed admission token's claims; its expiry is the caller's to check (EXPIRED vs INVALID). */
-    public record Admission(UUID userId, int eventId, Instant expiresAt) {}
+    public record Admission(UUID userId, int eventId, UUID roomId, Instant expiresAt) {}
 
     private final byte[] secret;
     private final MACSigner signer;
@@ -50,18 +53,22 @@ public class RoomTokens {
         this.verifier = new MACVerifier(this.secret);
     }
 
-    /** {@code iss, aud: queue, sub} = entry id, {@code evt}, {@code rnk} (only once ranked), {@code exp}. */
-    public String queue(UUID entryId, int eventId, Integer rank, Instant expiresAt) {
-        JWTClaimsSet.Builder claims = base(QUEUE, entryId.toString(), eventId, expiresAt).issuer(ISSUER);
+    /** {@code iss, aud: queue, sub} = entry id, {@code evt}, {@code rm}, {@code rnk} (only once ranked), {@code exp}. */
+    public String queue(UUID entryId, int eventId, UUID roomId, Integer rank, Instant expiresAt) {
+        JWTClaimsSet.Builder claims = base(QUEUE, entryId.toString(), eventId, roomId, expiresAt).issuer(ISSUER);
         if (rank != null) {
             claims.claim("rnk", rank);
         }
         return sign(claims.build());
     }
 
-    /** {@code aud: admission, sub} = user id, {@code evt}, {@code ent} = entry id, {@code exp} (04 lists no iss). */
-    public String admission(UUID userId, int eventId, UUID entryId, Instant expiresAt) {
-        return sign(base(ADMISSION, userId.toString(), eventId, expiresAt).claim("ent", entryId.toString()).build());
+    /**
+     * {@code aud: admission, sub} = user id, {@code evt}, {@code ent} = entry id, {@code rm} = room id, {@code exp}
+     * (04 lists no iss).
+     */
+    public String admission(UUID userId, int eventId, UUID roomId, UUID entryId, Instant expiresAt) {
+        return sign(base(ADMISSION, userId.toString(), eventId, roomId, expiresAt).claim("ent", entryId.toString())
+                .build());
     }
 
     /** Empty unless HS256 under this secret, {@code iss}, {@code aud} exactly queue, and {@code exp} after {@code now}. */
@@ -72,7 +79,8 @@ public class RoomTokens {
                 return Optional.empty();
             }
             return Optional.of(new Queue(UUID.fromString(c.getSubject()), c.getIntegerClaim("evt"),
-                    c.getIntegerClaim("rnk"), c.getExpirationTime().toInstant()));
+                    UUID.fromString(c.getStringClaim("rm")), c.getIntegerClaim("rnk"),
+                    c.getExpirationTime().toInstant()));
         } catch (ParseException | IllegalArgumentException e) {
             return Optional.empty();
         }
@@ -83,13 +91,14 @@ public class RoomTokens {
         try {
             JWTClaimsSet c = verified(token, ADMISSION);
             return c == null ? Optional.empty() : Optional.of(new Admission(UUID.fromString(c.getSubject()),
-                    c.getIntegerClaim("evt"), c.getExpirationTime().toInstant()));
+                    c.getIntegerClaim("evt"), UUID.fromString(c.getStringClaim("rm")),
+                    c.getExpirationTime().toInstant()));
         } catch (ParseException | IllegalArgumentException e) {
             return Optional.empty();
         }
     }
 
-    /** The claims if HS256 under this secret, {@code aud} exactly {@code audience}, with exp, evt and sub; else null. */
+    /** The claims if HS256 under this secret, {@code aud} exactly {@code audience}, with exp, evt, rm and sub; else null. */
     private JWTClaimsSet verified(String token, String audience) throws ParseException {
         SignedJWT jwt = SignedJWT.parse(token);
         try {
@@ -101,7 +110,8 @@ public class RoomTokens {
         }
         JWTClaimsSet c = jwt.getJWTClaimsSet();
         return List.of(audience).equals(c.getAudience()) && c.getExpirationTime() != null
-                && c.getIntegerClaim("evt") != null && c.getSubject() != null ? c : null;
+                && c.getIntegerClaim("evt") != null && c.getStringClaim("rm") != null && c.getSubject() != null
+                ? c : null;
     }
 
     /** HMAC-SHA256(ROOMS_TOKEN_SECRET, {@code value}): 32 bytes, for "device|…" and "ip|…". */
@@ -115,9 +125,10 @@ public class RoomTokens {
         }
     }
 
-    private static JWTClaimsSet.Builder base(String audience, String subject, int eventId, Instant expiresAt) {
+    private static JWTClaimsSet.Builder base(String audience, String subject, int eventId, UUID roomId,
+                                             Instant expiresAt) {
         return new JWTClaimsSet.Builder().audience(audience).subject(subject).claim("evt", eventId)
-                .expirationTime(Date.from(expiresAt.truncatedTo(ChronoUnit.SECONDS)));
+                .claim("rm", roomId.toString()).expirationTime(Date.from(expiresAt.truncatedTo(ChronoUnit.SECONDS)));
     }
 
     private String sign(JWTClaimsSet claims) {

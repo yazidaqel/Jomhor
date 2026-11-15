@@ -48,25 +48,25 @@ class RoomMemoTest extends IntegrationTest {
         RoomMemo memo = new RoomMemo(counted, now::get, Duration.ofSeconds(1));
 
         for (int i = 0; i < 1_000; i++) {
-            memo.get(open);
+            memo.rooms(open);
         }
         verify(counted, times(1)).live();
-        assertThat(memo.get(scheduled)).map(WaitingRoom::status).contains(WaitingRoom.Status.SCHEDULED);
-        assertThat(memo.get(open)).map(WaitingRoom::opensAt).contains(Instant.parse("2099-04-01T09:30:00Z"));
-        assertThat(memo.get(ended)).isEmpty();
-        assertThat(memo.get(-1)).isEmpty();
+        assertThat(memo.rooms(scheduled)).map(WaitingRoom::status).contains(WaitingRoom.Status.SCHEDULED);
+        assertThat(memo.rooms(open)).map(WaitingRoom::opensAt).contains(Instant.parse("2099-04-01T09:30:00Z"));
+        assertThat(memo.rooms(ended)).isEmpty();
+        assertThat(memo.rooms(-1)).isEmpty();
 
         now.set(now.get().plusMillis(999));
-        memo.get(open);
+        memo.rooms(open);
         verify(counted, times(1)).live();
 
         now.set(now.get().plusMillis(1));
-        memo.get(open);
-        memo.get(scheduled);
+        memo.rooms(open);
+        memo.rooms(scheduled);
         verify(counted, times(2)).live();
 
         memo.invalidate();
-        memo.get(open);
+        memo.rooms(open);
         verify(counted, times(3)).live();
     }
 
@@ -84,9 +84,9 @@ class RoomMemoTest extends IntegrationTest {
         }).doAnswer(call -> rooms.live()).when(counted).live();
         memo[0] = new RoomMemo(counted, () -> Instant.parse("2099-04-01T10:00:00Z"), Duration.ofSeconds(1));
 
-        assertThat(memo[0].get(open)).isPresent();
-        memo[0].get(open);
-        memo[0].get(open);
+        assertThat(memo[0].rooms(open)).isNotEmpty();
+        memo[0].rooms(open);
+        memo[0].rooms(open);
         verify(counted, times(2)).live();
     }
 }

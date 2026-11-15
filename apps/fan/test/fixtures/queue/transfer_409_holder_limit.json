@@ -1,0 +1,12 @@
+{
+ "status": 409,
+ "body": {
+  "code": "PER_ACCOUNT_LIMIT",
+  "message": "Per-account limit reached",
+  "details": {
+   "reason": "HOLDER",
+   "limit": 4,
+   "field": "to_phone"
+  }
+ }
+}

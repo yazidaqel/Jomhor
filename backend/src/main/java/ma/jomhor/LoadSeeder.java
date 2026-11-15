@@ -151,17 +151,17 @@ class LoadSeeder implements ApplicationRunner {
         int event = events.create(ORG, new EventInput(venue, Event.Type.OTHER, "Derby de charge", kickoff,
                 kickoff.minus(Duration.ofHours(2)), sale, null, 4, null)).id();
         List<UUID> prices = List.of(
-                events.createPrice(ORG, event, nord, "Virage", 5_000, 1_000).id(),
-                events.createPrice(ORG, event, sud, "Plein tarif", 8_000, 500).id(),
-                events.createPrice(ORG, event, est, "Plein tarif", 12_000, 500).id());
+                events.createPrice(ORG, event, nord, "Virage", 5_000, 1_000, Event.Audience.ALL).id(),
+                events.createPrice(ORG, event, sud, "Plein tarif", 8_000, 500, Event.Audience.ALL).id(),
+                events.createPrice(ORG, event, est, "Plein tarif", 12_000, 500, Event.Audience.ALL).id());
         events.publish(ORG, SEEDER, event);
-        rooms.put(ORG, SEEDER, event, new WaitingRoomService.Input(30, rate, new Rule(7, null, null)));
+        rooms.put(ORG, SEEDER, event, 1, new WaitingRoomService.Input(null, null, 30, rate, new Rule(7, null, null)));
 
         UUID hotVenue = venues.create(ORG, "Stade Rangée Chaude", "Casablanca", 200_000, null).id();
         int hotZone = venues.createZone(ORG, hotVenue, "HOT", "Zone chaude", 200_000, false).id();
         int hot = events.create(ORG, new EventInput(hotVenue, Event.Type.OTHER, "Rangée chaude", kickoff,
                 kickoff.minus(Duration.ofHours(2)), null, null, 10_000, null)).id();
-        UUID hotPrice = events.createPrice(ORG, hot, hotZone, "Plein tarif", 5_000, 200_000).id();
+        UUID hotPrice = events.createPrice(ORG, hot, hotZone, "Plein tarif", 5_000, 200_000, Event.Audience.ALL).id();
         events.publish(ORG, SEEDER, hot);
 
         return new Seed(event, prices, sale, hot, hotPrice, fans(now));

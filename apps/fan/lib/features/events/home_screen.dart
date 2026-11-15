@@ -18,6 +18,8 @@ import 'package:jomhor_fan/features/profile/profile_controller.dart';
 import 'package:jomhor_fan/features/queue/queue_store.dart';
 import 'package:jomhor_fan/features/queue/room_cta.dart';
 import 'package:jomhor_fan/features/tickets/my_ticket_strip.dart';
+import 'package:jomhor_fan/features/waitlist/waitlist_button.dart';
+import 'package:jomhor_fan/features/waitlist/waitlist_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -497,17 +499,21 @@ class _Hero extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: JomhorSpace.l),
-                FilledButton(
-                  key: const Key('hero.cta'),
-                  onPressed: switch (room) {
-                    null => open ? openEvent : null,
-                    _ => roomPath == null ? null : () => context.push(roomPath),
-                  },
-                  child: Text(
-                    room == null ? ctaLabel(l, e, now) : roomCtaLabel(l, e, room, now),
-                    textAlign: TextAlign.center,
+                // Lot 5 step 2: sold out with no room left, the waitlist.
+                if (waitlistOffered(e, now))
+                  WaitlistButton(eventId: e.id, scope: 'hero', loginFrom: '/events/${e.id}')
+                else
+                  FilledButton(
+                    key: const Key('hero.cta'),
+                    onPressed: switch (room) {
+                      null => open ? openEvent : null,
+                      _ => roomPath == null ? null : () => context.push(roomPath),
+                    },
+                    child: Text(
+                      room == null ? ctaLabel(l, e, now) : roomCtaLabel(l, e, room, now),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
                 if (room == RoomCta.opensAt && !ref.watch(sessionProvider))
                   TextButton(
                     key: const Key('hero.login'),

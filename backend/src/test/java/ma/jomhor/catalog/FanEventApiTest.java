@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -357,7 +358,7 @@ class FanEventApiTest extends OrgApiTest {
         assertKeys(json, "$", detailKeys);
         assertKeys(json, "$.venue", "name", "city");
         assertKeys(json, "$.zones[0]", "id", "code", "name", "seated", "gate_codes", "prices");
-        assertKeys(json, "$.zones[0].prices[0]", "price_category_id", "name", "price_mad", "remaining");
+        assertKeys(json, "$.zones[0].prices[0]", "price_category_id", "name", "price_mad", "remaining", "audience");
         assertNoSecretOrCount(json);
 
         String fan = fanToken(randomPhone());
@@ -419,7 +420,10 @@ class FanEventApiTest extends OrgApiTest {
         jdbc.sql("update events set sale_starts_at = now() where id = ?").param(id).update();
         mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.on_sale").value(true));
     }
-    // ---------- Lot 5: room (BE-40) ----------
+    // ---------- Lot 5: room (BE-40), phases (BE-48) ----------
+
+    private static final String[] ROOM_KEYS =
+            {"phase", "label", "status", "opens_at", "sale_starts_at", "eligibility", "next"};
 
     /** An ON_SALE event whose sale opens 2099-04-01T10:00Z, with a room PUT from {@code roomJson}. */
     private int withRoom(Caller a, String roomJson) throws Exception {
@@ -429,7 +433,7 @@ class FanEventApiTest extends OrgApiTest {
         call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-01T10:00:00Z\"}").andExpect(status().isOk());
         publish(a, id);
         if (roomJson != null) {
-            call(a, put("/org/events/" + id + "/room"), roomJson).andExpect(status().isCreated());
+            call(a, put("/org/events/" + id + "/rooms/1"), roomJson).andExpect(status().isCreated());
         }
         return id;
     }
@@ -441,15 +445,19 @@ class FanEventApiTest extends OrgApiTest {
         mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk()).andExpect(jsonPath("$.room").isEmpty());
         list(a.org().toString(), null).andExpect(jsonPath("$[0].room").isEmpty());
 
-        call(a, put("/org/events/" + id + "/room"), "{}").andExpect(status().isCreated());
+        call(a, put("/org/events/" + id + "/rooms/1"), "{}").andExpect(status().isCreated());
         String json = body(mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk()));
-        assertKeys(json, "$.room", "status", "opens_at", "eligibility");
+        assertKeys(json, "$.room", ROOM_KEYS);
+        assertThat((Integer) JsonPath.read(json, "$.room.phase")).isEqualTo(1);
+        assertThat((Object) JsonPath.read(json, "$.room.label")).isNull();
         assertThat((String) JsonPath.read(json, "$.room.status")).isEqualTo("SCHEDULED");
         assertThat((String) JsonPath.read(json, "$.room.opens_at")).isEqualTo("2099-04-01T09:30:00Z");
+        assertThat((String) JsonPath.read(json, "$.room.sale_starts_at")).isEqualTo("2099-04-01T10:00:00Z");
         assertThat((Object) JsonPath.read(json, "$.room.eligibility")).isNull(); // no rule set
+        assertThat((Object) JsonPath.read(json, "$.room.next")).isNull(); // no later phase
         assertNoSecretOrCount(json);
 
-        call(a, post("/org/events/" + id + "/room/end")).andExpect(status().isOk());
+        call(a, post("/org/events/" + id + "/rooms/1/end")).andExpect(status().isOk());
         mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.room").isEmpty());
         list(a.org().toString(), null).andExpect(jsonPath("$[0].room").isEmpty());
     }
@@ -465,7 +473,7 @@ class FanEventApiTest extends OrgApiTest {
         String rows = body(list(a.org().toString(), null).andExpect(status().isOk()));
         for (String room : List.of("$.room", "$[0].room")) {
             String json = room.startsWith("$[") ? rows : detail;
-            assertKeys(json, room, "status", "opens_at", "eligibility");
+            assertKeys(json, room, ROOM_KEYS);
             assertKeys(json, room + ".eligibility", "verified_before", "member_joined_before", "min_events_attended");
             assertThat((String) JsonPath.read(json, room + ".status")).isEqualTo("OPEN");
             assertThat((String) JsonPath.read(json, room + ".opens_at")).isEqualTo("2099-04-01T09:15:00Z");
@@ -482,11 +490,25 @@ class FanEventApiTest extends OrgApiTest {
         int id = withRoom(a, "{}");
         call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-02T10:00:00Z\"}").andExpect(status().isOk());
         mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.room.opens_at").value("2099-04-02T09:30:00Z"));
-        call(a, get("/org/events/" + id + "/room")).andExpect(jsonPath("$.room.opens_at").value("2099-04-02T09:30:00Z"))
-                .andExpect(jsonPath("$.room.sale_starts_at").value("2099-04-02T10:00:00Z"));
+        call(a, get("/org/events/" + id + "/rooms"))
+                .andExpect(jsonPath("$.rooms[0].opens_at").value("2099-04-02T09:30:00Z"))
+                .andExpect(jsonPath("$.rooms[0].sale_starts_at").value("2099-04-02T10:00:00Z"))
+                .andExpect(jsonPath("$.rooms[0].starts_at").isEmpty());
+
+        // Phase 2 opens 2099-04-05T09:30Z: phase 1's sale start (the event's) must stay before it while SCHEDULED.
+        call(a, put("/org/events/" + id + "/rooms/2"), "{\"starts_at\": \"2099-04-05T10:00:00Z\"}")
+                .andExpect(status().isCreated());
+        String json = body(call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-05T09:30:00Z\"}")
+                .andExpect(status().isUnprocessableContent()));
+        assertThat((String) JsonPath.read(json, "$.code")).isEqualTo("VALIDATION_FAILED");
+        assertThat((String) JsonPath.read(json, "$.details.reason")).isEqualTo("PHASE_ORDER");
+        assertKeys(json, "$.details.fields", "sale_starts_at");
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-05T09:29:00Z\"}").andExpect(status().isOk());
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-02T10:00:00Z\"}").andExpect(status().isOk());
 
         for (String started : List.of("PRE_QUEUE", "OPEN", "PAUSED")) {
-            jdbc.sql("update waiting_rooms set status = ?::room_status where event_id = ?").params(started, id).update();
+            jdbc.sql("update waiting_rooms set status = ?::room_status where event_id = ? and phase = 1")
+                    .params(started, id).update();
             call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-03T10:00:00Z\"}")
                     .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EVENT_NOT_EDITABLE"))
                     .andExpect(jsonPath("$.details.reason").value("ROOM_STARTED"));
@@ -494,7 +516,47 @@ class FanEventApiTest extends OrgApiTest {
             call(a, patch("/org/events/" + id), "{\"title\": \"Derby\", \"sale_starts_at\": \"2099-04-02T10:00:00Z\"}")
                     .andExpect(status().isOk());
         }
-        jdbc.sql("update waiting_rooms set status = 'ENDED' where event_id = ?").param(id).update();
-        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-03T10:00:00Z\"}").andExpect(status().isOk());
+        // Phase 1 ENDED: the phase order no longer binds it (only phases not ENDED are ordered).
+        jdbc.sql("update waiting_rooms set status = 'ENDED' where event_id = ? and phase = 1").param(id).update();
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-06T10:00:00Z\"}").andExpect(status().isOk());
+    }
+
+    /**
+     * Q167: {@code room} is the current phase (phase, label, its own sale start) with {@code next}, the following
+     * phase not ENDED; ending phase 1 makes phase 2 current (next null), ending phase 2 makes room null.
+     */
+    @Test
+    void roomIsTheCurrentPhaseWithTheNextOne() throws Exception {
+        Caller a = admin();
+        int id = withRoom(a, """
+                {"label": "Pr\u00e9vente membres", "eligibility": {"member_joined_before": "2099-03-01T00:00:00Z"}}""");
+        call(a, put("/org/events/" + id + "/rooms/2"), """
+                {"label": "Vente g\u00e9n\u00e9rale", "pre_queue_min": 60, "starts_at": "2099-04-03T10:00:00Z"}""")
+                .andExpect(status().isCreated());
+
+        String json = body(mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk()));
+        assertKeys(json, "$.room", ROOM_KEYS);
+        assertKeys(json, "$.room.next", "phase", "label", "opens_at", "sale_starts_at");
+        assertThat((Integer) JsonPath.read(json, "$.room.phase")).isEqualTo(1);
+        assertThat((String) JsonPath.read(json, "$.room.label")).isEqualTo("Pr\u00e9vente membres");
+        assertThat((String) JsonPath.read(json, "$.room.sale_starts_at")).isEqualTo("2099-04-01T10:00:00Z");
+        assertThat((String) JsonPath.read(json, "$.room.eligibility.member_joined_before"))
+                .isEqualTo("2099-03-01T00:00:00Z");
+        assertThat(JsonPath.<Map<String, Object>>read(json, "$.room.next")).containsOnly(Map.entry("phase", 2),
+                Map.entry("label", "Vente g\u00e9n\u00e9rale"), Map.entry("opens_at", "2099-04-03T09:00:00Z"),
+                Map.entry("sale_starts_at", "2099-04-03T10:00:00Z"));
+        list(a.org().toString(), null).andExpect(jsonPath("$[0].room.next.phase").value(2));
+
+        call(a, post("/org/events/" + id + "/rooms/1/end")).andExpect(status().isOk());
+        json = body(mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk()));
+        assertThat((Integer) JsonPath.read(json, "$.room.phase")).isEqualTo(2);
+        assertThat((String) JsonPath.read(json, "$.room.status")).isEqualTo("SCHEDULED");
+        assertThat((String) JsonPath.read(json, "$.room.opens_at")).isEqualTo("2099-04-03T09:00:00Z");
+        assertThat((String) JsonPath.read(json, "$.room.sale_starts_at")).isEqualTo("2099-04-03T10:00:00Z");
+        assertThat((Object) JsonPath.read(json, "$.room.eligibility")).isNull();
+        assertThat((Object) JsonPath.read(json, "$.room.next")).isNull();
+
+        call(a, post("/org/events/" + id + "/rooms/2/end")).andExpect(status().isOk());
+        mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.room").isEmpty());
     }
 }

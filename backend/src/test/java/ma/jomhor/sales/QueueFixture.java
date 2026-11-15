@@ -65,13 +65,34 @@ abstract class QueueFixture extends OrgApiTest {
                 .andExpect(status().isOk());
         String price = price(a, event, zone, "Cat 1", quota);
         call(a, post("/org/events/" + event + "/publish")).andExpect(status().isOk());
-        call(a, put("/org/events/" + event + "/room"), roomJson).andExpect(status().isCreated());
-        UUID id = jdbc.sql("select id from waiting_rooms where event_id = ?").param(event).query(UUID.class).single();
+        call(a, put("/org/events/" + event + "/rooms/1"), roomJson).andExpect(status().isCreated());
+        UUID id = jdbc.sql("select id from waiting_rooms where event_id = ? and phase = 1").param(event).query(UUID.class).single();
         return new Room(a, event, price, id);
     }
 
     Room room(String roomJson) throws Exception {
         return room(roomJson, 100);
+    }
+
+    /**
+     * BE-49: an ON_SALE event on sale now (no sale_starts_at, no room; sales close at {@link #CUTOFF}) whose one
+     * category of {@code quota} is sold out. {@code id} is null.
+     */
+    Room soldOut(int quota) throws Exception {
+        Caller a = admin();
+        String venue = venue(a, "Stade");
+        int event = event(a, venue);
+        String price = price(a, event, zone(a, venue, "NORD", Math.max(quota, 100)), "Cat 1", quota);
+        call(a, post("/org/events/" + event + "/publish")).andExpect(status().isOk());
+        setSold(price, quota);
+        return new Room(a, event, price, null);
+    }
+
+    /** PUT /rooms/{phase} of the room's event from {@code json} → 201; the new phase's room id. */
+    UUID phase(Room r, int phase, String json) throws Exception {
+        call(r.admin(), put("/org/events/" + r.event() + "/rooms/" + phase), json).andExpect(status().isCreated());
+        return jdbc.sql("select id from waiting_rooms where event_id = ? and phase = ?").params(r.event(), phase)
+                .query(UUID.class).single();
     }
 
     /**

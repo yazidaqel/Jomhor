@@ -56,11 +56,12 @@ class EventController {
                       Instant doorsOpenAt, Instant saleStartsAt, Event.ReentryPolicy reentryPolicy,
                       @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata) {}
 
+    /** {@code audience} absent: ALL. */
     record PriceCreate(@NotNull Integer zoneId, @NotBlank String name, @NotNull @PositiveOrZero Long priceMad,
-                       @NotNull @PositiveOrZero Integer quota) {}
+                       @NotNull @PositiveOrZero Integer quota, Event.Audience audience) {}
 
     record PricePatch(Integer zoneId, @Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String name,
-                      @PositiveOrZero Long priceMad, @PositiveOrZero Integer quota) {}
+                      @PositiveOrZero Long priceMad, @PositiveOrZero Integer quota, Event.Audience audience) {}
 
     // ---------- responses ----------
 
@@ -88,10 +89,11 @@ class EventController {
     /** Read-only (Lot 3): what the till shows of a category's zone. */
     record ZoneRef(String code, String name) {}
 
-    record PriceDto(UUID id, int zoneId, ZoneRef zone, String name, long priceMad, int quota, int sold) {
+    record PriceDto(UUID id, int zoneId, ZoneRef zone, String name, long priceMad, int quota, int sold,
+                    Event.Audience audience) {
         static PriceDto of(PriceCategory p) {
             return new PriceDto(p.id(), p.zoneId(), new ZoneRef(p.zoneCode(), p.zoneName()), p.name(), p.priceMad(),
-                    p.quota(), p.sold());
+                    p.quota(), p.sold(), p.audience());
         }
     }
 
@@ -148,14 +150,14 @@ class EventController {
     PriceDto createPrice(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable int id,
                          @Valid @RequestBody PriceCreate body) {
         return PriceDto.of(events.createPrice(org.organizerId(), id, body.zoneId(), body.name(), body.priceMad(),
-                body.quota()));
+                body.quota(), body.audience()));
     }
 
     @PatchMapping("/org/events/{id}/prices/{priceId}")
     PriceDto updatePrice(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable int id,
                          @PathVariable UUID priceId, @Valid @RequestBody PricePatch body) {
         return PriceDto.of(events.updatePrice(org.organizerId(), id, priceId, body.zoneId(), body.name(),
-                body.priceMad(), body.quota()));
+                body.priceMad(), body.quota(), body.audience()));
     }
 
     @DeleteMapping("/org/events/{id}/prices/{priceId}")

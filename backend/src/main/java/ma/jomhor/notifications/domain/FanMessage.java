@@ -4,15 +4,16 @@ import java.util.UUID;
 
 /**
  * One PENDING fan_messages row claimed for sending (docs/04-api.md §Notifications). {@code orderId} is set for
- * SPLIT_INVITE, PAY_CODE and ORDER_PAID, {@code ticketId} for TICKET_RECEIVED, {@code campaignId} for CAMPAIGN. {@code attempts} = sends tried so far;
+ * SPLIT_INVITE, PAY_CODE and ORDER_PAID, {@code ticketId} for TICKET_RECEIVED, {@code campaignId} for CAMPAIGN,
+ * {@code eventId} for WAITLIST_OPEN. {@code attempts} = sends tried so far;
  * the retry policy is {@link Delivery#backoff}.
  */
 public record FanMessage(UUID id, UUID organizerId, UUID userId, Channel channel, Kind kind, UUID campaignId,
-                         UUID orderId, UUID ticketId, int attempts) {
+                         UUID orderId, UUID ticketId, Integer eventId, int attempts) {
 
     public enum Channel { PUSH, WHATSAPP }
 
-    public enum Kind { TICKET_RECEIVED, SPLIT_INVITE, PAY_CODE, ORDER_PAID, CAMPAIGN }
+    public enum Kind { TICKET_RECEIVED, SPLIT_INVITE, PAY_CODE, ORDER_PAID, CAMPAIGN, WAITLIST_OPEN }
 
     /** last_error of a message that can't be sent and is not retried. */
     public static final String NOT_CONFIGURED = "NOT_CONFIGURED";

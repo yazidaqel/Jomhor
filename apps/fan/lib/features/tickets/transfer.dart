@@ -26,12 +26,15 @@ final class TransferDone extends TransferResult {
 /// Refused, or the outcome is unknown ([TransferRefusal.unknown]: network, 5xx; the list is fetched again, since the
 /// transfer may have happened).
 final class TransferRefused extends TransferResult {
-  const new(this.reason, {this.until});
+  const new(this.reason, {this.until, this.limit = 0});
 
   final TransferRefusal reason;
 
   /// `details.transfer_until` of a `TRANSFER_CLOSED`.
   final DateTime? until;
+
+  /// `details.limit` of a [TransferRefusal.holderLimit].
+  final int limit;
 }
 
 enum TransferRefusal {
@@ -43,6 +46,9 @@ enum TransferRefusal {
 
   /// 422 on `name` (§Holder names).
   name,
+
+  /// 409 `PER_ACCOUNT_LIMIT` reason `HOLDER` on `to_phone` (Lot 5): the recipient would hold too many places.
+  holderLimit,
 
   /// 409 `TRANSFER_CLOSED`.
   closed,
@@ -87,6 +93,10 @@ TransferRefused _refusal(ApiError e) {
     (422, _, {'reason': 'SELF'}) => const TransferRefused(TransferRefusal.self),
     (422, _, _) when fields is Map && fields.containsKey('to_phone') => const TransferRefused(TransferRefusal.phone),
     (422, _, _) when fields is Map && fields.containsKey('name') => const TransferRefused(TransferRefusal.name),
+    (409, 'PER_ACCOUNT_LIMIT', {'reason': 'HOLDER', 'limit': final int limit}) => TransferRefused(
+      TransferRefusal.holderLimit,
+      limit: limit,
+    ),
     (409, 'TRANSFER_CLOSED', final d) => TransferRefused(
       TransferRefusal.closed,
       until: switch (d['transfer_until']) {
@@ -103,7 +113,10 @@ TransferRefused _refusal(ApiError e) {
 
 /// Field refusals send the fan back to the form; anything else may have changed the list, so it is fetched again.
 bool _refetches(TransferRefusal r) =>
-    r != TransferRefusal.self && r != TransferRefusal.phone && r != TransferRefusal.name;
+    r != TransferRefusal.self &&
+    r != TransferRefusal.phone &&
+    r != TransferRefusal.name &&
+    r != TransferRefusal.holderLimit;
 
 void _remember(Ref ref, String ticketId, TransferRefused r) {
   if (r.reason case TransferRefusal.closed || TransferRefusal.admitted || TransferRefusal.notValid) {
@@ -196,6 +209,7 @@ String transferRefusalText(AppLocalizations l, FanTicket t, TransferRefused r) =
   TransferRefusal.self => l.transferSelf,
   TransferRefusal.phone => l.holderPhoneError(l.ltr(examplePhone)),
   TransferRefusal.name => l.holderNameError,
+  TransferRefusal.holderLimit => l.holderCapReached(r.limit),
   TransferRefusal.unknown => l.transferUnknown,
 };
 

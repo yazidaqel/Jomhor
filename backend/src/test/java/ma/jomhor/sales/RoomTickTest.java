@@ -73,7 +73,7 @@ class RoomTickTest extends QueueFixture {
             assertThat(users.stream().map(u -> rank(r, u)).toList()).isEqualTo(ranks);
             assertThat(jdbc.sql("select actor_type::text || ' ' || payload::text from audit_log "
                             + "where action = 'room.draw' and target = ?").param(String.valueOf(r.event()))
-                    .query(String.class).list()).containsExactly("SYSTEM {\"count\": 200}");
+                    .query(String.class).list()).containsExactly("SYSTEM {\"count\": 200, \"phase\": 1}");
 
             UUID late = joinAll(r, 1).getFirst();
             UUID later = joinAll(r, 1).getFirst();
@@ -148,11 +148,12 @@ class RoomTickTest extends QueueFixture {
         assertThat((String) JsonPath.read(json, "$.status")).isEqualTo("WAITING");
         assertThat((Integer) JsonPath.read(json, "$.position")).isEqualTo(1);
         assertThat((Integer) JsonPath.read(json, "$.in_room")).isEqualTo(1);
-        assertThat((Object) JsonPath.read(json, "$.estimated_wait_s")).isNull(); // no measured rate yet
-        assertThat((Integer) JsonPath.read(json, "$.poll_after_s")).isBetween(12, 18);
+        // The draw seeded the measured rate with the configured one (Q180): ⌈1 × 60 ÷ 6000⌉ s, near the front (Q181).
+        assertThat((Integer) JsonPath.read(json, "$.estimated_wait_s")).isEqualTo(1);
+        assertThat((Integer) JsonPath.read(json, "$.poll_after_s")).isEqualTo(2);
         String ranked = JsonPath.read(json, "$.queue_token");
 
-        memo.get(r.event()); // warm this instance's memo right before counting (it reloads once per memo-ttl)
+        memo.rooms(r.event()); // warm this instance's memo right before counting (it reloads once per memo-ttl)
         before = statements.count();
         json = body(poll(ranked).andExpect(status().isOk()));
         assertThat(statements.count()).isEqualTo(before);
@@ -223,9 +224,56 @@ class RoomTickTest extends QueueFixture {
         tick(SALE);
         assertThat(roomRow(a.id())).containsEntry("joined_count", 3).containsEntry("ranked_count", 3);
         assertThat(roomRow(b.id())).containsEntry("joined_count", 5).containsEntry("ranked_count", 5);
-        call(a.admin(), get("/org/events/" + a.event() + "/room")).andExpect(status().isOk())
+        call(a.admin(), get("/org/events/" + a.event() + "/rooms")).andExpect(status().isOk())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
-                        .jsonPath("$.room.figures.joined").value(3));
-        call(a.admin(), get("/org/events/" + b.event() + "/room")).andExpect(status().isNotFound());
+                        .jsonPath("$.rooms[0].figures.joined").value(3));
+        call(a.admin(), get("/org/events/" + b.event() + "/rooms")).andExpect(status().isNotFound());
+    }
+
+    // ---------- phases (BE-48) ----------
+
+    private long nextPhaseEnds(Room r) {
+        return jdbc.sql("""
+                        select count(*) from audit_log where action = 'room.end' and target = ? and actor_type = 'SYSTEM'
+                          and payload = '{"reason": "NEXT_PHASE", "phase": 1}'::jsonb""")
+                .param(String.valueOf(r.event())).query(Long.class).single();
+    }
+
+    /**
+     * Q167, Q180: phase 2's opens_at ends phase 1 once (one audit room.end NEXT_PHASE) and starts phase 2's own
+     * pre-queue; phase 2 draws at its own starts_at, ranks 1..n in its room. The measured rate is the configured one
+     * from the draw until the first 60 s re-mark.
+     */
+    @Test
+    void theNextPhaseOpeningEndsThePreviousOnceAndDrawsInItsOwnRoom() throws Exception {
+        Room r = room("{\"admission_rate_per_min\": 600}");
+        UUID two = phase(r, 2, """
+                {"pre_queue_min": 30, "admission_rate_per_min": 120, "starts_at": "2099-04-02T10:00:00Z"}""");
+        tick(OPENS);
+        List<UUID> presale = joinAll(r, 2);
+        tick(SALE);
+        assertThat(roomRow(r.id())).containsEntry("status", "OPEN").containsEntry("measured_rate_per_min", 600);
+        assertThat(roomRow(two)).containsEntry("status", "SCHEDULED");
+
+        tick("2099-04-02T09:29:59Z");
+        assertThat(roomRow(r.id()).get("status")).isEqualTo("OPEN");
+        assertThat(nextPhaseEnds(r)).isZero();
+        tick("2099-04-02T09:30:00Z");
+        assertThat(roomRow(r.id()).get("status")).isEqualTo("ENDED");
+        assertThat(roomRow(two).get("status")).isEqualTo("PRE_QUEUE");
+        tick("2099-04-02T09:30:01Z");
+        assertThat(nextPhaseEnds(r)).isEqualTo(1);
+        assertThat(presale.stream().map(u -> rank(r, u))).containsExactlyInAnyOrder(1, 2); // phase 1's stay
+
+        List<UUID> general = joinAll(r, 3); // phase 1 has ENDED: the joins land in phase 2
+        assertThat(general.stream().map(u -> entry(two, u).get("rank"))).containsOnlyNulls();
+        tick("2099-04-02T10:00:00Z");
+        assertThat(general.stream().map(u -> (Integer) entry(two, u).get("rank")))
+                .containsExactlyInAnyOrder(1, 2, 3);
+        assertThat(roomRow(two)).containsEntry("status", "OPEN").containsEntry("ranked_count", 3)
+                .containsEntry("measured_rate_per_min", 120);
+        tick("2099-04-02T10:01:00Z"); // 120/min would admit 120, but 3 are in: the real rate is 3
+        assertThat(roomRow(two)).containsEntry("admitted_through", 3).containsEntry("measured_rate_per_min", 3);
+        assertThat(roomRow(r.id()).get("status")).isEqualTo("ENDED");
     }
 }

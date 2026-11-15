@@ -1,0 +1,10 @@
+{
+ "status": 409,
+ "body": {
+  "code": "WAITLIST_CLOSED",
+  "message": "The waitlist is not open for this event",
+  "details": {
+   "reason": "NOT_SOLD_OUT"
+  }
+ }
+}

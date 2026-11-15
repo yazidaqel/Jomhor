@@ -16,13 +16,29 @@ public interface Orders {
     void lockBuyer(UUID userId, int eventId);
 
     /**
-     * Σ qty of the buyer's RESERVED, AWAITING_CASH and PAID orders on the event, plus the places of member orders of
-     * the buyer's split groups still RESERVED or AWAITING_CASH (04 §Split pay Limits, P83).
+     * {@link #lockBuyer} for each account, in the order of the keys actually locked (their hash, then the id), so two
+     * transactions locking overlapping sets never wait in a circle, even when two ids share a hash.
+     */
+    void lockAccounts(Collection<UUID> userIds, int eventId);
+
+    /**
+     * Σ qty of the buyer's RESERVED, AWAITING_CASH and PAID orders on the event, less the REFUNDED tickets of those
+     * PAID orders (plan lot-5 Q175), plus the places of member orders of the buyer's split groups still RESERVED or
+     * AWAITING_CASH (04 §Split pay Limits, P83).
      */
     long held(UUID org, UUID userId, int eventId);
 
-    /** Σ qty of the account's own RESERVED, AWAITING_CASH and PAID orders on the event (a split member's count). */
+    /**
+     * Σ qty of the account's own RESERVED, AWAITING_CASH and PAID orders on the event, less the REFUNDED tickets of
+     * those PAID orders (a split member's count).
+     */
     long ownHeld(UUID org, UUID userId, int eventId);
+
+    /**
+     * The places the account holds on the event, whoever bought them (04 POST /fan/orders Holder limit): its places in
+     * RESERVED and AWAITING_CASH orders plus its VALID and BLOCKED tickets.
+     */
+    long holding(UUID org, UUID holderId, int eventId);
 
     /** The event's RESERVED orders still held (reserved_until > now()). No lock (docs/04-api.md §On-sale Busy). */
     long activeHolds(UUID org, int eventId);

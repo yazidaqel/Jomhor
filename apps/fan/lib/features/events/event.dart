@@ -121,15 +121,29 @@ class FanEvent {
   static const _maxBackoff = Duration(seconds: 30);
 
   EventFacts get facts => EventFacts.of(eventType, metadata);
+
+  /// Eligibility copy counts "matchs au stade" for a match, "événements" otherwise (lot-5 Q182).
+  bool get isMatch => eventType == 'FOOTBALL_MATCH';
 }
 
-/// `room` of `GET /fan/events*` (docs/04-api.md §Fan, Lot 5).
+/// `room` of `GET /fan/events*` (docs/04-api.md §Fan, Lot 5): the event's current sale phase.
 class Room {
-  const new({required this.status, required this.opensAt, this.eligibility});
+  const new({
+    required this.status,
+    required this.opensAt,
+    this.phase = 1,
+    this.label,
+    this.saleStartsAt,
+    this.eligibility,
+    this.next,
+  });
 
   factory fromJson(Map<String, Object?> j) => Room(
+    phase: j['phase'] as int? ?? 1,
+    label: j['label'] as String?,
     status: j['status']! as String,
     opensAt: _instant(j['opens_at'])!,
+    saleStartsAt: _instant(j['sale_starts_at']),
     eligibility: switch (j['eligibility']) {
       final Map<String, Object?> e => Eligibility(
         verifiedBefore: _instant(e['verified_before']),
@@ -138,17 +152,46 @@ class Room {
       ),
       _ => null,
     },
+    next: switch (j['next']) {
+      final Map<String, Object?> n => NextPhase(
+        phase: n['phase']! as int,
+        label: n['label'] as String?,
+        opensAt: _instant(n['opens_at'])!,
+      ),
+      _ => null,
+    },
   );
+
+  /// Lot 5 step 2: 1, 2, ... in sale order.
+  final int phase;
+
+  /// The organizer's name for the phase, shown as typed ("Prévente membres"); null = none.
+  final String? label;
 
   /// `SCHEDULED`, `PRE_QUEUE`, `OPEN` or `PAUSED`.
   final String status;
   final DateTime opensAt;
 
+  /// This phase's sale start (its draw).
+  final DateTime? saleStartsAt;
+
   /// The room's verified-fan rule; null when none is set.
   final Eligibility? eligibility;
 
+  /// The following phase not `ENDED`; null when this is the last.
+  final NextPhase? next;
+
   /// Joins are open: the server says so, or `opens_at` has passed on this device (the read may be older).
   bool joinable(DateTime now) => status != 'SCHEDULED' || !now.isBefore(opensAt);
+}
+
+/// `room.next`: what the fan sees of the phase after the current one.
+class NextPhase {
+  const new({required this.phase, required this.opensAt, this.label});
+
+  final int phase;
+  final String? label;
+  final DateTime opensAt;
 }
 
 /// The parts of a room's rule; each null part is not required.
@@ -220,30 +263,50 @@ class Zone {
   bool get soldOut => remaining == 0;
   bool get lastSeats => !soldOut && remaining <= lastSeatsThreshold;
 
-  /// Cheapest price still available, in centimes; null when sold out.
-  int? get fromPriceMad {
-    final open = [
-      for (final p in prices)
-        if (p.remaining > 0) p.priceMad,
-    ];
-    return open.isEmpty ? null : open.reduce((a, b) => a < b ? a : b);
+  /// The category screen 3 starts from: the cheapest still open that anyone can buy, else the cheapest members one;
+  /// null when sold out.
+  Price? get firstOpen {
+    final open = [...prices.where((p) => p.remaining > 0)]
+      ..sort((a, b) => a.membersOnly != b.membersOnly ? (a.membersOnly ? 1 : -1) : a.priceMad.compareTo(b.priceMad));
+    return open.firstOrNull;
   }
+
+  /// The "dès" price, in centimes: the cheapest open price anyone can pay (lot-5 Q172); null when only members
+  /// prices are left, or none.
+  int? get fromPriceMad => switch (firstOpen) {
+    final p? when !p.membersOnly => p.priceMad,
+    _ => null,
+  };
+
+  /// Lot 5 step 2: the zone has a members-only category.
+  bool get hasMembersPrice => prices.any((p) => p.membersOnly);
 }
 
 class Price {
-  new({required this.priceCategoryId, required this.name, required this.priceMad, required this.remaining});
+  new({
+    required this.priceCategoryId,
+    required this.name,
+    required this.priceMad,
+    required this.remaining,
+    this.membersOnly = false,
+  });
 
   factory fromJson(Map<String, Object?> j) => Price(
     priceCategoryId: j['price_category_id']! as String,
     name: j['name']! as String,
     priceMad: j['price_mad']! as int,
     remaining: j['remaining']! as int,
+    membersOnly: j['audience'] == 'MEMBERS',
   );
 
   final String priceCategoryId;
   final String name;
   final int priceMad;
   final int remaining;
+
+  /// `audience: MEMBERS` (Lot 5 step 2): each place held by a member who joined before the sale opened; the server
+  /// decides at the order, nothing is blocked here.
+  final bool membersOnly;
 }
 
 /// `metadata` read by `event_type` (docs/04-api.md §Event metadata). A key with the wrong type is ignored.

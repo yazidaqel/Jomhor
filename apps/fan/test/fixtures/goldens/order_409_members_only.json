@@ -1,0 +1,12 @@
+{
+ "source": "design content for the goldens, in the shape of the FL-27 real run's test/fixtures/queue/order_409_members_only.json (queue_test checks the shapes match)",
+ "status": 409,
+ "body": {
+  "code": "MEMBERS_ONLY",
+  "message": "Members-only price",
+  "details": {
+   "field": "items[0].holders[0]",
+   "member_joined_before": "2027-02-20T12:30:00Z"
+  }
+ }
+}

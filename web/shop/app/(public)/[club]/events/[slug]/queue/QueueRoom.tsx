@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { fmt, type Dict } from '@/lib/i18n'
 import { errorCode, postJson, sleep, throwIfAborted, whenVisible, type Result } from '@/lib/order-client'
-import { FINAL_QUEUE, firstPosition, litDots, mmss, saveAdmission, toQueue, waitText, type Queue } from '@/lib/queue'
-import { useServerClock } from '@/lib/queue-hooks'
+import { FINAL_QUEUE, firstPosition, litDots, mmss, saveAdmission, savePlace, toQueue, waitText, type Queue } from '@/lib/queue'
+import { useServerClock, useWakeLock } from '@/lib/queue-hooks'
 import { formatShortDate, formatTime } from '@/lib/time'
 import { ArrowIcon, CheckIcon } from '../../../../../icons'
 
@@ -42,7 +42,10 @@ const details = (r: Result) => (r.data?.details ?? {}) as Details
  * The admitted token goes to this tab's sessionStorage for W2 and W3. Countdowns run on server time (`now`, then
  * each `server_time`, plus the page clock), never the device clock. A poll refused with 401 re-joins once; a
  * second 401 with no good poll in between stops on "Réessayer" (a backend refusing valid tokens must not turn every
- * fan into a join loop).
+ * fan into a join loop). Lot 5 step 2: a marker of the place (its phase, never the token) is kept in this browser
+ * for W2 "Reprendre ma place", and the turn is kept with its phase; `ENDED` (the phase is over) drops both and goes
+ * back to W2, which re-reads the event (uncached once the next phase has opened, lib/events.ts `phaseOver`): the next
+ * phase's room panel, or the zone picker. The screen is kept awake while visible.
  */
 export function QueueRoom(props: {
   eventId: number
@@ -58,24 +61,42 @@ export function QueueRoom(props: {
   remaining: number
   /** The event has an eligibility rule: a fan in the room passed it. */
   verified: boolean
+  /**
+   * The sale phase the page was rendered with, stored with the place marker and the turn. The join answer (04
+   * `GET /fan/queue` shape) carries no phase, so this is the best known.
+   */
+  phase: number
+  /** `event_type` FOOTBALL_MATCH: "matchs au stade", else "événements" (Q182). */
+  football: boolean
+  /** "Ensuite : {label} · file dès {time}" when a later phase exists, else null (shown under NOT_ELIGIBLE). */
+  next: string | null
   copy: Copy
 }) {
-  const { eventId, eventHref, loginHref, apiUrl, timezone, copy } = props
+  const { eventId, eventHref, loginHref, apiUrl, timezone, phase, copy } = props
   const c = copy.room
   const router = useRouter()
   const [serverNow, resync, readNow] = useServerClock(props.now)
   const [view, setView] = useState<View>({ kind: 'joining' })
   const [attempt, setAttempt] = useState(0) // "Reprendre une place" / "Réessayer" start over
+  useWakeLock()
 
   useEffect(() => {
     const ctl = new AbortController()
     const { signal } = ctl
 
+    /** The phase is over (or there is no room): forget its token and turn, and let W2 re-read the event. */
+    function ended() {
+      savePlace(eventId, null)
+      saveAdmission(eventId, null)
+      router.replace(eventHref)
+    }
+
     /** A fresh answer, or (`offline`) the last one kept on screen after a failed poll. */
     function show(q: Queue, offline = false) {
       if (!offline) resync(Date.parse(q.server_time))
-      if (q.status === 'ADMITTED' && q.admission) saveAdmission(eventId, q.admission)
-      if (q.status === 'ENDED') router.replace(eventHref) // no room any more: buy on W2
+      if (q.status === 'ADMITTED' && q.admission) saveAdmission(eventId, q.admission, phase)
+      savePlace(eventId, q.status === 'EXPIRED' || q.status === 'ENDED' ? null : phase)
+      if (q.status === 'ENDED') ended()
       setView({ kind: 'queue', q, first: q.position === null ? null : firstPosition(eventId, q.position), offline })
     }
 
@@ -99,7 +120,7 @@ export function QueueRoom(props: {
           continue
         }
         if ((code === 'QUEUE_NOT_OPEN' && det.reason !== 'CLOSED') || r.status === 404) {
-          router.replace(eventHref) // ENDED or no room: buy without the room
+          ended() // ENDED or no room: W2 shows the next phase, or the sale without a room
           return null
         }
         if (code === 'QUEUE_RATE_LIMITED' && !retried) {
@@ -167,7 +188,7 @@ export function QueueRoom(props: {
       if (!signal.aborted) setView({ kind: 'refused', code: '', det: {} })
     })
     return () => ctl.abort()
-  }, [attempt, eventId, eventHref, loginHref, apiUrl, router, resync, readNow])
+  }, [attempt, eventId, eventHref, loginHref, apiUrl, phase, router, resync, readNow])
 
   const again = (label: string) => (
     <button
@@ -191,7 +212,7 @@ export function QueueRoom(props: {
           : view.kind === 'limited'
             ? [c.title, fmt(c.rateLimited, { n: view.left })]
             : null
-    const refused = view.kind === 'refused' ? refusal(copy, view.code, view.det, timezone) : null
+    const refused = view.kind === 'refused' ? refusal(copy, view.code, view.det, timezone, props.football) : null
     const [title, text] = shown ?? [refused!.title, refused!.text]
     return (
       <div className="flex flex-col gap-6">
@@ -201,6 +222,7 @@ export function QueueRoom(props: {
             {text}
           </p>
         )}
+        {view.kind === 'refused' && view.code === 'NOT_ELIGIBLE' && props.next && <p className="text-body-small text-text-muted">{props.next}</p>}
         <Dots running={view.kind === 'joining'} lit={0} label={c.progress} />
         {refused?.retry && again(c.retry)}
       </div>
@@ -367,7 +389,7 @@ function Dots({ lit, running = false, turn = false, label }: { lit: number; runn
 }
 
 /** Copy for a refused join (DESIGN screen 12 other states). */
-function refusal(copy: Copy, code: string, det: Details, timezone: string): { title: string; text: string; retry: boolean } {
+function refusal(copy: Copy, code: string, det: Details, timezone: string, football: boolean): { title: string; text: string; retry: boolean } {
   const c = copy.room
   const date = (v: unknown) => (typeof v === 'string' ? formatShortDate(v, timezone, copy.meta.intl) : '')
   switch (code) {
@@ -378,7 +400,7 @@ function refusal(copy: Copy, code: string, det: Details, timezone: string): { ti
           : det.reason === 'NOT_MEMBER'
             ? fmt(c.NOT_MEMBER, { date: date(det.member_joined_before) })
             : det.reason === 'NOT_ENOUGH_EVENTS'
-              ? fmt(c.NOT_ENOUGH_EVENTS, { n: String(det.min_events_attended ?? ''), attended: String(det.attended ?? '') })
+              ? fmt(football ? c.NOT_ENOUGH_EVENTS : c.NOT_ENOUGH_EVENTS_OTHER, { n: String(det.min_events_attended ?? ''), attended: String(det.attended ?? '') })
               : ''
       return { title: c.NOT_ELIGIBLE, text, retry: false }
     }

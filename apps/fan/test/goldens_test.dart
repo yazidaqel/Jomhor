@@ -23,6 +23,7 @@ import 'helpers.dart';
 import 'split_pay_test.dart' show SplitBackend, buyerId, karimId, memberId, omarId, saraId;
 import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
 import 'transfer_test.dart' show openTicketJson, transferredJson;
+import 'waitlist_test.dart' show WaitlistSale;
 
 /// FL-17: FR and AR goldens of screens 1, 4, 5 and the cash order; FL-18: screen 8, the transfer sheet, on its form
 /// and mid-hold on its confirm step, and the "Transféré à" row in Billets (DESIGN.md Lot 4, AR / RTL); the login and
@@ -33,7 +34,8 @@ import 'transfer_test.dart' show openTicketJson, transferredJson;
 /// and the member strip on screen 1. FL-21: screen 4 with a friend paying their own place, screen 9 initiator (2/4)
 /// and member (to pay, released). FL-22: screen 10 and the bell with its unread dot on screen 1 and the top bar
 /// (bell then avatar at the end side, the left in AR). FL-26: screen 12 (pre-queue, waiting, the turn, not eligible)
-/// and screen 2 with a room. Recorded on Linux with the docker command at the top of goldens.dart.
+/// and screen 2 with a room. FL-28: the waitlist on screen 1's hero (to join, on the list) and screen 2 sold out.
+/// Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -726,5 +728,101 @@ void main() {
       if (locale == 'ar') expectArabicRules(tester);
       await snap('$locale-2-file-attente');
     });
+
+    // FL-27: a members presale with the general sale next, a members price, the holder-row refusals.
+    Map<String, Object?> presale() => realAnswer('event_room_presale_next', dir: 'goldens').body;
+
+    testWidgets('$locale · screen 2 presale with the next phase', (tester) async {
+      await room(tester, '/events/1', (sale) {
+        sale
+          ..detail = presale()
+          ..room = {...presale()['room']! as Map<String, Object?>};
+      });
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('event.next')), findsOneWidget);
+      expect(find.byKey(const Key('zone.1.members')), findsOneWidget);
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-2-prevente');
+    });
+
+    testWidgets('$locale · screen 3 with a members price', (tester) async {
+      await room(tester, '/events/1/zones', (sale) {
+        sale
+          ..detail = presale()
+          ..room = null;
+      });
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('zone.1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('zones.price.pc-1-1')), findsOneWidget);
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-3-tarif-membres');
+    });
+
+    for (final (name, fixture, row) in [
+      ('4-membres', ('order_409_members_only', 'goldens'), 0),
+      ('4-limite-titulaire', ('order_409_holder_limit', 'queue'), 1),
+    ]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await room(tester, '/events/1/checkout?price=pc-1-1&qty=2', (sale) {
+          sale
+            ..detail = presale()
+            ..room = null
+            ..orders.add(() => sale.real(fixture.$1, dir: fixture.$2));
+        });
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('holder.1.name')), locale == 'ar' ? 'سارة بنعلي' : 'Sara Benali');
+        await tester.enterText(find.byKey(const Key('holder.1.phone')), '06 12 34 56 78');
+        await tester.pump();
+        await tester.ensureVisible(find.byKey(const Key('checkout.consent')));
+        await tester.tap(find.byKey(const Key('checkout.consent')));
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
+        await tester.tap(find.byKey(const Key('checkout.pay')));
+        await tester.pumpAndSettle();
+        // From the top, down until the refused row's line shows at the bottom: the whole row stays in view.
+        await tester.drag(find.byType(ListView).last, const Offset(0, 3000));
+        await tester.pumpAndSettle();
+        final refusal = find.byKey(Key('holder.$row.refusal'));
+        await tester.dragUntilVisible(refusal, find.byType(ListView).last, const Offset(0, -100));
+        // dragUntilVisible aligns the line to the top, hiding the row above it: put it at the bottom instead.
+        await Scrollable.ensureVisible(tester.element(refusal), alignment: 1);
+        await tester.pumpAndSettle();
+        if (locale == 'ar') expectArabicRules(tester);
+        await snap('$locale-$name');
+      });
+    }
+
+    // FL-28: the sold-out waitlist on screen 1's hero (to join, then on the list) and screen 2's sticky CTA.
+    for (final (name, location, entry, key) in [
+      ('1-liste-attente', '/', 'get_200_none', 'hero.waitlist'),
+      ('1-sur-la-liste', '/', 'get_200_waiting', 'hero.waitlistOn'),
+      ('2-complet', '/events/1', 'get_200_none', 'event.waitlist'),
+    ]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await phone(tester);
+        final before = SharedPreferencesAsyncPlatform.instance;
+        SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+        addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+        final sale = WaitlistSale()..entry = entry;
+        final c = await pumpJomhor(
+          tester,
+          backend: sale.handle,
+          tokens: MemoryTokenStore('jwt'),
+          clock: TestClock(DateTime.utc(2027, 2, 20, 12)),
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+        );
+        if (location != '/') {
+          c.read(routerProvider).go(location);
+          await tester.pumpAndSettle();
+        }
+        // The hero's CTA in the middle of the screen, clear of the nav.
+        await Scrollable.ensureVisible(tester.element(find.byKey(Key(key))), alignment: 0.5);
+        await tester.pumpAndSettle();
+        if (locale == 'ar') expectArabicRules(tester);
+        await snap('$locale-$name');
+      });
+    }
   }
 }

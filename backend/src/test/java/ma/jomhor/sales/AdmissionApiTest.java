@@ -4,11 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import ma.jomhor.IntegrationTest;
@@ -100,7 +104,7 @@ class AdmissionApiTest extends QueueFixture {
     void anOpenRoomNeedsTheCallersAdmissionTokenForThisEventDecidedBeforeAnySql() throws Exception {
         Room r = openRoom("{}");
         Fan f = fan();
-        memo.get(r.event()); // warm this instance's memo right before counting
+        memo.rooms(r.event()); // warm this instance's memo right before counting
         long before = statements.count();
         admissionRequired(order(f, r, null), "MISSING");
         assertThat(statements.count() - before).isEqualTo(1); // the fan session lookup (SecurityConfig), nothing else
@@ -110,15 +114,16 @@ class AdmissionApiTest extends QueueFixture {
         Instant inTenMin = Instant.now().plusSeconds(600);
         Fan other = fan();
         Room elsewhere = openRoom("{}");
-        String othersToken = tokens.admission(other.id(), r.event(), entry, inTenMin);
+        String othersToken = tokens.admission(other.id(), r.event(), r.id(), entry, inTenMin);
         admissionRequired(order(f, r, othersToken), "INVALID"); // another user's
-        admissionRequired(order(f, r, tokens.admission(f.id(), elsewhere.event(), entry, inTenMin)), "INVALID");
+        admissionRequired(order(f, r, tokens.admission(f.id(), elsewhere.event(), r.id(), entry, inTenMin)),
+                "INVALID"); // another event's
         String[] mine = token.split("\\.");
         admissionRequired(order(f, r, mine[0] + "." + othersToken.split("\\.")[1] + "." + mine[2]), "INVALID");
-        admissionRequired(order(f, r, tokens.queue(entry, r.event(), 1, inTenMin)), "INVALID"); // a queue token
+        admissionRequired(order(f, r, tokens.queue(entry, r.event(), r.id(), 1, inTenMin)), "INVALID"); // queue token
         admissionRequired(order(f, r, "not-a-jwt"), "INVALID");
-        admissionRequired(order(f, r, tokens.admission(f.id(), r.event(), entry, Instant.now().minusSeconds(1))),
-                "EXPIRED");
+        admissionRequired(order(f, r, tokens.admission(f.id(), r.event(), r.id(), entry,
+                Instant.now().minusSeconds(1))), "EXPIRED");
 
         // Valid: several orders inside the turn, until the per-account limit.
         jdbc.sql("update events set per_account_limit = 2 where id = ?").param(r.event()).update();
@@ -126,6 +131,89 @@ class AdmissionApiTest extends QueueFixture {
         order(f, r, token).andExpect(status().isCreated());
         String json = body(order(f, r, token).andExpect(status().isConflict()));
         assertThat((String) JsonPath.read(json, "$.code")).isEqualTo("PER_ACCOUNT_LIMIT");
+    }
+
+    /**
+     * Lot 5 step 2 (04 §Waiting room Phases, Admission): a phase-1 admission token is refused (INVALID) the moment
+     * phase 2 is current, by its {@code rm} claim; phase 2's own token is accepted. Decided from the memo: no SQL.
+     */
+    @Test
+    void aPresaleTokenIsInvalidOnceTheNextPhaseIsCurrent() throws Exception {
+        Room r = openRoom("{}");
+        Fan f = fan();
+        String presale = admitted(r, f);
+        UUID two = phase(r, 2, "{\"pre_queue_min\": 0, \"admission_rate_per_min\": 6000, \"starts_at\": \"%s\"}"
+                .formatted(Instant.now().plusSeconds(3600)));
+        order(f, r, presale).andExpect(status().isCreated()); // phase 2 not open yet: the presale still sells
+
+        jdbc.sql("update waiting_rooms set starts_at = now() - interval '1 second' where id = ?").param(two).update();
+        memo.invalidate(); // phase 2 is current by the clock, before any tick ends phase 1
+        memo.rooms(r.event());
+        long before = statements.count();
+        admissionRequired(order(f, r, presale), "INVALID");
+        assertThat(statements.count() - before).isEqualTo(1); // the fan session lookup only
+
+        UUID entry = entryOf(r, f);
+        String general = tokens.admission(f.id(), r.event(), two, entry, Instant.now().plusSeconds(600));
+        order(f, r, general).andExpect(status().isCreated());
+    }
+
+    /**
+     * Q169: phase 1 ended by hand, phase 2 still SCHEDULED: orders are refused with EVENT_NOT_ON_SALE NOT_STARTED and
+     * phase 2's sale start, from the memo with no SQL, token or not. Once every phase has ENDED, no token is needed.
+     */
+    @Test
+    void betweenTwoPhasesOrdersWaitForTheNextAndAfterTheLastTheyNeedNoToken() throws Exception {
+        Room r = openRoom("{}");
+        Fan f = fan();
+        String presale = admitted(r, f);
+        Instant start2 = Instant.now().plusSeconds(7200).truncatedTo(ChronoUnit.SECONDS);
+        phase(r, 2, "{\"pre_queue_min\": 30, \"starts_at\": \"%s\"}".formatted(start2));
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/1/end")).andExpect(status().isOk());
+
+        memo.rooms(r.event());
+        for (String token : new String[] {null, presale}) {
+            long before = statements.count();
+            String json = body(order(f, r, token).andExpect(status().isConflict()));
+            assertThat(statements.count() - before).isEqualTo(1); // the fan session lookup only
+            assertThat((String) JsonPath.read(json, "$.code")).isEqualTo("EVENT_NOT_ON_SALE");
+            assertThat(JsonPath.<Map<String, Object>>read(json, "$.details")).containsOnly(
+                    Map.entry("reason", "NOT_STARTED"), Map.entry("sale_starts_at", start2.toString()));
+        }
+
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/2/end")).andExpect(status().isOk());
+        order(f, r, null).andExpect(status().isCreated());
+    }
+
+    /**
+     * A DRAFT event's phases never show through POST /fan/orders: the answer is the event check's (EVENT_NOT_ON_SALE
+     * NOT_ON_SALE), with no sale start and no ADMISSION_REQUIRED, whether its phase is SCHEDULED or live by the clock.
+     */
+    @Test
+    void aDraftEventsPhasesNeverShowThroughAnOrder() throws Exception {
+        Caller a = admin();
+        String venue = venue(a, "Stade");
+        int zone = zone(a, venue, "NORD", 100);
+        int event = event(a, venue);
+        call(a, patch("/org/events/" + event), "{\"sale_starts_at\": \"%s\"}".formatted(SALE))
+                .andExpect(status().isOk());
+        String price = price(a, event, zone, "Cat 1", 100);
+        call(a, put("/org/events/" + event + "/rooms/1"), "{\"pre_queue_min\": 0}").andExpect(status().isCreated());
+        Room draft = new Room(a, event, price, null);
+        Fan f = fan();
+        memo.invalidate();
+        for (String phaseState : List.of("SCHEDULED", "live")) {
+            if (phaseState.equals("live")) {
+                jdbc.sql("update events set sale_starts_at = now() - interval '1 minute' where id = ?").param(event)
+                        .update();
+                memo.invalidate();
+            }
+            String json = body(order(f, draft, null).andExpect(status().isConflict()));
+            assertThat((String) JsonPath.read(json, "$.code")).as(phaseState).isEqualTo("EVENT_NOT_ON_SALE");
+            assertThat(JsonPath.<Map<String, Object>>read(json, "$.details")).as(phaseState)
+                    .containsOnly(Map.entry("reason", "NOT_ON_SALE"));
+            assertThat(json).doesNotContain("sale_starts_at").doesNotContain("2099-04-01");
+        }
     }
 
     @Test
@@ -140,12 +228,12 @@ class AdmissionApiTest extends QueueFixture {
                 {"sale_id": "%s", "event_id": %d, "items": [{"price_category_id": "%s", "qty": 1, "holders": %s}]}
                 """.formatted(UUID.randomUUID(), r.event(), r.price(), holders(1))).andExpect(status().isCreated());
 
-        call(r.admin(), post("/org/events/" + r.event() + "/room/pause")).andExpect(status().isOk());
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/1/pause")).andExpect(status().isOk());
         order(f, r, token).andExpect(status().isCreated());
         Fan g = fan();
         admissionRequired(order(g, r, null), "MISSING");
 
-        call(r.admin(), post("/org/events/" + r.event() + "/room/end")).andExpect(status().isOk());
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/1/end")).andExpect(status().isOk());
         order(g, r, null).andExpect(status().isCreated());
     }
 

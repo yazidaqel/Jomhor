@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { fmt, type Dict } from '@/lib/i18n'
+import { forgetQueues } from '@/lib/queue'
 import { LogoutIcon, PersonIcon, TicketIcon } from '../icons'
 
 type Copy = Pick<Dict['header'], 'login' | 'tickets' | 'account' | 'accountOf' | 'signedIn' | 'logout' | 'logoutFailed'>
@@ -50,6 +51,7 @@ export function AccountMenu({ copy }: { copy: Copy }) {
     const res = await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null)
     setFailed(!res?.ok)
     if (!res?.ok) return
+    forgetQueues() // the next fan on this browser holds no place or turn of this one
     close()
     known.current = pathname
     setMe('out')

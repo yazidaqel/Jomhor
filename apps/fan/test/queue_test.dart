@@ -9,14 +9,17 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/error_panel.dart';
+import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/app/session.dart';
+import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/queue/queue.dart';
 import 'package:jomhor_fan/features/queue/queue_screen.dart';
 import 'package:jomhor_fan/features/queue/queue_store.dart';
+import 'package:jomhor_fan/features/queue/room_cta.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -163,8 +166,11 @@ void main() {
       expect(sale.calls('GET', '/fan/queue'), hasLength(1));
     });
 
-    testWidgets('ENDED (without sale_starts_at) goes straight to screen 3 and stops', (tester) async {
-      sale.polls.add(() => sale.answer(sale.q(status: 'ENDED', pollAfter: 0)..['sale_starts_at'] = null));
+    testWidgets('ENDED (without sale_starts_at), no phase left: screen 3, and polling stops', (tester) async {
+      sale.polls.add(() {
+        sale.room = null;
+        return sale.answer(sale.q(status: 'ENDED', pollAfter: 0)..['sale_starts_at'] = null);
+      });
       await start(tester);
       await tester.pump(const Duration(seconds: 5));
       await tester.pumpAndSettle();
@@ -445,7 +451,8 @@ void main() {
       expect(felt, isEmpty);
     });
 
-    for (final reason in ['missing', 'invalid', 'invalid_other_user', 'expired']) {
+    // invalid_presale: phase 1's token once phase 2's pre-queue opened (FL-27 real run).
+    for (final reason in ['missing', 'invalid', 'invalid_other_user', 'expired', 'invalid_presale']) {
       testWidgets('POST /fan/orders carries X-Admission-Token; ADMISSION_REQUIRED ($reason, the real answer) goes back '
           'to screen 12', (tester) async {
         sale.orders.add(() => sale.real('admission_required_$reason'));
@@ -626,6 +633,293 @@ void main() {
     });
   });
 
+  group('sale phases, members prices, holder limits (FL-27 real run, test/fixtures/queue)', () {
+    // The real run (2026-11-15): phase 1 "Prévente membres" drew at presaleStart (also the members cutoff); phase 2
+    // "Vente générale" opened at generalOpens and drew at generalStart. Phase 1 was ended by hand right after the
+    // presale order: the gap, then phase 2's pre-queue.
+    const presaleStart = '2026-11-15T15:28:49Z';
+    const generalOpens = '2026-11-15T15:30:49Z';
+    const generalStart = '2026-11-15T15:33:49Z';
+    Map<String, Object?> presale() => realAnswer('event_room_presale_next').body;
+    Map<String, Object?> roomOf(Map<String, Object?> event) => {...event['room']! as Map<String, Object?>};
+    List<Map<String, Object?>> pricesOf(Map<String, Object?> event) => [
+      for (final p in ((event['zones']! as List<Object?>).single! as Map<String, Object?>)['prices']! as List<Object?>)
+        p! as Map<String, Object?>,
+    ];
+    String priceId(String audience) =>
+        pricesOf(presale()).firstWhere((p) => p['audience'] == audience)['price_category_id']! as String;
+
+    /// The phone's clock as the server's at that captured answer.
+    void at(String instant) => clock.now = DateTime.parse(instant);
+    String day(String at) => venueDay(DateTime.parse(at), zone, 'fr');
+    String when(String at) => venueWhen(DateTime.parse(at), zone, 'fr');
+    String clockAt(String at) => venueClock(DateTime.parse(at), zone, 'fr');
+    String roomBanner(WidgetTester tester) => tester
+        .widget<Text>(find.descendant(of: find.byKey(const Key('event.room')), matching: find.byType(Text)))
+        .data!;
+    String ctaText(WidgetTester tester) =>
+        (tester.widget<FilledButton>(find.byKey(const Key('event.cta'))).child! as Text).data!;
+
+    test('the real answers read: phase, label, next, members prices; "dès" is a price anyone can pay', () {
+      final d = EventDetail.fromJson(presale(), fetchedAt: clock.now);
+      final room = d.event.room!;
+      expect((room.phase, room.label, room.status), (1, 'Prévente membres', 'PRE_QUEUE'));
+      expect(
+        (room.saleStartsAt, room.eligibility!.memberJoinedBefore),
+        (DateTime.parse(presaleStart), DateTime.parse(presaleStart)),
+      );
+      expect(
+        (room.next!.phase, room.next!.label, room.next!.opensAt),
+        (2, 'Vente générale', DateTime.parse(generalOpens)),
+      );
+      final est = d.zones.single;
+      expect([for (final p in est.prices) p.membersOnly], [false, true]);
+      expect((est.hasMembersPrice, est.firstOpen!.priceCategoryId, est.fromPriceMad), (true, priceId('ALL'), 5000));
+      // Phase 1 ended by hand: the gap reads phase 2 still SCHEDULED; then its pre-queue, with no phase after it.
+      for (final (name, status) in [('event_room_gap', 'SCHEDULED'), ('event_room_general', 'PRE_QUEUE')]) {
+        final r = EventDetail.fromJson(realAnswer(name).body, fetchedAt: clock.now).event.room!;
+        expect(
+          (r.phase, r.label, r.status, r.opensAt, r.saleStartsAt, r.eligibility, r.next),
+          (2, 'Vente générale', status, DateTime.parse(generalOpens), DateTime.parse(generalStart), null, null),
+          reason: name,
+        );
+      }
+      // The presale queue token, in the gap and once phase 2 opened: ENDED, nothing more to poll.
+      for (final name in ['poll_ended_gap', 'poll_ended_presale']) {
+        final q = QueueStatus.fromJson(realAnswer(name).body);
+        expect((q.phase, q.pollAfterS, q.admissionToken), (QueuePhase.ended, 0, null), reason: name);
+      }
+      // An order in the gap: the next phase's sale hasn't started.
+      final (:status, :body) = realAnswer('order_409_not_started_gap');
+      final details = body['details']! as Map<String, Object?>;
+      final gap = ApiError(status: status, code: body['code']! as String, message: '', details: details);
+      expect((apiErrorText(l, gap), details['sale_starts_at']), (l.errorNotStarted, generalStart));
+      // A step-1 room (no phase fields) still reads as phase 1 without a next.
+      final old = Room.fromJson(roomJson());
+      expect((old.phase, old.label, old.next), (1, null, null));
+    });
+
+    test("the goldens' design answers (test/fixtures/goldens) have the real answers' shape", () {
+      // Every key path, list items merged: the goldens can't show a field the server doesn't send, or miss one.
+      // `metadata` is the organizer's free-form jsonb: not walked.
+      Set<String> paths(Object? v, [String at = '']) => switch (v) {
+        Map<String, Object?>() when at != '.metadata' => {
+          for (final MapEntry(:key, :value) in v.entries) ...paths(value, '$at.$key'),
+          at,
+        },
+        List<Object?>() => {for (final x in v) ...paths(x, '$at[]'), at},
+        _ => {at},
+      };
+      for (final name in ['event_room_presale_next', 'order_409_members_only']) {
+        expect(paths(realAnswer(name, dir: 'goldens').body), paths(realAnswer(name).body), reason: name);
+      }
+    });
+
+    test('"dès" counts only prices anyone can pay: members prices alone show none, screen 3 still starts on one', () {
+      final zone = Zone.fromJson({
+        ...((presale()['zones']! as List<Object?>).first! as Map<String, Object?>),
+        'prices': [
+          {'price_category_id': 'a', 'name': 'Plein tarif', 'price_mad': 8000, 'remaining': 0, 'audience': 'ALL'},
+          {'price_category_id': 'm', 'name': 'Tarif membres', 'price_mad': 5000, 'remaining': 9, 'audience': 'MEMBERS'},
+        ],
+      });
+      expect((zone.fromPriceMad, zone.firstOpen!.priceCategoryId, zone.soldOut), (null, 'm', false));
+    });
+
+    testWidgets('screen 2: "{label} · tirage à", the next phase, the members chip and caption; the CTA has the label', (
+      tester,
+    ) async {
+      at('2026-11-15T15:26:52Z');
+      sale
+        ..detail = presale()
+        ..room = roomOf(presale());
+      await start(tester, location: '/events/1');
+      await tester.pumpAndSettle();
+      expect(
+        roomBanner(tester),
+        'Prévente membres · tirage à ${clockAt(presaleStart)}\n'
+        'Réservée aux fans vérifiés: membre inscrit avant le ${day(presaleStart)}',
+      );
+      expect(text(tester, 'event.next'), 'Ensuite : Vente générale · file dès ${clockAt(generalOpens)}');
+      expect(find.byKey(const Key('zone.2.members')), findsOneWidget);
+      expect(text(tester, 'event.members'), 'Tarif membres · inscrits avant le ${day(presaleStart)}');
+      expect(ctaText(tester), 'Prévente membres · rejoindre la file');
+    });
+
+    testWidgets('screen 2: an unnamed next phase is "Prochaine vente"; an unnamed room keeps the step-1 line', (
+      tester,
+    ) async {
+      sale
+        ..detail = presale()
+        ..room = (roomOf(presale())
+          ..['label'] = null
+          ..['next'] = {
+            'phase': 2,
+            'label': null,
+            'opens_at': '2027-02-21T09:30:00Z',
+            'sale_starts_at': '2027-02-21T10:00:00Z',
+          });
+      await start(tester, location: '/events/1');
+      await tester.pumpAndSettle();
+      expect(text(tester, 'event.next'), 'Ensuite : Prochaine vente · file dès ${when('2027-02-21T09:30:00Z')}');
+      expect(roomBanner(tester), startsWith("Vente à forte demande · file d'attente\n"));
+      expect(ctaText(tester), 'Rejoindre la file');
+    });
+
+    testWidgets('NOT_ELIGIBLE with a next phase: the panel, then "Ensuite : …"', (tester) async {
+      at('2026-11-15T15:26:52Z');
+      sale
+        ..detail = presale()
+        ..room = roomOf(presale())
+        ..joins.add(() => sale.real('not_eligible_not_member'));
+      await start(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('queue.notEligible')), findsOneWidget);
+      expect(text(tester, 'queue.next'), 'Ensuite : Vente générale · file dès ${clockAt(generalOpens)}');
+    });
+
+    /// Screen 12 in the presale, whose next poll answers [ended] while the event has become [event] (phase 2).
+    Future<ProviderContainer> presaleEnds(WidgetTester tester, String ended, String event) {
+      at(realAnswer(ended).body['server_time']! as String);
+      sale
+        ..detail = presale()
+        ..room = roomOf(presale())
+        ..polls.add(() {
+          sale
+            ..detail = realAnswer(event).body
+            ..room = roomOf(sale.detail!);
+          return sale.real(ended);
+        });
+      return start(tester);
+    }
+
+    testWidgets('poll ENDED once phase 2 opened: the event is read again, screen 2 offers its queue, no join', (
+      tester,
+    ) async {
+      final container = await presaleEnds(tester, 'poll_ended_presale', 'event_room_general');
+      final reads = sale.calls('GET', '/fan/events/1').length;
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.byType(QueueScreen), findsNothing);
+      expect(sale.calls('GET', '/fan/events/1').length, greaterThan(reads));
+      final cta = tester.widget<FilledButton>(find.byKey(const Key('event.cta')));
+      expect(((cta.child! as Text).data, cta.onPressed != null), ('Vente générale · rejoindre la file', true));
+      expect(sale.calls('POST', '/fan/queue'), hasLength(1), reason: 'the first join only: no automatic join');
+      expect((await container.read(queuePassesProvider.future))[1], isNull);
+      await tester.pump(const Duration(minutes: 1));
+      expect(sale.calls('GET', '/fan/queue'), hasLength(1));
+    });
+
+    testWidgets('poll ENDED in the gap (phase 1 ended by hand, phase 2 SCHEDULED): "{label} · file dès" disabled', (
+      tester,
+    ) async {
+      await presaleEnds(tester, 'poll_ended_gap', 'event_room_gap');
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      final cta = tester.widget<FilledButton>(find.byKey(const Key('event.cta')));
+      expect(((cta.child! as Text).data, cta.onPressed), ('Vente générale · file dès ${clockAt(generalOpens)}', null));
+      expect(sale.calls('POST', '/fan/queue'), hasLength(1));
+    });
+
+    testWidgets('poll ENDED and the event cannot be read again: screen 2, which offers its own retry', (tester) async {
+      sale.polls.add(() {
+        sale.detailFails = true;
+        return sale.answer(sale.q(status: 'ENDED', pollAfter: 0));
+      });
+      final container = await start(tester);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.byType(QueueScreen), findsNothing);
+      expect(container.read(routerProvider).routerDelegate.currentConfiguration.uri.path, '/events/1');
+      expect(find.byType(ErrorPanel), findsOneWidget);
+      sale.detailFails = false;
+      await tester.tap(find.text(l.retry));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('event.cta')), findsOneWidget);
+      expect(sale.calls('POST', '/fan/queue'), hasLength(1));
+    });
+
+    test('"matchs au stade" for a match, "événements" otherwise (Q182)', () {
+      FanEvent event(String type) => FanEvent.fromJson(
+        eventJson(eventType: type)..['room'] = roomJson(eligibility: {'min_events_attended': 3}),
+        fetchedAt: clock.now,
+      );
+      expect(eligibilityLine(l, event('FOOTBALL_MATCH')), 'Réservée aux fans vérifiés: 3 matchs au stade');
+      expect(eligibilityLine(l, event('CONCERT')), 'Réservée aux fans vérifiés: 3 événements');
+      expect(l.queueNotEnoughEventsAny(1, 0), 'Il faut 1 événement · tu en as 0');
+      expect(l.queueNotEnoughEventsAny(3, 2), 'Il faut 3 événements · tu en as 2');
+    });
+
+    testWidgets('NOT_ENOUGH_EVENTS on a concert says "événements"', (tester) async {
+      sale
+        ..detail = eventJson(
+          eventType: 'CONCERT',
+          metadata: const {'headliner': 'Hoba Hoba Spirit'},
+          onSale: false,
+          zones: [
+            zoneJson(1, 'Fosse', [(20000, 300)], seated: false),
+          ],
+        )
+        ..joins.add(() => sale.real('not_eligible_not_enough_events'));
+      await start(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Il faut 1 événement · tu en as 0'), findsOneWidget);
+    });
+
+    for (final (fixture, row, copy) in [
+      ('order_409_members_only', 0, (String day) => 'Tarif réservé aux membres inscrits avant le $day'),
+      ('order_409_holder_limit', 1, (String _) => 'Ce numéro a atteint la limite de 4 billets pour cet événement'),
+    ]) {
+      testWidgets('screen 4: $fixture is said under holder row ${row + 1}, picked by details.field', (tester) async {
+        sale
+          ..detail = presale()
+          ..room = null
+          ..orders.add(() => sale.real(fixture));
+        await start(tester, location: '/events/1/checkout?price=${priceId('MEMBERS')}&qty=2');
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('holder.1.name')), 'Sara Benali');
+        await tester.enterText(find.byKey(const Key('holder.1.phone')), '0612345678');
+        await tester.dragUntilVisible(
+          find.byKey(const Key('checkout.consent')),
+          find.byType(ListView).last,
+          const Offset(0, -200),
+        );
+        await tester.tap(find.byKey(const Key('checkout.consent')));
+        await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
+        await tester.tap(find.byKey(const Key('checkout.pay')));
+        await tester.pumpAndSettle();
+        expect(sale.calls('POST', '/fan/orders'), hasLength(1));
+        await tester.scrollUntilVisible(
+          find.byKey(Key('holder.$row.refusal')),
+          -200,
+          scrollable: find.byType(Scrollable).last,
+        );
+        expect(text(tester, 'holder.$row.refusal'), copy(day(presaleStart)));
+        expect(find.byKey(Key('holder.${1 - row}.refusal'), skipOffstage: false), findsNothing);
+        expect(find.byType(ErrorPanel), findsNothing);
+      });
+    }
+
+    test('holder copy: a members price without a sale start, the limit as a plural, the buyer limit untouched', () {
+      String? copy(String code, Map<String, Object?> details) =>
+          holderRefusalText(l, ApiError(status: 409, code: code, message: code, details: details), zone);
+      expect(
+        copy('MEMBERS_ONLY', {'field': 'items[0].holders[0]', 'member_joined_before': null}),
+        'Tarif réservé aux membres',
+      );
+      expect(
+        copy('PER_ACCOUNT_LIMIT', {'reason': 'HOLDER', 'field': 'to_phone', 'limit': 1}),
+        'Ce numéro a atteint la limite de 1 billet pour cet événement',
+      );
+      expect(copy('PER_ACCOUNT_LIMIT', {'limit': 4, 'held': 4}), isNull);
+      // No row to put it on: the banner still says why.
+      expect(
+        apiErrorText(l, const ApiError(status: 409, code: 'MEMBERS_ONLY', message: 'x')),
+        'Tarif réservé aux membres',
+      );
+    });
+  });
+
   group('the real API (FL-26 real run, test/fixtures/queue)', () {
     // The phone's clock as the server's at the first captured answer.
     setUp(() {
@@ -759,7 +1053,10 @@ void main() {
       sale.polls
         ..clear()
         ..add(() => sale.real('poll_after_rejoin'))
-        ..add(() => sale.real('poll_ended'));
+        ..add(() {
+          sale.room = null; // The real run ended its only room.
+          return sale.real('poll_ended');
+        });
       await tester.tap(find.byKey(const Key('queue.rejoin')));
       await flush(tester);
       await tester.pump(const Duration(milliseconds: 300));

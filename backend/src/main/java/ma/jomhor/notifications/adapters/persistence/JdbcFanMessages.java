@@ -1,8 +1,12 @@
 package ma.jomhor.notifications.adapters.persistence;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.notifications.application.FanMessages;
 import ma.jomhor.notifications.domain.FanMessage;
@@ -53,6 +57,36 @@ class JdbcFanMessages implements FanMessages {
     }
 
     /**
+     * No unique index: the caller (the waitlist job) queues once per wait, under its own lock. created_at is the job's
+     * clock, the one its cooldown is measured on.
+     */
+    @Override
+    public void enqueueEvent(UUID org, int eventId, FanMessage.Kind kind, List<FanMessage.Channel> channels,
+                             Collection<UUID> userIds, Instant at) {
+        jdbc.sql("""
+                        insert into fan_messages (organizer_id, user_id, channel, kind, event_id, created_at)
+                        select :org, u.id, cast(c.channel as message_channel), cast(:kind as message_kind), :event, :at
+                        from unnest(cast(:users as uuid[])) as u(id)
+                        cross join unnest(cast(:channels as text[])) as c(channel)
+                        """)
+                .param("org", org).param("event", eventId).param("kind", kind.name())
+                .param("channels", channels.stream().map(Enum::name).toArray(String[]::new))
+                .param("users", userIds.toArray(UUID[]::new)).param("at", at.atOffset(ZoneOffset.UTC)).update();
+    }
+
+    /** The waitlist cooldown, once per event per job run; served by the partial index (event_id, created_at). */
+    @Override
+    public Optional<Instant> lastQueued(UUID org, int eventId, FanMessage.Kind kind) {
+        return jdbc.sql("""
+                        select max(created_at) as at from fan_messages
+                        where organizer_id = :org and event_id = :event and kind = cast(:kind as message_kind)
+                        """)
+                .param("org", org).param("event", eventId).param("kind", kind.name())
+                .query((rs, n) -> Optional.ofNullable(rs.getObject("at", OffsetDateTime.class))).single()
+                .map(OffsetDateTime::toInstant);
+    }
+
+    /**
      * One CAMPAIGN row per user; a user already queued for the campaign is left as it is (the unique index
      * (campaign_id, user_id)). ponytail: the ids travel as one in-memory array, fine to about 100k recipients; page the
      * snapshot (or insert ... select the audience in SQL) beyond that.
@@ -85,7 +119,7 @@ class JdbcFanMessages implements FanMessages {
     public List<FanMessage> claimDue(int limit) {
         return jdbc.sql("""
                         select id, organizer_id, user_id, channel::text, kind::text, campaign_id, order_id, ticket_id,
-                               attempts
+                               event_id, attempts
                         from fan_messages
                         where status = 'PENDING' and next_attempt_at <= now()
                         order by (kind = 'CAMPAIGN'), next_attempt_at
@@ -97,7 +131,8 @@ class JdbcFanMessages implements FanMessages {
                         rs.getObject("organizer_id", UUID.class), rs.getObject("user_id", UUID.class), FanMessage.Channel.valueOf(rs.getString("channel")),
                         FanMessage.Kind.valueOf(rs.getString("kind")), rs.getObject("campaign_id", UUID.class),
                         rs.getObject("order_id", UUID.class),
-                        rs.getObject("ticket_id", UUID.class), rs.getInt("attempts")))
+                        rs.getObject("ticket_id", UUID.class), rs.getObject("event_id", Integer.class),
+                        rs.getInt("attempts")))
                 .list();
     }
 

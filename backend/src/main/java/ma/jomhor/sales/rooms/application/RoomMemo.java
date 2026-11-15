@@ -3,10 +3,11 @@ package ma.jomhor.sales.rooms.application;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.InstantSource;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import ma.jomhor.sales.rooms.domain.WaitingRoom;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Per-instance copy of every room not ENDED (docs/04-api.md §Waiting room Memo), reloaded by one statement at most
+ * Per-instance copy of every room not ENDED, by event then phase (docs/04-api.md §Waiting room Memo), reloaded by one statement at most
  * once per {@code rooms.memo-ttl} whatever the number of readers. A cache, never a source of truth: it may be one
  * TTL behind the database (01 §Deployment). A write on this instance calls {@link #invalidate()} after its commit; a
  * reload already running then is not kept (generation check), so the next read on this instance sees the write.
@@ -22,7 +23,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class RoomMemo {
 
-    private record Snapshot(Map<Integer, WaitingRoom> rooms, Instant loadedAt) {}
+    private record Snapshot(Map<Integer, List<WaitingRoom>> rooms, Instant loadedAt) {}
 
     private static final Snapshot STALE = new Snapshot(Map.of(), null);
 
@@ -43,9 +44,14 @@ public class RoomMemo {
         this.ttl = ttl;
     }
 
-    /** The event's room unless it has ENDED (or has none). */
-    public Optional<WaitingRoom> get(int eventId) {
-        return Optional.ofNullable(current().get(eventId));
+    /** The event's rooms not ENDED, by phase; empty when it has none. */
+    public List<WaitingRoom> rooms(int eventId) {
+        return byEvent().getOrDefault(eventId, List.of());
+    }
+
+    /** The event's current phase at {@code now} (WaitingRoom#current); empty when none or every phase has ENDED. */
+    public Optional<WaitingRoom> current(int eventId, Instant now) {
+        return WaitingRoom.current(rooms(eventId), now);
     }
 
     /** The next read reloads. */
@@ -54,7 +60,7 @@ public class RoomMemo {
         snapshot = STALE;
     }
 
-    private Map<Integer, WaitingRoom> current() {
+    private Map<Integer, List<WaitingRoom>> byEvent() {
         Snapshot s = snapshot;
         if (fresh(s)) {
             return s.rooms();
@@ -64,8 +70,8 @@ public class RoomMemo {
             if (!fresh(s)) {
                 long g = generation.get();
                 Instant now = clock.instant();
-                s = new Snapshot(rooms.live().stream()
-                        .collect(Collectors.toUnmodifiableMap(WaitingRoom::eventId, Function.identity())), now);
+                s = new Snapshot(rooms.live().stream().sorted(Comparator.comparingInt(WaitingRoom::phase))
+                        .collect(Collectors.groupingBy(WaitingRoom::eventId, Collectors.toUnmodifiableList())), now);
                 if (generation.get() == g) { // else invalidated while loading: this read may miss that write
                     snapshot = s;
                 }

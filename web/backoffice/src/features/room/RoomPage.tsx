@@ -1,7 +1,6 @@
-import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useState, type ReactNode } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { DoorOpen, Gauge, Hourglass, ShoppingCart, Ticket, Users } from 'lucide-react'
+import { DoorOpen, Gauge, Hourglass, Plus, ShoppingCart, Ticket, Users } from 'lucide-react'
 import { Controller, useForm, useWatch, type UseFormRegisterReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useParams } from 'react-router'
@@ -20,32 +19,35 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { useCanWrite, useOrganizer } from '@/features/auth/organizer'
+import { useCanWrite } from '@/features/auth/organizer'
 import { useEvent, usePrices, type EventDetail } from '@/features/events/api'
 import { ApiError } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { showFormError } from '@/lib/forms'
-import { formatDateTime, formatTime } from '@/lib/time'
+import { formatDateTime, formatTime, utcToWall, wallToUtc } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import {
   canEnd,
   canPause,
   canResume,
+  currentPhase,
+  endBody,
+  MAX_PHASES,
   rateEstimate,
   rateOnlyBody,
   roomSchema,
   toBody,
   toForm,
-  useRoom,
   useRoomMutation,
+  useRooms,
+  type EndBody,
   type Room,
   type RoomBody,
   type RoomForm,
-  type RoomResponse,
   type RoomStatus,
 } from './api'
 
@@ -59,8 +61,10 @@ const STATUS_STYLE: Record<RoomStatus, { badge: string; dot: string }> = {
 }
 
 const isNotFound = (e: unknown) => e instanceof ApiError && ['NOT_FOUND', 'BAD_REQUEST'].includes(e.code)
+const isRunning = (s: RoomStatus) => s === 'PRE_QUEUE' || s === 'OPEN' || s === 'PAUSED'
+const WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
 
-/** B13 Salle d'attente: `/events/:id/room`. ADMIN and OPS configure and steer; FINANCE reads. */
+/** B13 Salle d'attente: `/events/:id/room`. ADMIN and OPS configure and steer each phase; FINANCE reads. */
 export function RoomPage() {
   const id = useParams().id ?? ''
   // Same id rule as the event page: integers only, `/01` and `/1` are one query key.
@@ -68,13 +72,19 @@ export function RoomPage() {
   return <EventRoomPage id={String(Number(id))} />
 }
 
-/** B2 Règles row: "File d'attente · {status}" and a link to B13. */
+/** B2 Règles row: "File d'attente · {n} phase(s) · {current status}" and a link to B13. */
 export function RoomRuleRow({ eventId }: { eventId: number }) {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
-  const room = useRoom(String(eventId))
-  const status = room.data?.room?.status
-  const value = room.data ? (status ? t(`room.statuses.${status}`) : t('room.none')) : room.isError ? t(errorKey(room.error)) : t('common.loading')
+  const rooms = useRooms(String(eventId))
+  const list = rooms.data?.rooms
+  const value = list
+    ? list.length
+      ? t('room.ruleValue', { count: list.length, status: t(`room.statuses.${currentPhase(list)?.status ?? 'ENDED'}`) })
+      : t('room.none')
+    : rooms.isError
+      ? t(errorKey(rooms.error))
+      : t('common.loading')
   return (
     <Field className="md:col-span-2">
       <FieldLabel htmlFor="event-room">{t('room.rule')}</FieldLabel>
@@ -105,31 +115,131 @@ function EventRoomPage({ id }: { id: string }) {
   const { t } = useTranslation()
   const canWrite = useCanWrite()
   const event = useEvent(id)
-  const room = useRoom(id, true)
+  const rooms = useRooms(id, true)
   const prices = usePrices(id)
+  const [adding, setAdding] = useState(false)
 
-  if (isNotFound(event.error) || isNotFound(room.error)) return <Navigate to="/events" replace state={{ notFound: true }} />
-  if (event.isPending || room.isPending) return <LoadingRows rows={6} />
+  if (isNotFound(event.error) || isNotFound(rooms.error)) return <Navigate to="/events" replace state={{ notFound: true }} />
+  if (event.isPending || rooms.isPending) return <LoadingRows rows={6} />
   if (!event.data) return <ErrorNotice error={event.error} onRetry={() => void event.refetch()} className="p-0" />
   // Data first: a failed background refetch keeps the last figures.
-  if (!room.data) return <ErrorNotice error={room.error} onRetry={() => void room.refetch()} className="p-0" />
+  if (!rooms.data) return <ErrorNotice error={rooms.error} onRetry={() => void rooms.refetch()} className="p-0" />
 
-  const current = room.data.room
+  const list = rooms.data.rooms
   const quota = prices.data?.reduce((sum, p) => sum + p.quota, 0) ?? 0
+  const next = list.length + 1
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         crumbs={[{ label: t('events.title'), to: '/events' }, { label: event.data.title, to: `/events/${encodeURIComponent(event.data.id)}` }, { label: t('room.title') }]}
         title={t('room.title')}
-        badge={current && <RoomBadge room={current} zone={event.data.timezone} />}
         description={event.data.title}
-        actions={current && canWrite && <RoomControls eventId={id} status={current.status} />}
       />
       {!canWrite && <p className="text-sm text-muted-foreground">{t('room.readOnly')}</p>}
-      {current && <RoomKpis figures={current.figures} />}
-      {/* Remounted when the room starts: an edit left from SCHEDULED must not linger in a now-disabled field. */}
-      <RoomSettings key={current && current.status !== 'SCHEDULED' ? 'started' : 'setup'} event={event.data} room={current} canWrite={canWrite} quota={quota} />
+      {list.length === 0 ? (
+        <Card className="max-w-3xl">
+          <CardHeader>
+            <CardTitle role="heading" aria-level={2}>
+              {t('room.intro.title')}
+            </CardTitle>
+            <CardDescription>{t('room.intro.body')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RoomSettings event={event.data} phase={1} room={null} canWrite={canWrite} quota={quota} />
+          </CardContent>
+        </Card>
+      ) : (
+        <ol className="flex flex-col gap-4" aria-label={t('room.phase.list')}>
+          {list.map((r) => (
+            <li key={r.phase}>
+              <PhaseCard event={event.data} room={r} rooms={list} canWrite={canWrite} quota={quota} />
+            </li>
+          ))}
+        </ol>
+      )}
+      {canWrite && adding && list.length > 0 && next <= MAX_PHASES && (
+        <Card className="border-dashed">
+          <CardHeader>
+            <PhaseHeading phase={next} title={t('room.phase.newTitle', { n: next })} />
+            <CardDescription>{t('room.phase.newBody')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RoomSettings key={next} event={event.data} phase={next} room={null} canWrite={canWrite} quota={quota} onDone={() => setAdding(false)} />
+          </CardContent>
+        </Card>
+      )}
+      {canWrite && !adding && list.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" disabled={next > MAX_PHASES} onClick={() => setAdding(true)}>
+            <Plus />
+            {t('room.phase.add')}
+          </Button>
+          <span className="text-sm text-muted-foreground">{t(next > MAX_PHASES ? 'room.phase.max' : 'room.phase.addHint')}</span>
+        </div>
+      )}
     </div>
+  )
+}
+
+/** The phase number in a disc, then the title (and badge): one heading per phase card. */
+function PhaseHeading({ phase, title, badge }: { phase: number; title: string; badge?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <span
+        aria-hidden="true"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full border bg-muted text-sm font-semibold text-foreground tabular-nums"
+      >
+        {phase}
+      </span>
+      <CardTitle role="heading" aria-level={2}>
+        {title}
+      </CardTitle>
+      {badge}
+    </div>
+  )
+}
+
+/**
+ * One phase: N°, label, status, its sale start and queue opening in the venue zone, its controls; the live KPIs while it
+ * runs; its settings.
+ */
+function PhaseCard({ event, room, rooms, canWrite, quota }: { event: EventDetail; room: Room; rooms: Room[]; canWrite: boolean; quota: number }) {
+  const { t, i18n } = useTranslation()
+  const zone = event.timezone
+  const later = rooms.filter((r) => r.phase > room.phase)
+  const started = room.status !== 'SCHEDULED'
+  const note =
+    room.status === 'ENDED' ? t(later.some((r) => r.status !== 'ENDED') ? 'room.phase.ended' : 'room.ended') : started ? t('room.started') : undefined
+  return (
+    <Card className={cn(isRunning(room.status) && 'ring-1 ring-success-border', room.status === 'ENDED' && 'bg-muted/30')}>
+      <CardHeader>
+        <PhaseHeading
+          phase={room.phase}
+          title={room.label ? t('room.phase.titleLabel', { n: room.phase, label: room.label }) : t('room.phase.title', { n: room.phase })}
+          badge={<RoomBadge room={room} zone={zone} />}
+        />
+        <CardDescription>
+          {/* The pre-queue can open up to 1440 min before: then its own date too. */}
+          {utcToWall(room.opens_at, zone).slice(0, 10) === utcToWall(room.sale_starts_at, zone).slice(0, 10)
+            ? t('room.phase.when', { date: formatDateTime(room.sale_starts_at, i18n.language, zone), time: formatTime(room.opens_at, i18n.language, zone), zone })
+            : t('room.phase.whenOtherDay', {
+                date: formatDateTime(room.sale_starts_at, i18n.language, zone),
+                opens: formatDateTime(room.opens_at, i18n.language, zone),
+                zone,
+              })}
+        </CardDescription>
+        {canWrite && (
+          <CardAction className="flex flex-wrap justify-end gap-2">
+            <RoomControls eventId={String(event.id)} room={room} body={endBody(rooms, room.phase)} />
+          </CardAction>
+        )}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        {isRunning(room.status) && <RoomKpis figures={room.figures} />}
+        {/* Remounted when the phase starts: an edit left from SCHEDULED must not linger in a now-disabled field. */}
+        <RoomSettings key={started ? 'started' : 'setup'} event={event} phase={room.phase} room={room} canWrite={canWrite} quota={quota} note={note} />
+      </CardContent>
+    </Card>
   )
 }
 
@@ -159,21 +269,17 @@ function RoomKpis({ figures: f }: { figures: Room['figures'] }) {
   )
 }
 
-/** Pause / Reprendre / Terminer la file, as the status allows (04). A 409 ROOM_STATUS says so; the room is refetched. */
-function RoomControls({ eventId, status }: { eventId: string; status: RoomStatus }) {
+/** Pause / Reprendre / Terminer la file of one phase, as its status allows (04). A 409 ROOM_STATUS says so; the list is refetched. */
+function RoomControls({ eventId, room, body }: { eventId: string; room: Room; body: EndBody }) {
   const { t } = useTranslation()
-  const { organizer_id: organizerId } = useOrganizer()
-  const queryClient = useQueryClient()
-  const action = useRoomMutation(eventId)
+  const action = useRoomMutation(eventId, room.phase)
   const [ending, setEnding] = useState(false)
+  const { status, phase } = room
   const run = (kind: 'pause' | 'resume' | 'end', done: string) =>
     action.mutate(
       { kind },
       {
-        onSuccess: (r) => {
-          queryClient.setQueryData(['org', organizerId, 'events', eventId, 'room'], r)
-          toast.success(done)
-        },
+        onSuccess: () => void toast.success(done),
         onError: (e) => void toast.error(t(errorKey(e))),
         onSettled: () => setEnding(false),
       },
@@ -181,12 +287,12 @@ function RoomControls({ eventId, status }: { eventId: string; status: RoomStatus
   return (
     <>
       {canPause(status) && (
-        <Button variant="outline" disabled={action.isPending} onClick={() => run('pause', t('room.paused'))}>
+        <Button variant="outline" disabled={action.isPending} onClick={() => run('pause', t('room.paused', { n: phase }))}>
           {t('room.actions.pause')}
         </Button>
       )}
       {canResume(status) && (
-        <Button variant="outline" disabled={action.isPending} onClick={() => run('resume', t('room.resumed'))}>
+        <Button variant="outline" disabled={action.isPending} onClick={() => run('resume', t('room.resumed', { n: phase }))}>
           {t('room.actions.resume')}
         </Button>
       )}
@@ -197,12 +303,12 @@ function RoomControls({ eventId, status }: { eventId: string; status: RoomStatus
           </Button>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>{t('room.endConfirm.title')}</AlertDialogTitle>
-              <AlertDialogDescription>{t('room.endConfirm.body')}</AlertDialogDescription>
+              <AlertDialogTitle>{t('room.endConfirm.title', { n: phase })}</AlertDialogTitle>
+              <AlertDialogDescription>{t(body)}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-              <Button variant="destructive" disabled={action.isPending} onClick={() => run('end', t('room.endConfirm.done'))}>
+              <Button variant="destructive" disabled={action.isPending} onClick={() => run('end', t('room.endConfirm.done', { n: phase }))}>
                 {t('room.endConfirm.confirm')}
               </Button>
             </AlertDialogFooter>
@@ -214,40 +320,61 @@ function RoomControls({ eventId, status }: { eventId: string; status: RoomStatus
 }
 
 /**
- * Not configured: the intro and the form (PUT creates). SCHEDULED: the same form (PUT replaces). Once started only the
- * rate stays editable, applied after a confirm with the rest sent unchanged. ENDED and FINANCE: read-only.
+ * One phase's settings. Not configured: the form (PUT creates, then `onDone`). SCHEDULED: the same form (PUT replaces).
+ * Once started only the rate stays editable, applied after a confirm with the rest sent unchanged. ENDED and FINANCE:
+ * read-only. Every phase has "Libellé"; phase ≥ 2 adds "Début de la vente".
  */
-function RoomSettings({ event, room, canWrite, quota }: { event: EventDetail; room: Room | null; canWrite: boolean; quota: number }) {
+function RoomSettings({
+  event,
+  phase,
+  room,
+  canWrite,
+  quota,
+  note,
+  onDone,
+}: {
+  event: EventDetail
+  phase: number
+  room: Room | null
+  canWrite: boolean
+  quota: number
+  note?: string
+  onDone?: () => void
+}) {
   const { t, i18n } = useTranslation()
-  const { organizer_id: organizerId } = useOrganizer()
-  const queryClient = useQueryClient()
   const zone = event.timezone
   const started = !!room && room.status !== 'SCHEDULED'
   const editable = canWrite && room?.status !== 'ENDED'
   const form = useForm<RoomForm>({
-    resolver: zodResolver(roomSchema(t, zone, event.sale_starts_at, started)),
+    resolver: zodResolver(roomSchema(t, zone, event.sale_starts_at, started, phase)),
     defaultValues: toForm(room, zone),
     // Follows the polled server copy; fields being edited keep their value.
     values: room ? toForm(room, zone) : undefined,
     resetOptions: { keepDirtyValues: true, keepErrors: true },
   })
-  const save = useRoomMutation(String(event.id))
+  const save = useRoomMutation(String(event.id), phase)
   const [confirmRate, setConfirmRate] = useState<number | null>(null)
   const { errors, isDirty } = form.formState
-  const [preQueue, rate, verified] = useWatch({ control: form.control, name: ['pre_queue_min', 'admission_rate_per_min', 'verified'] })
+  const [startsAt, preQueue, rate, verified] = useWatch({ control: form.control, name: ['starts_at', 'pre_queue_min', 'admission_rate_per_min', 'verified'] })
 
   const put = (body: RoomBody, done: string) =>
     save.mutate(
       { kind: 'put', body },
       {
-        onSuccess: (r: RoomResponse) => {
-          queryClient.setQueryData(['org', organizerId, 'events', String(event.id), 'room'], r)
-          form.reset(toForm(r.room, zone))
+        onSuccess: (r) => {
+          form.reset(toForm(r, zone))
           toast.success(done)
+          onDone?.()
         },
         onError: (e) => {
           if (e instanceof ApiError && e.code === 'ROOM_STATUS') return void toast.error(t(errorKey(e)))
           if (e instanceof ApiError && e.details.reason === 'SALE_START_REQUIRED') return form.setError('root', { message: t('room.form.saleStartRequired') })
+          if (e instanceof ApiError && e.details.reason === 'PHASE_ORDER') {
+            // 422 on `starts_at` or `pre_queue_min` (04); neither named: the previous phase is missing.
+            const fields = Object.keys(Object(e.details.fields)).filter((f): f is 'starts_at' | 'pre_queue_min' => f === 'starts_at' || f === 'pre_queue_min')
+            if (!fields.length) return form.setError('root', { message: t('room.form.phaseOrder') })
+            return fields.forEach((f, i) => form.setError(f, { message: t('room.form.phaseOrder') }, { shouldFocus: i === 0 }))
+          }
           showFormError(e, form, t)
         },
         onSettled: () => setConfirmRate(null),
@@ -255,143 +382,172 @@ function RoomSettings({ event, room, canWrite, quota }: { event: EventDetail; ro
     )
   const submit = form.handleSubmit((v) => {
     if (started) return setConfirmRate(Number(v.admission_rate_per_min))
-    put(toBody(v, zone), t(room ? 'room.form.saved' : 'room.form.created'))
+    put(toBody(v, zone, phase), room ? t('room.form.saved') : phase === 1 ? t('room.form.created') : t('room.phase.created', { n: phase }))
   })
 
-  // The computed opening, in the venue zone.
+  // The computed opening, in the venue zone, from this phase's sale start.
+  const saleStart = phase === 1 ? event.sale_starts_at : WALL.test(startsAt) ? wallToUtc(startsAt, zone) : null
   const preQueueMin = /^\d+$/.test(preQueue.trim()) ? Number(preQueue) : null
-  const opensAt = event.sale_starts_at && preQueueMin !== null ? new Date(Date.parse(event.sale_starts_at) - preQueueMin * 60_000).toISOString() : null
+  const opensAt = saleStart && preQueueMin !== null ? new Date(Date.parse(saleStart) - preQueueMin * 60_000).toISOString() : null
   const rateN = /^\d+$/.test(rate.trim()) ? Number(rate) : 0
   const estimate = rateN > 0 ? rateEstimate(rateN, quota) : null
   const locked = started || !editable
+  const submitLabel = room ? t(started ? 'room.form.apply' : 'room.form.save') : phase === 1 ? t('room.form.create') : t('room.phase.create', { n: phase })
 
   return (
-    <Card className="max-w-3xl">
-      <CardHeader>
-        <CardTitle role="heading" aria-level={2}>
-          {t(room ? 'room.form.title' : 'room.intro.title')}
-        </CardTitle>
-        <CardDescription>{t(room?.status === 'ENDED' ? 'room.ended' : started ? 'room.started' : 'room.intro.body')}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form noValidate onSubmit={(e) => void submit(e)}>
-          <FieldSet disabled={!editable || save.isPending}>
-            <FieldGroup className="grid gap-6 md:grid-cols-2">
-              <NumberField
-                id="room-pre-queue"
-                label={t('room.form.preQueue')}
-                hint={
-                  !event.sale_starts_at
-                    ? t('room.form.preQueueNoSale')
-                    : opensAt
-                      ? t('room.form.preQueueHint', { date: formatDateTime(opensAt, i18n.language, zone), zone })
-                      : undefined
-                }
-                error={errors.pre_queue_min?.message}
+    <div className="flex max-w-3xl flex-col gap-4">
+      {room && (
+        <div className="flex flex-col gap-1">
+          <h3 className="text-sm font-medium">{t('room.form.title')}</h3>
+          {note && <p className="text-sm text-muted-foreground">{note}</p>}
+        </div>
+      )}
+      <form noValidate onSubmit={(e) => void submit(e)}>
+        <FieldSet disabled={!editable || save.isPending}>
+          <FieldGroup className="grid gap-6 md:grid-cols-2">
+            <TextField
+              id={`room-${phase}-label`}
+              type="text"
+              label={t('room.form.label')}
+              hint={t('room.form.labelHint')}
+              error={errors.label?.message}
+              disabled={locked}
+              className={phase === 1 ? 'md:col-span-2' : undefined}
+              registration={form.register('label')}
+            />
+            {phase >= 2 && (
+              <TextField
+                id={`room-${phase}-starts-at`}
+                type="datetime-local"
+                label={t('room.form.startsAt')}
+                hint={t('room.form.startsAtHint', { zone })}
+                error={errors.starts_at?.message}
                 disabled={locked}
-                registration={form.register('pre_queue_min')}
+                registration={form.register('starts_at')}
               />
-              <NumberField
-                id="room-rate"
-                label={t('room.form.rate')}
-                hint={
-                  !estimate
-                    ? undefined
-                    : estimate.minutes === null
-                      ? t('room.form.rateHintNoQuota', { orders: estimate.orders })
-                      : t('room.form.rateHint', { orders: estimate.orders, minutes: estimate.minutes })
-                }
-                error={errors.admission_rate_per_min?.message}
-                registration={form.register('admission_rate_per_min')}
-              />
-              <Controller
-                control={form.control}
-                name="verified"
-                render={({ field }) => (
-                  <Field orientation="horizontal" className="md:col-span-2" data-invalid={!!errors.verified}>
-                    <Switch
-                      id="room-verified"
-                      ref={field.ref}
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      onBlur={field.onBlur}
-                      disabled={locked}
-                      aria-invalid={!!errors.verified}
-                      aria-describedby={errors.verified ? 'room-verified-hint room-verified-error' : 'room-verified-hint'}
-                    />
-                    <div className="flex flex-col gap-1">
-                      <FieldLabel htmlFor="room-verified">{t('room.form.verified')}</FieldLabel>
-                      <FieldDescription id="room-verified-hint">{t('room.form.verifiedHint')}</FieldDescription>
-                      {errors.verified?.message && <FieldError id="room-verified-error">{errors.verified.message}</FieldError>}
-                    </div>
-                  </Field>
-                )}
-              />
-              {verified && (
-                <FieldSet className="rounded-lg bg-muted/60 p-4 md:col-span-2">
-                  <FieldGroup className="grid gap-4 md:grid-cols-3">
-                    <NumberField
-                      id="room-account-age"
-                      label={t('room.form.accountAge')}
-                      error={errors.eligibility?.min_account_age_days?.message}
-                      disabled={locked}
-                      registration={form.register('eligibility.min_account_age_days')}
-                    />
-                    <NumberField
-                      id="room-member-before"
-                      type="date"
-                      label={t('room.form.memberBefore')}
-                      error={errors.eligibility?.member_joined_before?.message}
-                      disabled={locked}
-                      registration={form.register('eligibility.member_joined_before')}
-                    />
-                    <NumberField
-                      id="room-events-attended"
-                      label={t('room.form.eventsAttended')}
-                      error={errors.eligibility?.min_events_attended?.message}
-                      disabled={locked}
-                      registration={form.register('eligibility.min_events_attended')}
-                    />
-                  </FieldGroup>
-                </FieldSet>
-              )}
-            </FieldGroup>
-            {errors.root?.message && <FieldError className="mt-4">{errors.root.message}</FieldError>}
-            {editable && (
-              <div className="mt-6 flex justify-end">
-                <Button type="submit" disabled={save.isPending || (!!room && !isDirty)}>
-                  {t(!room ? 'room.form.create' : started ? 'room.form.apply' : 'room.form.save')}
-                </Button>
-              </div>
             )}
-          </FieldSet>
-        </form>
-        <AlertDialog open={confirmRate !== null} onOpenChange={(o) => !o && setConfirmRate(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t('room.applyConfirm.title', { rate: confirmRate ?? 0 })}</AlertDialogTitle>
-              <AlertDialogDescription>{t('room.applyConfirm.body')}</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-              <Button disabled={save.isPending} onClick={() => confirmRate !== null && put(rateOnlyBody(room!, confirmRate), t('room.applyConfirm.done', { rate: confirmRate }))}>
-                {t('room.form.apply')}
+            <TextField
+              id={`room-${phase}-pre-queue`}
+              label={t('room.form.preQueue')}
+              hint={
+                phase === 1 && !event.sale_starts_at
+                  ? t('room.form.preQueueNoSale')
+                  : opensAt
+                    ? t('room.form.preQueueHint', { date: formatDateTime(opensAt, i18n.language, zone), zone })
+                    : undefined
+              }
+              error={errors.pre_queue_min?.message}
+              disabled={locked}
+              registration={form.register('pre_queue_min')}
+            />
+            <TextField
+              id={`room-${phase}-rate`}
+              label={t('room.form.rate')}
+              hint={
+                !estimate
+                  ? undefined
+                  : estimate.minutes === null
+                    ? t('room.form.rateHintNoQuota', { orders: estimate.orders })
+                    : t('room.form.rateHint', { orders: estimate.orders, minutes: estimate.minutes })
+              }
+              error={errors.admission_rate_per_min?.message}
+              registration={form.register('admission_rate_per_min')}
+            />
+            <Controller
+              control={form.control}
+              name="verified"
+              render={({ field }) => (
+                <Field orientation="horizontal" className="md:col-span-2" data-invalid={!!errors.verified}>
+                  <Switch
+                    id={`room-${phase}-verified`}
+                    ref={field.ref}
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    onBlur={field.onBlur}
+                    disabled={locked}
+                    aria-invalid={!!errors.verified}
+                    aria-describedby={errors.verified ? `room-${phase}-verified-hint room-${phase}-verified-error` : `room-${phase}-verified-hint`}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <FieldLabel htmlFor={`room-${phase}-verified`}>{t('room.form.verified')}</FieldLabel>
+                    <FieldDescription id={`room-${phase}-verified-hint`}>{t('room.form.verifiedHint')}</FieldDescription>
+                    {errors.verified?.message && <FieldError id={`room-${phase}-verified-error`}>{errors.verified.message}</FieldError>}
+                  </div>
+                </Field>
+              )}
+            />
+            {verified && (
+              <FieldSet className="rounded-lg bg-muted/60 p-4 md:col-span-2">
+                <FieldGroup className="grid gap-4 md:grid-cols-3">
+                  <TextField
+                    id={`room-${phase}-account-age`}
+                    label={t('room.form.accountAge')}
+                    error={errors.eligibility?.min_account_age_days?.message}
+                    disabled={locked}
+                    registration={form.register('eligibility.min_account_age_days')}
+                  />
+                  <TextField
+                    id={`room-${phase}-member-before`}
+                    type="date"
+                    label={t('room.form.memberBefore')}
+                    error={errors.eligibility?.member_joined_before?.message}
+                    disabled={locked}
+                    registration={form.register('eligibility.member_joined_before')}
+                  />
+                  <TextField
+                    id={`room-${phase}-events-attended`}
+                    // Q182: "matchs au stade" for a football match, "événements" otherwise.
+                    label={t(event.event_type === 'FOOTBALL_MATCH' ? 'room.form.eventsAttended' : 'room.form.eventsAttendedOther')}
+                    error={errors.eligibility?.min_events_attended?.message}
+                    disabled={locked}
+                    registration={form.register('eligibility.min_events_attended')}
+                  />
+                </FieldGroup>
+              </FieldSet>
+            )}
+          </FieldGroup>
+          {errors.root?.message && <FieldError className="mt-4">{errors.root.message}</FieldError>}
+          {editable && (
+            <div className="mt-6 flex justify-end gap-2">
+              {onDone && (
+                <Button type="button" variant="outline" disabled={save.isPending} onClick={onDone}>
+                  {t('common.cancel')}
+                </Button>
+              )}
+              <Button type="submit" disabled={save.isPending || (!!room && !isDirty)}>
+                {submitLabel}
               </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </CardContent>
-    </Card>
+            </div>
+          )}
+        </FieldSet>
+      </form>
+      <AlertDialog open={confirmRate !== null} onOpenChange={(o) => !o && setConfirmRate(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('room.applyConfirm.title', { rate: confirmRate ?? 0 })}</AlertDialogTitle>
+            <AlertDialogDescription>{t('room.applyConfirm.body')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <Button disabled={save.isPending} onClick={() => confirmRate !== null && put(rateOnlyBody(room!, confirmRate), t('room.applyConfirm.done', { rate: confirmRate }))}>
+              {t('room.form.apply')}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   )
 }
 
-function NumberField({
+/** A labelled input: numeric by default; `type` for the label and the dates. */
+function TextField({
   id,
   label,
   hint,
   error,
   disabled,
   type,
+  className,
   registration,
 }: {
   id: string
@@ -399,12 +555,13 @@ function NumberField({
   hint?: string
   error?: string
   disabled?: boolean
-  type?: 'date'
+  type?: 'text' | 'date' | 'datetime-local'
+  className?: string
   registration: UseFormRegisterReturn
 }) {
   const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ')
   return (
-    <Field data-invalid={!!error}>
+    <Field data-invalid={!!error} className={className}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input
         id={id}

@@ -1289,7 +1289,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String roomMemberBefore(String date) {
-    return 'member since before $date';
+    return 'joined before $date';
   }
 
   @override
@@ -1481,4 +1481,99 @@ class AppLocalizationsEn extends AppLocalizations {
   String turnBar(String time) {
     return 'Your turn · $time';
   }
+
+  @override
+  String roomMinEventsAny(int n) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: '$n events', one: '1 event');
+    return '$_temp0';
+  }
+
+  @override
+  String queueNotEnoughEventsAny(int n, int attended) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'You need $n events · you have $attended',
+      one: 'You need 1 event · you have $attended',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String roomStatusScheduled(String time) {
+    return 'queue from $time';
+  }
+
+  @override
+  String roomStatusDraw(String time) {
+    return 'draw at $time';
+  }
+
+  @override
+  String get roomStatusJoin => 'join the queue';
+
+  @override
+  String get roomStatusResume => 'back to my place';
+
+  @override
+  String get roomStatusChoose => 'choose my seats';
+
+  @override
+  String get roomStatusOpen => 'queue open';
+
+  @override
+  String get roomStatusPaused => 'admission paused';
+
+  @override
+  String roomNext(String label, String time) {
+    return 'Next: $label · queue from $time';
+  }
+
+  @override
+  String get roomNextDefault => 'Next sale';
+
+  @override
+  String get membersChip => 'Members';
+
+  @override
+  String membersCaption(String date) {
+    return 'Members price · joined before $date';
+  }
+
+  @override
+  String get membersCaptionAny => 'Members price';
+
+  @override
+  String holderMembersOnly(String date) {
+    return 'Members-only price: joined before $date';
+  }
+
+  @override
+  String get holderMembersOnlyAny => 'Members-only price';
+
+  @override
+  String holderCapReached(int limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: 'This number has reached the limit of $limit tickets for this event',
+      one: 'This number has reached the limit of 1 ticket for this event',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get waitlistJoin => 'Waitlist';
+
+  @override
+  String get waitlistOn => 'On the waitlist';
+
+  @override
+  String get waitlistSheetBody => 'We\'ll let you know as soon as places come back. First come, first served.';
+
+  @override
+  String get waitlistLeave => 'Leave the list';
+
+  @override
+  String get waitlistChannels => 'We\'ll let you know by notification and WhatsApp';
 }

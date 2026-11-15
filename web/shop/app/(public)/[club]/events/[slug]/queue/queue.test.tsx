@@ -11,8 +11,10 @@ import { getEvent } from '@/lib/events'
 import { json, NOW, rawEvent, SECRETS } from '@/lib/events.fixture'
 import { getDictionary } from '@/lib/i18n'
 import { placeOrder } from '@/lib/order-client'
-import { admissionKey, litDots, waitText } from '@/lib/queue'
+import { admissionKey, litDots, queueKey, waitText } from '@/lib/queue'
+import { formatDateTime } from '@/lib/time'
 import { CheckoutForm } from '../../../../orders/new/CheckoutForm'
+import CheckoutPage from '../../../../orders/new/page'
 import { EventView } from '../event-view'
 import QueuePage from './page'
 import { QueueRoom } from './QueueRoom'
@@ -45,8 +47,12 @@ const iso = (ms: number) => new Date(ms).toISOString()
 
 // Every instant is relative to NOW (2026-02-01T12:00Z, in the past): nothing here falls due on the real calendar.
 const room = (over: Record<string, unknown> = {}) => ({
+  phase: 1,
+  label: null,
   status: 'SCHEDULED',
   opens_at: iso(NOW + 5_000), // 13:00 in Africa/Casablanca
+  sale_starts_at: iso(NOW + 1_805_000),
+  next: null,
   eligibility: { verified_before: '2026-01-25T12:30:05Z', member_joined_before: null, min_events_attended: null },
   ...over,
 })
@@ -90,6 +96,7 @@ afterEach(() => {
   act(() => root.unmount())
   el.remove()
   sessionStorage.clear()
+  localStorage.clear()
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -162,7 +169,7 @@ describe('W2 room panel', () => {
 
   it('admitted in this tab: zones enabled, the turn bar counts down on server time; an expired turn gates again', async () => {
     const e = await detail({ room: room({ status: 'OPEN', opens_at: iso(NOW - 1_800_000) }) })
-    sessionStorage.setItem(admissionKey(12), JSON.stringify({ token: ADM, expires_at: iso(NOW + 600_000) }))
+    sessionStorage.setItem(admissionKey(12), JSON.stringify({ token: ADM, expires_at: iso(NOW + 600_000), phase: 1 }))
     await act(async () => root.render(EventView({ e, now: NOW, d: fr, signedIn: true })))
     expect(el.querySelector('[data-room]')).toBeNull()
     const virage = cardButtons().find((b) => b.textContent!.includes('Virage'))!
@@ -272,26 +279,30 @@ describe('join handler POST /api/queue', () => {
   })
 })
 
+const show = (over: Partial<Parameters<typeof QueueRoom>[0]> = {}, d = fr) =>
+  act(async () =>
+    root.render(
+      <QueueRoom
+        eventId={12}
+        eventHref={W2}
+        loginHref={LOGIN_W8}
+        apiUrl={API}
+        now={NOW}
+        timezone="Africa/Casablanca"
+        limit={4}
+        remaining={2330}
+        verified
+        phase={1}
+        football
+        next={null}
+        copy={{ room: d.room, event: d.event, errors: d.errors, meta: d.meta }}
+        {...over}
+      />,
+    ),
+  )
+const polls = () => fetchMock.mock.calls.filter(([u]) => String(u).startsWith(API))
+
 describe('W8 room (client)', () => {
-  const show = (over: Partial<Parameters<typeof QueueRoom>[0]> = {}, d = fr) =>
-    act(async () =>
-      root.render(
-        <QueueRoom
-          eventId={12}
-          eventHref={W2}
-          loginHref={LOGIN_W8}
-          apiUrl={API}
-          now={NOW}
-          timezone="Africa/Casablanca"
-          limit={4}
-          remaining={2330}
-          verified
-          copy={{ room: d.room, event: d.event, errors: d.errors, meta: d.meta }}
-          {...over}
-        />,
-      ),
-    )
-  const polls = () => fetchMock.mock.calls.filter(([u]) => String(u).startsWith(API))
 
   it('joins, then polls the API directly with X-Queue-Token and no credentials, at poll_after_s, paused while hidden, until ADMITTED', async () => {
     fetchMock
@@ -341,7 +352,7 @@ describe('W8 room (client)', () => {
     expect(text()).toContain('Tu as 10:00 pour réserver')
     expect(el.querySelector(`a[href="${W2}#zones"]`)!.textContent).toBe(fr.room.choose)
     expect(el.querySelector('[data-dot="turn"]')).not.toBeNull()
-    expect(JSON.parse(sessionStorage.getItem(admissionKey(12))!)).toEqual({ token: ADM, expires_at: iso(NOW + 630_000) })
+    expect(JSON.parse(sessionStorage.getItem(admissionKey(12))!)).toEqual({ token: ADM, expires_at: iso(NOW + 630_000), phase: 1 })
     await advance(1_000)
     expect(text()).toContain('Tu as 09:59 pour réserver')
     await advance(60_000)
@@ -419,6 +430,8 @@ describe('W8 room (client)', () => {
   it.each<[string, Record<string, unknown>, string]>([
     ['NOT_ELIGIBLE ACCOUNT_TOO_NEW', { code: 'NOT_ELIGIBLE', details: { reason: 'ACCOUNT_TOO_NEW', verified_before: '2026-01-25T12:30:05Z' } }, 'Vente réservée aux fans vérifiésCompte vérifié après le 25 janv.'],
     ['NOT_ENOUGH_EVENTS', { code: 'NOT_ELIGIBLE', details: { reason: 'NOT_ENOUGH_EVENTS', min_events_attended: 3, attended: 1 } }, 'Il faut 3 matchs au stade · tu en as 1'],
+    // The real-run body (Lot 5 step 2 presale, a non-member).
+    ['NOT_ELIGIBLE NOT_MEMBER', { code: 'NOT_ELIGIBLE', message: 'Not eligible for this sale', details: { reason: 'NOT_MEMBER', member_joined_before: '2026-01-25T12:30:05Z' } }, 'Vente réservée aux fans vérifiésRéservée aux membres inscrits avant le 25 janv.'],
     ['QUEUE_DEVICE_LIMIT', { code: 'QUEUE_DEVICE_LIMIT', details: { limit: 3 } }, fr.room.QUEUE_DEVICE_LIMIT],
     ['QUEUE_NOT_OPEN CLOSED', { code: 'QUEUE_NOT_OPEN', details: { reason: 'CLOSED' } }, fr.room.closed],
   ])('%s: says why, no retry', async (_, body, copy) => {
@@ -555,4 +568,276 @@ describe('admission → orders', () => {
 it('Q165 wait copy and the dots scale', () => {
   expect([59, 60, 61, 3600, 3601].map((s) => waitText(fr.room, s))).toEqual(["moins d'une minute", 'environ 1 min', 'environ 2 min', 'environ 60 min', "plus d'une heure"])
   expect([litDots(40, 40), litDots(10, 40), litDots(1, 40), litDots(900, 40)]).toEqual([0, 9, 11, 0])
+})
+
+describe('Lot 5 step 2 (WS-13): phases, members prices, holder errors, the WS-12 follow-ups', () => {
+  const TZ = 'Africa/Casablanca'
+  const NEXT = { phase: 2, label: 'Vente générale', opens_at: iso(NOW + 86_400_000), sale_starts_at: iso(NOW + 88_200_000) }
+  const nextText = (label: string) => `Ensuite : ${label} · file dès ${formatDateTime(NEXT.opens_at, TZ, fr.meta.intl)}`
+  const kicker = () => el.querySelector('[data-room] .text-label')!.textContent
+  const cta = () => el.querySelector('[data-room] .md\\:flex')!
+  const remount = () => {
+    act(() => root.unmount())
+    root = createRoot(el)
+  }
+  function type(input: HTMLInputElement, value: string) {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+
+  it('W2: "{label} · {status}" and the next phase line; without a label the room title and "Prochaine vente"; in AR', async () => {
+    const presale = room({ label: 'Prévente membres', status: 'PRE_QUEUE', opens_at: iso(NOW - 60_000), sale_starts_at: iso(NOW + 600_000), next: NEXT })
+    let e = await detail({ on_sale: false, sale_starts_at: iso(NOW + 600_000), room: presale })
+    el.innerHTML = renderToString(EventView({ e, now: NOW, d: fr }))
+    expect(kicker()).toBe('Prévente membres · tirage à 13:10')
+    expect(el.querySelector('[data-room]')!.textContent).toContain(nextText('Vente générale'))
+
+    e = await detail({ on_sale: false, sale_starts_at: iso(NOW + 1_805_000), room: room({ label: 'Prévente membres' }) })
+    el.innerHTML = renderToString(EventView({ e, now: NOW, d: fr }))
+    expect(kicker()).toBe('Prévente membres · file dès 13:00')
+    expect(el.querySelector('[data-room]')!.textContent).not.toContain('Ensuite')
+
+    e = await detail({ on_sale: false, sale_starts_at: iso(NOW + 1_805_000), room: room({ next: { ...NEXT, label: null } }) })
+    el.innerHTML = renderToString(EventView({ e, now: NOW, d: fr }))
+    expect(kicker()).toBe(fr.room.title)
+    expect(el.querySelector('[data-room]')!.textContent).toContain(nextText(fr.room.nextDefault))
+
+    e = await detail({ room: room({ label: 'Prévente membres', status: 'OPEN', opens_at: iso(NOW - 60_000), next: NEXT }) })
+    el.innerHTML = renderToString(EventView({ e, now: NOW, d: ar }))
+    expect(kicker()).toBe(`Prévente membres · ${ar.room.phase.OPEN}`)
+    expect(el.querySelector('[data-room]')!.textContent).toContain('من بعد: Vente générale')
+  })
+
+  it.each([
+    ['FOOTBALL_MATCH', '3 matchs au stade'],
+    ['CONCERT', '3 événements'],
+  ])('W2 eligibility copy by event_type (%s)', async (event_type, words) => {
+    const e = await detail({ event_type, room: room({ eligibility: { verified_before: null, member_joined_before: null, min_events_attended: 3 } }) })
+    el.innerHTML = renderToString(EventView({ e, now: NOW, d: fr }))
+    expect(el.querySelector('[data-room]')!.textContent).toContain(`Réservée aux fans vérifiés : ${words}`)
+  })
+
+  it('W2: "Reprendre ma place" when this browser holds a queue token of the current phase (not of an earlier one)', async () => {
+    const open = (phase: number) => detail({ room: room({ phase, status: 'OPEN', opens_at: iso(NOW - 60_000) }) })
+    let e = await open(1)
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr, signedIn: true })))
+    expect(cta().textContent).toBe(fr.room.join)
+
+    localStorage.setItem(queueKey(12), JSON.stringify({ phase: 1 }))
+    remount()
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr, signedIn: true })))
+    expect(cta().textContent).toBe(fr.room.resume)
+    expect(cta().getAttribute('href')).toBe(W8)
+
+    remount() // signed out (another fan on a shared browser): the marker means nothing
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr })))
+    expect(cta().textContent).toBe(fr.room.join)
+
+    e = await open(2) // the presale's place is no place in the general sale
+    remount()
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr, signedIn: true })))
+    expect(cta().textContent).toBe(fr.room.join)
+    expect(localStorage.getItem(queueKey(12))).not.toContain('eyJ') // a marker, never the queue token
+  })
+
+  it('W2 and W3: a presale turn is no turn in the general sale (cards gated, no turn bar)', async () => {
+    sessionStorage.setItem(admissionKey(12), JSON.stringify({ token: ADM, expires_at: iso(NOW + 600_000), phase: 1 }))
+    const general = room({ phase: 2, status: 'OPEN', opens_at: iso(NOW - 60_000) })
+    const e = await detail({ room: general })
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr, signedIn: true })))
+    expect(el.querySelector('[data-room]')).not.toBeNull()
+    for (const b of cardButtons()) expect(b.disabled).toBe(true)
+
+    jar['__Host-jomhor_session'] = SESSION
+    fetchMock.mockImplementation(async (u) => (String(u).endsWith('/fan/me') ? json(200, { id: 'u1', display_name: 'Yazid Aqel' }) : json(200, rawEvent({ room: general }))))
+    const tree = await CheckoutPage({ searchParams: Promise.resolve({ event: '12', price: 'pc-virage', qty: '1' }) })
+    remount()
+    await act(async () => root.render(tree))
+    expect(el.querySelector('[data-turn]')).toBeNull()
+  })
+
+  it('W2 after the next phase opened: a cached read showing the ended phase is read again, uncached', async () => {
+    const stale = rawEvent({ room: room({ status: 'OPEN', opens_at: iso(NOW - 3_600_000), next: { ...NEXT, opens_at: iso(NOW - 1_000) } }) })
+    const fresh = rawEvent({ room: room({ phase: 2, label: 'Vente générale', status: 'PRE_QUEUE', opens_at: iso(NOW - 1_000), sale_starts_at: iso(NOW + 600_000) }) })
+    fetchMock.mockResolvedValueOnce(json(200, stale)).mockResolvedValueOnce(json(200, fresh))
+    const e = (await getEvent(12, NOW))!
+    expect(e.room).toMatchObject({ phase: 2, label: 'Vente générale' })
+    expect(sent(0).init).toMatchObject({ next: { revalidate: 15 } })
+    expect(sent(1).init).not.toHaveProperty('next')
+  })
+
+  it('W2: a MEMBERS price shows the "Membres" chip and its caption, and stays selectable (the server decides)', async () => {
+    const prices = [
+      { price_category_id: 'pc-plein', name: 'Plein tarif', price_mad: 8000, remaining: 100, audience: 'ALL' },
+      { price_category_id: 'pc-membres', name: 'Tarif membres', price_mad: 5000, remaining: 100, audience: 'MEMBERS' },
+    ]
+    const e = await detail({ zones: [{ id: 3, code: 'NORD', name: 'Tribune Nord', seated: false, gate_codes: [], prices }] })
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr })))
+    const [plein, membres] = cardButtons()
+    expect(plein!.querySelector('[data-members]')).toBeNull()
+    expect(membres!.querySelector('[data-members]')!.textContent).toBe('Membres')
+    expect(membres!.textContent).toContain('Tarif membres · inscrits avant le 20 janv.')
+    expect(membres!.disabled).toBe(false)
+    await act(async () => membres!.click())
+    expect(el.querySelector('a[href*="price=pc-membres"]')).not.toBeNull()
+  })
+
+  it('W8 keeps the queue token with its phase; ENDED drops it and the turn, then W2 shows the next phase or the zone picker', async () => {
+    sessionStorage.setItem(admissionKey(12), JSON.stringify({ token: ADM, expires_at: iso(NOW + 600_000), phase: 1 }))
+    fetchMock.mockResolvedValueOnce(json(201, queue({ poll_after_s: 2 }))).mockResolvedValueOnce(json(200, queue({ status: 'ENDED', position: null, poll_after_s: 0 })))
+    await show({ phase: 1 })
+    expect(JSON.parse(localStorage.getItem(queueKey(12))!)).toEqual({ phase: 1 })
+    await advance(2_000)
+    expect(router.replace).toHaveBeenCalledWith(W2)
+    expect(localStorage.getItem(queueKey(12))).toBeNull()
+    expect(sessionStorage.getItem(admissionKey(12))).toBeNull()
+
+    // W2 re-reads the event: the general sale's room panel (join, not resume), or no room → the zone picker.
+    let e = await detail({ room: room({ phase: 2, label: 'Vente générale', status: 'PRE_QUEUE', opens_at: iso(NOW - 60_000), sale_starts_at: iso(NOW + 600_000) }) })
+    remount()
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr, signedIn: true })))
+    expect(kicker()).toBe('Vente générale · tirage à 13:10')
+    expect(cta().textContent).toBe(fr.room.join)
+    for (const b of cardButtons()) expect(b.disabled).toBe(true)
+    e = await detail({ room: null })
+    remount()
+    await act(async () => root.render(EventView({ e, now: NOW, d: fr, signedIn: true })))
+    expect(el.querySelector('[data-room]')).toBeNull()
+    expect(cardButtons().find((b) => b.textContent!.includes('Virage'))!.disabled).toBe(false)
+  })
+
+  it('W8 EXPIRED forgets the queue token', async () => {
+    fetchMock.mockResolvedValueOnce(json(200, queue({ status: 'EXPIRED', position: null, poll_after_s: 0 })))
+    localStorage.setItem(queueKey(12), JSON.stringify({ phase: 1 }))
+    await show()
+    expect(localStorage.getItem(queueKey(12))).toBeNull()
+  })
+
+  it('W8 NOT_ELIGIBLE: the reason by event_type, then the next phase line', async () => {
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'NOT_ELIGIBLE', message: '', details: { reason: 'NOT_ENOUGH_EVENTS', min_events_attended: 3, attended: 1 } }))
+    await show({ football: false, next: nextText('Vente générale') })
+    expect(text()).toContain('Il faut 3 événements · tu en as 1')
+    expect(text()).toContain(nextText('Vente générale'))
+  })
+
+  it('W8 keeps the screen awake while visible: released when hidden and on unmount, taken again when visible', async () => {
+    const release = vi.fn(async () => {})
+    const sentinels: EventTarget[] = []
+    const request = vi.fn(async () => {
+      const s = Object.assign(new EventTarget(), { release })
+      sentinels.push(s)
+      return s as unknown as WakeLockSentinel
+    })
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request } })
+    try {
+      fetchMock.mockImplementation(async () => json(201, queue({ poll_after_s: 15 })))
+      await show()
+      expect(request).toHaveBeenCalledTimes(1)
+      expect(request).toHaveBeenCalledWith('screen')
+      hidden = true
+      await act(async () => document.dispatchEvent(new Event('visibilitychange')))
+      expect(release).toHaveBeenCalledTimes(1)
+      hidden = false
+      await act(async () => document.dispatchEvent(new Event('visibilitychange')))
+      expect(request).toHaveBeenCalledTimes(2)
+      // The browser drops the lock on its own (battery saver), then the tab comes back: a new lock is taken.
+      await act(async () => sentinels[1]!.dispatchEvent(new Event('release')))
+      await act(async () => document.dispatchEvent(new Event('visibilitychange')))
+      expect(request).toHaveBeenCalledTimes(3)
+      remount()
+      expect(release).toHaveBeenCalledTimes(2)
+    } finally {
+      delete (navigator as { wakeLock?: unknown }).wakeLock
+    }
+  })
+
+  it('W8 without the Wake Lock API, or refused: no error', async () => {
+    expect('wakeLock' in navigator).toBe(false)
+    fetchMock.mockImplementation(async () => json(201, queue({ poll_after_s: 15 })))
+    await show()
+    expect(text()).toContain('N° 40')
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: () => Promise.reject(new DOMException('', 'NotAllowedError')) } })
+    try {
+      remount()
+      await show()
+      expect(text()).toContain('N° 40')
+    } finally {
+      delete (navigator as { wakeLock?: unknown }).wakeLock
+    }
+  })
+
+  it('W3: "Ton tour · {mm:ss}" above the form while admitted, counting to expires_at on server time; absent otherwise', async () => {
+    jar['__Host-jomhor_session'] = SESSION
+    const w3 = (r: unknown) => {
+      fetchMock.mockImplementation(async (u) => (String(u).endsWith('/fan/me') ? json(200, { id: 'u1', display_name: 'Yazid Aqel' }) : json(200, rawEvent({ room: r }))))
+      return CheckoutPage({ searchParams: Promise.resolve({ event: '12', price: 'pc-virage', qty: '1' }) })
+    }
+    const bar = () => el.querySelector('[data-turn]')
+    const live = room({ status: 'OPEN', opens_at: iso(NOW - 60_000) })
+
+    let tree = await w3(live)
+    await act(async () => root.render(tree))
+    expect(bar()).toBeNull() // no turn in this tab
+
+    sessionStorage.setItem(admissionKey(12), JSON.stringify({ token: ADM, expires_at: iso(NOW + 600_000), phase: 1 }))
+    remount()
+    await act(async () => root.render(tree))
+    expect(bar()!.textContent).toBe('Ton tour · 10:00')
+    expect(bar()!.compareDocumentPosition(el.querySelector('form')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await advance(1_000)
+    expect(bar()!.textContent).toBe('Ton tour · 09:59')
+    await advance(599_000)
+    expect(bar()).toBeNull()
+
+    sessionStorage.setItem(admissionKey(12), JSON.stringify({ token: ADM, expires_at: iso(NOW + 1_200_000), phase: 1 }))
+    tree = await w3(null) // the room has ended: a turn left over means nothing
+    remount()
+    await act(async () => root.render(tree))
+    expect(bar()).toBeNull()
+  })
+
+  it('W3 holder rows: MEMBERS_ONLY and PER_ACCOUNT_LIMIT HOLDER under the row named by details.field, never "held"', async () => {
+    await act(async () =>
+      root.render(
+        <CheckoutForm
+          eventId={12}
+          priceCategoryId="pc-membres"
+          qty={2}
+          displayName="Yazid Aqel"
+          unitMad={5000}
+          methods={['CARD']}
+          cashLate={false}
+          cashDeadline=""
+          now={NOW}
+          timezone={TZ}
+          copy={{ checkout: fr.checkout, errors: fr.errors, meta: fr.meta }}
+        />,
+      ),
+    )
+    const $ = (sel: string) => el.querySelector<HTMLInputElement>(sel)
+    await act(async () => type($('#name-1')!, 'Sara Alami'))
+    const submit = () => act(async () => $('button[type="submit"]')!.click())
+
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'MEMBERS_ONLY', message: '', details: { field: 'items[0].holders[0]', member_joined_before: '2026-01-20T10:00:00Z' } }))
+    await submit()
+    expect($('#name-0-error')!.textContent).toBe('Tarif réservé aux membres inscrits avant le 20 janv.')
+    expect($('#name-0')!.getAttribute('aria-invalid')).toBe('true')
+    expect(document.activeElement).toBe($('#name-0'))
+
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'PER_ACCOUNT_LIMIT', message: '', details: { reason: 'HOLDER', field: 'items[0].holders[1]', limit: 4 } }))
+    await submit()
+    expect($('#name-0-error')).toBeNull()
+    expect($('#phone-1-error')!.textContent).toBe('Ce numéro a atteint la limite de 4 billets pour cet événement')
+    expect($('#phone-1')!.getAttribute('aria-describedby')).toBe('phone-1-hint phone-1-error')
+    expect(document.activeElement).toBe($('#phone-1'))
+
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'PER_ACCOUNT_LIMIT', message: '', details: { reason: 'HOLDER', field: 'items[0].holders[1]' } }))
+    await submit()
+    expect($('#phone-1-error')!.textContent).toBe(fr.errors.HOLDER_LIMIT_ANY) // no "limite de  billets"
+
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'MEMBERS_ONLY', message: '', details: { field: 'items[0].holders[1]', member_joined_before: null } }))
+    await submit()
+    expect($('#phone-1-error')!.textContent).toBe(fr.errors.MEMBERS_ONLY)
+    expect(text()).not.toContain('déjà')
+  })
 })

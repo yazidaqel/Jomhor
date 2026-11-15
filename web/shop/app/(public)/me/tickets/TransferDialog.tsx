@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { normalizeHolderName } from '@/lib/holder-name'
 import { fmt, isolate, ltr, type Dict } from '@/lib/i18n'
-import { errorCode, postJson, type Result } from '@/lib/order-client'
+import { errorCode, holderLimitText, postJson, type Result } from '@/lib/order-client'
 import { normalizePhone } from '@/lib/phone'
 import type { TicketView } from '@/lib/tickets'
 import { formatDateTime } from '@/lib/time'
@@ -265,10 +265,14 @@ function Field({ id, label, hint, error, children }: { id: string; label: string
   )
 }
 
-/** A 422 on `to_phone` (SELF: the caller's own number) or `name` → the field errors to show; otherwise null. */
+/**
+ * A 422 on `to_phone` (SELF: the caller's own number) or `name`, or (Lot 5) 409 PER_ACCOUNT_LIMIT `HOLDER` on
+ * `to_phone` → the field errors to show; otherwise null.
+ */
 function refusedFields(copy: TransferCopy, r: Result): FieldErrors | null {
-  if (r.status !== 422) return null
   const details = (r.data?.details ?? {}) as Record<string, unknown>
+  if (errorCode(r) === 'PER_ACCOUNT_LIMIT' && details.field === 'to_phone') return { phone: holderLimitText(copy.errors, details.limit) }
+  if (r.status !== 422) return null
   const fields = Object.keys((details.fields ?? {}) as object)
   const self = details.reason === 'SELF'
   const errs: FieldErrors = {

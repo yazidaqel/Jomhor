@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.ResultActions;
  */
 class PriceApiTest extends OrgApiTest {
 
-    private static final String[] PRICE_KEYS = {"id", "zone_id", "zone", "name", "price_mad", "quota", "sold"};
+    private static final String[] PRICE_KEYS = {"id", "zone_id", "zone", "name", "price_mad", "quota", "sold", "audience"};
 
     private static void invalid(ResultActions r, String field) throws Exception {
         r.andExpect(status().isUnprocessableContent())

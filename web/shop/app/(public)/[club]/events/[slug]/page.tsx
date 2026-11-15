@@ -37,8 +37,8 @@ export default async function EventPage({ params }: Props) {
   const p = await params
   const [{ e, path }, { d }] = await Promise.all([load(p), getI18n()])
   if (`/${p.club}/events/${p.slug}` !== path) permanentRedirect(path)
-  // Signed in or not (the room panel's way to W8); the session itself never leaves the server.
-  const signedIn = e.room ? !!(await currentSession()) : false
+  // Signed in or not (the room panel's way to W8, the waitlist's way to join); the session itself never leaves the server.
+  const signedIn = e.room || e.sold_out ? !!(await currentSession()) : false
   // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
   return <EventView e={e} now={Date.now()} d={d} signedIn={signedIn} />
 }

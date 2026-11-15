@@ -1,0 +1,523 @@
+### Lot 5 step 2 demo, the fair on-sale (IntelliJ HTTP client): plan lot-5 §10.1 Exit (1)-(10) on one instance;
+### Lot5FairSaleFlowTest runs the same flow in CI on a fixed clock.
+#
+# Start the backend with the dev profile on port 8080, so @base and the card redirect (PUBLIC_BASE_URL, dev default
+# http://localhost:8080/v1) agree; the dev profile alone serves on 8090 (dev seed: ATLAS FC, Admin Dev +212600000001,
+# Ops Dev +212600000003, Grand Stade; the room tick runs every second, the waitlist job every 30 s with a 10 min
+# cooldown per event; the simulated card gateway is on; push and WhatsApp go to the log):
+#   docker compose up -d && SERVER_PORT=8080 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phones are made up.
+#
+# The plan's "general sale the next day" is squeezed into minutes. Before step 1.5 set (UTC):
+#   @saleStartsAt    about 10 min from now: phase 1 "Prévente membres" draws then (its pre-queue opens at once);
+#                    also the members-price cutoff (members who joined before it) and the presale rule's date.
+#   @generalStartsAt @saleStartsAt + 20 min: phase 2 "Vente générale" draws then; its pre-queue (10 min) opens at
+#                    @saleStartsAt + 10 min, and that ends phase 1 by itself.
+# Yazid joins the club in step 2 (before @saleStartsAt); Karim, Sara, Omar and Nadia never do.
+# At the end, backend/loadtest/check.sql must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@adminPhone = +212600000001
+@opsPhone = +212600000003
+@yazidPhone = +212611150001
+@karimPhone = +212611150002
+@saraPhone = +212611150003
+@omarPhone = +212611150004
+@hamzaPhone = +212611150005
+@nadiaPhone = +212611150006
+@code = 123456
+@saleStartsAt = 2026-11-15T16:00:00Z
+@generalStartsAt = 2026-11-15T16:20:00Z
+
+### ---------- (1) B2: "Plein tarif" (ALL) next to "Tarif membres" (MEMBERS) ----------
+
+### 1.1 OPS (Ops Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 1.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 1.3 OPS: the Grand Stade zones (keeps the first zone id)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("zoneId", response.body.zones[0].id); %}
+
+### 1.4 OPS: a DRAFT derby
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo Lot 5 vente équitable",
+ "starts_at": "2099-05-01T19:00:00Z", "metadata": {"opponent": "Démo"}}
+
+> {% client.global.set("eventId", response.body.id); %}
+
+### 1.5 OPS: the sale (phase 1) opens at @saleStartsAt
+PATCH {{base}}/org/events/{{eventId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"sale_starts_at": "{{saleStartsAt}}"}
+
+### 1.6 OPS: "Plein tarif", 6 places at 50 DH (audience ALL by default)
+POST {{base}}/org/events/{{eventId}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{zoneId}}, "name": "Plein tarif", "price_mad": 5000, "quota": 6}
+
+> {% client.global.set("fullId", response.body.id); %}
+
+### 1.7 OPS: "Tarif membres" (Accès: Membres), 2 places at 30 DH
+POST {{base}}/org/events/{{eventId}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{zoneId}}, "name": "Tarif membres", "price_mad": 3000, "quota": 2, "audience": "MEMBERS"}
+
+> {% client.global.set("membersId", response.body.id); %}
+
+### 1.8 OPS: publish (DRAFT -> ON_SALE)
+POST {{base}}/org/events/{{eventId}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (2) B13: phase 1 "Prévente membres", phase 2 "Vente générale" ----------
+
+### 2.1 OPS: phase 1 -> 201: members who joined before @saleStartsAt, pre-queue 30 min, 60 fans/min
+PUT {{base}}/org/events/{{eventId}}/rooms/1
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Prévente membres", "pre_queue_min": 30, "admission_rate_per_min": 60,
+ "eligibility": {"member_joined_before": "{{saleStartsAt}}"}}
+
+### 2.2 OPS: phase 2 -> 201: its own sale start, pre-queue 10 min, no rule
+PUT {{base}}/org/events/{{eventId}}/rooms/2
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Vente générale", "pre_queue_min": 10, "admission_rate_per_min": 60, "starts_at": "{{generalStartsAt}}"}
+
+### 2.3 OPS: the phases -> phase 1 PRE_QUEUE (after the next tick), phase 2 SCHEDULED
+GET {{base}}/org/events/{{eventId}}/rooms
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (3) screen 2: "Prévente membres · tirage à …", "Ensuite : Vente générale · file dès …" ----------
+
+### 3.1 Fan view -> room {phase 1, label, status PRE_QUEUE, eligibility.member_joined_before, next: {phase 2, label,
+### opens_at, sale_starts_at}}; prices[].audience; from_price_mad 5000 (the ALL price, never the members one)
+GET {{base}}/fan/events/{{eventId}}
+
+### ---------- (4) presale: Karim (not a member) is refused; Yazid (member) joins, is drawn, buys, pays ----------
+
+### 4.1 Yazid: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}"}
+
+### 4.2 Yazid: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("yazidToken", response.body.token); %}
+
+### 4.3 Yazid joins the club (before @saleStartsAt) -> 201 (200 on a re-run)
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": false, "marketing_whatsapp": false}
+
+### 4.4 Karim: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}"}
+
+### 4.5 Karim: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("karimToken", response.body.token); %}
+
+### 4.6 Karim joins -> 409 NOT_ELIGIBLE {reason: NOT_MEMBER, member_joined_before}; screen 2 adds the next-phase
+### line from 3.1's room.next
+POST {{base}}/fan/queue
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-karim-0002"}
+
+### 4.7 Yazid joins -> 201 PRE_QUEUE
+POST {{base}}/fan/queue
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-yazid-0002"}
+
+> {% client.global.set("yazidQueue", response.body.queue_token); %}
+
+### 4.8 Yazid: poll. After @saleStartsAt: WAITING, then ADMITTED within a second or two (keeps the admission token)
+GET {{base}}/fan/queue
+X-Queue-Token: {{yazidQueue}}
+
+> {% client.global.set("yazidQueue", response.body.queue_token);
+     if (response.body.admission) client.global.set("yazidAdmission", response.body.admission.token); %}
+
+### 4.9 Yazid buys 2 "Tarif membres" with his admission token -> 201 RESERVED, total_mad 6000
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+X-Admission-Token: {{yazidAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{membersId}}", "qty": 2,
+  "holders": [{"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}]}]}
+
+> {% client.global.set("yazidOrder", response.body.id); %}
+
+### 4.10 Yazid pays by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{yazidOrder}}/pay
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 4.11 Yazid: the order -> PAID with two ticket_ids
+GET {{base}}/fan/orders/{{yazidOrder}}
+Authorization: Bearer {{yazidToken}}
+
+### ---------- (5) at @saleStartsAt + 10 min phase 2's pre-queue opens: phase 1 ends by itself ----------
+
+### 5.1 OPS: the phases -> phase 1 ENDED, phase 2 PRE_QUEUE
+GET {{base}}/org/events/{{eventId}}/rooms
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 5.2 Yazid's leftover presale token -> 409 ADMISSION_REQUIRED, details.reason INVALID
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+X-Admission-Token: {{yazidAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 1,
+  "holders": [{"name": "Yazid Aqel"}]}]}
+
+### 5.3 Yazid's presale queue token -> status ENDED (the client re-reads the event: room = phase 2)
+GET {{base}}/fan/queue
+X-Queue-Token: {{yazidQueue}}
+
+### 5.4 Fan view -> room {phase 2, label "Vente générale", status PRE_QUEUE, next null}
+GET {{base}}/fan/events/{{eventId}}
+
+### 5.5 Sara: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}"}
+
+### 5.6 Sara: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("saraToken", response.body.token); %}
+
+### 5.7 Omar: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}"}
+
+### 5.8 Omar: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("omarToken", response.body.token); %}
+
+### 5.9 Karim joins phase 2 -> 201 PRE_QUEUE (no rule)
+POST {{base}}/fan/queue
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-karim-0002"}
+
+> {% client.global.set("karimQueue", response.body.queue_token); %}
+
+### 5.10 Sara joins phase 2 -> 201 PRE_QUEUE
+POST {{base}}/fan/queue
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-sara-00002"}
+
+> {% client.global.set("saraQueue", response.body.queue_token); %}
+
+### 5.11 Omar joins phase 2 -> 201 PRE_QUEUE
+POST {{base}}/fan/queue
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-omar-00002"}
+
+> {% client.global.set("omarQueue", response.body.queue_token); %}
+
+### ---------- (6) after @generalStartsAt: the draw, then all three ADMITTED within seconds ----------
+# Poll Karim and Sara (6.1, 6.2) after @generalStartsAt until ADMITTED: each poll keeps the admission token.
+# Omar polls in 7.3, right before his orders, so his 10 min turn covers 7.4 and 8.1.
+
+### 6.1 Karim: poll
+GET {{base}}/fan/queue
+X-Queue-Token: {{karimQueue}}
+
+> {% client.global.set("karimQueue", response.body.queue_token);
+     if (response.body.admission) client.global.set("karimAdmission", response.body.admission.token); %}
+
+### 6.2 Sara: poll
+GET {{base}}/fan/queue
+X-Queue-Token: {{saraQueue}}
+
+> {% client.global.set("saraQueue", response.body.queue_token);
+     if (response.body.admission) client.global.set("saraAdmission", response.body.admission.token); %}
+
+### 6.3 Karim picks "Tarif membres" -> 409 MEMBERS_ONLY {field: items[0].holders[0], member_joined_before}
+### (screen 4 / W3: "Tarif réservé aux membres inscrits avant le …" on that holder row)
+POST {{base}}/fan/orders
+Authorization: Bearer {{karimToken}}
+X-Admission-Token: {{karimAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{membersId}}", "qty": 1,
+  "holders": [{"name": "Karim Alaoui"}]}]}
+
+### ---------- (7) the holder cap ----------
+
+### 7.1 Sara buys 4 "Plein tarif" for her friend Hamza -> 201 (Hamza now holds 4)
+POST {{base}}/fan/orders
+Authorization: Bearer {{saraToken}}
+X-Admission-Token: {{saraAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 4,
+  "holders": [{"name": "Hamza Tazi", "phone": "{{hamzaPhone}}"}, {"name": "Hamza Tazi", "phone": "{{hamzaPhone}}"},
+              {"name": "Hamza Tazi", "phone": "{{hamzaPhone}}"}, {"name": "Hamza Tazi", "phone": "{{hamzaPhone}}"}]}]}
+
+> {% client.global.set("saraOrder", response.body.id); %}
+
+### 7.2 Sara pays by card: open redirect_url and click "Approuver"
+POST {{base}}/fan/orders/{{saraOrder}}/pay
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 7.3 Omar: poll until ADMITTED (keeps his admission token)
+GET {{base}}/fan/queue
+X-Queue-Token: {{omarQueue}}
+
+> {% client.global.set("omarQueue", response.body.queue_token);
+     if (response.body.admission) client.global.set("omarAdmission", response.body.admission.token); %}
+
+### 7.4 Omar, a fourth friend, names Hamza too -> 409 PER_ACCOUNT_LIMIT {reason: HOLDER,
+### field: items[0].holders[1], limit: 4} ("Ce numéro a atteint la limite de 4 billets")
+POST {{base}}/fan/orders
+Authorization: Bearer {{omarToken}}
+X-Admission-Token: {{omarAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 2,
+  "holders": [{"name": "Omar Idrissi"}, {"name": "Hamza Tazi", "phone": "{{hamzaPhone}}"}]}]}
+
+### ---------- (8) sold out, the room ends, two fans join the waitlist ----------
+
+### 8.1 Omar takes the last 2 places for himself -> 201: the event is sold out
+POST {{base}}/fan/orders
+Authorization: Bearer {{omarToken}}
+X-Admission-Token: {{omarAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 2,
+  "holders": [{"name": "Omar Idrissi"}, {"name": "Omar Idrissi"}]}]}
+
+> {% client.global.set("omarOrder", response.body.id); %}
+
+### 8.2 Omar pays by card: open redirect_url and click "Approuver"
+POST {{base}}/fan/orders/{{omarOrder}}/pay
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 8.3 Karim tries the waitlist while phase 2 is live -> 409 WAITLIST_CLOSED, details.reason ROOM
+PUT {{base}}/fan/waitlist/{{eventId}}
+Authorization: Bearer {{karimToken}}
+
+### 8.4 OPS: end phase 2 -> ENDED
+POST {{base}}/org/events/{{eventId}}/rooms/2/end
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 8.5 Fan view -> room null, on_sale true, sold_out true, from_price_mad null: screen 1 shows "Liste d'attente"
+GET {{base}}/fan/events/{{eventId}}
+
+### 8.6 Karim registers a push token (the notice goes to the log in dev) -> 204
+PUT {{base}}/fan/me/push-token
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"token": "demo-push-token-karim", "platform": "android"}
+
+### 8.7 Karim joins the waitlist -> 201 {entry: {joined_at, notified_at: null}}
+PUT {{base}}/fan/waitlist/{{eventId}}
+Authorization: Bearer {{karimToken}}
+
+### 8.8 Nadia: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{nadiaPhone}}"}
+
+### 8.9 Nadia: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{nadiaPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("nadiaToken", response.body.token); %}
+
+### 8.10 Nadia joins the waitlist -> 201, after Karim
+PUT {{base}}/fan/waitlist/{{eventId}}
+Authorization: Bearer {{nadiaToken}}
+
+### ---------- (9) an ADMIN refund: one place back and Sara's limit freed (Q52) ----------
+
+### 9.1 Sara is at her limit -> 409 PER_ACCOUNT_LIMIT {held: 4, limit: 4}
+POST {{base}}/fan/orders
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 1,
+  "holders": [{"name": "Sara Bennani"}]}]}
+
+### 9.2 ADMIN (Admin Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 9.3 ADMIN: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("adminToken", response.body.token); %}
+
+### 9.4 ADMIN: the tickets Hamza holds (Sara bought them, so her own order lists none) -> 4 VALID tickets of
+### Sara's order (keeps the first)
+POST {{base}}/org/events/{{eventId}}/tickets/search
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{hamzaPhone}}"}
+
+> {% client.global.set("refundTicket", response.body[0].id); %}
+
+### 9.5 ADMIN refunds one of Sara's tickets -> 200 REFUNDED; one place is back. Within about 30 s the waitlist job
+### notifies Karim only: "Des places se sont libérées" (push and WhatsApp lines in the backend log)
+POST {{base}}/org/tickets/{{refundTicket}}/refund
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "Geste commercial"}
+
+### 9.6 Karim's entry (after about 30 s) -> notified_at set
+GET {{base}}/fan/waitlist/{{eventId}}
+Authorization: Bearer {{karimToken}}
+
+### 9.7 Nadia's entry -> notified_at null (one fan per released place)
+GET {{base}}/fan/waitlist/{{eventId}}
+Authorization: Bearer {{nadiaToken}}
+
+### 9.8 Karim buys the place, no token (no room left) -> 201
+POST {{base}}/fan/orders
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 1,
+  "holders": [{"name": "Karim Alaoui"}]}]}
+
+> {% client.global.set("karimOrder", response.body.id); %}
+
+### 9.9 Karim pays by card: open redirect_url and click "Approuver"
+POST {{base}}/fan/orders/{{karimOrder}}/pay
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 9.10 Sara's refunded ticket no longer counts: 2 more -> 409 PER_ACCOUNT_LIMIT {held: 3}; 1 more passes the limit
+### and is refused only because the place has gone -> 409 SOLD_OUT (change qty and holders to 1 to see it)
+POST {{base}}/fan/orders
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 2,
+  "holders": [{"name": "Sara Bennani"}, {"name": "Sara Bennani"}]}]}
+
+### 9.11 OPS releases one more place (quota 7). Inside the 10 min cooldown after 9.5's notice, Nadia gets nothing
+### (9.7 still says notified_at null), so run 9.12 within those 10 min: after them the job would notify her
+### (and once 9.12 has sold the place, no later run does)
+PATCH {{base}}/org/events/{{eventId}}/prices/{{fullId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"quota": 7}
+
+### 9.12 Sara buys her one more place -> 201 (sold out again)
+POST {{base}}/fan/orders
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{fullId}}", "qty": 1,
+  "holders": [{"name": "Sara Bennani"}]}]}
+
+> {% client.global.set("saraOrder2", response.body.id); %}
+
+### 9.13 Sara pays by card: open redirect_url and click "Approuver". Then (10): run check.sql (header): no rows.
+POST {{base}}/fan/orders/{{saraOrder2}}/pay
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"method": "CARD"}

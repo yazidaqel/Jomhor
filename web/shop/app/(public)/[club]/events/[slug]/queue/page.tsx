@@ -5,6 +5,7 @@ import { eventAt } from '@/lib/clubs'
 import { currentSession } from '@/lib/http'
 import { getI18n } from '@/lib/i18n/server'
 import { loginUrl } from '@/lib/orders'
+import { nextLine } from '@/lib/queue'
 import { formatDateTime } from '@/lib/time'
 import { Crest } from '../../../../../brand'
 import { BackIcon } from '../../../../../icons'
@@ -56,7 +57,7 @@ export default async function QueuePage({ params }: Props) {
           {d.room.back}
         </Link>
         <h1 id="queue-title" className="text-label uppercase text-accent">
-          {d.room.title}
+          {e.room.label ? `${d.room.title} · ${e.room.label}` : d.room.title}
         </h1>
         <QueueRoom
           eventId={e.id}
@@ -68,6 +69,9 @@ export default async function QueuePage({ params }: Props) {
           limit={e.per_account_limit}
           remaining={remaining}
           verified={e.room.eligibility !== null}
+          phase={e.room.phase}
+          football={e.event_type === 'FOOTBALL_MATCH'}
+          next={nextLine(d.room, e.room.next, e.timezone, d.meta.intl, now)}
           copy={{ room: d.room, event: d.event, errors: d.errors, meta: d.meta }}
         />
       </section>

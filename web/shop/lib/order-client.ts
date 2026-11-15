@@ -218,7 +218,7 @@ export function canRetryPay(o: OrderStatus, msOnPage: number, renderedAt: number
 
 /**
  * Copy for an error answer: reason-specific for EVENT_NOT_ON_SALE, METHOD_NOT_AVAILABLE and split pay's
- * NO_BUYER_PLACE (a 422 on `items`, no row to mark), limit numbers for PER_ACCOUNT_LIMIT.
+ * NO_BUYER_PLACE (a 422 on `items`, no row to mark), limit numbers for PER_ACCOUNT_LIMIT (HOLDER: the limit only).
  */
 export function errorText(errors: Dict['errors'], r: Result): string {
   const code = errorCode(r)
@@ -228,9 +228,14 @@ export function errorText(errors: Dict['errors'], r: Result): string {
     return errors[`METHOD_${details.reason}`]
   }
   if (code === 'VALIDATION_FAILED' && details.reason === 'NO_BUYER_PLACE') return errors.NO_BUYER_PLACE
+  if (code === 'PER_ACCOUNT_LIMIT' && details.reason === 'HOLDER') return holderLimitText(errors, details.limit)
   if (code === 'PER_ACCOUNT_LIMIT') return fmt(errors.PER_ACCOUNT_LIMIT, { limit: String(details.limit ?? ''), held: String(details.held ?? '') })
   return Object.hasOwn(errors, code) ? (errors as Record<string, string>)[code]! : errors.generic
 }
+
+/** "Ce numéro a atteint la limite de {limit} billets…", or the same without a number when `limit` is missing. */
+export const holderLimitText = (errors: Pick<Dict['errors'], 'HOLDER_LIMIT' | 'HOLDER_LIMIT_ANY'>, limit: unknown) =>
+  Number.isSafeInteger(limit) ? fmt(errors.HOLDER_LIMIT, { limit: limit as number }) : errors.HOLDER_LIMIT_ANY
 
 /** Time left on a hold, as shown next to its deadline: `7 min 59 s`, or `1 h 52 min` from an hour on. */
 export function leftText(c: Pick<Dict['orderPage'], 'left' | 'leftHours'>, seconds: number) {

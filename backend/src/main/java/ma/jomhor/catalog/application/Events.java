@@ -51,10 +51,12 @@ public interface Events {
 
     boolean hasQuota(UUID org, int eventId);
 
-    PriceCategory insertPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota);
+    PriceCategory insertPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota,
+                              Event.Audience audience);
 
     /** Null arguments are unchanged. Empty if the new quota is below sold (checked in the same statement). */
-    Optional<PriceCategory> updatePrice(UUID org, int eventId, UUID priceId, String name, Long priceMad, Integer quota);
+    Optional<PriceCategory> updatePrice(UUID org, int eventId, UUID priceId, String name, Long priceMad, Integer quota,
+                                        Event.Audience audience);
 
     /**
      * Fan side (sales): the event by id alone, since a fan request carries no organizer. The organizer comes

@@ -21,6 +21,7 @@ import ma.jomhor.notifications.application.FanMessageService;
 import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.rooms.application.RoomTicks;
+import ma.jomhor.sales.waitlist.application.WaitlistService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,9 @@ class MultiInstanceTest extends QueueFixture {
 
     @Autowired
     ManifestService manifests;
+
+    @Autowired
+    WaitlistService waitlist;
 
     @BeforeAll
     static void startB() {
@@ -118,6 +122,53 @@ class MultiInstanceTest extends QueueFixture {
         assertThat(roomRow(r.id())).containsEntry("admitted_through", 100);
         tickBoth("2099-04-01T10:00:15Z");
         assertThat(roomRow(r.id())).containsEntry("admitted_through", 150);
+    }
+
+    /** BE-48: both instances tick at phase 2's opens_at: phase 1 ends once, with one audit, and phase 2 opens. */
+    @Test
+    void theNextPhaseEndsThePreviousOnceOnBoth() throws Exception {
+        Room r = room("{}");
+        UUID two = phase(r, 2, "{\"pre_queue_min\": 0, \"starts_at\": \"2099-04-02T10:00:00Z\"}");
+        tickBoth(OPENS);
+        tickBoth(SALE);
+        tickBoth("2099-04-02T10:00:00Z");
+        assertThat(roomRow(r.id()).get("status")).isEqualTo("ENDED");
+        assertThat(roomRow(two).get("status")).isEqualTo("OPEN");
+        tickBoth("2099-04-02T10:00:01Z");
+        assertThat(jdbc.sql("""
+                        select count(*) from audit_log where action = 'room.end' and target = ?
+                          and payload ->> 'reason' = 'NEXT_PHASE'""")
+                .param(String.valueOf(r.event())).query(Integer.class).single()).isOne();
+    }
+
+    /** BE-49: both instances run the waitlist job at once, twice: the R oldest are notified once, with 2 rows each. */
+    @Test
+    void theWaitlistNoticeGoesOutOncePerWait() throws Exception {
+        Room s = soldOut(5);
+        List<UUID> users = IntStream.range(0, 8).mapToObj(i -> user()).toList();
+        for (int i = 0; i < users.size(); i++) {
+            waitlist.join(users.get(i), s.event());
+            jdbc.sql("update waitlist_entries set joined_at = '2026-01-01'::timestamptz + ? * interval '1 second' "
+                    + "where event_id = ? and user_id = ?").params(i, s.event(), users.get(i)).update();
+        }
+        setSold(s.price(), 2); // R = 3
+        Instant t = Instant.now();
+        WaitlistService onB = b.getBean(WaitlistService.class);
+        for (Instant at : List.of(t, t.plusSeconds(60))) { // the second run is inside the cooldown
+            both(() -> {
+                waitlist.notifyAt(at);
+                return 0;
+            }, () -> {
+                onB.notifyAt(at);
+                return 0;
+            });
+        }
+        assertThat(jdbc.sql("""
+                        select user_id from waitlist_entries where event_id = ? and notified_at is not null
+                        order by joined_at""").param(s.event()).query(UUID.class).list())
+                .containsExactlyElementsOf(users.subList(0, 3));
+        assertThat(jdbc.sql("select count(*) from fan_messages where event_id = ? and kind = 'WAITLIST_OPEN'")
+                .param(s.event()).query(Integer.class).single()).isEqualTo(6);
     }
 
     @Test

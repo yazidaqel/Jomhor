@@ -17,16 +17,19 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 /**
- * Every statement filters on organizer_id, except {@link #live()} (the memo: every organizer). The reads join events
- * for sale_starts_at, read-only (docs/01-architecture.md: the report-query exception), so the memo is one statement.
+ * Every statement filters on organizer_id, except {@link #live()} (the memo: every organizer) and the tick's. The reads
+ * join events for phase 1's sale start, read-only (docs/01-architecture.md: the report-query exception), so the memo is
+ * one statement.
  */
 @Repository
 class JdbcWaitingRooms implements WaitingRooms {
 
     private static final String SELECT = """
-            select r.id, r.organizer_id, r.event_id, r.status::text as status, e.sale_starts_at, r.pre_queue_min,
+            select r.id, r.organizer_id, r.event_id, r.phase, r.label, r.starts_at, r.status::text as status,
+                   coalesce(r.starts_at, e.sale_starts_at) as sale_starts_at, r.pre_queue_min,
                    r.admission_rate_per_min, r.min_account_age_days, r.member_joined_before, r.min_events_attended,
-                   r.joined_count, r.ranked_count, r.admitted_through, r.measured_rate_per_min, r.sold_out, r.drawn_at
+                   r.joined_count, r.ranked_count, r.admitted_through, r.measured_rate_per_min, r.sold_out, r.drawn_at,
+                   e.status = 'DRAFT' as event_draft
             from waiting_rooms r
             join events e on e.id = r.event_id and e.organizer_id = r.organizer_id
             """;
@@ -38,52 +41,65 @@ class JdbcWaitingRooms implements WaitingRooms {
     }
 
     @Override
-    public Optional<WaitingRoom> find(UUID org, int eventId) {
-        return jdbc.sql(SELECT + "where r.organizer_id = ? and r.event_id = ?").params(org, eventId)
-                .query(JdbcWaitingRooms::room).optional();
+    public List<WaitingRoom> list(UUID org, int eventId) {
+        return jdbc.sql(SELECT + "where r.organizer_id = ? and r.event_id = ? order by r.phase").params(org, eventId)
+                .query(JdbcWaitingRooms::room).list();
     }
 
     @Override
-    public Optional<Status> lock(UUID org, int eventId) {
-        return status("for no key update", org, eventId);
+    public Optional<WaitingRoom> find(UUID org, int eventId, int phase) {
+        return jdbc.sql(SELECT + "where r.organizer_id = ? and r.event_id = ? and r.phase = ?")
+                .params(org, eventId, phase).query(JdbcWaitingRooms::room).optional();
     }
 
     @Override
-    public Optional<Status> share(UUID org, int eventId) {
-        return status("for share", org, eventId);
-    }
-
-    private Optional<Status> status(String lock, UUID org, int eventId) {
-        return jdbc.sql("select status::text from waiting_rooms where organizer_id = ? and event_id = ? " + lock)
-                .params(org, eventId).query(String.class).optional().map(Status::valueOf);
+    public Optional<Status> lock(UUID org, int eventId, int phase) {
+        return status("for no key update", org, eventId, phase);
     }
 
     @Override
-    public void insert(UUID org, int eventId, Config c) {
+    public Optional<Status> share(UUID org, int eventId, int phase) {
+        return status("for share", org, eventId, phase);
+    }
+
+    private Optional<Status> status(String lock, UUID org, int eventId, int phase) {
+        return jdbc.sql("select status::text from waiting_rooms where organizer_id = ? and event_id = ? and phase = ? "
+                        + lock)
+                .params(org, eventId, phase).query(String.class).optional().map(Status::valueOf);
+    }
+
+    @Override
+    public void insert(UUID org, int eventId, int phase, String label, Instant startsAt, Config c) {
         jdbc.sql("""
-                        insert into waiting_rooms (organizer_id, event_id, pre_queue_min, admission_rate_per_min,
-                                                   min_account_age_days, member_joined_before, min_events_attended)
-                        values (?, ?, ?, ?, ?, ?, ?)""")
-                .params(org, eventId, c.preQueueMin(), c.admissionRatePerMin(), c.rule().minAccountAgeDays(),
-                        timestamp(c.rule().memberJoinedBefore()), c.rule().minEventsAttended())
+                        insert into waiting_rooms (organizer_id, event_id, phase, label, starts_at, pre_queue_min,
+                                                   admission_rate_per_min, min_account_age_days, member_joined_before,
+                                                   min_events_attended)
+                        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""")
+                .params(org, eventId, phase, label, timestamp(startsAt), c.preQueueMin(), c.admissionRatePerMin(),
+                        c.rule().minAccountAgeDays(), timestamp(c.rule().memberJoinedBefore()),
+                        c.rule().minEventsAttended())
                 .update();
     }
 
     @Override
-    public void update(UUID org, int eventId, Config c) {
+    public void update(UUID org, int eventId, int phase, String label, Instant startsAt, Config c) {
         jdbc.sql("""
-                        update waiting_rooms set pre_queue_min = ?, admission_rate_per_min = ?, min_account_age_days = ?,
-                                                 member_joined_before = ?, min_events_attended = ?
-                        where organizer_id = ? and event_id = ?""")
-                .params(c.preQueueMin(), c.admissionRatePerMin(), c.rule().minAccountAgeDays(),
-                        timestamp(c.rule().memberJoinedBefore()), c.rule().minEventsAttended(), org, eventId)
+                        update waiting_rooms set label = ?, starts_at = ?, pre_queue_min = ?, admission_rate_per_min = ?,
+                                                 min_account_age_days = ?, member_joined_before = ?,
+                                                 min_events_attended = ?
+                        where organizer_id = ? and event_id = ? and phase = ?""")
+                .params(label, timestamp(startsAt), c.preQueueMin(), c.admissionRatePerMin(),
+                        c.rule().minAccountAgeDays(), timestamp(c.rule().memberJoinedBefore()),
+                        c.rule().minEventsAttended(), org, eventId, phase)
                 .update();
     }
 
     @Override
-    public void setStatus(UUID org, int eventId, Status status) {
-        jdbc.sql("update waiting_rooms set status = ?::room_status where organizer_id = ? and event_id = ?")
-                .params(status.name(), org, eventId).update();
+    public void setStatus(UUID org, int eventId, int phase, Status status) {
+        jdbc.sql("""
+                        update waiting_rooms set status = ?::room_status
+                        where organizer_id = ? and event_id = ? and phase = ?""")
+                .params(status.name(), org, eventId, phase).update();
     }
 
     @Override
@@ -105,19 +121,25 @@ class JdbcWaitingRooms implements WaitingRooms {
     @Override
     public Optional<Tick> lockForTick(UUID roomId) {
         return jdbc.sql("""
-                        select r.id, r.organizer_id, r.event_id, r.status::text as status, r.pre_queue_min,
-                               r.admission_rate_per_min, e.sale_starts_at, e.refund_cutoff_at, r.joined_count,
-                               r.ranked_count, r.admitted_through, r.measured_rate_per_min, r.rate_mark_at,
-                               r.rate_mark_through, r.sold_out, r.last_tick_at, r.drawn_at
+                        select r.id, r.organizer_id, r.event_id, r.phase, r.status::text as status, r.pre_queue_min,
+                               r.admission_rate_per_min, coalesce(r.starts_at, e.sale_starts_at) as sale_starts_at,
+                               e.refund_cutoff_at,
+                               (select n.starts_at - make_interval(mins => n.pre_queue_min::int) from waiting_rooms n
+                                where n.organizer_id = r.organizer_id and n.event_id = r.event_id
+                                  and n.phase > r.phase and n.status <> 'ENDED'
+                                order by n.phase limit 1) as next_opens_at,
+                               r.joined_count, r.ranked_count, r.admitted_through, r.measured_rate_per_min,
+                               r.rate_mark_at, r.rate_mark_through, r.sold_out, r.last_tick_at, r.drawn_at
                         from waiting_rooms r
                         join events e on e.id = r.event_id and e.organizer_id = r.organizer_id
                         where r.id = ? and r.status <> 'ENDED'
                         for no key update of r skip locked""")
                 .param(roomId)
                 .query((rs, n) -> new Tick(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
-                        rs.getInt("event_id"), Status.valueOf(rs.getString("status")), rs.getInt("pre_queue_min"),
-                        rs.getInt("admission_rate_per_min"), instant(rs, "sale_starts_at"),
-                        instant(rs, "refund_cutoff_at"), rs.getInt("joined_count"), rs.getInt("ranked_count"),
+                        rs.getInt("event_id"), rs.getInt("phase"), Status.valueOf(rs.getString("status")),
+                        rs.getInt("pre_queue_min"), rs.getInt("admission_rate_per_min"),
+                        instant(rs, "sale_starts_at"), instant(rs, "refund_cutoff_at"), instant(rs, "next_opens_at"),
+                        rs.getInt("joined_count"), rs.getInt("ranked_count"),
                         rs.getInt("admitted_through"), rs.getInt("measured_rate_per_min"), instant(rs, "rate_mark_at"),
                         rs.getInt("rate_mark_through"), rs.getBoolean("sold_out"), instant(rs, "last_tick_at"),
                         instant(rs, "drawn_at")))
@@ -153,11 +175,13 @@ class JdbcWaitingRooms implements WaitingRooms {
 
     private static WaitingRoom room(ResultSet rs, int row) throws SQLException {
         return new WaitingRoom(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
-                rs.getInt("event_id"), Status.valueOf(rs.getString("status")), instant(rs, "sale_starts_at"),
+                rs.getInt("event_id"), rs.getInt("phase"), rs.getString("label"), instant(rs, "starts_at"),
+                Status.valueOf(rs.getString("status")), instant(rs, "sale_starts_at"),
                 new Config(rs.getInt("pre_queue_min"), rs.getInt("admission_rate_per_min"),
                         new Rule(integer(rs, "min_account_age_days"), instant(rs, "member_joined_before"),
                                 integer(rs, "min_events_attended"))),
                 rs.getInt("joined_count"), rs.getInt("ranked_count"), rs.getInt("admitted_through"),
-                rs.getInt("measured_rate_per_min"), rs.getBoolean("sold_out"), instant(rs, "drawn_at"));
+                rs.getInt("measured_rate_per_min"), rs.getBoolean("sold_out"), instant(rs, "drawn_at"),
+                rs.getBoolean("event_draft"));
     }
 }

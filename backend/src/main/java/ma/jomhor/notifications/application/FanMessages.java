@@ -1,8 +1,10 @@
 package ma.jomhor.notifications.application;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.notifications.domain.FanMessage;
 
@@ -17,6 +19,13 @@ public interface FanMessages {
      * queued for (order, kind, channel) is left as it is.
      */
     void enqueueOrders(UUID org, Collection<UUID> orderIds, FanMessage.Kind kind, List<FanMessage.Channel> channels);
+
+    /** One {@code kind} row per user and channel about the event (WAITLIST_OPEN), created_at = {@code at}. */
+    void enqueueEvent(UUID org, int eventId, FanMessage.Kind kind, List<FanMessage.Channel> channels,
+                      Collection<UUID> userIds, Instant at);
+
+    /** The latest created_at of the event's {@code kind} rows; empty when none. */
+    Optional<Instant> lastQueued(UUID org, int eventId, FanMessage.Kind kind);
 
     /** One CAMPAIGN row per user on {@code channel}; users already queued for it are skipped. Rows added. */
     int enqueueCampaign(UUID org, UUID campaignId, FanMessage.Channel channel, Collection<UUID> userIds);

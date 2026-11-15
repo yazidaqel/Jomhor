@@ -9,6 +9,15 @@ import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/queue/queue.dart';
 import 'package:jomhor_fan/features/queue/queue_store.dart';
 
+/// Where screen 12 sends the fan once its room is over.
+enum QueueExit {
+  /// Another sale phase follows: screen 2, whose CTA joins it (no automatic join).
+  event,
+
+  /// No room any more: screen 3, buying without a token.
+  zones,
+}
+
 /// What screen 12 shows.
 class QueueView {
   const new({
@@ -18,6 +27,7 @@ class QueueView {
     this.offline = false,
     this.firstPosition,
     this.offset = Duration.zero,
+    this.exit,
   });
 
   /// The last answer of the room; null before the first one.
@@ -38,6 +48,9 @@ class QueueView {
 
   /// Server time minus this phone's clock, at the last answer: countdowns run on server time.
   final Duration offset;
+
+  /// Set once the room is over for this fan: the screen leaves.
+  final QueueExit? exit;
 
   DateTime serverNow(DateTime deviceNow) => deviceNow.add(offset);
 }
@@ -175,9 +188,10 @@ class QueueController extends Notifier<QueueView> {
     final first = state.firstPosition ?? s.position;
     state = QueueView(status: s, firstPosition: first, offset: offset);
     if (s.phase == QueuePhase.ended) {
-      // No room any more: orders need no token. Screens 1, 2 and 3 read the event again.
+      // This phase is over (Lot 5 step 2: maybe for the next one). The token is useless now; the event says what
+      // follows.
       await _passes.put(eventId, null);
-      if (ref.mounted) ref.invalidate(eventDetailProvider(eventId));
+      if (ref.mounted) await _leave();
       return;
     }
     final admitted = s.phase == QueuePhase.admitted ? s.admissionToken : null;
@@ -191,6 +205,22 @@ class QueueController extends Notifier<QueueView> {
       ),
     );
     if (ref.mounted && s.phase.polls && s.pollAfterS > 0) _schedule(s.queueToken, s.pollAfterS);
+  }
+
+  /// Reads the event again: a `room` is the next phase (screen 2), none means buying without a room (screen 3). A
+  /// failed read goes to screen 2, which reads it again with its own retry.
+  Future<void> _leave() async {
+    QueueExit exit;
+    try {
+      exit = (await ref.refresh(eventDetailProvider(eventId).future)).event.room == null
+          ? QueueExit.zones
+          : QueueExit.event;
+    } on Object {
+      exit = QueueExit.event;
+    }
+    if (ref.mounted) {
+      state = QueueView(status: state.status, firstPosition: state.firstPosition, offset: state.offset, exit: exit);
+    }
   }
 
   void _schedule(String token, int seconds) => _after(Duration(seconds: seconds), () => _poll(token));
@@ -232,7 +262,14 @@ class QueueController extends Notifier<QueueView> {
           _after((wait.isNegative ? Duration.zero : wait) + jitter, join);
         }
       case ('QUEUE_NOT_OPEN', 'ENDED' || 'NO_ROOM'):
-        state = base;
+        // Every phase is over (or none): buy without a room.
+        state = QueueView(
+          status: state.status,
+          firstPosition: state.firstPosition,
+          offset: state.offset,
+          error: e,
+          exit: QueueExit.zones,
+        );
         ref.invalidate(eventDetailProvider(eventId));
       default:
         state = base;

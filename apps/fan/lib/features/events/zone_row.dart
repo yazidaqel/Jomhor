@@ -53,7 +53,18 @@ class ZoneRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(z.name, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                    if (z.hasMembersPrice)
+                      Wrap(
+                        spacing: JomhorSpace.s,
+                        runSpacing: JomhorSpace.xs,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(z.name, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                          MembersChip(key: Key('zone.${z.id}.members'), label: l.membersChip),
+                        ],
+                      )
+                    else
+                      Text(z.name, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(description, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
                   ],
@@ -96,4 +107,26 @@ class ZoneRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Membres" on a members-only price (DESIGN.md Lot 5, screens 2 and 3): a small amber outline; nothing is blocked
+/// on the phone, the server decides at the order.
+class MembersChip extends StatelessWidget {
+  const new({required this.label, super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.s, vertical: 2),
+    decoration: BoxDecoration(
+      color: JomhorColors.accent.withValues(alpha: 0.12),
+      border: Border.all(color: JomhorColors.accent.withValues(alpha: 0.5)),
+      borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
+    ),
+    child: Text(
+      label,
+      style: JomhorType.caption.copyWith(color: JomhorColors.accentHover, fontWeight: FontWeight.w600, fontSize: 12),
+    ),
+  );
 }

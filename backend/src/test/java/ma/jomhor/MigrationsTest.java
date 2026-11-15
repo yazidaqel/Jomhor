@@ -19,11 +19,48 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV24Apply() {
+    void v1ToV28Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22", "23", "24");
+                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28");
+    }
+
+    /**
+     * V27 + V28: WAITLIST_OPEN needs its event and only it has one (a CHECK runs before the foreign keys); one waitlist
+     * entry per account per event, organizer required.
+     */
+    @Test
+    void waitlistOpenNeedsItsEventAndEntriesAreOnePerAccount() {
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind)
+                values (gen_random_uuid(), gen_random_uuid(), 'PUSH', 'WAITLIST_OPEN')"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_subject");
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind, order_id, event_id)
+                values (gen_random_uuid(), gen_random_uuid(), 'PUSH', 'ORDER_PAID', gen_random_uuid(), 1)"""))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_subject");
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('W') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        var event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""", Integer.class, org, venue,
+                new byte[32]);
+        var user = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        jdbcTemplate.update("""
+                insert into fan_messages (organizer_id, user_id, channel, kind, event_id)
+                values (?, ?, 'WHATSAPP', 'WAITLIST_OPEN', ?)""", org, user, event);
+        String join = "insert into waitlist_entries (organizer_id, event_id, user_id) values (?, ?, ?)";
+        jdbcTemplate.update(join, org, event, user);
+        assertThatThrownBy(() -> jdbcTemplate.update(join, org, event, user)).isInstanceOf(DuplicateKeyException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(join, null, event, user))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from pg_indexes where tablename = 'fan_messages'
+                  and indexdef like 'CREATE INDEX%(event_id, created_at) WHERE (kind = ''WAITLIST_OPEN''::message_kind)'""",
+                Integer.class)).isEqualTo(1);
     }
 
     /**
@@ -54,7 +91,11 @@ class MigrationsTest extends IntegrationTest {
                 .isNull();
     }
 
-    /** V23: one room per event, the 03 ranges, and admitted_through never above ranked_count. */
+    /**
+     * V23 + V26: one room per phase of an event (a row written without a phase, as every step-1 room, is phase 1 with
+     * starts_at null), phases 1-5, starts_at set exactly for phase 2 and up, label 1-40 characters, the 03 ranges, and
+     * admitted_through never above ranked_count.
+     */
     @Test
     void waitingRoomsChecks() {
         var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
@@ -65,19 +106,52 @@ class MigrationsTest extends IntegrationTest {
                 values (?, ?, 'Match', now() + interval '1 day', ?) returning id""",
                 Integer.class, org, venue, new byte[32]);
         jdbcTemplate.update("insert into waiting_rooms (organizer_id, event_id) values (?, ?)", org, event);
-        assertThat(jdbcTemplate.queryForMap("select status::text as status, pre_queue_min, admission_rate_per_min "
-                + "from waiting_rooms where event_id = ?", event))
+        assertThat(jdbcTemplate.queryForMap("select status::text as status, pre_queue_min, admission_rate_per_min, "
+                + "phase, label, starts_at from waiting_rooms where event_id = ?", event))
                 .containsEntry("status", "SCHEDULED").containsEntry("pre_queue_min", 30)
-                .containsEntry("admission_rate_per_min", 500);
+                .containsEntry("admission_rate_per_min", 500).containsEntry("phase", 1)
+                .containsEntry("label", null).containsEntry("starts_at", null);
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "insert into waiting_rooms (organizer_id, event_id) values (?, ?)", org, event))
                 .isInstanceOf(DuplicateKeyException.class);
+        String phase = "insert into waiting_rooms (organizer_id, event_id, phase, label, starts_at) values (?, ?, ?, ?, ?)";
+        var at = java.sql.Timestamp.from(java.time.Instant.now().plusSeconds(3600));
+        jdbcTemplate.update(phase, org, event, 2, "Vente générale", at);
+        assertThatThrownBy(() -> jdbcTemplate.update(phase, org, event, 2, null, at))
+                .isInstanceOf(DuplicateKeyException.class);
+        for (Object[] bad : new Object[][] {{3, null, null}, {1, null, at}, {6, null, at}, {0, null, at},
+                {3, "", at}, {3, "x".repeat(41), at}}) {
+            assertThatThrownBy(() -> jdbcTemplate.update(phase, org, event, bad[0], bad[1], bad[2]))
+                    .as("phase %s label %s", bad[0], bad[1]).isInstanceOf(DataIntegrityViolationException.class);
+        }
+        jdbcTemplate.update(phase, org, event, 3, "x".repeat(40), at);
         for (String set : new String[] {"pre_queue_min = 1441", "admission_rate_per_min = 0",
                 "admission_rate_per_min = 6001", "min_account_age_days = 0", "min_events_attended = 51",
                 "admitted_through = 1"}) {
-            assertThatThrownBy(() -> jdbcTemplate.update("update waiting_rooms set " + set + " where event_id = ?",
-                    event)).as(set).isInstanceOf(DataIntegrityViolationException.class);
+            assertThatThrownBy(() -> jdbcTemplate.update("update waiting_rooms set " + set
+                    + " where event_id = ? and phase = 1", event))
+                    .as(set).isInstanceOf(DataIntegrityViolationException.class);
         }
+    }
+
+    /** V25: a category written without an audience (every row before V25) is ALL; holders has its GIN index. */
+    @Test
+    void priceAudienceAndHoldersIndex() {
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        var zone = jdbcTemplate.queryForObject("insert into zones (organizer_id, venue_id, code, name, capacity) "
+                + "values (?, ?, 'NORD', 'Nord', 100) returning id", Short.class, org, venue);
+        Integer event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""",
+                Integer.class, org, venue, new byte[32]);
+        assertThat(jdbcTemplate.queryForObject("""
+                insert into price_categories (organizer_id, event_id, zone_id, name, price_mad, quota)
+                values (?, ?, ?, 'Plein tarif', 5000, 10) returning audience::text""", String.class, org, event, zone))
+                .isEqualTo("ALL");
+        assertThat(jdbcTemplate.queryForList("select indexdef from pg_indexes where tablename = 'order_items'",
+                String.class)).anyMatch(d -> d.contains("USING gin (holders jsonb_path_ops)"));
     }
 
     /** V24: one entry per account per room, one rank per room, 32-byte hashes, positive ranks, organizer required. */

@@ -11,7 +11,8 @@ import { PAY_METHODS, type PayMethod } from './order-client'
  * `organizers` is kept.
  */
 export type Organizer = { slug: string | null; name: string; crest_url: string | null }
-export type Price = { price_category_id: string; name: string; price_mad: number; remaining: number }
+/** Lot 5 step 2 `audience`: MEMBERS = each place held by a member who joined before `sale_starts_at` (server-checked). */
+export type Price = { price_category_id: string; name: string; price_mad: number; remaining: number; audience: 'ALL' | 'MEMBERS' }
 export type Zone = { id: number; code: string; name: string; seated: boolean; gate_codes: string[]; prices: Price[] }
 export type ShopEvent = {
   id: number
@@ -40,13 +41,31 @@ export type ShopEvent = {
 export type ShopEventDetail = ShopEvent & { zones: Zone[]; payment_methods: PayMethod[]; cash_until: string | null; room: Room | null }
 
 /**
- * Lot 5 `room` (04 GET /fan/events): the event's waiting room while it is live, else null (none, or `ENDED`).
- * `eligibility` null = no rule; each rule part null = not required.
+ * Lot 5 `room` (04 GET /fan/events): the event's **current sale phase** while one is live, else null (no phase, or
+ * every phase `ENDED`). `label` is organizer text, shown as typed; `sale_starts_at` and `opens_at` are the phase's;
+ * `next` = the following phase not `ENDED`. `eligibility` null = no rule; each rule part null = not required.
  */
 export type RoomStatus = 'SCHEDULED' | 'PRE_QUEUE' | 'OPEN' | 'PAUSED'
 export type Eligibility = { verified_before: string | null; member_joined_before: string | null; min_events_attended: number | null }
-export type Room = { status: RoomStatus; opens_at: string; eligibility: Eligibility | null }
+export type NextPhase = { phase: number; label: string | null; opens_at: string; sale_starts_at: string }
+export type Room = {
+  phase: number
+  label: string | null
+  status: RoomStatus
+  opens_at: string
+  sale_starts_at: string
+  eligibility: Eligibility | null
+  next: NextPhase | null
+}
 const ROOM_STATUSES: readonly string[] = ['SCHEDULED', 'PRE_QUEUE', 'OPEN', 'PAUSED']
+
+const label = (v: unknown) => str(v)?.trim() || null
+
+function toNext(v: unknown): NextPhase | null {
+  const n = (v && typeof v === 'object' ? v : {}) as Raw
+  const opens = str(n.opens_at)
+  return opens ? { phase: int(n.phase) ?? 0, label: label(n.label), opens_at: opens, sale_starts_at: str(n.sale_starts_at) ?? opens } : null
+}
 
 function toRoom(v: unknown): Room | null {
   const r = (v && typeof v === 'object' ? v : {}) as Raw
@@ -55,9 +74,13 @@ function toRoom(v: unknown): Room | null {
   const el = r.eligibility && typeof r.eligibility === 'object' ? (r.eligibility as Raw) : null
   const eligibility = el && { verified_before: str(el.verified_before), member_joined_before: str(el.member_joined_before), min_events_attended: int(el.min_events_attended) }
   return {
+    phase: int(r.phase) ?? 1,
+    label: label(r.label),
     status: r.status as RoomStatus,
     opens_at: opens,
+    sale_starts_at: str(r.sale_starts_at) ?? opens,
     eligibility: eligibility && Object.values(eligibility).some((x) => x !== null) ? eligibility : null,
+    next: toNext(r.next),
   }
 }
 
@@ -116,6 +139,7 @@ function toZone(z: Raw): Zone {
       name: String(p.name),
       price_mad: int(p.price_mad) ?? 0,
       remaining: int(p.remaining) ?? 0,
+      audience: p.audience === 'MEMBERS' ? 'MEMBERS' : 'ALL',
     })),
   }
 }
@@ -129,6 +153,14 @@ export function windowContradicts(e: Pick<ShopEvent, 'on_sale' | 'sale_starts_at
   if (e.on_sale || !e.sale_starts_at) return false
   return Date.parse(e.sale_starts_at) <= now && (!e.sales_close_at || now < Date.parse(e.sales_close_at))
 }
+
+/**
+ * The read's current phase is over by the clock: the next phase's `opens_at` has passed, which ends it (04 §Waiting
+ * room Lifecycle). A cached copy then shows a room that no longer sells (W8 `ENDED` sends the fan back to W2), so it
+ * is fetched again, uncached. A phase ended early by hand has no such signal: up to DETAIL_REVALIDATE_S stale (W8
+ * then joins the current phase anyway).
+ */
+export const phaseOver = (room: Room | null, now: number) => !!room?.next && Date.parse(room.next.opens_at) <= now
 
 /** The backend's cap on `GET /fan/events` (04), also applied to the merged "Mes clubs" list. */
 export const LIST_MAX = 50
@@ -171,7 +203,7 @@ export const getEvent = cache(async (id: number, now = Date.now()): Promise<Shop
     }
   }
   let raw = await read(false)
-  if (raw && windowContradicts(toEvent(raw), now)) raw = await read(true)
+  if (raw && (windowContradicts(toEvent(raw), now) || phaseOver(toRoom(raw.room), now))) raw = await read(true)
   if (!raw) return null
   return { ...toEvent(raw), zones: (Array.isArray(raw.zones) ? (raw.zones as Raw[]) : []).map(toZone), payment_methods: methodsOf(raw.payment_methods), cash_until: str(raw.cash_until), room: toRoom(raw.room) }
 })

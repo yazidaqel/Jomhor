@@ -1535,4 +1535,99 @@ class AppLocalizationsAr extends AppLocalizations {
   String turnBar(String time) {
     return 'نوبتك · $time';
   }
+
+  @override
+  String roomMinEventsAny(int n) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: '$n أحداث', one: 'حدث واحد');
+    return '$_temp0';
+  }
+
+  @override
+  String queueNotEnoughEventsAny(int n, int attended) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'خاصك $n أحداث · عندك $attended',
+      one: 'خاصك حدث واحد · عندك $attended',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String roomStatusScheduled(String time) {
+    return 'الصف من $time';
+  }
+
+  @override
+  String roomStatusDraw(String time) {
+    return 'القرعة على $time';
+  }
+
+  @override
+  String get roomStatusJoin => 'دخل للصف';
+
+  @override
+  String get roomStatusResume => 'رجع لبلاصتي';
+
+  @override
+  String get roomStatusChoose => 'ختار بلايصي';
+
+  @override
+  String get roomStatusOpen => 'الصف مفتوح';
+
+  @override
+  String get roomStatusPaused => 'الدخول واقف شوية';
+
+  @override
+  String roomNext(String label, String time) {
+    return 'من بعد: $label · الصف من $time';
+  }
+
+  @override
+  String get roomNextDefault => 'البيع الجاي';
+
+  @override
+  String get membersChip => 'الأعضاء';
+
+  @override
+  String membersCaption(String date) {
+    return 'سعر الأعضاء · اللي تسجلو قبل $date';
+  }
+
+  @override
+  String get membersCaptionAny => 'سعر الأعضاء';
+
+  @override
+  String holderMembersOnly(String date) {
+    return 'هاد السعر غير للأعضاء اللي تسجلو قبل $date';
+  }
+
+  @override
+  String get holderMembersOnlyAny => 'هاد السعر غير للأعضاء';
+
+  @override
+  String holderCapReached(int limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: 'هاد الرقم وصل للحد ديال $limit تذاكر لهاد الحدث',
+      one: 'هاد الرقم وصل للحد ديال تذكرة وحدة لهاد الحدث',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get waitlistJoin => 'قائمة الانتظار';
+
+  @override
+  String get waitlistOn => 'راك فقائمة الانتظار';
+
+  @override
+  String get waitlistSheetBody => 'غادي نعلموك غير يتحررو شي بلايص. اللي جا الأول كيشري الأول.';
+
+  @override
+  String get waitlistLeave => 'خرج من القائمة';
+
+  @override
+  String get waitlistChannels => 'غادي نعلموك بنوتيفيكاسيون و واتساب';
 }

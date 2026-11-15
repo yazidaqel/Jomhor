@@ -18,10 +18,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * The room tick (docs/04-api.md §Waiting room Tick, Lifecycle): one transaction per live room, its row taken
- * {@code for no key update skip locked}, so with N instances one of them ticks a room at a time. The event row is never
- * locked here: an event PATCH holds it, then waits on the room row (for share), so the tick must never wait on it.
- * Stock and active holds are read without locks.
+ * The room tick (docs/04-api.md §Waiting room Tick, Lifecycle): one transaction per live room (one per phase), its row
+ * taken {@code for no key update skip locked}, so with N instances one of them ticks a room at a time. The event row is
+ * never locked here: an event PATCH holds it, then waits on the room row (for share), so the tick must never wait on
+ * it. Stock, active holds and the next phase's opens_at are read without locks.
  */
 @Service
 public class RoomTicks {
@@ -99,9 +99,14 @@ public class RoomTicks {
     private void tick(Tick r, Instant now) {
         UUID org = r.organizerId();
         Status status = r.status();
-        if (r.refundCutoffAt() != null && !now.isBefore(r.refundCutoffAt())) {
+        boolean nextPhase = r.nextOpensAt() != null && !now.isBefore(r.nextOpensAt());
+        if (nextPhase || (r.refundCutoffAt() != null && !now.isBefore(r.refundCutoffAt()))) {
             rooms.saveTick(with(r, Status.ENDED, r.joinedCount(), r.rankedCount(), r.admittedThrough(),
                     r.measuredRatePerMin(), r.rateMarkAt(), r.rateMarkThrough(), r.soldOut(), now, r.drawnAt()));
+            if (nextPhase) { // once: the row is locked and an ENDED room is never ticked again
+                audit.system(org, "room.end", String.valueOf(r.eventId()),
+                        "{\"reason\": \"NEXT_PHASE\", \"phase\": %d}".formatted(r.phase()));
+            }
             return;
         }
         int ranked = r.rankedCount();
@@ -117,7 +122,8 @@ public class RoomTicks {
             drawnAt = now;
             status = Status.OPEN;
             last = now;
-            audit.system(org, "room.draw", String.valueOf(r.eventId()), "{\"count\": %d}".formatted(drawn));
+            audit.system(org, "room.draw", String.valueOf(r.eventId()),
+                    "{\"count\": %d, \"phase\": %d}".formatted(drawn, r.phase()));
         }
         boolean ranking = status == Status.OPEN || status == Status.PAUSED;
         if (ranking) {
@@ -144,10 +150,10 @@ public class RoomTicks {
         int measured = r.measuredRatePerMin();
         Instant markAt = r.rateMarkAt();
         int markThrough = r.rateMarkThrough();
-        if (ranking) { // admitted over the last full minute, re-marked every 60 s
+        if (ranking) { // admitted over the last full minute, re-marked every 60 s; the first ranking tick seeds it
             long ms = markAt == null ? 0 : Duration.between(markAt, now).toMillis();
             if (markAt == null || ms >= 60_000) {
-                measured = markAt == null ? measured : (int) ((admitted - markThrough) * 60_000L / ms);
+                measured = markAt == null ? r.admissionRatePerMin() : (int) ((admitted - markThrough) * 60_000L / ms);
                 markAt = now;
                 markThrough = admitted;
             }
@@ -158,8 +164,8 @@ public class RoomTicks {
 
     private static Tick with(Tick r, Status status, int joined, int ranked, int admitted, int measured,
                              Instant markAt, int markThrough, boolean soldOut, Instant lastTickAt, Instant drawnAt) {
-        return new Tick(r.id(), r.organizerId(), r.eventId(), status, r.preQueueMin(), r.admissionRatePerMin(),
-                r.saleStartsAt(), r.refundCutoffAt(), joined, ranked, admitted, measured, markAt, markThrough, soldOut,
-                lastTickAt, drawnAt);
+        return new Tick(r.id(), r.organizerId(), r.eventId(), r.phase(), status, r.preQueueMin(),
+                r.admissionRatePerMin(), r.saleStartsAt(), r.refundCutoffAt(), r.nextOpensAt(), joined, ranked,
+                admitted, measured, markAt, markThrough, soldOut, lastTickAt, drawnAt);
     }
 }

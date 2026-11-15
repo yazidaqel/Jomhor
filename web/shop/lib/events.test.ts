@@ -130,10 +130,28 @@ it('getEvent maps field by field: nothing outside the contract survives', async 
   const text = JSON.stringify(e)
   for (const s of SECRETS) expect(text).not.toContain(s)
   expect(e).toMatchObject({ id: 12, organizer_id: ORG, organizer: { slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null }, competition: 'Championnat', matchday: 11, per_account_limit: 4 })
-  expect(e!.zones[0]!.prices[0]).toEqual({ price_category_id: 'pc-tribune', name: 'Tribune', price_mad: 12050, remaining: 30 })
+  expect(e!.zones[0]!.prices[0]).toEqual({ price_category_id: 'pc-tribune', name: 'Tribune', price_mad: 12050, remaining: 30, audience: 'ALL' })
   const [url, init] = fetchMock.mock.calls[0]!
   expect(url).toBe('http://backend.test/v1/fan/events/12')
   expect(init).toMatchObject({ next: { revalidate: 15 } })
+})
+
+it('getEvent maps the Lot 5 step 2 room (current phase, label, next) and price audience field by field', async () => {
+  const next = { phase: 2, label: '  ', opens_at: '2026-02-02T09:30:00Z', sale_starts_at: '2026-02-02T10:00:00Z', SECRET: 'SECRET-NEXT' }
+  const room = { phase: 1, label: 'Prévente membres', status: 'OPEN', opens_at: '2026-01-20T09:30:00Z', sale_starts_at: '2026-01-20T10:00:00Z', eligibility: null, next, id: 'SECRET-ROOM' }
+  const zones = [{ id: 3, code: 'N', name: 'Nord', seated: false, gate_codes: [], prices: [{ price_category_id: 'pc-m', name: 'Membres', price_mad: 5000, remaining: 9, audience: 'MEMBERS' }] }]
+  fetchMock.mockResolvedValue(json(200, rawEvent({ room, zones })))
+  const e = await getEvent(12, NOW)
+  expect(e!.room).toEqual({
+    phase: 1,
+    label: 'Prévente membres',
+    status: 'OPEN',
+    opens_at: '2026-01-20T09:30:00Z',
+    sale_starts_at: '2026-01-20T10:00:00Z',
+    eligibility: null,
+    next: { phase: 2, label: null, opens_at: '2026-02-02T09:30:00Z', sale_starts_at: '2026-02-02T10:00:00Z' }, // a blank label is none
+  })
+  expect(e!.zones[0]!.prices[0]!.audience).toBe('MEMBERS')
 })
 
 it('getEvent → null for an unknown or DRAFT event (404)', async () => {

@@ -85,7 +85,7 @@ class _TransferSheetState extends ConsumerState<TransferSheet> {
     setState(() {
       _sending = false;
       switch (refused.reason) {
-        case TransferRefusal.self || TransferRefusal.phone:
+        case TransferRefusal.self || TransferRefusal.phone || TransferRefusal.holderLimit:
           _phoneError = text;
           _step = _Step.form;
         case TransferRefusal.name:

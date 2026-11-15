@@ -51,10 +51,12 @@ void main() {
       expect(cta(tester, 'hero.cta').onPressed, isNull);
     });
 
-    testWidgets('sold out: "Complet", disabled', (tester) async {
+    // Lot 5 step 2: sold out with no room, the waitlist (test/waitlist_test.dart); signed out, nothing read yet.
+    testWidgets('sold out: "Liste d\'attente", enabled', (tester) async {
       await pumpJomhor(tester, backend: backend([eventJson(soldOut: true, fromPriceMad: null)]));
-      expect(find.text('Complet'), findsOneWidget);
-      expect(cta(tester, 'hero.cta').onPressed, isNull);
+      expect(find.text("Liste d'attente"), findsOneWidget);
+      expect(cta(tester, 'hero.waitlist').onPressed, isNotNull);
+      expect(requests.where((r) => r.url.path.startsWith('/v1/fan/waitlist')), isEmpty);
     });
 
     testWidgets('closed: "Vente terminée", disabled', (tester) async {

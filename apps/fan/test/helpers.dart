@@ -325,10 +325,10 @@ Map<String, Object?> roomJson({
   Map<String, Object?>? eligibility,
 }) => {'status': status, 'opens_at': at, 'eligibility': eligibility};
 
-/// An answer captured from the dev API in the FL-26 real run (2026-11-15), queue and admission tokens replaced by
-/// `qt-real` and `adm-real`.
-({int status, Map<String, Object?> body}) realAnswer(String name) {
-  final j = jsonDecode(File('test/fixtures/queue/$name.json').readAsStringSync()) as Map<String, Object?>;
+/// An answer captured from the dev API in the FL-26 and FL-27 real runs (2026-11-15), queue and admission tokens
+/// replaced by `qt-real` and `adm-real`. [dir] `goldens`: design content in the shape of a captured answer.
+({int status, Map<String, Object?> body}) realAnswer(String name, {String dir = 'queue'}) {
+  final j = jsonDecode(File('test/fixtures/$dir/$name.json').readAsStringSync()) as Map<String, Object?>;
   return (status: j['status']! as int, body: j['body']! as Map<String, Object?>);
 }
 
@@ -342,6 +342,12 @@ class RoomSale {
   final Duration serverSkew;
   final requests = <http.Request>[];
   Map<String, Object?>? room = roomJson();
+
+  /// A whole `GET /fan/events/{id}` body to serve instead of the default event (its `room` is still [room]).
+  Map<String, Object?>? detail;
+
+  /// `GET /fan/events/1` answers 503 while set.
+  bool detailFails = false;
 
   /// Queued answers of POST /fan/queue (default: 201 in the pre-queue).
   final joins = <http.Response Function()>[];
@@ -389,27 +395,31 @@ class RoomSale {
   http.Response refusal(int status, String code, Map<String, Object?> details) =>
       answer({'code': code, 'message': code, 'details': details}, status);
 
-  /// An answer of the real API (test/fixtures/queue, FL-26 real run), served for event 1.
-  http.Response real(String name) {
-    final (:status, :body) = realAnswer(name);
+  /// An answer of the real API (test/fixtures/queue, FL-26 and FL-27 real runs), served for event 1.
+  http.Response real(String name, {String dir = 'queue'}) {
+    final (:status, :body) = realAnswer(name, dir: dir);
     if (body case {'event_id': _}) body['event_id'] = 1;
     return answer(body, status);
   }
 
-  Map<String, Object?> event() => eventJson(
-    onSale: false,
-    saleStartsAt: roomSaleStartsAt,
-    zones: [
-      zoneJson(1, 'Tribune Nord', [(5000, 300)]),
-      zoneJson(2, 'Virage Sud', [(3000, 120)], seated: false),
-    ],
-  )..['room'] = room;
+  Map<String, Object?> event() =>
+      detail != null
+            ? {...detail!, 'id': 1, 'room': room}
+            : eventJson(
+                onSale: false,
+                saleStartsAt: roomSaleStartsAt,
+                zones: [
+                  zoneJson(1, 'Tribune Nord', [(5000, 300)]),
+                  zoneJson(2, 'Virage Sud', [(3000, 120)], seated: false),
+                ],
+              )
+        ..['room'] = room;
 
   Future<http.Response> handle(http.Request r) async {
     requests.add(r);
     return switch ((r.method, r.url.path)) {
       ('GET', '/v1/fan/events') => answer([event()..remove('zones')]),
-      ('GET', '/v1/fan/events/1') => answer(event()),
+      ('GET', '/v1/fan/events/1') => detailFails ? apiError(503, 'UNAVAILABLE') : answer(event()),
       ('POST', '/v1/fan/queue') => joins.isEmpty ? answer(q(), 201) : joins.removeAt(0)(),
       ('GET', '/v1/fan/queue') => switch (polls.length) {
         0 => answer(q()),

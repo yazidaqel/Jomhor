@@ -1,6 +1,6 @@
 # Lot 5 · Organizer platform: implementation plan
 
-As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids: BE-40, FL-26, WS-12, BO-20, Q139, P101. Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
+As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 2, §10): BE-51, FL-29, WS-15, BO-22, Q184, P129; next migration V25 (step 2 takes V25–V28). Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
 
 ## 1. Lot
 
@@ -548,9 +548,7 @@ No new runtime component and no Kafka. Payzone stays simulated. No hosting-provi
 6. In phase 2, a non-member picking "Tarif membres" gets "Tarif réservé aux membres inscrits avant le {date}" on that holder row.
 7. A fourth friend's order naming a phone that already holds 4 places gets "Ce numéro a atteint la limite de 4 billets".
 8. The event sells out and OPS ends the room. Screen 1 shows "Liste d'attente". Two fans join.
-9. An ADMIN refunds one ticket. Two things follow:
-   - the refunded buyer can buy one more place (Q52);
-   - within about 30 s, the oldest waitlisted fan gets "Des places se sont libérées" (push, plus WhatsApp in the simulated provider's log) and buys it.
+9. An ADMIN refunds one ticket. The refunded ticket no longer counts toward the buyer's limit (Q52: two more places → `PER_ACCOUNT_LIMIT` `held` 3). Within about 30 s, the oldest waitlisted fan gets "Des places se sont libérées" (push, plus WhatsApp in the simulated provider's log) and buys the place. OPS then releases one more place: no second notice inside the 10 min cooldown, and the refunded buyer buys it.
 10. `check.sql` is clean.
 
 CI green on: `Lot5FairSaleFlowTest`, `FairLimitsApiTest`, `WaitlistApiTest`, `WaitlistJobTest`, the extended `MultiInstanceTest`, every step-1 test moved to `/rooms/1`, `apps/fan/test/queue_test.dart` and `waitlist_test.dart`, shop `queue.test.tsx` and `waitlist.test.tsx`, back-office `room.test.tsx`.
@@ -792,7 +790,7 @@ Gate, manifest, scans, token and vectors: unchanged.
 
 | # | Owner | Area | Done |
 | --- | --- | --- | --- |
-| W0-1 | orchestrator | `docs/02`, `03`, `04`, `06`, `design/DESIGN.md` | §10.4 applied after the founder agrees |
+| W0-1 | orchestrator | `docs/02`, `03`, `04`, `06`, `design/DESIGN.md` | §10.4 applied after the founder agrees · **done 2026-11-15** |
 | W0-2 | orchestrator | git | `feat/lot-5-fair-sale` from `main`. No new CI job |
 | W0-3 | founder | — | The product calls (Q168–Q171, Q173, Q176–Q178, Q183). Club: member price per place or per buyer? Presale dates? Meta template `waitlist_open` once the WhatsApp provider exists (BE-36). CNDP: "availability notices" |
 
@@ -878,3 +876,6 @@ Gate, manifest, scans, token and vectors: unchanged.
 | Holder limit re-checked on a late success | if it ever matters | `ponytail:` in `OrderService.reReserve` |
 | Member-only leftovers notifying non-members | if the club complains | `ponytail:` in `WaitlistJob` (R over every category) |
 | Meta template `waitlist_open` | with BE-36 | Q178 |
+| W2 after `WAITLIST_CLOSED`: `router.refresh()` reads the 15 s event cache, so the page can stay stale until it expires; a fresh read when rendered `sold_out` with no room | when polishing W2 | WS-14 review n2 |
+| B13 "Rythme" reads the seed rate (`figures.admitted_last_min`) in the first minute after a draw, with no fans admitted yet, and `estimated_drain_s` 0 instead of null; show it as "—" until the first 60 s re-mark, or seed only the fan estimate | when polishing B13 | BO-21 real run |
+| Event PATCH moving `starts_at` earlier doesn't re-check that phases ≥ 2 start before `starts_at − 60 min` | if it ever matters | BE-48 review m3 |

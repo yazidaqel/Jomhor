@@ -163,6 +163,8 @@ create table events (
 );
 create index on events (organizer_id, starts_at);
 
+create type price_audience as enum ('ALL','MEMBERS');
+
 create table price_categories (
   id            uuid primary key default gen_random_uuid(),
   organizer_id  uuid not null references organizers(id),
@@ -174,6 +176,8 @@ create table price_categories (
   sold          integer not null default 0 check (sold >= 0 and sold <= quota),
                 -- held (RESERVED, AWAITING_CASH) + PAID; incremented atomically on reserve,
                 -- decremented when an order expires or is cancelled, and when a ticket is refunded (one place)
+  audience      price_audience not null default 'ALL',  -- MEMBERS: each place held by a live member of the organizer who joined
+                                                         -- before events.sale_starts_at (docs/04-api.md POST /fan/orders)
   unique (event_id, zone_id, name)
 );
 
@@ -215,6 +219,7 @@ create table order_items (
   constraint order_items_holders_len check (jsonb_array_length(holders) = qty) not valid,  -- Lot 0 rows keep []
   unique (order_id, price_category_id)
 );
+create index on order_items using gin (holders jsonb_path_ops);  -- holder limit: places one account holds (docs/04-api.md POST /fan/orders)
 
 create type ticket_status as enum ('VALID','CANCELLED','REFUNDED','BLOCKED');
 
@@ -262,13 +267,17 @@ create table passes (
 -- ---------- sales: waiting rooms (Lot 5) ----------
 create type room_status as enum ('SCHEDULED','PRE_QUEUE','OPEN','PAUSED','ENDED');
 
-create table waiting_rooms (                          -- high-demand on-sale (docs/04-api.md §Waiting room); one per event in Lot 5 step 1
+create table waiting_rooms (                          -- high-demand on-sale (docs/04-api.md §Waiting room); one per phase of an event
   id                      uuid primary key default gen_random_uuid(),
   organizer_id            uuid not null references organizers(id),
-  event_id                integer not null unique references events(id),
+  event_id                integer not null references events(id),   -- no longer unique (Lot 5 step 2)
+  phase                   smallint not null default 1 check (phase between 1 and 5),
+                          -- sale phases in order; a phase ends when the next one's opens_at passes
+  label                   text check (char_length(label) between 1 and 40),  -- shown to fans as typed ('Prévente membres'); null = none
+  starts_at               timestamptz,   -- this phase's sale start (its draw); null for phase 1 = events.sale_starts_at
   status                  room_status not null default 'SCHEDULED',
   pre_queue_min           smallint not null default 30 check (pre_queue_min between 0 and 1440),
-                          -- joins open at events.sale_starts_at - pre_queue_min; joins before sale_starts_at are drawn at random
+                          -- joins open at the phase's sale start - pre_queue_min; joins before the sale start are drawn at random
   admission_rate_per_min  integer not null default 500 check (admission_rate_per_min between 1 and 6000),
   min_account_age_days    smallint check (min_account_age_days between 1 and 365),  -- eligibility, each null = not required:
   member_joined_before    timestamptz,                                              --   verified_at <= sale_starts_at - n days;
@@ -283,7 +292,9 @@ create table waiting_rooms (                          -- high-demand on-sale (do
   last_tick_at            timestamptz,
   drawn_at                timestamptz,
   created_at              timestamptz not null default now(),
-  constraint waiting_rooms_admitted check (admitted_through <= ranked_count)
+  unique (event_id, phase),
+  constraint waiting_rooms_admitted check (admitted_through <= ranked_count),
+  constraint waiting_rooms_starts check ((phase = 1) = (starts_at is null))
 );
 create index on waiting_rooms (status) where status <> 'ENDED';
 
@@ -305,6 +316,19 @@ create index on queue_entries (room_id, joined_at) where rank is null;
 create index on queue_entries (room_id, device_hash);
 create index on queue_entries (room_id, ip_hash, joined_at);   -- per-IP join limit (docs/04-api.md §Waiting room)
 -- Rows are deleted 30 days after the event's starts_at (rooms.retention).
+
+-- ---------- sales: waitlist (Lot 5) ----------
+create table waitlist_entries (                       -- sold-out waitlist (docs/04-api.md §Waitlist); one per account per event
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  event_id      integer not null references events(id),
+  user_id       uuid not null references users(id),
+  joined_at     timestamptz not null default now(),   -- notice order; a join after a notice resets it (back of the list)
+  notified_at   timestamptz,                          -- set with the WAITLIST_OPEN messages, in one transaction
+  unique (event_id, user_id)
+);
+create index on waitlist_entries (event_id, notified_at, joined_at);
+-- Rows are deleted on leave and 30 days after the event's starts_at (waitlist.retention).
 
 -- ---------- point of sale ----------
 create table pos_sessions (
@@ -403,7 +427,7 @@ create index on ticket_deliveries (next_attempt_at) where status = 'PENDING';
 create index on ticket_deliveries (ticket_id, created_at desc);   -- re-send limit
 
 create type message_channel as enum ('PUSH','WHATSAPP');
-create type message_kind    as enum ('TICKET_RECEIVED','SPLIT_INVITE','PAY_CODE','ORDER_PAID','CAMPAIGN');
+create type message_kind    as enum ('TICKET_RECEIVED','SPLIT_INVITE','PAY_CODE','ORDER_PAID','CAMPAIGN','WAITLIST_OPEN');
 
 create table push_tokens (                            -- FCM registration tokens of the Jomhor fan app (one app, every club)
   id            uuid primary key default gen_random_uuid(),   -- platform identity like fan_sessions: no organizer_id;
@@ -447,7 +471,8 @@ create table fan_messages (                           -- outbox: push and WhatsA
   campaign_id      uuid references campaigns(id),
   order_id         uuid references orders(id),             -- SPLIT_INVITE, PAY_CODE, ORDER_PAID
   ticket_id        uuid references tickets(id),            -- TICKET_RECEIVED
-  status           delivery_status not null default 'PENDING',
+  event_id         integer references events(id),          -- WAITLIST_OPEN
+  status          delivery_status not null default 'PENDING',
   attempts         smallint not null default 0,
   next_attempt_at  timestamptz not null default now(),
   last_error       text,                                   -- provider code or NO_DEVICE / OPTED_OUT / NOT_CONFIGURED / STALE; never a phone or body
@@ -456,12 +481,15 @@ create table fan_messages (                           -- outbox: push and WhatsA
   constraint fan_messages_campaign check ((kind = 'CAMPAIGN') = (campaign_id is not null)),
   constraint fan_messages_subject check (
     (ticket_id is not null) = (kind = 'TICKET_RECEIVED')
-    and (order_id is not null) = (kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID')))
+    and (order_id is not null) = (kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID'))
+    and (event_id is not null) = (kind = 'WAITLIST_OPEN'))
 );
 create index on fan_messages (next_attempt_at) where status = 'PENDING';
 create unique index on fan_messages (campaign_id, user_id) where campaign_id is not null;          -- one per recipient
 create unique index on fan_messages (order_id, kind, channel) where kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID');  -- once
 create index on fan_messages (user_id, created_at desc) where kind = 'CAMPAIGN' and channel = 'PUSH';  -- inbox
+create index on fan_messages (event_id, created_at) where kind = 'WAITLIST_OPEN';  -- waitlist cooldown
+-- No unique index for WAITLIST_OPEN: waitlist_entries.notified_at, set in the same transaction, makes it once per wait.
 
 -- ---------- gate ----------
 create type device_status as enum ('PENDING','ACTIVE','REVOKED');
