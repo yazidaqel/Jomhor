@@ -40,6 +40,11 @@
 | admission token | jeton d'accès | رمز الدخول | Internal (never shown to fans) |
 | verified fan | fan vérifié | مشجع موثّق | meets this event's rule (account age, membership, matches attended) |
 | pre-queue | pré-file | قبل الفتح | — |
+| waitlist | liste d'attente | قائمة الانتظار | sold out: we tell you when places come back |
+| presale | prévente | البيع المسبق | — |
+| sale phase | phase de vente | مرحلة البيع | — |
+| general sale | vente générale | البيع العام | — |
+| members price | tarif membres | سعر الأعضاء | for members who joined before the sale opened |
 
 ## Scan result codes
 

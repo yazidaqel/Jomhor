@@ -1,6 +1,6 @@
 # Lot 5 · Organizer platform: implementation plan
 
-As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids: BE-40, FL-26, WS-12, BO-20, Q139, P101. Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
+As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 2, §10): BE-51, FL-29, WS-15, BO-22, Q184, P129; next migration V25 (step 2 takes V25–V28). Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
 
 ## 1. Lot
 
@@ -792,7 +792,7 @@ Gate, manifest, scans, token and vectors: unchanged.
 
 | # | Owner | Area | Done |
 | --- | --- | --- | --- |
-| W0-1 | orchestrator | `docs/02`, `03`, `04`, `06`, `design/DESIGN.md` | §10.4 applied after the founder agrees |
+| W0-1 | orchestrator | `docs/02`, `03`, `04`, `06`, `design/DESIGN.md` | §10.4 applied after the founder agrees · **done 2026-11-15** |
 | W0-2 | orchestrator | git | `feat/lot-5-fair-sale` from `main`. No new CI job |
 | W0-3 | founder | — | The product calls (Q168–Q171, Q173, Q176–Q178, Q183). Club: member price per place or per buyer? Presale dates? Meta template `waitlist_open` once the WhatsApp provider exists (BE-36). CNDP: "availability notices" |
 
