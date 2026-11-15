@@ -390,6 +390,7 @@ These override the screen specs above (see `docs/plans/lot-5.md` §11).
 | W2 | Header nav "Abonnements" → W9. |
 | W9 | Club header (as W7), then one card per product: name, price in display type, zone and venue, "{n} matchs annoncés" (expandable), CTA "Acheter" → `/orders/new?product={id}` (signed out → `/login?next=…`). The membership card: "Carte membre · {price} · valable jusqu'au {date}". |
 | W3 | Product variant at `/orders/new?product=`: holder name, methods, CTA. |
+| W3, W8 | When `MEMBERS_ONLY` or `NOT_ELIGIBLE` `NOT_MEMBER` carry `paid_required: true`: "Tarif réservé aux membres à jour de cotisation, inscrits avant le {date}" (without the date when null) / "Réservée aux membres à jour de cotisation…", as the app (screens 3/4/12). |
 | W5 | Section "Mes abonnements" above the tickets: rows with status; `PENDING` → resume. "Abonnement" chip on tickets. |
 | B2 Général | "Série" select (the organizer's series) + "Nouvelle série" dialog (nom, du, au). Disabled with a tooltip on `PASS_TICKETS`. |
 | B2 Tarifs | "Accès" + "Abonnés" (helper "Places des abonnés de la série · jamais vendues"); the price input is fixed at 0 for it. |
