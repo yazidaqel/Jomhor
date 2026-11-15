@@ -781,11 +781,10 @@ void main() {
         // From the top, down until the refused row's line shows at the bottom: the whole row stays in view.
         await tester.drag(find.byType(ListView).last, const Offset(0, 3000));
         await tester.pumpAndSettle();
-        await tester.dragUntilVisible(
-          find.byKey(Key('holder.$row.refusal')),
-          find.byType(ListView).last,
-          const Offset(0, -100),
-        );
+        final refusal = find.byKey(Key('holder.$row.refusal'));
+        await tester.dragUntilVisible(refusal, find.byType(ListView).last, const Offset(0, -100));
+        // dragUntilVisible aligns the line to the top, hiding the row above it: put it at the bottom instead.
+        await Scrollable.ensureVisible(tester.element(refusal), alignment: 1);
         await tester.pumpAndSettle();
         if (locale == 'ar') expectArabicRules(tester);
         await snap('$locale-$name');
