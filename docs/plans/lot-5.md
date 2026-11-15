@@ -882,7 +882,7 @@ Gate, manifest, scans, token and vectors: unchanged.
 
 ## 11. Step 3 · Passes, paid membership, installments
 
-As of 2026-11-15 · owner: tech-lead · status: **proposed**. V28 is the latest migration, so step 3 starts at V29.
+As of 2026-11-15 · owner: tech-lead · status: **agreed 2026-11-15** by the founder: paid membership required for members prices and presales once the club sells one (Q189); N payments every 30 days, N ≤ 10, within the season (Q195); 7-day grace then suspension, unblocked on payment, no fee or cancellation (Q197); zone pass, one per account, transferable match tickets (Q186, Q188); the other defaults stand. V28 is the latest migration, so step 3 starts at V29.
 - 3a uses V29–V30 and branch `feat/lot-5-passes` from `main` (c7d96ee, step 2 merged in #21).
 - 3b uses V31–V32 and branch `feat/lot-5-installments` from `main` once 3a is merged.
 - Ids used: Q184–Q201, P129–P141, BE-51–BE-60, FL-29–FL-31, WS-15–WS-16, BO-22–BO-24.
