@@ -2,12 +2,29 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import type { Zone } from '@/lib/events'
+import type { RoomStatus, Zone } from '@/lib/events'
 import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
+import { mmss } from '@/lib/queue'
+import { useAdmission, useServerClock } from '@/lib/queue-hooks'
 import { ArrowIcon, CheckIcon } from '../../../../icons'
 
-type Copy = Pick<Dict, 'event' | 'order' | 'meta'>
+type Copy = Pick<Dict, 'event' | 'order' | 'meta' | 'room'>
+
+/** W2 room panel (DESIGN Lot 5): what the server knows, formatted in the venue time zone. */
+export type RoomView = {
+  status: RoomStatus
+  opensAt: string
+  /** "File d'attente dès 15:30". */
+  opensLabel: string
+  /** The eligibility line, or null without a rule. */
+  rules: string | null
+  /** W8, or the login page back to W8 when signed out. */
+  join: string
+  signedIn: boolean
+  /** Server clock at SSR (ms): the flip at `opensAt` and the turn countdown run on it, never the device clock. */
+  now: number
+}
 
 /** "Dernières places" at or under this many (DESIGN.md §Lot 1 adjustments, screen 2). */
 const LAST_SEATS = 50
@@ -18,12 +35,15 @@ const BARS = ['bg-zone-a', 'bg-zone-b', 'bg-zone-c']
  * W2 zone grid + summary card. One card per price category (a zone can have several). Quantity 1 to
  * min(per_account_limit, remaining): the server re-checks both, including what the fan already holds.
  * `closed` = the sale status text when the sale isn't open; every card is disabled then.
+ * `room` (Lot 5) = a live waiting room: until this tab holds a running W8 turn, cards show prices but are disabled
+ * ("Accès par la file") and the summary becomes the room panel, which flips to "Rejoindre la file" at `opens_at`.
  */
 export function ZonePicker({
   eventId,
   zones,
   limit,
   closed,
+  room = null,
   copy,
   children,
 }: {
@@ -31,9 +51,14 @@ export function ZonePicker({
   zones: Zone[]
   limit: number
   closed: string | null
+  room?: RoomView | null
   copy: Copy
   children?: React.ReactNode
 }) {
+  const [serverNow] = useServerClock(room?.now ?? 0, !!room)
+  const stored = useAdmission(eventId, serverNow)
+  const turn = room ? stored : null // a turn left from a room that has ended means nothing now
+  const gated = !!room && !turn
   const options = zones.flatMap((z, i) =>
     z.prices.map((p) => ({
       ...p,
@@ -46,7 +71,7 @@ export function ZonePicker({
   )
   const [selected, setSelected] = useState<string | null>(null)
   const [qty, setQty] = useState(1)
-  const opt = closed ? undefined : options.find((o) => o.price_category_id === selected && o.remaining > 0)
+  const opt = closed || gated ? undefined : options.find((o) => o.price_category_id === selected && o.remaining > 0)
   const max = opt ? Math.max(1, Math.min(limit, opt.remaining)) : 1
   const n = Math.min(qty, max)
   const total = opt ? opt.price_mad * n : 0 // integer centimes × integer count: exact
@@ -66,7 +91,7 @@ export function ZonePicker({
               <button
                 key={o.price_category_id}
                 type="button"
-                disabled={soldOut || !!closed}
+                disabled={soldOut || !!closed || gated}
                 aria-pressed={on}
                 onClick={() => setSelected(o.price_category_id)}
                 style={{ '--i': i } as React.CSSProperties}
@@ -78,7 +103,7 @@ export function ZonePicker({
                   <span aria-hidden="true" className={`h-7 w-2.5 rounded-[5px] ${soldOut ? 'bg-zone-disabled' : o.bar}`} />
                   <span className="text-base font-semibold">{o.zone}</span>
                 </span>
-                {!soldOut && !closed && (
+                {!soldOut && !closed && !gated && (
                   <span
                     aria-hidden="true"
                     className={`absolute top-4 end-4 flex size-6 items-center justify-center rounded-pill border-2 transition-colors duration-200 ${
@@ -101,6 +126,7 @@ export function ZonePicker({
                     )}
                   </span>
                 )}
+                {gated && !soldOut && <span className="text-xs font-semibold text-accent">{copy.room.viaQueue}</span>}
               </button>
             )
           })}
@@ -108,42 +134,51 @@ export function ZonePicker({
         {children}
       </section>
 
-      <aside
-        aria-labelledby="order-title"
-        className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-border bg-surface p-5 shadow-2xl shadow-ground md:sticky md:top-24 md:max-w-[380px]"
-      >
-        <h2 id="order-title" className="font-display text-h2 uppercase">
-          {copy.order.title}
-        </h2>
-        {opt ? (
-          <>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="flex items-center gap-2.5 font-semibold">
-                <span aria-hidden="true" className={`h-5 w-1.5 rounded-pill ${opt.bar}`} />
-                {opt.zone}
-              </span>
-              <div role="group" aria-label={copy.order.quantity} className="flex items-center gap-2.5">
-                <Step label={copy.order.less} disabled={n <= 1} onClick={() => setQty(n - 1)} path="M5 12h14" />
-                <output aria-live="polite" className="w-5 text-center font-semibold">
-                  {n}
-                </output>
-                <Step label={copy.order.more} disabled={n >= max} onClick={() => setQty(n + 1)} path="M5 12h14M12 5v14" />
+      {gated && room ? (
+        <RoomPanel room={room} open={room.status !== 'SCHEDULED' || serverNow >= Date.parse(room.opensAt)} copy={copy.room} />
+      ) : (
+        <aside
+          aria-labelledby="order-title"
+          className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-border bg-surface p-5 shadow-2xl shadow-ground md:sticky md:top-24 md:max-w-[380px]"
+        >
+          <h2 id="order-title" className="font-display text-h2 uppercase">
+            {copy.order.title}
+          </h2>
+          {opt ? (
+            <>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="flex items-center gap-2.5 font-semibold">
+                  <span aria-hidden="true" className={`h-5 w-1.5 rounded-pill ${opt.bar}`} />
+                  {opt.zone}
+                </span>
+                <div role="group" aria-label={copy.order.quantity} className="flex items-center gap-2.5">
+                  <Step label={copy.order.less} disabled={n <= 1} onClick={() => setQty(n - 1)} path="M5 12h14" />
+                  <output aria-live="polite" className="w-5 text-center font-semibold">
+                    {n}
+                  </output>
+                  <Step label={copy.order.more} disabled={n >= max} onClick={() => setQty(n + 1)} path="M5 12h14M12 5v14" />
+                </div>
               </div>
-            </div>
-            <Line left={fmt(copy.order.line, { qty: n, price: formatDh(opt.price_mad) })} right={formatDh(total)} />
-            <Line left={copy.order.fee} right={formatDh(0)} />
-            <hr className="border-border" />
-            <p className="flex items-baseline justify-between">
-              <span className="font-semibold">{copy.order.total}</span>
-              <span className="font-display text-[34px] font-extrabold leading-none">{formatDh(total)}</span>
+              <Line left={fmt(copy.order.line, { qty: n, price: formatDh(opt.price_mad) })} right={formatDh(total)} />
+              <Line left={copy.order.fee} right={formatDh(0)} />
+              <hr className="border-border" />
+              <p className="flex items-baseline justify-between">
+                <span className="font-semibold">{copy.order.total}</span>
+                <span className="font-display text-[34px] font-extrabold leading-none">{formatDh(total)}</span>
+              </p>
+            </>
+          ) : (
+            <p className="rounded-chip border border-dashed border-border px-4 py-5 text-center text-body-small text-text-secondary">{closed ?? copy.order.pick}</p>
+          )}
+          {turn && (
+            <p data-turn className="flex items-center justify-center gap-2 rounded-chip bg-accent/10 px-3 py-2 text-sm font-semibold text-accent">
+              {fmt(copy.room.turnBar, { time: mmss(Math.ceil((Date.parse(turn.expires_at) - serverNow) / 1000)) })}
             </p>
-          </>
-        ) : (
-          <p className="rounded-chip border border-dashed border-border px-4 py-5 text-center text-body-small text-text-secondary">{closed ?? copy.order.pick}</p>
-        )}
-        <Cta href={href} label={copy.order.cta} className="hidden md:flex" />
-        <p className="text-center text-xs text-text-muted">{copy.order.hold}</p>
-      </aside>
+          )}
+          <Cta href={href} label={copy.order.cta} className="hidden md:flex" />
+          <p className="text-center text-xs text-text-muted">{copy.order.hold}</p>
+        </aside>
+      )}
 
       {/* Phone width: the CTA is a sticky bottom bar (DESIGN.md §Web shop). */}
       {opt && (
@@ -201,5 +236,44 @@ function Cta({ href, label, className }: { href: string | undefined; label: stri
     <button type="button" disabled className={`${base} bg-surface2 text-text-disabled`}>
       {label}
     </button>
+  )
+}
+
+/**
+ * The summary aside while a room gates the sale: one line on the room, the eligibility rule, and the CTA:
+ * before `opens_at` disabled "File d'attente dès {time}" (+ "Connecte-toi maintenant" when signed out), then
+ * "Rejoindre la file" → W8 (through the login when signed out). Phone width: the CTA is a sticky bottom bar.
+ */
+function RoomPanel({ room, open, copy }: { room: RoomView; open: boolean; copy: Dict['room'] }) {
+  const cta = (phone: boolean) => (
+    <Cta href={open ? room.join : undefined} label={open ? copy.join : room.opensLabel} className={phone ? 'flex w-full' : 'hidden md:flex'} />
+  )
+  return (
+    <aside
+      aria-labelledby="room-title"
+      data-room={open ? 'open' : 'scheduled'}
+      className="flex w-full flex-[1_1_320px] flex-col gap-3.5 rounded-card border border-accent/40 bg-surface p-5 shadow-2xl shadow-ground md:sticky md:top-24 md:max-w-[380px]"
+    >
+      <p className="text-label uppercase text-accent">{copy.title}</p>
+      <h2 id="room-title" className="font-display text-h2 uppercase">
+        {copy.panelTitle}
+      </h2>
+      <p className="text-body-small text-text-secondary">{copy.panelIntro}</p>
+      {room.rules && (
+        <p className="flex gap-2 rounded-control bg-ground p-3 text-body-small text-text-secondary">
+          <CheckIcon className="mt-0.5 size-4 shrink-0 text-accent" />
+          {room.rules}
+        </p>
+      )}
+      {cta(false)}
+      {!open && !room.signedIn && (
+        <Link href={room.join} className="flex min-h-touch-min items-center justify-center text-body-small font-semibold text-accent hover:underline">
+          {copy.loginNow}
+        </Link>
+      )}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] md:hidden">
+        {cta(true)}
+      </div>
+    </aside>
   )
 }

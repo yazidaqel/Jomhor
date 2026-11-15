@@ -927,6 +927,24 @@ it('sale opening: a server 422 on sale_starts_at opens Général and shows the F
   expect(field(fr.events.form.saleStartsAt).getAttribute('aria-invalid')).toBe('true')
 })
 
+it('sale opening: a 409 ROOM_STARTED (the waiting room has started) says the opening is pinned, on the field', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi(
+    'ADMIN',
+    (c) => (c.method === 'PATCH' ? Response.json({ code: 'EVENT_NOT_EDITABLE', message: 'x', details: { reason: 'ROOM_STARTED' } }, { status: 409 }) : undefined),
+    detail({ status: 'ON_SALE', sale_starts_at: '2026-11-01T09:00:00Z' }),
+  )
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  setDateTime(fr.events.form.saleStartsAt, '2026-11-02T10:00')
+  await user.click(screen.getByRole('button', { name: fr.events.saveChanges }))
+
+  expect(await screen.findByText(fr.events.form.roomStarted)).toBeTruthy()
+  expect(field(fr.events.form.saleStartsAt).getAttribute('aria-invalid')).toBe('true')
+  expect(screen.queryByText(fr.errors.EVENT_NOT_EDITABLE)).toBeNull()
+  expect(writes(calls)).toHaveLength(1)
+})
+
 it('FINANCE: the sale opening is shown read-only', async () => {
   stubApi('FINANCE', undefined, detail({ sale_starts_at: '2026-11-01T09:00:00Z' }))
   renderApp('/events/1')

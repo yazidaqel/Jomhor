@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -62,15 +63,17 @@ public class EventService {
     private final AuditLog audit;
     private final EventLock gateLock;
     private final PaymentMethods paymentMethods;
+    private final EventRooms rooms;
     private final SecureRandom random = new SecureRandom();
 
     public EventService(Events events, KeyEncryptor keys, AuditLog audit, EventLock gateLock,
-                        PaymentMethods paymentMethods) {
+                        PaymentMethods paymentMethods, EventRooms rooms) {
         this.events = events;
         this.keys = keys;
         this.audit = audit;
         this.gateLock = gateLock;
         this.paymentMethods = paymentMethods;
+        this.rooms = rooms;
     }
 
     public List<Event.Summary> list(UUID org, Status status, Instant from) {
@@ -107,6 +110,11 @@ public class EventService {
 
     public Event get(UUID org, int eventId) {
         return events.find(org, eventId).orElseThrow(notFound("Event"));
+    }
+
+    /** Like {@link #get}, and locks the event row until the caller's transaction ends (sales' room writes). */
+    public Event lock(UUID org, int eventId) {
+        return events.lock(org, eventId).orElseThrow(notFound("Event"));
     }
 
     /**
@@ -147,6 +155,9 @@ public class EventService {
         checkDoors(doors, startsAt);
         Instant saleStartsAt = or(in.saleStartsAt(), e.saleStartsAt());
         checkSaleStart(saleStartsAt, startsAt);
+        if (!Objects.equals(saleStartsAt, e.saleStartsAt())) {
+            rooms.checkSaleStartMovable(org, eventId); // a SCHEDULED room follows: its opens_at is derived
+        }
         String metadata = in.metadata() == null || in.metadata().isNull()
                 ? e.metadata() : metadata(e.eventType(), in.metadata());
         Instant cutoff = e.status() == Status.ON_SALE ? startsAt.minus(REFUND_FREEZE) : e.refundCutoffAt();

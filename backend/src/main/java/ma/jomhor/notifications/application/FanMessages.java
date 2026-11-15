@@ -22,6 +22,12 @@ public interface FanMessages {
     int enqueueCampaign(UUID org, UUID campaignId, FanMessage.Channel channel, Collection<UUID> userIds);
 
     /**
+     * The fan-message claim lock (EventLock's class 6), until the caller's transaction ends: false when another
+     * instance holds it.
+     */
+    boolean tryLockClaim();
+
+    /**
      * Up to {@code limit} PENDING rows due now, transactional kinds before campaigns, oldest first, locked for the
      * caller's transaction ({@code for update skip locked}).
      */

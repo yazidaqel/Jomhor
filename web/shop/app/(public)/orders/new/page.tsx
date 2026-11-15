@@ -84,6 +84,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
           now={now}
           timezone={e.timezone}
           cashDeadline={formatDateTime(cashUntil, e.timezone, d.meta.intl)}
+          queueHref={back && `${back}/queue`}
           copy={{ checkout: d.checkout, errors: d.errors, meta: d.meta }}
         />
       </section>

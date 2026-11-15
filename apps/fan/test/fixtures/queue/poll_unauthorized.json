@@ -1,0 +1,8 @@
+{
+ "status": 401,
+ "body": {
+  "code": "UNAUTHORIZED",
+  "message": "Missing, invalid or wrong-audience token",
+  "details": {}
+ }
+}

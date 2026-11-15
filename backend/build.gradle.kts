@@ -19,6 +19,8 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    // Health only (/v1/actuator/health/{liveness,readiness}), for any load balancer or process manager (plan lot-5 P107).
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     // Flyway version comes from the Boot 4.1 BOM (12.x), not the latest 13.x: Boot's autoconfig is tested against it.

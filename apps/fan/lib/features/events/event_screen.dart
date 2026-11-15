@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
+import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/clock.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/sale_copy.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
+import 'package:jomhor_fan/features/queue/queue_store.dart';
+import 'package:jomhor_fan/features/queue/room_cta.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -95,6 +98,16 @@ class _Body extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               InfoBanner(key: const Key('event.rules'), text: rulesLabel(l, e, now), success: open),
+              // Lot 5: a high-demand sale, and its verified-fan rule when it has one.
+              if (e.room != null) ...[
+                const SizedBox(height: JomhorSpace.s),
+                InfoBanner(
+                  key: const Key('event.room'),
+                  text: [l.roomHighDemand, ?eligibilityLine(l, e)].join('\n'),
+                  accent: true,
+                  icon: Icons.groups_rounded,
+                ),
+              ],
               const SizedBox(height: JomhorSpace.xxl),
               Text(l.zonesTitle, style: JomhorType.h2),
               const SizedBox(height: JomhorSpace.m),
@@ -205,7 +218,7 @@ class EventHeader extends StatelessWidget {
   }
 }
 
-class _Footer extends StatelessWidget {
+class _Footer extends ConsumerWidget {
   const new({required this.event, required this.now, required this.l});
 
   final FanEvent event;
@@ -213,9 +226,13 @@ class _Footer extends StatelessWidget {
   final AppLocalizations l;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final price = event.fromPriceMad;
     final open = event.saleState(now) == SaleState.onSale;
+    // Lot 5: with a room, the CTA as screen 1's (DESIGN.md Lot 5, screen 2).
+    final room = roomCta(event, now, ref.watch(queuePassesProvider).value?[event.id]);
+    final roomPath = room == null ? null : roomCtaPath(event, room);
+    final signedOut = room == RoomCta.opensAt && !ref.watch(sessionProvider);
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: JomhorColors.surface,
@@ -239,10 +256,30 @@ class _Footer extends StatelessWidget {
                 const SizedBox(width: JomhorSpace.l),
               ],
               Expanded(
-                child: FilledButton(
-                  key: const Key('event.cta'),
-                  onPressed: open ? () => context.push('/events/${event.id}/zones') : null,
-                  child: Text(open ? l.chooseZone : ctaLabel(l, event, now), textAlign: TextAlign.center),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    FilledButton(
+                      key: const Key('event.cta'),
+                      onPressed: switch (room) {
+                        null => open ? () => context.push('/events/${event.id}/zones') : null,
+                        _ => roomPath == null ? null : () => context.push(roomPath),
+                      },
+                      child: Text(switch (room) {
+                        null => open ? l.chooseZone : ctaLabel(l, event, now),
+                        final r => roomCtaLabel(l, event, r, now),
+                      }, textAlign: TextAlign.center),
+                    ),
+                    if (signedOut)
+                      TextButton(
+                        key: const Key('event.login'),
+                        onPressed: () => context.push(
+                          Uri(path: '/login', queryParameters: {'from': '/events/${event.id}'}).toString(),
+                        ),
+                        child: Text(l.queueLoginNow),
+                      ),
+                  ],
                 ),
               ),
             ],

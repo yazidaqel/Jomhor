@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.web.client.RestClient;
 
 /**
- * Per-IP OTP throttle with the real limits (fan 20 / 10 min, org 5 / 10 min) over real HTTP, so Tomcat's
+ * Per-IP OTP throttle with the real limits (fan 60 / 10 min, org 5 / 10 min) over real HTTP, so Tomcat's
  * RemoteIpValve runs. No proxy is trusted here (test default): the TCP peer is the client, whatever
  * X-Forwarded-For says. {@link TrustedProxyIpTest} covers the trusted side.
  */
@@ -35,8 +35,10 @@ import org.springframework.web.client.RestClient;
                 ClientIpTest.FAN_10M, ClientIpTest.FAN_24H, ClientIpTest.ORG_10M, ClientIpTest.ORG_24H})
 class ClientIpTest extends IntegrationTest {
 
-    static final String FAN_10M = "otp.per-ip.fan.sends-10m=20";
-    static final String FAN_24H = "otp.per-ip.fan.sends-24h=200";
+    /** application.yml default (04 POST /fan/auth/otp: 60 per 10 min, 600 per 24 h). */
+    static final int FAN_LIMIT = 60;
+    static final String FAN_10M = "otp.per-ip.fan.sends-10m=" + FAN_LIMIT;
+    static final String FAN_24H = "otp.per-ip.fan.sends-24h=600";
     static final String ORG_10M = "otp.per-ip.org.sends-10m=5";
     static final String ORG_24H = "otp.per-ip.org.sends-24h=20";
 
@@ -47,11 +49,11 @@ class ClientIpTest extends IntegrationTest {
     OtpService otpService;
 
     @Test
-    void twentyFirstFanSendFromOneIpIs429AndASpoofedForwardedForDoesNotBypassIt() {
+    void sixtyFirstFanSendFromOneIpIs429AndASpoofedForwardedForDoesNotBypassIt() {
         // Earlier test classes' MockMvc calls also come from 127.0.0.1 (with the limits off): start clean.
         jdbc.sql("delete from otp_challenges where ip = '127.0.0.1'").update();
         List<String> phones = new ArrayList<>();
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < FAN_LIMIT; i++) {
             phones.add(randomPhone());
             assertThat(fanOtp(port, phones.getLast(), randomIp())).isEqualTo(202);
         }
@@ -86,7 +88,7 @@ class ClientIpTest extends IntegrationTest {
         var r = ThreadLocalRandom.current();
         String net = "2001:db8:%x:%x:".formatted(r.nextInt(0x10000), r.nextInt(0x10000));
         List<String> phones = new ArrayList<>();
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < FAN_LIMIT; i++) {
             phones.add(randomPhone());
             otp("/fan/auth/otp", phones.getLast(), net + randomHost()).andExpect(status().isAccepted());
         }
@@ -100,7 +102,7 @@ class ClientIpTest extends IntegrationTest {
     @Test
     void parallelSendsFromOneIpAtLimitMinusOneAcceptExactlyOne() throws Exception {
         String ip = randomIp();
-        for (int i = 0; i < 19; i++) {
+        for (int i = 0; i < FAN_LIMIT - 1; i++) {
             jdbc.sql("""
                     insert into otp_challenges (phone_e164, audience, ip, code_hash, expires_at)
                     values (?, 'fan', cast(? as inet), ?, now() + interval '5 minutes')

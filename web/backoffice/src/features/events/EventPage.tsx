@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useCanWrite, useOrganizer } from '@/features/auth/organizer'
 import { useVenue, useVenues } from '@/features/venues/api'
+import { RoomRuleRow } from '@/features/room/RoomPage'
 import { GateZoneMatrix } from '@/features/venues/GateZoneMatrix'
 import { ApiError, path } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
@@ -134,6 +135,11 @@ function EventEditor({ event }: { event?: EventDetail }) {
   }
   const onError = (e: unknown) => {
     if (event && e instanceof ApiError && e.code === 'NOT_FOUND') return void navigate('/events', { replace: true, state: { notFound: true } })
+    // Lot 5: the waiting room has started, so the sale opening is pinned until the room ends.
+    if (e instanceof ApiError && e.code === 'EVENT_NOT_EDITABLE' && e.details.reason === 'ROOM_STARTED') {
+      reveal(['sale_starts_at'])
+      return form.setError('sale_starts_at', { message: t('events.form.roomStarted') }, { shouldFocus: true })
+    }
     const fields = e instanceof ApiError && e.code === 'VALIDATION_FAILED' ? Object.keys(Object(e.details.fields)) : []
     reveal(fields) // before showFormError focuses the first of them
     showFormError(e, form, t)
@@ -434,6 +440,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
                           : t('events.rules.refundFreezeHint')}
                       </FieldDescription>
                     </Field>
+                    {event && <RoomRuleRow eventId={event.id} />}
                   </FieldGroup>
                 </FieldSet>
               </form>

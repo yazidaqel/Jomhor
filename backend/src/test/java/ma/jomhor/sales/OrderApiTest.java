@@ -233,10 +233,10 @@ class OrderApiTest extends OrgApiTest {
                 List.of(new OrderService.HolderRequest("Yazid Aqel", null))));
         new TransactionTemplate(transactions).executeWithoutResult(tx -> {
             jdbc.sql("update events set sale_starts_at = now() where id = ?").param(s.eventId()).update();
-            assertThat(orderService.place(buyer, s.eventId(), Order.Channel.APP, oneItem).order().status())
+            assertThat(orderService.place(buyer, s.eventId(), Order.Channel.APP, null, oneItem).order().status())
                     .isEqualTo(Order.Status.RESERVED);
             jdbc.sql("update events set refund_cutoff_at = now() where id = ?").param(s.eventId()).update();
-            assertThatThrownBy(() -> orderService.place(buyer, s.eventId(), Order.Channel.APP, oneItem))
+            assertThatThrownBy(() -> orderService.place(buyer, s.eventId(), Order.Channel.APP, null, oneItem))
                     .isInstanceOfSatisfying(ApiException.class, e -> {
                         assertThat(e.code()).isEqualTo("EVENT_NOT_ON_SALE");
                         assertThat(e.details()).containsEntry("reason", "CLOSED");

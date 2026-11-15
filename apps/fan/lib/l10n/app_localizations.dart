@@ -2150,6 +2150,318 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Activer'**
   String get profilePushEnable;
+
+  /// Screens 1 and 2 CTA (disabled) while the room is SCHEDULED: opens_at in the venue zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'File d\'attente dès {time}'**
+  String queueOpensAt(String time);
+
+  /// Under the SCHEDULED CTA when signed out.
+  ///
+  /// In fr, this message translates to:
+  /// **'Connecte-toi maintenant'**
+  String get queueLoginNow;
+
+  /// CTA while the room takes joins.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rejoindre la file'**
+  String get queueJoin;
+
+  /// CTA when the phone holds a queue token for the event.
+  ///
+  /// In fr, this message translates to:
+  /// **'Reprendre ma place'**
+  String get queueResume;
+
+  /// Calendar chip: the room is open.
+  ///
+  /// In fr, this message translates to:
+  /// **'File d\'attente'**
+  String get chipQueue;
+
+  /// Screen 2 banner for an event with a room.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vente à forte demande · file d\'attente'**
+  String get roomHighDemand;
+
+  /// Screen 2: the room's rule, only the parts set, joined by ' · '.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réservée aux fans vérifiés: {rules}'**
+  String roomEligibility(String rules);
+
+  /// No description provided for @roomVerifiedBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'compte vérifié avant le {date}'**
+  String roomVerifiedBefore(String date);
+
+  /// No description provided for @roomMemberBefore.
+  ///
+  /// In fr, this message translates to:
+  /// **'membre depuis le {date}'**
+  String roomMemberBefore(String date);
+
+  /// No description provided for @roomMinEvents.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =1{1 match au stade} other{{n} matchs au stade}}'**
+  String roomMinEvents(int n);
+
+  /// Screen 12 name (screen readers).
+  ///
+  /// In fr, this message translates to:
+  /// **'File d\'attente'**
+  String get queueTitle;
+
+  /// Toast when leaving screen 12 with a place.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta place est gardée'**
+  String get queuePlaceKept;
+
+  /// No description provided for @queueJoining.
+  ///
+  /// In fr, this message translates to:
+  /// **'Connexion à la file…'**
+  String get queueJoining;
+
+  /// Screen 12 pre-queue label (uppercased in FR/EN).
+  ///
+  /// In fr, this message translates to:
+  /// **'Tirage au sort à {time}'**
+  String queueDrawAt(String time);
+
+  /// No description provided for @queueDrawText.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tous ceux qui sont là avant {time} ont la même chance: l\'ordre est tiré au sort. Après, premier arrivé, premier servi.'**
+  String queueDrawText(String time);
+
+  /// No description provided for @queueInRoom.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =1{1 fan dans la file} other{{n} fans dans la file}}'**
+  String queueInRoom(int n);
+
+  /// Countdown tile caption.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sec'**
+  String get queueSeconds;
+
+  /// After the draw, before the fan's rank is known.
+  ///
+  /// In fr, this message translates to:
+  /// **'Placement en cours'**
+  String get queueRankingTitle;
+
+  /// No description provided for @queueRanking.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta position arrive dans quelques secondes.'**
+  String get queueRanking;
+
+  /// No description provided for @queuePositionLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta position'**
+  String get queuePositionLabel;
+
+  /// The fan's position, display 88.
+  ///
+  /// In fr, this message translates to:
+  /// **'N° {n}'**
+  String queuePosition(int n);
+
+  /// No description provided for @queueAhead.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =0{Personne devant toi} =1{1 fan devant toi} other{{n} fans devant toi}}'**
+  String queueAhead(int n);
+
+  /// No description provided for @queueWait.
+  ///
+  /// In fr, this message translates to:
+  /// **'Attente estimée · {time}'**
+  String queueWait(String time);
+
+  /// No description provided for @queueWaitLess.
+  ///
+  /// In fr, this message translates to:
+  /// **'moins d\'une minute'**
+  String get queueWaitLess;
+
+  /// No description provided for @queueWaitMin.
+  ///
+  /// In fr, this message translates to:
+  /// **'environ {n} min'**
+  String queueWaitMin(int n);
+
+  /// No description provided for @queueWaitHour.
+  ///
+  /// In fr, this message translates to:
+  /// **'plus d\'une heure'**
+  String get queueWaitHour;
+
+  /// No description provided for @queuePaused.
+  ///
+  /// In fr, this message translates to:
+  /// **'Admission en pause · ta place est gardée'**
+  String get queuePaused;
+
+  /// No description provided for @queueKeepPlace.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tu peux fermer l\'app: ta place est gardée'**
+  String get queueKeepPlace;
+
+  /// No description provided for @queueLimit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Limite {n, plural, =1{1 billet} other{{n} billets}} par compte · billets nominatifs'**
+  String queueLimit(int n);
+
+  /// No description provided for @queueRemaining.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =1{Il reste 1 place} other{Il reste {n} places}}'**
+  String queueRemaining(int n);
+
+  /// No description provided for @queueSoldOut.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tout est réservé pour l\'instant · des places peuvent se libérer'**
+  String get queueSoldOut;
+
+  /// Chip on screen 12 when the event has a rule (the fan passed it to join).
+  ///
+  /// In fr, this message translates to:
+  /// **'Fan vérifié'**
+  String get queueVerified;
+
+  /// Uppercased in FR/EN.
+  ///
+  /// In fr, this message translates to:
+  /// **'C\'est ton tour'**
+  String get queueTurnTitle;
+
+  /// mm:ss to admission.expires_at.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tu as {time} pour réserver'**
+  String queueTurnLeft(String time);
+
+  /// No description provided for @queueChoose.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir mes places'**
+  String get queueChoose;
+
+  /// No description provided for @queueExpiredTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ton tour est passé'**
+  String get queueExpiredTitle;
+
+  /// No description provided for @queueExpiredBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Une nouvelle place te remet en fin de file.'**
+  String get queueExpiredBody;
+
+  /// No description provided for @queueRejoin.
+  ///
+  /// In fr, this message translates to:
+  /// **'Reprendre une place'**
+  String get queueRejoin;
+
+  /// No description provided for @queueOffline.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors ligne · ta place est gardée'**
+  String get queueOffline;
+
+  /// Screen-reader label of the twelve dots.
+  ///
+  /// In fr, this message translates to:
+  /// **'Progression dans la file'**
+  String get queueProgress;
+
+  /// Screen-reader value of the twelve dots: how many are lit.
+  ///
+  /// In fr, this message translates to:
+  /// **'{lit} sur 12'**
+  String queueProgressValue(int lit);
+
+  /// No description provided for @queueNotEligibleTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vente réservée aux fans vérifiés'**
+  String get queueNotEligibleTitle;
+
+  /// No description provided for @queueAccountTooNew.
+  ///
+  /// In fr, this message translates to:
+  /// **'Compte vérifié après le {date}'**
+  String queueAccountTooNew(String date);
+
+  /// No description provided for @queueNotMember.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réservée aux membres inscrits avant le {date}'**
+  String queueNotMember(String date);
+
+  /// No description provided for @queueNotEnoughEvents.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =1{Il faut 1 match au stade · tu en as {attended}} other{Il faut {n} matchs au stade · tu en as {attended}}}'**
+  String queueNotEnoughEvents(int n, int attended);
+
+  /// No description provided for @queueDeviceLimit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Trop de comptes sur ce téléphone pour cette vente'**
+  String get queueDeviceLimit;
+
+  /// No description provided for @queueRateLimited.
+  ///
+  /// In fr, this message translates to:
+  /// **'Beaucoup de fans sur ce réseau · nouvel essai dans {s} s'**
+  String queueRateLimited(int s);
+
+  /// No description provided for @queueRateLimitedAgain.
+  ///
+  /// In fr, this message translates to:
+  /// **'Beaucoup de fans sur ce réseau. Réessaie dans un instant.'**
+  String get queueRateLimitedAgain;
+
+  /// No description provided for @queueNotOpenTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'La file n\'est pas encore ouverte'**
+  String get queueNotOpenTitle;
+
+  /// No description provided for @queueNotOpen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Garde cet écran ouvert: tu entres dans la file automatiquement.'**
+  String get queueNotOpen;
+
+  /// No description provided for @queueClosed.
+  ///
+  /// In fr, this message translates to:
+  /// **'La vente est terminée pour cet événement.'**
+  String get queueClosed;
+
+  /// Screens 3 and 4 slim bar while admitted: mm:ss left.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ton tour · {time}'**
+  String turnBar(String time);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

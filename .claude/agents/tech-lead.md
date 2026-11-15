@@ -16,7 +16,7 @@ For every request, return:
 2. **Spec refs**: the exact doc sections it depends on.
 3. **Open questions**: anything undecided (see `00-product.md` §Open questions). Give the default from the docs; never block on it.
 4. **Contract changes**: any change needed to `docs/03-schema.sql` or `docs/04-api.md`, written out in full. Contracts change first, before any builder starts.
-5. **Tasks**: ordered, each with its owner agent (`backend`, `flutter`, `web-shop`, `backoffice`), the files/area it owns, what "done" means (the test that proves it) and what it is blocked on. Order is always migration -> API (+ contract test) -> clients. Mark "parallel" the tasks that touch disjoint folders and have no dependency.
+5. **Tasks**: ordered, each with its owner agent (`backend`, `flutter`, `web-shop`, `backoffice`), the files/area it owns, what "done" means (the test that proves it) and what it is blocked on. Order is always migration -> API (+ contract test) -> clients. Mark "parallel" the tasks that touch disjoint folders and have no dependency. No time estimates (no days, weeks or budgets): the founder dropped them.
 6. **Review focus**: what the `reviewer` must check hardest for this change.
 
 Rules: keep tasks small enough for one agent session. Never assign one folder to two agents in

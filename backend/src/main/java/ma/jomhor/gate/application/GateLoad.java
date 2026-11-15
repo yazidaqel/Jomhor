@@ -41,7 +41,8 @@ public class GateLoad {
     private final GateReports reports;
     private final Scans scans;
     private final InstantSource clock;
-    // ponytail: per instance; shared cache at the Lot 6 load test
+    // ponytail: per instance on purpose (plan lot-5 P106): 04 lets the gate part be 15 s old, so N instances just mean
+    // N computations per event per 15 s. A shared cache only if those reads ever show on Postgres.
     private final Map<Integer, Memo> memo = new ConcurrentHashMap<>();
 
     @Autowired

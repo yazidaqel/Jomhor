@@ -30,10 +30,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** docs/04-api.md §Fan: POST /fan/orders, GET /fan/orders/{id}, GET /fan/orders. The buyer is the fan token's sub. */
+/**
+ * docs/04-api.md §Fan: POST /fan/orders ({@code X-Admission-Token} while the event's waiting room is live),
+ * GET /fan/orders/{id}, GET /fan/orders. The buyer is the fan token's sub.
+ */
 @RestController
 class OrderController {
 
@@ -91,12 +95,13 @@ class OrderController {
 
     @PostMapping("/fan/orders")
     @ResponseStatus(HttpStatus.CREATED)
-    Reserved create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OrderCreate body) {
+    Reserved create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OrderCreate body,
+                    @RequestHeader(name = "X-Admission-Token", required = false) String admissionToken) {
         if (body.channel() == Order.Channel.POS) { // APP | WEB only: a till sale goes through /org/pos/orders
             throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
                     Map.of("fields", Map.of("channel", "APP or WEB")));
         }
-        View v = orders.place(UUID.fromString(jwt.getSubject()), body.eventId(), body.channel(),
+        View v = orders.place(UUID.fromString(jwt.getSubject()), body.eventId(), body.channel(), admissionToken,
                 body.items().stream().map(i -> new ItemRequest(i.priceCategoryId(), i.qty(), i.holders() == null ? null
                         : i.holders().stream().map(h -> h == null ? null : new HolderRequest(h.name(), h.phone(),
                                 Boolean.TRUE.equals(h.pays()))).toList()))

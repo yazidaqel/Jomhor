@@ -1,0 +1,11 @@
+{
+ "status": 409,
+ "body": {
+  "code": "QUEUE_NOT_OPEN",
+  "message": "The queue is not open",
+  "details": {
+   "reason": "NOT_STARTED",
+   "opens_at": "2026-11-15T13:37:33Z"
+  }
+ }
+}

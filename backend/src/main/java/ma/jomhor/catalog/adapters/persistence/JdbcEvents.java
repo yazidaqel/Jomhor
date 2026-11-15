@@ -221,7 +221,7 @@ class JdbcEvents implements Events {
                           case when e.status <> 'ON_SALE' then 'NOT_ON_SALE'
                                when e.refund_cutoff_at is null or now() >= e.refund_cutoff_at then 'CLOSED'
                                when now() < e.sale_starts_at then 'NOT_STARTED'
-                               else 'OPEN' end as sale_window,
+                               else 'OPEN' end as sale_window, e.status = 'DRAFT' as draft,
                           (select coalesce(sum(pc.quota), 0) from price_categories pc
                            where pc.organizer_id = e.organizer_id and pc.event_id = e.id) as quota
                         from events e where e.id = :id
@@ -229,7 +229,8 @@ class JdbcEvents implements Events {
                 .param("id", eventId)
                 .query((rs, n) -> new Inventory.SaleEvent(rs.getObject("organizer_id", UUID.class),
                         Inventory.SaleWindow.valueOf(rs.getString("sale_window")), instant(rs, "sale_starts_at"),
-                        instant(rs, "refund_cutoff_at"), rs.getInt("per_account_limit"), rs.getLong("quota")))
+                        instant(rs, "refund_cutoff_at"), rs.getInt("per_account_limit"), rs.getLong("quota"),
+                        rs.getBoolean("draft")))
                 .optional();
     }
 

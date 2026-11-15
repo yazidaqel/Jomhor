@@ -12,6 +12,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcFanMessages implements FanMessages {
 
+    /** Advisory class 6 (EventLock lists the classes); one key, the job serves every organizer. */
+    private static final long CLAIM_LOCK = 6L << 32;
+
     private final JdbcClient jdbc;
 
     JdbcFanMessages(JdbcClient jdbc) {
@@ -67,6 +70,11 @@ class JdbcFanMessages implements FanMessages {
                         """)
                 .param("org", org).param("campaign", campaignId).param("channel", channel.name())
                 .param("users", userIds.toArray(UUID[]::new)).update();
+    }
+
+    @Override
+    public boolean tryLockClaim() {
+        return jdbc.sql("select pg_try_advisory_xact_lock(?)").param(CLAIM_LOCK).query(Boolean.class).single();
     }
 
     /**

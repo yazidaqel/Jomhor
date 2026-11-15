@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import ma.jomhor.catalog.application.EventService;
+import ma.jomhor.sales.rooms.application.RoomMemo;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -35,7 +36,7 @@ class FanEventApiTest extends OrgApiTest {
 
     private static final String[] EVENT_KEYS = {"id", "organizer_id", "organizer", "status", "event_type", "title", "starts_at",
             "doors_open_at", "timezone", "venue", "metadata", "sale_starts_at", "sales_close_at", "on_sale", "sold_out",
-            "from_price_mad", "per_account_limit"};
+            "from_price_mad", "per_account_limit", "room"};
     private static final Pattern JSON_KEY = Pattern.compile("\"([A-Za-z_]+)\"\\s*:");
     private static final Set<String> FORBIDDEN = Set.of("key", "k_e", "k_t", "event_key", "event_key_enc", "sold", "quota");
 
@@ -44,6 +45,9 @@ class FanEventApiTest extends OrgApiTest {
 
     @Autowired
     PlatformTransactionManager transactions;
+
+    @Autowired
+    RoomMemo roomMemo;
 
     private ResultActions list(String organizer, String from) throws Exception {
         var req = get("/fan/events");
@@ -414,5 +418,83 @@ class FanEventApiTest extends OrgApiTest {
         });
         jdbc.sql("update events set sale_starts_at = now() where id = ?").param(id).update();
         mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.on_sale").value(true));
+    }
+    // ---------- Lot 5: room (BE-40) ----------
+
+    /** An ON_SALE event whose sale opens 2099-04-01T10:00Z, with a room PUT from {@code roomJson}. */
+    private int withRoom(Caller a, String roomJson) throws Exception {
+        String venueId = venue(a, "Stade");
+        int id = event(a, venueId);
+        priced(a, id, zone(a, venueId, "NORD"), "Plein", 5000, 10);
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-01T10:00:00Z\"}").andExpect(status().isOk());
+        publish(a, id);
+        if (roomJson != null) {
+            call(a, put("/org/events/" + id + "/room"), roomJson).andExpect(status().isCreated());
+        }
+        return id;
+    }
+
+    @Test
+    void roomIsNullWithoutARoomAndOnceEnded() throws Exception {
+        Caller a = admin();
+        int id = withRoom(a, null);
+        mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk()).andExpect(jsonPath("$.room").isEmpty());
+        list(a.org().toString(), null).andExpect(jsonPath("$[0].room").isEmpty());
+
+        call(a, put("/org/events/" + id + "/room"), "{}").andExpect(status().isCreated());
+        String json = body(mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk()));
+        assertKeys(json, "$.room", "status", "opens_at", "eligibility");
+        assertThat((String) JsonPath.read(json, "$.room.status")).isEqualTo("SCHEDULED");
+        assertThat((String) JsonPath.read(json, "$.room.opens_at")).isEqualTo("2099-04-01T09:30:00Z");
+        assertThat((Object) JsonPath.read(json, "$.room.eligibility")).isNull(); // no rule set
+        assertNoSecretOrCount(json);
+
+        call(a, post("/org/events/" + id + "/room/end")).andExpect(status().isOk());
+        mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.room").isEmpty());
+        list(a.org().toString(), null).andExpect(jsonPath("$[0].room").isEmpty());
+    }
+
+    @Test
+    void roomOnDetailAndListRowsWithTheEligibilityDates() throws Exception {
+        Caller a = admin();
+        int id = withRoom(a, """
+                {"pre_queue_min": 45, "eligibility": {"min_account_age_days": 7, "min_events_attended": 3}}""");
+        jdbc.sql("update waiting_rooms set status = 'OPEN' where event_id = ?").param(id).update();
+        roomMemo.invalidate();
+        String detail = body(mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk()));
+        String rows = body(list(a.org().toString(), null).andExpect(status().isOk()));
+        for (String room : List.of("$.room", "$[0].room")) {
+            String json = room.startsWith("$[") ? rows : detail;
+            assertKeys(json, room, "status", "opens_at", "eligibility");
+            assertKeys(json, room + ".eligibility", "verified_before", "member_joined_before", "min_events_attended");
+            assertThat((String) JsonPath.read(json, room + ".status")).isEqualTo("OPEN");
+            assertThat((String) JsonPath.read(json, room + ".opens_at")).isEqualTo("2099-04-01T09:15:00Z");
+            assertThat((String) JsonPath.read(json, room + ".eligibility.verified_before"))
+                    .isEqualTo("2099-03-25T10:00:00Z");
+            assertThat((Object) JsonPath.read(json, room + ".eligibility.member_joined_before")).isNull();
+            assertThat((Integer) JsonPath.read(json, room + ".eligibility.min_events_attended")).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void movingTheSaleStartMovesAScheduledRoomAndIsRefusedOnceStarted() throws Exception {
+        Caller a = admin();
+        int id = withRoom(a, "{}");
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-02T10:00:00Z\"}").andExpect(status().isOk());
+        mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.room.opens_at").value("2099-04-02T09:30:00Z"));
+        call(a, get("/org/events/" + id + "/room")).andExpect(jsonPath("$.room.opens_at").value("2099-04-02T09:30:00Z"))
+                .andExpect(jsonPath("$.room.sale_starts_at").value("2099-04-02T10:00:00Z"));
+
+        for (String started : List.of("PRE_QUEUE", "OPEN", "PAUSED")) {
+            jdbc.sql("update waiting_rooms set status = ?::room_status where event_id = ?").params(started, id).update();
+            call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-03T10:00:00Z\"}")
+                    .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EVENT_NOT_EDITABLE"))
+                    .andExpect(jsonPath("$.details.reason").value("ROOM_STARTED"));
+            // Other fields, and the same sale start, still go through.
+            call(a, patch("/org/events/" + id), "{\"title\": \"Derby\", \"sale_starts_at\": \"2099-04-02T10:00:00Z\"}")
+                    .andExpect(status().isOk());
+        }
+        jdbc.sql("update waiting_rooms set status = 'ENDED' where event_id = ?").param(id).update();
+        call(a, patch("/org/events/" + id), "{\"sale_starts_at\": \"2099-04-03T10:00:00Z\"}").andExpect(status().isOk());
     }
 }

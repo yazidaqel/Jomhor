@@ -15,13 +15,15 @@ String ctaLabel(AppLocalizations l, FanEvent e, DateTime now) => switch (e.saleS
   SaleState.closed => l.saleClosed,
 };
 
-/// Calendar row chip.
-String chipLabel(AppLocalizations l, FanEvent e, DateTime now) => switch (e.saleState(now)) {
-  SaleState.onSale => e.fromPriceMad == null ? l.ctaBuy : l.chipFrom(l.dh(e.fromPriceMad!)),
-  SaleState.notStarted || SaleState.opening => l.chipSoon,
-  SaleState.soldOut => l.soldOut,
-  SaleState.closed => l.saleClosed,
-};
+/// Calendar row chip: "File d'attente" while the event's room takes joins (Lot 5), else the sale state.
+String chipLabel(AppLocalizations l, FanEvent e, DateTime now) => (e.room?.joinable(now) ?? false)
+    ? l.chipQueue
+    : switch (e.saleState(now)) {
+        SaleState.onSale => e.fromPriceMad == null ? l.ctaBuy : l.chipFrom(l.dh(e.fromPriceMad!)),
+        SaleState.notStarted || SaleState.opening => l.chipSoon,
+        SaleState.soldOut => l.soldOut,
+        SaleState.closed => l.saleClosed,
+      };
 
 /// Screen 2 rules banner.
 String rulesLabel(AppLocalizations l, FanEvent e, DateTime now) => switch (e.saleState(now)) {

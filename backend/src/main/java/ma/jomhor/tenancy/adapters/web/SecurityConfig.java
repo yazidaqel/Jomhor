@@ -45,11 +45,14 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Four stateless chains. /fan/** needs a JWT with aud=fan, /org/** one with aud=org (same HS256 key,
  * the audience is what separates them); /fan/auth/** and /org/auth/** are open. Everything else is
- * closed except /payments/** (gateway-facing, verified per provider) and /gate/** (scanners: no token, every request
- * is checked by the gate module's device-signature filter, 04 §Gate auth). 401/403 bodies use the 04 shape.
+ * closed except /payments/** (gateway-facing, verified per provider), /gate/** (scanners: no token, every request
+ * is checked by the gate module's device-signature filter, 04 §Gate auth) and GET /actuator/health/** (status only,
+ * for load balancers). 401/403 bodies use the 04 shape.
  * GET /fan/organizers, /fan/organizers/{slug}, /fan/events and /fan/events/{id} are public (04 §Fan) and sit on their own chain without a resource
  * server, so an Authorization header sent there is ignored rather than checked, and without the default
  * no-store cache headers (04: public reads carry no cache headers; the authenticated chains keep them).
+ * GET /fan/queue sits there too: its only credential is the X-Queue-Token room token, checked by the sales module
+ * (04 §Waiting room); it sets its own no-store.
  * A fan token is accepted only if its {@code sid} names an active fan_sessions row of its subject (one primary-key
  * lookup, run after signature, expiry and audience pass); no sid, revoked or expired → 401 (plan Q13).
  */
@@ -75,13 +78,14 @@ class SecurityConfig {
         return decoder(AuthService.ENROL, jwt -> OAuth2TokenValidatorResult.success());
     }
 
-    /** Exactly the four public reads; anything else under /fan (other methods, deeper paths) falls to fanChain. */
+    /** Exactly the four public reads and the queue poll; anything else under /fan falls to fanChain. */
     @Bean
     @Order(0)
     SecurityFilterChain publicFanChain(HttpSecurity http) {
         return stateless(http)
                 .securityMatchers(m -> m.requestMatchers(HttpMethod.GET,
-                        "/fan/organizers", "/fan/organizers/{slug}", "/fan/events", "/fan/events/{id}"))
+                        "/fan/organizers", "/fan/organizers/{slug}", "/fan/events", "/fan/events/{id}",
+                        "/fan/queue"))
                 .headers(h -> h.cacheControl(c -> c.disable()))
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
                 .build();
@@ -109,7 +113,9 @@ class SecurityConfig {
     @Order(3)
     SecurityFilterChain otherChain(HttpSecurity http) {
         return stateless(http)
-                .authorizeHttpRequests(a -> a.requestMatchers("/payments/**", "/gate/**", "/error").permitAll().anyRequest().denyAll())
+                .authorizeHttpRequests(a -> a.requestMatchers("/payments/**", "/gate/**", "/error").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/**").permitAll()
+                        .anyRequest().denyAll())
                 .build();
     }
 

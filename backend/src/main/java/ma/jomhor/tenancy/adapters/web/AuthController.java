@@ -4,14 +4,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import ma.jomhor.common.web.ApiException;
+import ma.jomhor.common.web.ClientIp;
 import ma.jomhor.tenancy.application.AuthService;
 import ma.jomhor.tenancy.application.AuthService.Session;
 import ma.jomhor.tenancy.application.UserService;
@@ -73,7 +69,7 @@ class AuthController {
     @PostMapping("/fan/auth/otp")
     @ResponseStatus(HttpStatus.ACCEPTED)
     void fanOtp(@Valid @RequestBody OtpRequest body, HttpServletRequest request) {
-        auth.fanRequestOtp(body.phone(), clientIp(request));
+        auth.fanRequestOtp(body.phone(), ClientIp.of(request));
     }
 
     @PostMapping("/fan/auth/verify")
@@ -103,7 +99,7 @@ class AuthController {
     @PostMapping("/org/auth/otp")
     @ResponseStatus(HttpStatus.ACCEPTED)
     void orgOtp(@Valid @RequestBody OtpRequest body, HttpServletRequest request) {
-        auth.orgRequestOtp(body.phone(), clientIp(request));
+        auth.orgRequestOtp(body.phone(), ClientIp.of(request));
     }
 
     @PostMapping("/org/auth/verify")
@@ -116,30 +112,5 @@ class AuthController {
     Me me(@AuthenticationPrincipal Jwt jwt) {
         Session s = auth.me(UUID.fromString(jwt.getSubject()));
         return new Me(UserDto.of(s.user()), MembershipDto.of(s.memberships()));
-    }
-
-    /**
-     * The peer address as Tomcat's RemoteIpValve left it: X-Forwarded-For is applied only when the peer matches
-     * server.tomcat.remoteip.internal-proxies, so a client-sent header from anywhere else is ignored.
-     * Parsed as an IP literal (no DNS); anything else is a misconfigured proxy → 400. IPv6 is bucketed by /64
-     * (low 64 bits zeroed): one subscriber usually holds a whole /64, so per-address buckets would be free to rotate.
-     */
-    private static String clientIp(HttpServletRequest request) {
-        InetAddress address;
-        try {
-            address = InetAddress.ofLiteral(request.getRemoteAddr());
-        } catch (IllegalArgumentException e) {
-            throw new ApiException("BAD_REQUEST", HttpStatus.BAD_REQUEST, "Unresolvable client address");
-        }
-        if (address instanceof Inet6Address) {
-            byte[] bytes = address.getAddress();
-            Arrays.fill(bytes, 8, 16, (byte) 0);
-            try {
-                address = InetAddress.getByAddress(bytes); // raw bytes: no lookup, no scope id
-            } catch (UnknownHostException e) {
-                throw new IllegalStateException(e); // only thrown for a wrong length
-            }
-        }
-        return address.getHostAddress();
     }
 }

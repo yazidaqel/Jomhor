@@ -1,0 +1,317 @@
+### Lot 5 step 1 demo, on-sale with a waiting room (IntelliJ HTTP client): plan lot-5 §1 Demo-complete (1)-(6) on
+### one instance; Lot5OnSaleFlowTest runs the same flow in CI on a fixed clock. The 2-instance kill is BE-45's smoke.
+#
+# Start the backend with the dev profile on port 8080, so @base and the card redirect (PUBLIC_BASE_URL, dev default
+# http://localhost:8080/v1) agree; the dev profile alone serves on 8090 (dev seed: ATLAS FC, Ops Dev +212600000003,
+# Grand Stade; the room tick runs every second; the simulated card gateway is on):
+#   docker compose up -d && SERVER_PORT=8080 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phones are made up.
+# Set @saleStartsAt to about 5 min from now (UTC) before step 1.5: the room is in PRE_QUEUE at once (pre-queue
+# 30 min), and the draw runs at that time. The room is for accounts verified >= 7 days before the sale; a new account
+# is verified at its first login, so after step 2.8 age the three fans by hand (Omar stays 0 days old -> NOT_ELIGIBLE):
+#   docker compose exec postgres psql -U jomhor -d jomhor -c "update users set verified_at = now() - interval '30 days' where phone_e164 in ('+212611150001', '+212611150002', '+212611150003')"
+# Then backend/loadtest/check.sql at the end must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@opsPhone = +212600000003
+@yazidPhone = +212611150001
+@karimPhone = +212611150002
+@saraPhone = +212611150003
+@omarPhone = +212611150004
+@opsCode = 123456
+@yazidCode = 123456
+@karimCode = 123456
+@saraCode = 123456
+@omarCode = 123456
+@saleStartsAt = 2026-11-14T16:00:00Z
+
+### ---------- (1) set-up: an event of 4 places and its room ----------
+
+### 1.1 OPS (Ops Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 1.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{opsCode}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 1.3 OPS: the Grand Stade zones (keeps the first zone id)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("zoneId", response.body.zones[0].id); %}
+
+### 1.4 OPS: a DRAFT derby
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo Lot 5",
+ "starts_at": "2099-05-01T19:00:00Z", "metadata": {"opponent": "Démo"}}
+
+> {% client.global.set("eventId", response.body.id); %}
+
+### 1.5 OPS: the sale opens at @saleStartsAt
+PATCH {{base}}/org/events/{{eventId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"sale_starts_at": "{{saleStartsAt}}"}
+
+### 1.6 OPS: one price, 4 places at 50 DH
+POST {{base}}/org/events/{{eventId}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{zoneId}}, "name": "Plein tarif", "price_mad": 5000, "quota": 4}
+
+> {% client.global.set("priceId", response.body.id); %}
+
+### 1.7 OPS: publish (DRAFT -> ON_SALE)
+POST {{base}}/org/events/{{eventId}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 1.8 OPS: the room -> 201: pre-queue 30 min, 6 fans/min (slow, to watch positions), verified >= 7 days
+PUT {{base}}/org/events/{{eventId}}/room
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"pre_queue_min": 30, "admission_rate_per_min": 6, "eligibility": {"min_account_age_days": 7}}
+
+### 1.9 Fan view of the event: room {status: PRE_QUEUE (after the next tick), opens_at, eligibility.verified_before}
+GET {{base}}/fan/events/{{eventId}}
+
+### ---------- (2) pre-queue: Yazid, Karim and Sara join; Omar (a new account) is refused ----------
+
+### 2.1 Yazid: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}"}
+
+### 2.2 Yazid: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}", "code": "{{yazidCode}}"}
+
+> {% client.global.set("yazidToken", response.body.token); %}
+
+### 2.3 Karim: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}"}
+
+### 2.4 Karim: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}", "code": "{{karimCode}}"}
+
+> {% client.global.set("karimToken", response.body.token); %}
+
+### 2.5 Sara: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}"}
+
+### 2.6 Sara: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}", "code": "{{saraCode}}"}
+
+> {% client.global.set("saraToken", response.body.token); %}
+
+### 2.7 Omar: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}"}
+
+### 2.8 Omar: verify. Now age Yazid, Karim and Sara with the psql line in the header.
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}", "code": "{{omarCode}}"}
+
+> {% client.global.set("omarToken", response.body.token); %}
+
+### 2.9 Yazid joins -> 201 PRE_QUEUE, position null, poll_after_s up to 30
+POST {{base}}/fan/queue
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-yazid-0001"}
+
+> {% client.global.set("yazidQueue", response.body.queue_token); %}
+
+### 2.10 Karim joins -> 201 PRE_QUEUE
+POST {{base}}/fan/queue
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-karim-0001"}
+
+> {% client.global.set("karimQueue", response.body.queue_token); %}
+
+### 2.11 Sara joins -> 201 PRE_QUEUE
+POST {{base}}/fan/queue
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-sara-00001"}
+
+> {% client.global.set("saraQueue", response.body.queue_token); %}
+
+### 2.12 Omar joins -> 409 NOT_ELIGIBLE, details {reason: ACCOUNT_TOO_NEW, verified_before}
+POST {{base}}/fan/queue
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-omar-00001"}
+
+### ---------- (3) draw at @saleStartsAt, (4) admission at 6/min in rank order ----------
+# Poll each fan (2.13-2.15) before and after @saleStartsAt: PRE_QUEUE with in_room 3, then WAITING with a position
+# (1, 2, 3 in a random order), then ADMITTED one fan every 10 s, in that order. Each poll keeps the refreshed queue
+# token, and the admission token once ADMITTED. All three are admitted within 30 s, so the steps below work whatever
+# the draw.
+
+### 2.13 Yazid: poll
+GET {{base}}/fan/queue
+X-Queue-Token: {{yazidQueue}}
+
+> {% client.global.set("yazidQueue", response.body.queue_token);
+     if (response.body.admission) client.global.set("yazidAdmission", response.body.admission.token); %}
+
+### 2.14 Karim: poll
+GET {{base}}/fan/queue
+X-Queue-Token: {{karimQueue}}
+
+> {% client.global.set("karimQueue", response.body.queue_token);
+     if (response.body.admission) client.global.set("karimAdmission", response.body.admission.token); %}
+
+### 2.15 Sara: poll
+GET {{base}}/fan/queue
+X-Queue-Token: {{saraQueue}}
+
+> {% client.global.set("saraQueue", response.body.queue_token);
+     if (response.body.admission) client.global.set("saraAdmission", response.body.admission.token); %}
+
+### 3.1 OPS: the room -> OPEN, drawn_at, figures {joined 3, waiting, admitted, ...}
+GET {{base}}/org/events/{{eventId}}/room
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (5) guard, then Yazid and Sara buy with their admission tokens ----------
+
+### 5.1 Omar orders without a token -> 409 ADMISSION_REQUIRED, details.reason MISSING
+POST {{base}}/fan/orders
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{priceId}}", "qty": 1,
+  "holders": [{"name": "Omar Idrissi"}]}]}
+
+### 5.2 Yazid orders 2 places with his admission token -> 201 RESERVED
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+X-Admission-Token: {{yazidAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{priceId}}", "qty": 2,
+  "holders": [{"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}]}]}
+
+> {% client.global.set("yazidOrder", response.body.id); %}
+
+### 5.3 Yazid pays by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{yazidOrder}}/pay
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 5.4 Yazid: the order -> PAID with two ticket_ids
+GET {{base}}/fan/orders/{{yazidOrder}}
+Authorization: Bearer {{yazidToken}}
+
+### 5.5 Sara (once ADMITTED in 2.15, within her 10 min turn) holds the last 2 places -> 201; on the next tick the
+### room is sold_out (polls show sold_out true, admission stops)
+POST {{base}}/fan/orders
+Authorization: Bearer {{saraToken}}
+X-Admission-Token: {{saraAdmission}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{priceId}}", "qty": 2,
+  "holders": [{"name": "Sara Bennani"}, {"name": "Sara Bennani"}]}]}
+
+### ---------- (6) controls ----------
+# With three fans every turn is given within 30 s of the draw, so frozen positions show only if you pause in that
+# window; after 5.5 the room is sold out and Karim, back in the queue (6.4), waits with sold_out true.
+
+### 6.1 OPS: pause -> PAUSED. Polls (2.13-2.15) of waiting fans show PAUSED, positions frozen, rate_per_min 0
+POST {{base}}/org/events/{{eventId}}/room/pause
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 6.2 OPS: resume -> OPEN, admission continues
+POST {{base}}/org/events/{{eventId}}/room/resume
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 6.3 OPS: move the rate to 800/min (applies from the next tick)
+PUT {{base}}/org/events/{{eventId}}/room
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"pre_queue_min": 30, "admission_rate_per_min": 800, "eligibility": {"min_account_age_days": 7}}
+
+### 6.4 Karim lets his turn pass: 10 min after his first ADMITTED poll, 2.14 says EXPIRED. He takes a place again
+### -> 201 WAITING at the back of the queue (rank after everyone ranked); 2.14 then shows his position and
+### sold_out true, and no turn comes while the room is sold out
+POST {{base}}/fan/queue
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "device_id": "demo-device-karim-0001"}
+
+> {% client.global.set("karimQueue", response.body.queue_token); %}
+
+### 6.5 OPS: end the room -> ENDED (irreversible); polls say ENDED
+POST {{base}}/org/events/{{eventId}}/room/end
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 6.6 OPS: release one more place (quota 5)
+PATCH {{base}}/org/events/{{eventId}}/prices/{{priceId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"quota": 5}
+
+### 6.7 Karim orders without a token -> 201 (no room any more). Then run check.sql (header): no rows.
+POST {{base}}/fan/orders
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"event_id": {{eventId}}, "channel": "APP", "items": [{"price_category_id": "{{priceId}}", "qty": 1,
+  "holders": [{"name": "Karim Alaoui"}]}]}

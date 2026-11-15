@@ -372,5 +372,35 @@ Back-office → **Portes en direct** → Sporting Anfa : les entrées montent en
 - Affluence : avec un seul scanner, la puce reste **Fluide**.
 - Sporting Anfa ne se recale qu'au redémarrage, et plus du tout une fois clôturé : `reset` dans ce cas. Un billet
   scanné reste « Tu es dedans » jusqu'au `reset`.
-- La salle d'attente des grosses ventes (Lot 5) n'est pas incluse.
+- La salle d'attente des grosses ventes (Lot 5) se règle dans le back-office (événement → **Salle d'attente**) ; le
+  parcours complet est dans `backend/http/lot5-onsale.http`.
 - Le texte en darija est un premier jet, à relire par un natif.
+
+## Load
+
+Deux instances en local (plan lot-5 §5.5). Docker démarré ; sans k6 installé, le script prend l'image `grafana/k6`.
+
+```bash
+bash backend/loadtest/smoke.sh                       # tout : build, api-1 + api-2, 5 scénarios de 30 s (--vus 5), check.sql
+VUS=20 DURATION_S=60 bash backend/loadtest/smoke.sh  # plus gros
+```
+
+Pas à pas, depuis `backend/` :
+
+```bash
+./gradlew bootJar
+DB_PORT=5436 docker compose -p jomhor-smoke --profile smoke up -d --build postgres api-1 api-2
+curl http://localhost:8081/v1/actuator/health/readiness
+curl http://localhost:8082/v1/actuator/health/readiness
+cd loadtest/k6
+k6 run --vus 5 --duration 30s -e DURATION_S=30 -e SCENARIO=prequeue --console-output ../../build/loadtest/orders-prequeue.log onsale.js
+k6 run --vus 5 --duration 30s -e DURATION_S=30 -e SCENARIO=poll --console-output ../../build/loadtest/orders-poll.log onsale.js
+k6 run --vus 5 --duration 30s -e DURATION_S=30 -e SCENARIO=buy --console-output ../../build/loadtest/orders-buy.log onsale.js
+k6 run --vus 5 --duration 30s -e DURATION_S=30 -e SCENARIO=cold-visitor --console-output ../../build/loadtest/orders-cold-visitor.log onsale.js
+k6 run --vus 5 --duration 30s --console-output ../../build/loadtest/orders-hot-row.log hot-row.js
+k6 run onsale.js        # le run §5.5 complet (jamais exécuté : reporté avec le test de capacité) (FANS, BUYERS, POLL_VUS, POLL_RPS, COLD_RPS, DURATION_S)
+k6 run hot-row.js       # 100 acheteurs, 60 s
+cd ../..
+docker compose -p jomhor-smoke exec -T postgres psql -U jomhor -d jomhor -At < loadtest/check.sql   # aucune ligne = OK
+docker compose -p jomhor-smoke --profile smoke down -v
+```

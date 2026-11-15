@@ -54,6 +54,10 @@ String venueDate(DateTime instant, String zone, String locale) =>
 String venueClock(DateTime instant, String zone, String locale) =>
     DateFormat.Hm(intlLocale(locale)).format(venueTime(instant, zone));
 
+/// "6 nov." inside a sentence ("avant le 6 nov.").
+String venueDay(DateTime instant, String zone, String locale) =>
+    DateFormat('d MMM', intlLocale(locale)).format(venueTime(instant, zone));
+
 /// "Sam. 21 févr. 12:00": a deadline.
 String venueWhen(DateTime instant, String zone, String locale) =>
     '${venueDate(instant, zone, locale)} ${venueClock(instant, zone, locale)}';

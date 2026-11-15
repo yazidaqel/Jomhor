@@ -29,6 +29,7 @@ class FanEvent {
     this.saleStartsAt,
     this.fromPriceMad,
     this.status,
+    this.room,
   });
 
   /// [fetchedAt]: server time of this read (the response `Date`, else the device clock).
@@ -54,6 +55,10 @@ class FanEvent {
       soldOut: j['sold_out']! as bool,
       fromPriceMad: j['from_price_mad'] as int?,
       perAccountLimit: j['per_account_limit']! as int,
+      room: switch (j['room']) {
+        final Map<String, Object?> r => Room.fromJson(r),
+        _ => null,
+      },
     );
   }
 
@@ -85,6 +90,9 @@ class FanEvent {
   final int? fromPriceMad;
   final int perAccountLimit;
 
+  /// Lot 5: the event's waiting room while it is not `ENDED`; null without one (docs/04-api.md §Waiting room).
+  final Room? room;
+
   /// The server's `on_sale` decides "open". "Closed" needs proof: the cutoff has passed, or the status
   /// says so. Not on sale with the opening behind us is [SaleState.opening] (as the web shop's OPENING):
   /// a read from before the opening, or a server whose clock is a little behind the device's.
@@ -113,6 +121,43 @@ class FanEvent {
   static const _maxBackoff = Duration(seconds: 30);
 
   EventFacts get facts => EventFacts.of(eventType, metadata);
+}
+
+/// `room` of `GET /fan/events*` (docs/04-api.md §Fan, Lot 5).
+class Room {
+  const new({required this.status, required this.opensAt, this.eligibility});
+
+  factory fromJson(Map<String, Object?> j) => Room(
+    status: j['status']! as String,
+    opensAt: _instant(j['opens_at'])!,
+    eligibility: switch (j['eligibility']) {
+      final Map<String, Object?> e => Eligibility(
+        verifiedBefore: _instant(e['verified_before']),
+        memberJoinedBefore: _instant(e['member_joined_before']),
+        minEventsAttended: e['min_events_attended'] as int?,
+      ),
+      _ => null,
+    },
+  );
+
+  /// `SCHEDULED`, `PRE_QUEUE`, `OPEN` or `PAUSED`.
+  final String status;
+  final DateTime opensAt;
+
+  /// The room's verified-fan rule; null when none is set.
+  final Eligibility? eligibility;
+
+  /// Joins are open: the server says so, or `opens_at` has passed on this device (the read may be older).
+  bool joinable(DateTime now) => status != 'SCHEDULED' || !now.isBefore(opensAt);
+}
+
+/// The parts of a room's rule; each null part is not required.
+class Eligibility {
+  const new({this.verifiedBefore, this.memberJoinedBefore, this.minEventsAttended});
+
+  final DateTime? verifiedBefore;
+  final DateTime? memberJoinedBefore;
+  final int? minEventsAttended;
 }
 
 class EventDetail {

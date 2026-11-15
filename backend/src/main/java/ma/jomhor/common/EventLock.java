@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
  * and gate (the rest) both take it and must agree on the key.
  *
  * <p>Advisory keys in use. Single-bigint (class << 32) | 32-bit value: 1 OTP phone, 2 OTP IP (JdbcOtpChallenges),
- * 3 this lock, 4 the manifest build (JdbcManifests). Two-int, a key space Postgres keeps apart from the bigint one:
+ * 3 this lock, 4 the manifest build (JdbcManifests), 6 the fan-message claim (JdbcFanMessages, one key: the job's
+ * try-lock, so one instance sends per tick). Two-int, a key space Postgres keeps apart from the bigint one:
  * (4, hashtext(organizer id)) the organizer's membership lock (JdbcMemberships, PUT/DELETE /fan/me/membership), and
  * (hashtext(user id), event id) the per-account order lock (JdbcOrders), which can meet a membership key only when
  * a user hash is 4: a short wait, never a wrong result.

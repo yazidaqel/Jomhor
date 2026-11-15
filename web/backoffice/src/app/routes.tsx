@@ -7,6 +7,7 @@ import { EventPage } from '@/features/events/EventPage'
 import { EventsPage } from '@/features/events/EventsPage'
 import { CashPage } from '@/features/finance/CashPage'
 import { LiveIndexPage, LivePage } from '@/features/live/LivePage'
+import { RoomPage } from '@/features/room/RoomPage'
 import { ReconciliationPage } from '@/features/reconciliation/ReconciliationPage'
 import { OverviewPage } from '@/features/overview/OverviewPage'
 import { PosPage } from '@/features/pos/PosPage'
@@ -31,6 +32,7 @@ export const routes: RouteObject[] = [
       { path: 'events/:id/tickets', element: <TicketsPage /> },
       { path: 'events/:id/live', element: <LivePage /> },
       { path: 'events/:id/reconciliation', element: <ReconciliationPage /> },
+      { path: 'events/:id/room', element: <RoomPage /> },
       { path: 'sales', element: <SalesIndexPage /> },
       { path: 'live', element: <LiveIndexPage /> },
       { path: 'devices', element: <DevicesPage /> },

@@ -1,0 +1,3 @@
+*
+!build/libs/*.jar
+build/libs/*-plain.jar

@@ -2,6 +2,8 @@ package ma.jomhor.tenancy.adapters.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +46,16 @@ class JdbcAccounts implements Accounts {
     @Override
     public User upsertByPhone(String phone) {
         jdbc.sql("insert into users (phone_e164) values (?) on conflict (phone_e164) do nothing").param(phone).update();
+        return jdbc.sql("select " + USER_COLUMNS + " from users where phone_e164 = ?")
+                .param(phone).query(JdbcAccounts::user).single();
+    }
+
+    @Override
+    public User fanLogin(String phone) {
+        jdbc.sql("""
+                        insert into users (phone_e164, verified_at) values (?, now())
+                        on conflict (phone_e164) do update set verified_at = now() where users.verified_at is null""")
+                .param(phone).update();
         return jdbc.sql("select " + USER_COLUMNS + " from users where phone_e164 = ?")
                 .param(phone).query(JdbcAccounts::user).single();
     }
@@ -139,6 +151,12 @@ class JdbcAccounts implements Accounts {
     public Optional<User> findUser(UUID userId) {
         return jdbc.sql("select " + USER_COLUMNS + " from users where id = ?")
                 .param(userId).query(JdbcAccounts::user).optional();
+    }
+
+    @Override
+    public Optional<Instant> verifiedAt(UUID userId) {
+        return jdbc.sql("select verified_at from users where id = ?").param(userId)
+                .query((rs, n) -> rs.getObject(1, OffsetDateTime.class)).optional().map(OffsetDateTime::toInstant);
     }
 
     @Override

@@ -10,6 +10,7 @@ import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
 import 'package:jomhor_fan/features/checkout/method_rows.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
+import 'package:jomhor_fan/features/queue/queue_screen.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -30,26 +31,33 @@ class CheckoutScreen extends ConsumerWidget {
     final detail = ref.watch(eventDetailProvider(args.eventId));
     return Scaffold(
       appBar: AppBar(title: Text(l.payTitle)),
-      body: detail.when(
-        loading: () => ListView(
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(JomhorSpace.xl),
-          children: const [SkeletonList(rows: 4)],
-        ),
-        error: (e, _) => Center(
-          child: ErrorPanel(error: e, onRetry: () => ref.invalidate(eventDetailProvider(args.eventId))),
-        ),
-        data: (d) {
-          for (final z in d.zones) {
-            for (final p in z.prices) {
-              if (p.priceCategoryId == args.priceCategoryId) return _Form(args: args, detail: d, zone: z, price: p);
-            }
-          }
-          return Center(child: Text(l.errorNotFound));
-        },
+      body: Column(
+        children: [
+          AdmissionBar(eventId: args.eventId),
+          Expanded(child: _body(context, ref, l, detail)),
+        ],
       ),
     );
   }
+
+  Widget _body(BuildContext context, WidgetRef ref, AppLocalizations l, AsyncValue<EventDetail> detail) => detail.when(
+    loading: () => ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(JomhorSpace.xl),
+      children: const [SkeletonList(rows: 4)],
+    ),
+    error: (e, _) => Center(
+      child: ErrorPanel(error: e, onRetry: () => ref.invalidate(eventDetailProvider(args.eventId))),
+    ),
+    data: (d) {
+      for (final z in d.zones) {
+        for (final p in z.prices) {
+          if (p.priceCategoryId == args.priceCategoryId) return _Form(args: args, detail: d, zone: z, price: p);
+        }
+      }
+      return Center(child: Text(l.errorNotFound));
+    },
+  );
 }
 
 class _Form extends ConsumerStatefulWidget {
@@ -153,6 +161,10 @@ class _FormState extends ConsumerState<_Form> {
     // A cash /pay in flight when the hold ends decides first: a code issued goes to the order screen.
     ref.listen(checkoutControllerProvider(args).select((s) => (s.phase, s.payingCash)), (_, now) {
       if (now == (CheckoutPhase.expired, false)) _onExpired(context, l);
+    });
+    // Lot 5: the waiting room wants a (new) turn first.
+    ref.listen(checkoutControllerProvider(args).select((s) => s.error?.code), (_, code) {
+      if (code == 'ADMISSION_REQUIRED') context.go('/events/${args.eventId}/queue');
     });
     final locked = state.order != null; // The holders are on the order now.
     final busy = state.busy;

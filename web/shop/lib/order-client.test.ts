@@ -11,6 +11,7 @@ import {
   pollOrder,
   postJson,
   RETRY_PAY_AFTER_MS,
+  sleep,
   withBusyRetry,
   type OrderStatus,
   type Poll,
@@ -22,6 +23,16 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
+})
+
+it('sleep removes its abort listener once the timer fires (long-lived signals, like the W8 poller, keep none)', async () => {
+  const ctl = new AbortController()
+  const add = vi.spyOn(ctl.signal, 'addEventListener')
+  const remove = vi.spyOn(ctl.signal, 'removeEventListener')
+  const done = sleep(1000, ctl.signal)
+  await vi.advanceTimersByTimeAsync(1000)
+  await done
+  expect(remove).toHaveBeenCalledWith('abort', add.mock.calls[0]![1])
 })
 
 const busy = (s: number): Result => ({ ok: false, status: 429, data: { code: 'SALE_BUSY', message: '', details: { retry_after_s: s } } })
