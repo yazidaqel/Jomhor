@@ -425,5 +425,10 @@
   "membersCaptionAny": "سعر الأعضاء",
   "holderMembersOnly": "هاد السعر غير للأعضاء اللي تسجلو قبل {date}",
   "holderMembersOnlyAny": "هاد السعر غير للأعضاء",
-  "holderCapReached": "{limit, plural, =1{هاد الرقم وصل للحد ديال تذكرة وحدة لهاد الحدث} other{هاد الرقم وصل للحد ديال {limit} تذاكر لهاد الحدث}}"
+  "holderCapReached": "{limit, plural, =1{هاد الرقم وصل للحد ديال تذكرة وحدة لهاد الحدث} other{هاد الرقم وصل للحد ديال {limit} تذاكر لهاد الحدث}}",
+  "waitlistJoin": "قائمة الانتظار",
+  "waitlistOn": "راك فقائمة الانتظار",
+  "waitlistSheetBody": "غادي نعلموك غير يتحررو شي بلايص. اللي جا الأول كيشري الأول.",
+  "waitlistLeave": "خرج من القائمة",
+  "waitlistChannels": "غادي نعلموك بنوتيفيكاسيون و واتساب"
 }

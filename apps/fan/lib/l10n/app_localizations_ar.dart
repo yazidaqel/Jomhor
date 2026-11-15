@@ -1615,4 +1615,19 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get waitlistJoin => 'قائمة الانتظار';
+
+  @override
+  String get waitlistOn => 'راك فقائمة الانتظار';
+
+  @override
+  String get waitlistSheetBody => 'غادي نعلموك غير يتحررو شي بلايص. اللي جا الأول كيشري الأول.';
+
+  @override
+  String get waitlistLeave => 'خرج من القائمة';
+
+  @override
+  String get waitlistChannels => 'غادي نعلموك بنوتيفيكاسيون و واتساب';
 }

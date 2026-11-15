@@ -1564,4 +1564,19 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get waitlistJoin => 'Liste d\'attente';
+
+  @override
+  String get waitlistOn => 'Sur la liste d\'attente';
+
+  @override
+  String get waitlistSheetBody => 'On te prévient dès que des places se libèrent. Premier arrivé, premier servi.';
+
+  @override
+  String get waitlistLeave => 'Quitter la liste';
+
+  @override
+  String get waitlistChannels => 'On te prévient par notification et WhatsApp';
 }

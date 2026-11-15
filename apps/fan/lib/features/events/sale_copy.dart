@@ -3,7 +3,8 @@ import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 
-/// Hero CTA label per sale state (DESIGN.md screen 1 + Lot 1 adjustments). "Liste d'attente" is Lot 5.
+/// Hero CTA label per sale state (DESIGN.md screen 1 + Lot 1 adjustments). Sold out with no room, the hero shows the
+/// waitlist instead (features/waitlist, Lot 5 step 2).
 String ctaLabel(AppLocalizations l, FanEvent e, DateTime now) => switch (e.saleState(now)) {
   SaleState.onSale => e.fromPriceMad == null ? l.ctaBuy : l.ctaBuyFrom(l.dh(e.fromPriceMad!)),
   SaleState.notStarted => l.saleOpensOn(

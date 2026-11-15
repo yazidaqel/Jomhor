@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_text.dart';
+import 'package:jomhor_fan/app/router.dart';
+import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/features/auth/login_controller.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
@@ -33,6 +36,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final state = ref.watch(loginControllerProvider);
     final controller = ref.read(loginControllerProvider.notifier);
     final codeStep = state.phone != null;
+    // Pushed ("Connecte-toi", the waitlist on screens 1 and 2): the router's redirect only sees the page under it, so
+    // the login leaves itself once signed in: back to that page without `from`, else on to `from`.
+    // After the frame: the router's own refresh for the new session would otherwise put the login back.
+    ref.listen(sessionProvider, (_, signedIn) {
+      if (!signedIn) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted || !context.canPop() || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+        final from = GoRouterState.of(context).uri.queryParameters['from'];
+        from == null ? context.pop() : context.pushReplacement(afterLogin(from));
+      });
+    });
     final error = state.error;
 
     return Scaffold(

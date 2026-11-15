@@ -425,5 +425,10 @@
   "membersCaptionAny": "Members price",
   "holderMembersOnly": "Members-only price: joined before {date}",
   "holderMembersOnlyAny": "Members-only price",
-  "holderCapReached": "{limit, plural, =1{This number has reached the limit of 1 ticket for this event} other{This number has reached the limit of {limit} tickets for this event}}"
+  "holderCapReached": "{limit, plural, =1{This number has reached the limit of 1 ticket for this event} other{This number has reached the limit of {limit} tickets for this event}}",
+  "waitlistJoin": "Waitlist",
+  "waitlistOn": "On the waitlist",
+  "waitlistSheetBody": "We'll let you know as soon as places come back. First come, first served.",
+  "waitlistLeave": "Leave the list",
+  "waitlistChannels": "We'll let you know by notification and WhatsApp"
 }

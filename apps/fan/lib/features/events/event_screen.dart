@@ -11,6 +11,8 @@ import 'package:jomhor_fan/features/events/sale_copy.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
 import 'package:jomhor_fan/features/queue/queue_store.dart';
 import 'package:jomhor_fan/features/queue/room_cta.dart';
+import 'package:jomhor_fan/features/waitlist/waitlist_button.dart';
+import 'package:jomhor_fan/features/waitlist/waitlist_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -288,23 +290,33 @@ class _Footer extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    FilledButton(
-                      key: const Key('event.cta'),
-                      onPressed: switch (room) {
-                        null => open ? () => context.push('/events/${event.id}/zones') : null,
-                        _ => roomPath == null ? null : () => context.push(roomPath),
-                      },
-                      child: Text(switch (room) {
-                        null => open ? l.chooseZone : ctaLabel(l, event, now),
-                        final r => roomCtaLabel(l, event, r, now),
-                      }, textAlign: TextAlign.center),
-                    ),
+                    // Lot 5 step 2: sold out with no room left, the waitlist and how its notice comes.
+                    if (waitlistOffered(event, now)) ...[
+                      WaitlistButton(eventId: event.id, scope: 'event'),
+                      const SizedBox(height: JomhorSpace.s),
+                      Text(
+                        l.waitlistChannels,
+                        key: const Key('event.waitlistInfo'),
+                        textAlign: TextAlign.center,
+                        style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
+                      ),
+                    ] else
+                      FilledButton(
+                        key: const Key('event.cta'),
+                        onPressed: switch (room) {
+                          null => open ? () => context.push('/events/${event.id}/zones') : null,
+                          _ => roomPath == null ? null : () => context.push(roomPath),
+                        },
+                        child: Text(switch (room) {
+                          null => open ? l.chooseZone : ctaLabel(l, event, now),
+                          final r => roomCtaLabel(l, event, r, now),
+                        }, textAlign: TextAlign.center),
+                      ),
                     if (signedOut)
                       TextButton(
                         key: const Key('event.login'),
-                        onPressed: () => context.push(
-                          Uri(path: '/login', queryParameters: {'from': '/events/${event.id}'}).toString(),
-                        ),
+                        // No `from`: the login comes back to this page once signed in.
+                        onPressed: () => context.push('/login'),
                         child: Text(l.queueLoginNow),
                       ),
                   ],

@@ -11,6 +11,7 @@ import 'package:jomhor_fan/features/inbox/inbox.dart';
 import 'package:jomhor_fan/features/queue/queue_store.dart';
 import 'package:jomhor_fan/features/tickets/gate_load.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
+import 'package:jomhor_fan/features/waitlist/waitlist_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Whether a token was stored at startup. `main` overrides it with [startSession]'s result.
@@ -46,6 +47,7 @@ class Session extends Notifier<bool> {
 
   /// Never throws: signed out even if the Keystore/Keychain fails, and [Tickets.build] wipes the cache again then.
   Future<void> signOut() async {
+    ref.read(waitlistJoinAfterLoginProvider).clear();
     // Best effort and not awaited (lot-4 Q124): an offline logout leaves the server token live; deleting it on the
     // phone makes FCM report it unregistered. Offline, it must not hold the sign-out up.
     if (ref.read(pushMessagingProvider) case final push?) {

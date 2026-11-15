@@ -1,0 +1,7 @@
+{
+ "source": "contract-first (docs/04-api.md §Waitlist, Lot 5 step 2): replace with a captured answer once BE-49 runs",
+ "status": 200,
+ "body": {
+  "entry": null
+ }
+}

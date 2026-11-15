@@ -642,5 +642,15 @@
   "holderMembersOnlyAny": "Tarif réservé aux membres",
   "@holderMembersOnlyAny": {"description": "holderMembersOnly without a date (member_joined_before null)."},
   "holderCapReached": "{limit, plural, =1{Ce numéro a atteint la limite de 1 billet pour cet événement} other{Ce numéro a atteint la limite de {limit} billets pour cet événement}}",
-  "@holderCapReached": {"description": "Screen 4 holder row and screen 8 phone: 409 PER_ACCOUNT_LIMIT reason HOLDER.", "placeholders": {"limit": {"type": "int"}}}
+  "@holderCapReached": {"description": "Screen 4 holder row and screen 8 phone: 409 PER_ACCOUNT_LIMIT reason HOLDER.", "placeholders": {"limit": {"type": "int"}}},
+  "waitlistJoin": "Liste d'attente",
+  "@waitlistJoin": {"description": "Screens 1 and 2 CTA: sold out, on sale, no room. Joins the waitlist (docs/04-api.md §Waitlist)."},
+  "waitlistOn": "Sur la liste d'attente",
+  "@waitlistOn": {"description": "Screens 1 and 2 outlined CTA (check icon) and sheet title once on the waitlist."},
+  "waitlistSheetBody": "On te prévient dès que des places se libèrent. Premier arrivé, premier servi.",
+  "@waitlistSheetBody": {"description": "Waitlist sheet: notify only, no hold, no priority (lot-5 Q176)."},
+  "waitlistLeave": "Quitter la liste",
+  "@waitlistLeave": {"description": "Waitlist sheet action: DELETE /fan/waitlist/{event_id}."},
+  "waitlistChannels": "On te prévient par notification et WhatsApp",
+  "@waitlistChannels": {"description": "Screen 2 info line under the sold-out waitlist CTA (lot-5 Q178)."}
 }

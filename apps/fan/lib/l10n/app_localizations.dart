@@ -2564,6 +2564,36 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'{limit, plural, =1{Ce numéro a atteint la limite de 1 billet pour cet événement} other{Ce numéro a atteint la limite de {limit} billets pour cet événement}}'**
   String holderCapReached(int limit);
+
+  /// Screens 1 and 2 CTA: sold out, on sale, no room. Joins the waitlist (docs/04-api.md §Waitlist).
+  ///
+  /// In fr, this message translates to:
+  /// **'Liste d\'attente'**
+  String get waitlistJoin;
+
+  /// Screens 1 and 2 outlined CTA (check icon) and sheet title once on the waitlist.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sur la liste d\'attente'**
+  String get waitlistOn;
+
+  /// Waitlist sheet: notify only, no hold, no priority (lot-5 Q176).
+  ///
+  /// In fr, this message translates to:
+  /// **'On te prévient dès que des places se libèrent. Premier arrivé, premier servi.'**
+  String get waitlistSheetBody;
+
+  /// Waitlist sheet action: DELETE /fan/waitlist/{event_id}.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quitter la liste'**
+  String get waitlistLeave;
+
+  /// Screen 2 info line under the sold-out waitlist CTA (lot-5 Q178).
+  ///
+  /// In fr, this message translates to:
+  /// **'On te prévient par notification et WhatsApp'**
+  String get waitlistChannels;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

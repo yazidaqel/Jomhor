@@ -1,0 +1,11 @@
+{
+ "source": "contract-first (docs/04-api.md §Waitlist, Lot 5 step 2): replace with a captured answer once BE-49 runs",
+ "status": 409,
+ "body": {
+  "code": "WAITLIST_CLOSED",
+  "message": "A waiting-room phase is live",
+  "details": {
+   "reason": "ROOM"
+  }
+ }
+}

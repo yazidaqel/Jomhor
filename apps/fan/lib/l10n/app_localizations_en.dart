@@ -1561,4 +1561,19 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get waitlistJoin => 'Waitlist';
+
+  @override
+  String get waitlistOn => 'On the waitlist';
+
+  @override
+  String get waitlistSheetBody => 'We\'ll let you know as soon as places come back. First come, first served.';
+
+  @override
+  String get waitlistLeave => 'Leave the list';
+
+  @override
+  String get waitlistChannels => 'We\'ll let you know by notification and WhatsApp';
 }
