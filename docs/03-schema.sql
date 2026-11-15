@@ -163,7 +163,7 @@ create table events (
 );
 create index on events (organizer_id, starts_at);
 
-create type price_audience as enum ('ALL','MEMBERS');
+create type price_audience as enum ('ALL','MEMBERS','PASS');
 
 create table price_categories (
   id            uuid primary key default gen_random_uuid(),
@@ -178,7 +178,10 @@ create table price_categories (
                 -- decremented when an order expires or is cancelled, and when a ticket is refunded (one place)
   audience      price_audience not null default 'ALL',  -- MEMBERS: each place held by a live member of the organizer who joined
                                                          -- before events.sale_starts_at (docs/04-api.md POST /fan/orders)
-  unique (event_id, zone_id, name)
+                                                         -- PASS: places for season-pass holders of the event's series (docs/04-api.md §Passes);
+                                                         -- issued by the pass job only, never sold to fans or at a till; price_mad = 0
+  unique (event_id, zone_id, name),
+  constraint price_categories_pass check (audience <> 'PASS' or price_mad = 0)
 );
 
 -- ---------- sales ----------
@@ -186,10 +189,53 @@ create type sales_channel as enum ('APP','WEB','POS');
 create type order_status  as enum ('RESERVED','AWAITING_CASH','PAID','EXPIRED','CANCELLED','REFUNDED');
 create type payment_method as enum ('CARD','CASH_AGENCY','WALLET','POS_CASH','FREE');
 
+-- ---------- sales: products (Lot 5 step 3) ----------
+create type product_kind as enum ('PASS','MEMBERSHIP');
+
+create table products (                               -- what an order sells besides event places (docs/04-api.md §Products)
+  id              uuid primary key default gen_random_uuid(),
+  organizer_id    uuid not null references organizers(id),
+  kind            product_kind not null,
+  name            text not null check (char_length(name) between 1 and 60),   -- organizer content, shown as typed
+  price_mad       bigint not null check (price_mad > 0),                      -- centimes; snapshot in order_items
+  on_sale         boolean not null default false,
+  sales_close_at  timestamptz not null,                 -- no product order at or after; caps a cash code's hold
+  quota           integer check (quota >= 0),           -- PASS: passes on sale; null for MEMBERSHIP (no cap)
+  sold            integer not null default 0 check (sold >= 0 and (quota is null or sold <= quota)),
+                  -- PASS: passes PENDING, ACTIVE or SUSPENDED; 0 for MEMBERSHIP
+  series_id       uuid references event_series(id),     -- PASS: the events it covers
+  zone_id         smallint references zones(id),        -- PASS: the zone its tickets admit to; events at that zone's venue only
+  valid_until     timestamptz,                          -- MEMBERSHIP: the memberships.paid_until it grants
+  created_at      timestamptz not null default now(),
+  constraint products_kind check (
+    (kind = 'PASS') = (series_id is not null and zone_id is not null and quota is not null)
+    and (kind = 'MEMBERSHIP') = (valid_until is not null))
+);
+create index on products (organizer_id, kind);
+
+-- ---------- sales: passes (Lot 5 step 3) ----------
+create type pass_status as enum ('PENDING','ACTIVE','SUSPENDED','CANCELLED');
+
+create table passes (                                 -- a season pass (docs/04-api.md §Passes): one ticket per event of its series
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  product_id    uuid not null references products(id),     -- kind PASS (zone, price)
+  series_id     uuid not null references event_series(id), -- = the product's; one live pass per account per series
+  user_id       uuid not null references users(id),        -- buyer and holder
+  holder_name   text not null,                              -- §Holder names; copied to its tickets; never in a QR or manifest
+  status        pass_status not null default 'PENDING',     -- PENDING until its purchase order is PAID; CANCELLED if that expires
+  created_at    timestamptz not null default now()
+);
+create unique index on passes (series_id, user_id) where status <> 'CANCELLED';
+-- a pass's ticket for an event comes from an order with pass_id and event_id set (channel APP, method FREE,
+-- one PASS-category place); see docs/04-api.md §Passes
+
 create table orders (
   id              uuid primary key default gen_random_uuid(),
   organizer_id    uuid not null references organizers(id),
-  event_id        integer not null references events(id),
+  event_id        integer references events(id),   -- null = a product order (pass purchase, membership)
+  pass_id         uuid references passes(id),      -- event_id null: the pass's purchase order;
+                                                   -- event_id set: the pass's ticket order for that event (PAID, FREE, total 0)
   user_id         uuid references users(id),
   channel         sales_channel not null,
   status          order_status not null default 'RESERVED',
@@ -199,7 +245,8 @@ create table orders (
   reserved_until  timestamptz not null,
   paid_at         timestamptz,
   created_at      timestamptz not null default now(),
-  group_order_id  uuid references orders(id)   -- split pay: set on a member order, = the initiator's order (docs/04-api.md §Split pay)
+  group_order_id  uuid references orders(id),  -- split pay: set on a member order, = the initiator's order (docs/04-api.md §Split pay)
+  constraint orders_product check (event_id is not null or (channel in ('APP','WEB') and group_order_id is null))
 );
 -- AWAITING_CASH: a cash code was issued; reserved_until = least(issue + 24 h, events.refund_cutoff_at).
 -- POS sale: channel POS, user_id null, created PAID. Ticket refunds leave the order PAID
@@ -207,16 +254,20 @@ create table orders (
 create index on orders (event_id, status);
 create index on orders (user_id, created_at desc);
 create index on orders (group_order_id) where group_order_id is not null;
+create unique index on orders (pass_id, event_id) where pass_id is not null and event_id is not null;  -- one ticket order per pass per event
+create index on orders (pass_id) where pass_id is not null;
 
 create table order_items (
   id                uuid primary key default gen_random_uuid(),
   organizer_id      uuid not null references organizers(id),
   order_id          uuid not null references orders(id),
-  price_category_id uuid not null references price_categories(id),
+  price_category_id uuid references price_categories(id),  -- an event place; null on a product item
+  product_id        uuid references products(id),          -- a product item (qty 1, one holder)
   qty               smallint not null check (qty > 0),
   unit_price_mad    bigint not null check (unit_price_mad >= 0),  -- snapshot at reservation
   holders           jsonb not null default '[]'::jsonb,            -- [{"name": "Yazid Aqel", "user_id": "<uuid>"}], one per place; no phone stored
   constraint order_items_holders_len check (jsonb_array_length(holders) = qty) not valid,  -- Lot 0 rows keep []
+  constraint order_items_subject check ((price_category_id is null) <> (product_id is null)),
   unique (order_id, price_category_id)
 );
 create index on order_items using gin (holders jsonb_path_ops);  -- holder limit: places one account holds (docs/04-api.md POST /fan/orders)
@@ -250,19 +301,6 @@ create table ticket_transfers (                       -- transfer or re-issue: t
   transferred_at  timestamptz not null default now()
 );
 create index on ticket_transfers (from_user_id, transferred_at desc);
-
-create type pass_status as enum ('ACTIVE','SUSPENDED','CANCELLED');
-
-create table passes (
-  id            uuid primary key default gen_random_uuid(),
-  organizer_id  uuid not null references organizers(id),
-  series_id     uuid not null references event_series(id),
-  user_id       uuid not null references users(id),
-  zone_id       smallint not null references zones(id),
-  status        pass_status not null default 'ACTIVE',
-  created_at    timestamptz not null default now()
-);
--- a pass materialises as one tickets row per event in the series (order channel APP, method FREE)
 
 -- ---------- sales: waiting rooms (Lot 5) ----------
 create type room_status as enum ('SCHEDULED','PRE_QUEUE','OPEN','PAUSED','ENDED');
@@ -396,7 +434,7 @@ create table refunds (                                 -- money owed back for a 
 create index on refunds (organizer_id, status, requested_at);
 
 -- ---------- fans ----------
-create table memberships (                            -- a fan who joined an organizer's club (free, Lot 4); loyalty is computed on read
+create table memberships (                            -- a fan who joined an organizer's club (free to join, Lot 4; paid cotisation through paid_until, Lot 5); loyalty is computed on read
   id                  uuid primary key default gen_random_uuid(),
   organizer_id        uuid not null references organizers(id),
   user_id             uuid not null references users(id),
@@ -405,6 +443,7 @@ create table memberships (                            -- a fan who joined an org
   left_at             timestamptz,                           -- left the club; a rejoin clears it and keeps the number and joined_at
   marketing_push      boolean not null default false,        -- opt-ins for MEMBERS campaigns (changes audited: membership.consent)
   marketing_whatsapp  boolean not null default false,
+  paid_until          timestamptz,   -- the latest MEMBERSHIP product's valid_until paid for (docs/04-api.md §Products); null = never paid
   unique (organizer_id, user_id),
   unique (organizer_id, number)
 );

@@ -122,15 +122,16 @@ Server (PostgreSQL):
 | gate\_zones | Which zones a gate serves | organizer\_id, gate\_id, zone\_id |
 | event\_series | Season, festival edition, tour | id, organizer\_id, name, starts\_on, ends\_on |
 | events | One ticketed occurrence | id, organizer\_id, venue\_id, series\_id (nullable), event\_type (FOOTBALL\_MATCH, CONCERT, FESTIVAL\_DAY, CONFERENCE, OTHER), title, starts\_at, doors\_open\_at, status (DRAFT, ON\_SALE, GATES\_OPEN, CLOSED), event\_key\_enc, refund\_cutoff\_at, sale\_starts\_at, reentry\_policy, metadata jsonb (opponent, competition, headliner…) |
-| price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold, audience (ALL, MEMBERS) |
-| orders | Purchase | id, organizer\_id, event\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status, group\_order\_id (split pay: a member order → the initiator's order) |
-| order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, qty, unit\_price\_mad, holders jsonb (name, user\_id per place) |
+| price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold, audience (ALL, MEMBERS, PASS) |
+| orders | Purchase | id, organizer\_id, event\_id (nullable: product orders), pass\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status, group\_order\_id (split pay: a member order → the initiator's order) |
+| order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, product\_id, qty, unit\_price\_mad, holders jsonb (name, user\_id per place) |
 | payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref, pay\_code (cash code), pos\_session\_id, redirected\_at |
 | pos\_sessions | Club till sessions (one cashier's shift) | id, organizer\_id, staff\_id, label, opened\_at, closed\_at, expected\_mad, declared\_mad |
 | refunds | Money owed back for a refunded ticket, paid back by hand | id, organizer\_id, event\_id, ticket\_id, order\_id, payment\_id, amount\_mad, reason, status (REQUIRED, DONE), requested\_by, done\_by, reference |
 | tickets | One seat / admission | id (UUID), order\_id, event\_id, zone\_id, seat\_label, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_user\_id, holder\_name (never in a manifest), holder\_initials, issued\_at |
 | ticket\_transfers | Transfer or re-issue: the old ticket goes CANCELLED, a new one (new K\_t) is issued | id, organizer\_id, ticket\_id (unique), new\_ticket\_id (unique), from\_user\_id, to\_user\_id (= from\_user\_id for a re-issue), transferred\_at |
-| passes | Season ticket / multi-event bundle | id, series\_id, user\_id, zone\_id, status; materialised as one ticket per event |
+| products | What an order sells besides event places | id, organizer\_id, kind (PASS, MEMBERSHIP), name, price\_mad, on\_sale, sales\_close\_at, quota, sold, series\_id, zone\_id, valid\_until |
+| passes | Season pass: one ticket per published event of its series, through a pass ticket order | id, organizer\_id, product\_id, series\_id, user\_id, holder\_name, status (PENDING, ACTIVE, SUSPENDED, CANCELLED) |
 | devices | Enrolled scanners | id, organizer\_id, label, public\_key (ECDSA P-256 SPKI DER), status (PENDING, ACTIVE, REVOKED), enrolled\_at, approved\_at, revoked\_at, last\_seen\_at |
 | device\_assignments | Device ↔ event ↔ gate | organizer\_id, device\_id, event\_id, gate\_id, manifest\_version, closed\_ack\_at |
 | manifests | Signed snapshots | id, organizer\_id, event\_id, version, built\_at, row\_count, signature (Ed25519 over the text payload), body (gzip) |
@@ -140,7 +141,7 @@ Server (PostgreSQL):
 | otp\_challenges | Phone OTP (platform-wide) | id, phone\_e164, audience (fan, org), ip, code\_hash, attempts, expires\_at |
 | fan\_sessions | Revocable fan login sessions (platform-wide) | id (JWT sid), user\_id, expires\_at, revoked\_at |
 | ticket\_deliveries | WhatsApp delivery outbox | id, organizer\_id, ticket\_id, status (PENDING, SENT, FAILED), attempts, next\_attempt\_at |
-| memberships | A fan who joined an organizer's club (free); loyalty computed on read | id, organizer\_id, user\_id, number (per organizer, never reused), joined\_at, left\_at, marketing\_push, marketing\_whatsapp |
+| memberships | A fan who joined an organizer's club (free to join; a paid cotisation sets paid_until); loyalty computed on read | id, organizer\_id, user\_id, number (per organizer, never reused), joined\_at, left\_at, marketing\_push, marketing\_whatsapp, paid\_until |
 | push\_tokens | FCM tokens of the Jomhor fan app (platform identity, every club) | id, user\_id, session\_id, token, platform (android, ios), updated\_at |
 | campaigns | Push or WhatsApp campaign | id, organizer\_id, channel (PUSH, WHATSAPP), audience (MEMBERS, EVENT\_HOLDERS), event\_id, title, body, status (DRAFT, SCHEDULED, SENDING, SENT, CANCELLED), scheduled\_at, created\_by, started\_at, finished\_at |
 | fan\_messages | Push and WhatsApp outbox other than ticket PDFs | id, organizer\_id, user\_id, channel, kind (TICKET\_RECEIVED, SPLIT\_INVITE, PAY\_CODE, ORDER\_PAID, CAMPAIGN, WAITLIST\_OPEN), campaign\_id, order\_id, ticket\_id, event\_id, status, attempts, next\_attempt\_at, last\_error |
@@ -227,7 +228,7 @@ Runbook:
 - [ ] Stadium plan: which gates serve which tribunes, and how many gates are actually staffed on a normal match vs a derby?
 - [ ] Cash on match day: do kiosks at the stadium print tickets, or is cash only sold in advance at agencies?
 - [ ] Who buys the devices: the club, or rented per match as part of the fee?
-- [ ] Season tickets: app-only in v1, or does the club insist on a physical card?
+- [x] Season tickets: app + PDF, no physical card in V1 (lot-5 Q186).
 
 ## Fan app: design direction
 
