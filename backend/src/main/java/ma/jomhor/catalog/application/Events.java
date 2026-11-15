@@ -48,6 +48,9 @@ public interface Events {
 
     Optional<PriceCategory> findPrice(UUID org, int eventId, UUID priceId);
 
+    /** Like findPrice, and locks the row until the end of the transaction (a sale's take waits). */
+    Optional<PriceCategory> lockPrice(UUID org, int eventId, UUID priceId);
+
     /** Capacity of the zone if it belongs to this venue. */
     Optional<Integer> zoneCapacity(UUID org, UUID venueId, int zoneId);
 
@@ -88,8 +91,14 @@ public interface Events {
     /** Zones of the event's venue that have at least one of its price categories, by id, prices by name. */
     List<Event.ZoneListing> zoneListings(UUID org, int eventId);
 
-    /** sold += qty if it stays within quota, in one statement. The only way sold grows. Empty if it doesn't fit. */
+    /** sold += qty if it stays within quota, in one statement. Empty if it doesn't fit. Any audience (the pass job). */
     Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty);
+
+    /**
+     * Like take, but never a PASS category (checked in the same statement): fan orders, till sales and late successes,
+     * so a concurrent audience change can't hand a fan a PASS place.
+     */
+    Optional<PriceCategory> takeSellable(UUID org, int eventId, UUID priceId, int qty);
 
     /** sold -= qty; false if sold < qty (never happens unless holds and sold disagree). */
     boolean giveBack(UUID org, int eventId, UUID priceId, int qty);

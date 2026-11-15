@@ -136,7 +136,7 @@ public class Inventory {
     /** Takes in UUID order into {@code taken}; returns the first category that doesn't fit, or null. */
     private UUID take(UUID org, int eventId, Map<UUID, Integer> qtyByCategory, Map<UUID, SalePrice> taken) {
         for (var e : new TreeMap<>(qtyByCategory).entrySet()) {
-            Optional<PriceCategory> row = events.take(org, eventId, e.getKey(), e.getValue());
+            Optional<PriceCategory> row = events.takeSellable(org, eventId, e.getKey(), e.getValue()); // never PASS
             if (row.isEmpty()) {
                 return e.getKey();
             }

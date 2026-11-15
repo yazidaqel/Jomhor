@@ -159,6 +159,13 @@ class JdbcEvents implements Events {
     }
 
     @Override
+    public Optional<PriceCategory> lockPrice(UUID org, int eventId, UUID priceId) {
+        return jdbc.sql("select " + PRICE_COLUMNS + " from price_categories"
+                        + " where organizer_id = :org and event_id = :event and id = :id for no key update")
+                .param("org", org).param("event", eventId).param("id", priceId).query(JdbcEvents::price).optional();
+    }
+
+    @Override
     public Optional<Integer> zoneCapacity(UUID org, UUID venueId, int zoneId) {
         return jdbc.sql("select capacity from zones where organizer_id = :org and venue_id = :venue and id = :id")
                 .param("org", org).param("venue", venueId).param("id", zoneId).query(Integer.class).optional();
@@ -338,10 +345,19 @@ class JdbcEvents implements Events {
     // Check and increment in one statement under the row lock: two buyers can't both take the last place.
     @Override
     public Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty) {
+        return take(org, eventId, priceId, qty, "");
+    }
+
+    @Override
+    public Optional<PriceCategory> takeSellable(UUID org, int eventId, UUID priceId, int qty) {
+        return take(org, eventId, priceId, qty, " and audience <> 'PASS'");
+    }
+
+    private Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty, String audience) {
         return jdbc.sql("""
                         update price_categories set sold = sold + :qty
-                        where organizer_id = :org and event_id = :event and id = :id and sold + :qty <= quota
-                        returning\s""" + PRICE_COLUMNS)
+                        where organizer_id = :org and event_id = :event and id = :id and sold + :qty <= quota"""
+                        + audience + "\nreturning " + PRICE_COLUMNS)
                 .param("org", org).param("event", eventId).param("id", priceId).param("qty", qty)
                 .query(JdbcEvents::price).optional();
     }
@@ -362,7 +378,7 @@ class JdbcEvents implements Events {
     @Override
     public List<Event.Series> series(UUID org) {
         return jdbc.sql("select " + SERIES_COLUMNS + " from event_series where organizer_id = :org"
-                        + " order by starts_on, name, id")
+                        + " order by starts_on, name collate \"C\", id")
                 .param("org", org).query(JdbcEvents::series).list();
     }
 

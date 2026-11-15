@@ -60,6 +60,9 @@ public class EventService {
     /** GET /fan/events/{id}: the event, its zones with prices, and how it can be paid. */
     public record PublicEvent(Event.Listing event, List<Event.ZoneListing> zones, PaymentMethods.Options payment) {}
 
+    /** A non-DRAFT event and every zone with one of its categories, PASS ones included (tickets' read model). */
+    public record EventZones(Event.Listing event, List<Event.ZoneListing> zones) {}
+
     /** A zone with at least one of the event's price categories, and those categories (sales' read model). */
     public record PricedZone(int zoneId, String code, String name, List<PriceCategory> prices) {}
 
@@ -119,6 +122,11 @@ public class EventService {
 
     public Event get(UUID org, int eventId) {
         return events.find(org, eventId).orElseThrow(notFound("Event"));
+    }
+
+    /** 04 GET /org/events/{id} {@code pass_tickets}: pass tickets exist for the event, so its series_id is fixed. */
+    public boolean hasPassTickets(UUID org, int eventId) {
+        return passes.hasPassTickets(org, eventId);
     }
 
     /** Like {@link #get}, and locks the event row until the caller's transaction ends (sales' room writes). */
@@ -242,8 +250,9 @@ public class EventService {
      * categories are left out of the rows, and a zone with only those is left out (04 §Passes).
      */
     public PublicEvent publicEvent(int eventId) {
-        Event.Listing e = events.listing(eventId).orElseThrow(notFound("Event"));
-        List<Event.ZoneListing> zones = events.zoneListings(e.organizerId(), eventId).stream()
+        EventZones all = eventZones(eventId);
+        Event.Listing e = all.event();
+        List<Event.ZoneListing> zones = all.zones().stream()
                 .map(z -> new Event.ZoneListing(z.id(), z.code(), z.name(), z.seated(), z.gates(),
                         z.prices().stream().filter(p -> p.audience().sellable()).toList()))
                 .filter(z -> !z.prices().isEmpty())
@@ -254,6 +263,21 @@ public class EventService {
                 .map(Event.PriceListing::priceMad).min(Long::compare).orElse(null);
         return new PublicEvent(e.withStock(left.isEmpty(), fromPrice), zones,
                 paymentMethods.available(e.organizerId(), e.salesCloseAt(), events.now()));
+    }
+
+    /**
+     * Tickets (wallet, PDF, till slips): the event by id alone and every zone with one of its categories, PASS ones
+     * included, so a ticket's zone is always found. DRAFT or unknown → 404. Never a fan's event view: that is
+     * {@link #publicEvent}.
+     */
+    public EventZones eventZones(int eventId) {
+        Event.Listing e = events.listing(eventId).orElseThrow(notFound("Event"));
+        return new EventZones(e, events.zoneListings(e.organizerId(), eventId));
+    }
+
+    /** The database clock (now()), so time rules agree across instances. */
+    public Instant now() {
+        return events.now();
     }
 
     // ---------- prices ----------
@@ -292,9 +316,17 @@ public class EventService {
     public PriceCategory updatePrice(UUID org, int eventId, UUID priceId, Integer zoneId, String name, Long priceMad,
                                      Integer quota, Event.Audience audience) {
         Event e = lockForPrices(org, eventId);
-        PriceCategory p = events.findPrice(org, eventId, priceId).orElseThrow(notFound("Price category"));
+        // Locked: a sale's take waits, so sold can't grow between the PASS_SOLD check and the write.
+        PriceCategory p = events.lockPrice(org, eventId, priceId).orElseThrow(notFound("Price category"));
         if (zoneId != null && zoneId != p.zoneId()) {
             throw invalid("zone_id", "is fixed after create");
+        }
+        if (audience != null && (audience == Event.Audience.PASS) != (p.audience() == Event.Audience.PASS)
+                && p.sold() > 0) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("reason", "PASS_SOLD");
+            details.put("fields", Map.of("audience", "can't move to or from PASS once places are sold"));
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
         }
         checkPassPrice(or(audience, p.audience()), or(priceMad, p.priceMad()));
         if (quota != null) {

@@ -1,6 +1,7 @@
 package ma.jomhor.catalog.adapters.web;
 
 import com.fasterxml.jackson.annotation.JsonRawValue;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -115,9 +116,13 @@ class EventController {
                 body.metadata(), body.seriesId())));
     }
 
+    /** GET /org/events/{id} only (Lot 5 step 3): the event + {@code pass_tickets}. */
+    record EventDetail(@JsonUnwrapped EventDto event, boolean passTickets) {}
+
     @GetMapping("/org/events/{id}")
-    EventDto get(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable int id) {
-        return EventDto.of(events.get(org.organizerId(), id));
+    EventDetail get(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable int id) {
+        EventDto event = EventDto.of(events.get(org.organizerId(), id));
+        return new EventDetail(event, events.hasPassTickets(org.organizerId(), id));
     }
 
     @PatchMapping("/org/events/{id}")
