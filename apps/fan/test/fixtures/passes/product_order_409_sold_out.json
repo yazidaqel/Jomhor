@@ -1,11 +1,11 @@
 {
- "source": "contract-first (docs/04-api.md, Lot 5 step 3, POST /fan/product-orders): replace with a captured answer once BE-53 runs",
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
  "status": 409,
  "body": {
   "code": "SOLD_OUT",
-  "message": "SOLD_OUT",
+  "message": "No pass left",
   "details": {
-   "product_id": "b1000000-0000-4000-8000-000000000001"
+   "product_id": "772caba4-89e1-45ef-9518-9a9f3e341e3c"
   }
  }
 }

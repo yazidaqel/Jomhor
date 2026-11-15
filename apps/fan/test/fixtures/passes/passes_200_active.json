@@ -1,50 +1,50 @@
 {
- "source": "contract-first (docs/04-api.md, Lot 5 step 3, GET /fan/passes): replace with a captured answer once BE-53 runs",
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
  "status": 200,
  "body": {
   "passes": [
    {
-    "id": "c1000000-0000-4000-8000-000000000001",
+    "id": "26408456-db0f-4468-a3ab-1bfa1ff9149b",
     "status": "ACTIVE",
     "product": {
-     "id": "b1000000-0000-4000-8000-000000000001",
-     "name": "Abonnement Tribune Est"
+     "id": "772caba4-89e1-45ef-9518-9a9f3e341e3c",
+     "name": "FL-29 Abonnement Tribune Est 8755"
     },
     "organizer": {
-     "id": "0b8e7a52-0000-4000-8000-000000000001",
+     "id": "a7a5fc00-0000-4000-8000-000000000001",
      "slug": "atlas-fc",
-     "name": "Atlas FC",
+     "name": "ATLAS FC",
      "crest_url": null
     },
     "series": {
-     "id": "e1000000-0000-4000-8000-000000000001",
-     "name": "Saison 2026-27",
+     "id": "ff84c471-816b-4c9c-827e-76203350508b",
+     "name": "FL-29 real run 8755",
      "starts_on": "2026-08-01",
      "ends_on": "2027-06-30"
     },
     "zone": {
-     "id": 3,
-     "code": "E",
-     "name": "Tribune Est"
+     "id": 2,
+     "code": "EST",
+     "name": "Est"
     },
     "timezone": "Africa/Casablanca",
     "holder_label": "Yazid A.",
-    "created_at": "2027-02-20T12:00:00Z",
+    "created_at": "2026-11-15T20:37:11.621908Z",
     "order_id": null,
     "events": [
      {
-      "id": 7,
-      "title": "Atlas FC vs Rapid Oued",
+      "id": 32,
+      "title": "FL-29 real run 8755 match 1",
       "event_type": "FOOTBALL_MATCH",
       "starts_at": "2027-03-13T19:00:00Z",
-      "ticket_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+      "ticket_id": "0900adb1-a2f2-401d-a3b5-4c600f717905"
      },
      {
-      "id": 8,
-      "title": "Atlas FC vs Olympique Tensift",
+      "id": 33,
+      "title": "FL-29 real run 8755 match 2",
       "event_type": "FOOTBALL_MATCH",
       "starts_at": "2027-04-03T19:00:00Z",
-      "ticket_id": null
+      "ticket_id": "5a3b4350-e459-4f23-8476-09f4f19f962b"
      }
     ]
    }

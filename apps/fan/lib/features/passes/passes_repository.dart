@@ -19,12 +19,15 @@ class PassesRepository {
   }
 
   /// `GET /fan/products?organizer=` (public): the club's products on sale, passes first, then its membership, and
-  /// the server time of the read (the response `Date`).
+  /// the server time of the read (the response `Date`). A product whose sales have closed is left out.
   Future<ClubProducts> products(String organizerId) async {
     final res = await _api.getPublicResponse('/fan/products', query: {'organizer': organizerId});
     final at = res.date ?? _now();
     return (
-      list: [for (final p in res.body! as List<Object?>) Product.fromJson(p! as Map<String, Object?>, fetchedAt: at)],
+      list: [
+        for (final j in res.body! as List<Object?>)
+          if (Product.fromJson(j! as Map<String, Object?>, fetchedAt: at) case final p when !p.closed) p,
+      ],
       serverAt: at,
     );
   }

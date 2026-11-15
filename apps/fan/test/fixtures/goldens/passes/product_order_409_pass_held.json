@@ -1,0 +1,12 @@
+{
+ "source": "design content for the goldens and the screen tests (contract-first, docs/04-api.md Lot 5 step 3), in the shape of the FL-29 real run's test/fixtures/passes/product_order_409_pass_held.json (passes_test checks the shapes match)",
+ "status": 409,
+ "body": {
+  "code": "PASS_HELD",
+  "message": "PASS_HELD",
+  "details": {
+   "pass_id": "c1000000-0000-4000-8000-000000000001",
+   "status": "ACTIVE"
+  }
+ }
+}

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/app/session.dart';
+import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/club/club_repository.dart';
 import 'package:jomhor_fan/features/club/join_sheet.dart';
 import 'package:jomhor_fan/features/club/membership.dart';
@@ -28,20 +29,21 @@ Map<String, Object?> memberJson({int number = 42, bool push = false, bool whatsa
   'paid_until': paidUntil,
 };
 
-/// The club's PASS product and its MEMBERSHIP product (test/fixtures/club/products_200.json), and the order the
-/// membership purchase opens.
+/// The club's PASS product and its MEMBERSHIP product (design content, test/fixtures/goldens/club/products_200.json),
+/// and the order the membership purchase opens.
 const passProductId = 'b1000000-0000-4000-8000-000000000001';
 const duesProductId = 'b1000000-0000-4000-8000-000000000002';
 const duesOrderId = 'd1000000-0000-4000-8000-000000000002';
 
-/// A contract-first answer of test/fixtures/club (each carries its `source` line), as `(status, body)`.
-({int status, Object? body}) clubAnswer(String name) {
-  final j = jsonDecode(File('test/fixtures/club/$name.json').readAsStringSync()) as Map<String, Object?>;
+/// An answer of test/fixtures/club (captured from the dev API, FL-29/FL-30 real run), as `(status, body)`. [dir]
+/// `goldens/club`: the design content the goldens and the screen tests use, in the captured answer's shape.
+({int status, Object? body}) clubAnswer(String name, {String dir = 'club'}) {
+  final j = jsonDecode(File('test/fixtures/$dir/$name.json').readAsStringSync()) as Map<String, Object?>;
   return (status: j['status']! as int, body: j['body']);
 }
 
 /// `GET /fan/products?organizer=` for Atlas FC: the pass and the membership, both on sale.
-List<Object?> clubProducts() => clubAnswer('products_200').body! as List<Object?>;
+List<Object?> clubProducts() => clubAnswer('products_200', dir: 'goldens/club').body! as List<Object?>;
 
 /// A `last_events` row; ids from 101, two weeks apart, oldest first.
 Map<String, Object?> pastJson(int id, {bool attended = true, String eventType = 'FOOTBALL_MATCH'}) => {
@@ -89,8 +91,8 @@ class ClubBackend {
   /// `GET /fan/products` rows; null = 404.
   List<Object?>? products;
 
-  /// Queued answers of `POST /fan/product-orders` (default: the membership's 201).
-  final productOrders = <String>[];
+  /// Queued answers of `POST /fan/product-orders` (default: the design membership's 201).
+  final productOrders = <({int status, Object? body})>[];
 
   /// `/fan/me` `display_name`.
   String? displayName = 'Yazid Aqel';
@@ -158,8 +160,9 @@ class ClubBackend {
             ? res
             : http.Response.bytes(res.bodyBytes, 200, headers: {...res.headers, 'date': HttpDate.format(serverDate!)});
       case ('POST', '/v1/fan/product-orders'):
-        final next = productOrders.isEmpty ? 'product_order_201_membership' : productOrders.removeAt(0);
-        final (:status, :body) = clubAnswer(next);
+        final (:status, :body) = productOrders.isEmpty
+            ? clubAnswer('product_order_201_membership', dir: 'goldens/club')
+            : productOrders.removeAt(0);
         await Future<void>.delayed(orderDelay);
         return json(body, status);
       default:
@@ -647,7 +650,7 @@ void main() {
     expect(find.text('8 matchs au stade'), findsNothing);
   });
 
-  group('FL-30 cotisation and Abonnements (Lot 5 step 3, contract-first)', () {
+  group('FL-30 cotisation and Abonnements (Lot 5 step 3)', () {
     const only = (ids: [testOrganizer], seen: true, chip: chipAll);
     final duesPay = find.byKey(const Key('club.duesPay'));
 
@@ -663,7 +666,7 @@ void main() {
 
     test('the fixtures parse, and the fake backend answers in their shape', () {
       final paid = Membership.fromJson(clubAnswer('membership_200_paid').body! as Map<String, Object?>);
-      expect((paid.paidRequired, paid.member!.paidUntil), (true, DateTime.utc(2027, 6, 30, 22)));
+      expect((paid.paidRequired, paid.member!.paidUntil), (true, DateTime.utc(2027, 6, 30, 22, 59, 59)));
       final unpaid = Membership.fromJson(clubAnswer('membership_200_unpaid').body! as Map<String, Object?>);
       expect((unpaid.paidRequired, unpaid.member!.paidUntil), (true, null));
       // Before BE-54 (no `paid_required`, no `paid_until`): nothing required.
@@ -673,6 +676,48 @@ void main() {
       final fake = {'member': memberJson(), 'loyalty': loyaltyJson(), 'paid_required': true};
       expect(fake.keys.toSet(), fixture.keys.toSet());
       expect(memberJson().keys.toSet(), (fixture['member']! as Map<String, Object?>).keys.toSet());
+    });
+
+    test("the design answers (test/fixtures/goldens/club) have the real answers' shape", () {
+      for (final name in ['products_200', 'product_order_201_membership']) {
+        expect(keyPaths(clubAnswer(name, dir: 'goldens/club').body), keyPaths(clubAnswer(name).body), reason: name);
+      }
+    });
+
+    test('real run: the paid membership order reads as a product order (no event, zone or pass)', () {
+      final order = FanOrder.fromJson(clubAnswer('order_200_membership_paid').body! as Map<String, Object?>);
+      expect((order.eventId, order.passId, order.product!.isPass), (null, null, false));
+      expect(order.product!.timezone, 'Africa/Casablanca');
+      expect(order.product!.paymentMethods, [PayMethod.card, PayMethod.wallet, PayMethod.cashAgency]);
+      expect(order.product!.cashUntil, DateTime.utc(2027, 6, 30, 10));
+      expect(order.items.single.zoneId, isNull);
+    });
+
+    testWidgets('real run: screen 7 on the captured products: the cotisation to pay, its order opened; a product '
+        'whose sales closed is not offered', (tester) async {
+      final rows = clubAnswer('products_200').body! as List<Object?>;
+      String idOf(String kind, bool Function(String close) closed) => [
+        for (final p in rows.cast<Map<String, Object?>>())
+          if (p['kind'] == kind && closed(p['sales_close_at']! as String)) p['id']! as String,
+      ].single;
+      // 20:39Z: after the short pass's sales_close_at (20:38:11Z), before the others' (2027).
+      bool before(String at) => DateTime.parse(at).isBefore(DateTime.utc(2026, 11, 15, 20, 39));
+      final b = ClubBackend(members: {testOrganizer: memberJson()})
+        ..paidRequired = true
+        ..products = rows
+        ..serverDate = DateTime.utc(2026, 11, 15, 20, 39)
+        ..productOrders.add(clubAnswer('product_order_201_membership'));
+      final c = await open(tester, b, follows: only);
+      expect(find.byKey(const Key('club.dues.$testOrganizer.unpaid')), findsOneWidget);
+      expect(find.byKey(Key('club.pass.${idOf('PASS', (at) => !before(at))}')), findsOneWidget);
+      expect(find.byKey(Key('club.pass.${idOf('PASS', before)}')), findsNothing);
+      await tester.ensureVisible(duesPay);
+      await tester.tap(find.descendant(of: duesPay, matching: find.byType(FilledButton)));
+      await tester.pumpAndSettle();
+      final post = jsonDecode(b.calls('POST', '/fan/product-orders').single.body) as Map<String, Object?>;
+      expect(post['product_id'], idOf('MEMBERSHIP', (_) => true));
+      final order = clubAnswer('product_order_201_membership').body! as Map<String, Object?>;
+      expect(path(c), '/orders/${order['id']}');
     });
 
     test('duesOf: none, unpaid, paid, expired', () {
@@ -754,7 +799,7 @@ void main() {
     });
 
     testWidgets('MEMBERSHIP_PAID (paid elsewhere) → the membership is read again → the paid chip', (tester) async {
-      final b = backend()..productOrders.add('product_order_409_membership_paid');
+      final b = backend()..productOrders.add(clubAnswer('product_order_409_membership_paid'));
       final c = await open(tester, b, follows: only);
       b.members[testOrganizer] = memberJson(paidUntil: '2027-06-30T22:00:00Z'); // paid on the shop meanwhile
       await tester.ensureVisible(duesPay);

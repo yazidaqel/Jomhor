@@ -1,0 +1,52 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 200,
+ "body": {
+  "id": "36f2b99c-431d-45b6-a4b4-fe36b48cc2fb",
+  "event_id": null,
+  "channel": "APP",
+  "status": "PAID",
+  "payment_status": "SUCCEEDED",
+  "total_mad": 20000,
+  "reserved_until": "2026-11-16T20:37:12.665269Z",
+  "paid_at": "2026-11-15T20:37:12.761744Z",
+  "items": [
+   {
+    "product_id": "45244e2b-a8f8-49c5-b164-dfd4bb0a7206",
+    "price_category_id": null,
+    "zone_id": null,
+    "zone_name": null,
+    "name": "FL-30 Carte membre 8755",
+    "qty": 1,
+    "unit_price_mad": 20000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "ticket_ids": [],
+  "payment_method": "CASH_AGENCY",
+  "cash": null,
+  "group": null,
+  "product": {
+   "id": "45244e2b-a8f8-49c5-b164-dfd4bb0a7206",
+   "kind": "MEMBERSHIP",
+   "name": "FL-30 Carte membre 8755",
+   "organizer": {
+    "slug": "atlas-fc",
+    "name": "ATLAS FC",
+    "crest_url": null
+   },
+   "timezone": "Africa/Casablanca",
+   "payment_methods": [
+    "CARD",
+    "WALLET",
+    "CASH_AGENCY"
+   ],
+   "cash_until": "2027-06-30T10:00:00Z"
+  },
+  "pass_id": null
+ }
+}

@@ -21,20 +21,27 @@ const passId = 'c1000000-0000-4000-8000-000000000001';
 const productOrderId = 'd1000000-0000-4000-8000-000000000001';
 const cardPage = 'http://10.0.2.2:8080/v1/payments/card/p1/redirect';
 
-/// A contract-first answer of test/fixtures/passes (each carries its `source` line), as `(status, body)`; the body
-/// is a fresh copy a test may change.
-({int status, Map<String, Object?> body}) passAnswer(String name) => realAnswer(name, dir: 'passes');
+/// A design answer of test/fixtures/goldens/passes (contract-first content, in the real run's shape), as
+/// `(status, body)`; the body is a fresh copy a test may change.
+({int status, Map<String, Object?> body}) passAnswer(String name) => realAnswer(name, dir: 'goldens/passes');
 
-/// A fake backend for one PASS product (Tribune Est, two announced matches), its purchase order and the caller's
-/// passes and tickets, shaped as docs/04-api.md §Products, §Passes.
+/// A fake backend for one PASS product (two announced matches), its purchase order and the caller's passes and
+/// tickets, shaped as docs/04-api.md §Products, §Passes. [dir]: the answers it serves, the design ones (Tribune Est,
+/// the goldens) or `passes`, the FL-29 real run's; the product and order ids are the answers' own.
 class PassSale {
-  new(this.clock);
+  new(this.clock, {this.dir = 'goldens/passes'});
 
   final TestClock clock;
+  final String dir;
   final requests = <http.Request>[];
 
+  ({int status, Map<String, Object?> body}) load(String name) => realAnswer(name, dir: dir);
+
   /// `GET /fan/products/{id}` body; null = 404 (off sale).
-  Map<String, Object?>? product = passAnswer('product_200_pass').body;
+  late Map<String, Object?>? product = load('product_200_pass').body;
+
+  late final String productId = load('product_200_pass').body['id']! as String;
+  late final String orderId = load('product_order_201').body['id']! as String;
 
   /// Queued answers of `POST /fan/product-orders` (default: the 201).
   final productOrders = <String>[];
@@ -66,12 +73,12 @@ class PassSale {
   );
 
   http.Response fixture(String name) {
-    final (:status, :body) = passAnswer(name);
+    final (:status, :body) = load(name);
     return answer(body, status);
   }
 
   Map<String, Object?> order() => {
-    ...passAnswer(orderStatus == 'PAID' ? 'order_200_paid' : 'order_200_reserved').body,
+    ...load(orderStatus == 'PAID' ? 'order_200_paid' : 'order_200_reserved').body,
     'status': orderStatus,
     'payment_status': paymentStatus,
     'payment_method': paymentMethod,
@@ -93,13 +100,14 @@ class PassSale {
     requests.add(r);
     return switch ((r.method, r.url.path)) {
       ('GET', '/v1/fan/events') => answer(<Object?>[]),
-      ('GET', '/v1/fan/products/$productId') => product == null ? apiError(404, 'NOT_FOUND') : answer(product),
+      ('GET', final p) when p == '/v1/fan/products/$productId' =>
+        product == null ? apiError(404, 'NOT_FOUND') : answer(product),
       ('GET', '/v1/fan/me') => answer({'id': 'u1', 'phone': '+212600000001', 'display_name': 'Yazid Aqel'}),
       ('POST', '/v1/fan/product-orders') => fixture(
         productOrders.isEmpty ? 'product_order_201' : productOrders.removeAt(0),
       ),
-      ('GET', '/v1/fan/orders/$productOrderId') => answer(productOrderBody ?? order()),
-      ('POST', '/v1/fan/orders/$productOrderId/pay') => () {
+      ('GET', final p) when p == '/v1/fan/orders/$orderId' => answer(productOrderBody ?? order()),
+      ('POST', final p) when p == '/v1/fan/orders/$orderId/pay' => () {
         paymentStatus = 'PENDING';
         return answer({'payment_id': 'p1', 'method': 'CARD', 'redirect_url': cardPage});
       }(),
@@ -491,6 +499,132 @@ void main() {
     expect(order.items.single.zoneId, isNull);
     expect(order.items.single.priceCategoryId, isNull);
     expect(order.items.single.holderLabels, ['Yazid A.']);
+  });
+
+  group('FL-29 real run (test/fixtures/passes, captured from the dev API)', () {
+    // 20:38Z on the run's day: the pass bought at 20:37, both matches' tickets issued by the pass job.
+    PassSale real({DateTime? at}) =>
+        sale = PassSale(clock = TestClock(at ?? DateTime.utc(2026, 11, 15, 20, 38)), dir: 'passes');
+    Map<String, Object?> body(String name) => realAnswer(name, dir: 'passes').body;
+    Map<String, Object?> realPass(String name) =>
+        (body(name)['passes']! as List<Object?>).single! as Map<String, Object?>;
+    List<int> eventIds(Map<String, Object?> m) => [
+      for (final e in (m['events']! as List<Object?>).cast<Map<String, Object?>>()) e['id']! as int,
+    ];
+
+    test("the design answers (test/fixtures/goldens/passes) have the real answers' shape", () {
+      for (final f in Directory('test/fixtures/goldens/passes').listSync().whereType<File>()) {
+        final name = f.uri.pathSegments.last.replaceAll('.json', '');
+        expect(keyPaths(passAnswer(name).body), keyPaths(body(name)), reason: name);
+      }
+    });
+
+    test('GET /fan/orders/{id} of a pass: timezone, payment_methods, cash_until, pass_id', () {
+      final order = FanOrder.fromJson(body('order_200_paid'));
+      final product = order.product!;
+      expect((order.eventId, order.passId), (null, realPass('passes_200_active')['id']));
+      expect(product.isPass, isTrue);
+      expect(product.timezone, 'Africa/Casablanca');
+      expect(product.paymentMethods, [PayMethod.card, PayMethod.wallet, PayMethod.cashAgency]);
+      expect(product.cashUntil, DateTime.utc(2027, 6, 30, 10));
+      expect(order.items.single.zoneId, 2);
+      expect(order.items.single.holderLabels, ['Yazid A.']);
+    });
+
+    testWidgets('screen 13 buy reads the captured product; buy → screen 4 on the captured order', (tester) async {
+      final p = real().product!;
+      final pass = p['pass']! as Map<String, Object?>;
+      final c = await start(tester, '/products/${sale.productId}');
+      expect(textOf(tester, 'buy.name'), p['name']);
+      expect(textOf(tester, 'buy.zone'), (pass['zone']! as Map<String, Object?>)['name']);
+      expect(textOf(tester, 'buy.venue'), 'Grand Stade · Casablanca');
+      expect(textOf(tester, 'buy.count'), '2 matchs annoncés');
+      for (final id in eventIds(pass)) {
+        expect(find.byKey(Key('buy.event.$id')), findsOneWidget);
+      }
+      expect(textOf(tester, 'buy.cta'), l.passBuy(l.dh(150000)));
+
+      await tap(tester, 'buy.cta');
+      expect(sent()['product_id'], sale.productId);
+      expect(location(c), '/orders/${sale.orderId}');
+      expect(find.text(p['name']! as String), findsOneWidget);
+      expect(textOf(tester, 'product.holder'), l.productHolder('Yazid A.'));
+      expect(find.byKey(const Key('method.CASH_AGENCY')), findsOneWidget);
+    });
+
+    testWidgets('a product past its sales_close_at: the CTA off, "Les ventes sont closes" before any POST', (
+      tester,
+    ) async {
+      real(at: DateTime.utc(2027, 6, 30, 12));
+      await start(tester, '/products/${sale.productId}');
+      expect(tester.widget<FilledButton>(find.byKey(const Key('buy.cta'))).onPressed, isNull);
+      expect(textOf(tester, 'buy.error'), l.errorProductNotOnSale);
+      expect(sale.calls('POST', '/fan/product-orders'), isEmpty);
+    });
+
+    testWidgets('PASS_HELD → the owned view: the pass job issued a ticket for both matches', (tester) async {
+      real()
+        ..productOrders.add('product_order_409_pass_held')
+        ..passes = 'passes_200_active';
+      final held = realPass('passes_200_active');
+      final c = await start(tester, '/products/${sale.productId}');
+      await tap(tester, 'buy.cta');
+      expect(location(c), '/passes/${held['id']}');
+      expect(textOf(tester, 'pass.holder'), 'Yazid A.');
+      for (final id in eventIds(held)) {
+        expect(find.byKey(Key('pass.ticket.$id')), findsOneWidget);
+      }
+    });
+
+    testWidgets('ACTIVE before the pass job: every match "Bientôt"', (tester) async {
+      real().passes = 'passes_200_active_no_tickets';
+      final pass = realPass('passes_200_active_no_tickets');
+      await start(tester, '/passes/${pass['id']}');
+      expect(find.byKey(const Key('pass.pending')), findsNothing);
+      for (final id in eventIds(pass)) {
+        expect(find.byKey(Key('pass.soon.$id')), findsOneWidget);
+      }
+    });
+
+    testWidgets('PENDING: "Reprendre le paiement" opens the purchase order', (tester) async {
+      real().passes = 'passes_200_pending';
+      final pass = realPass('passes_200_pending');
+      final c = await start(tester, '/passes/${pass['id']}');
+      expect(find.byKey(const Key('pass.pending')), findsOneWidget);
+      await tap(tester, 'pass.resume');
+      expect(location(c), '/orders/${sale.orderId}');
+    });
+
+    for (final (name, check) in <(String, void Function(WidgetTester))>[
+      ('product_order_409_sold_out', (t) => expect(find.byKey(const Key('buy.soldOut')), findsOneWidget)),
+      ('product_order_409_not_on_sale', (t) => expect(find.text(l.errorProductNotOnSale), findsOneWidget)),
+      ('product_order_422_holder_name', (t) => expect(find.text(l.holderNameError), findsOneWidget)),
+    ]) {
+      testWidgets('$name → the CTA says it', (tester) async {
+        real().productOrders.add(name);
+        await start(tester, '/products/${sale.productId}');
+        await tap(tester, 'buy.cta');
+        check(tester);
+      });
+    }
+
+    testWidgets('/fan/tickets pass_id → the "Abonnement" chip; /fan/orders product row on screen 1', (tester) async {
+      real()
+        ..passes = 'passes_200_active'
+        ..orders = 'orders_200_product_cash'
+        ..orderStatus = 'AWAITING_CASH'
+        ..tickets = [
+          for (final t in (body('tickets_200_pass')['tickets']! as List<Object?>).cast<Map<String, Object?>>()) t,
+        ];
+      final c = await start(tester, '/');
+      expect(find.textContaining(sale.product!['name']! as String), findsOneWidget);
+      c.read(routerProvider).go('/tickets');
+      await tester.pumpAndSettle();
+      for (final t in sale.tickets) {
+        expect(t['pass_id'], realPass('passes_200_active')['id']);
+        expect(find.byKey(Key('ticket.passChip.${t['id']}')), findsOneWidget);
+      }
+    });
   });
 
   group('Billets and orders', () {

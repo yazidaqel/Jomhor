@@ -705,18 +705,8 @@ void main() {
     });
 
     test("the goldens' design answers (test/fixtures/goldens) have the real answers' shape", () {
-      // Every key path, list items merged: the goldens can't show a field the server doesn't send, or miss one.
-      // `metadata` is the organizer's free-form jsonb: not walked.
-      Set<String> paths(Object? v, [String at = '']) => switch (v) {
-        Map<String, Object?>() when at != '.metadata' => {
-          for (final MapEntry(:key, :value) in v.entries) ...paths(value, '$at.$key'),
-          at,
-        },
-        List<Object?>() => {for (final x in v) ...paths(x, '$at[]'), at},
-        _ => {at},
-      };
       for (final name in ['event_room_presale_next', 'order_409_members_only']) {
-        expect(paths(realAnswer(name, dir: 'goldens').body), paths(realAnswer(name).body), reason: name);
+        expect(keyPaths(realAnswer(name, dir: 'goldens').body), keyPaths(realAnswer(name).body), reason: name);
       }
     });
 
@@ -928,6 +918,10 @@ void main() {
     final presaleOrg = presale()['organizer_id']! as String;
 
     /// The fan follows Atlas FC then the event's club, a member of the latter since [joinedAt], not paid up.
+    /// `details.member_joined_before` of a refusal captured in the FL-30 real run (test/fixtures/club).
+    String cutoffOf(String name) =>
+        (realAnswer(name, dir: 'club').body['details']! as Map<String, Object?>)['member_joined_before']! as String;
+
     FollowsState memberOfPresaleClub({String joinedAt = '2026-11-03T10:00:00Z'}) {
       sale
         ..organizers = [clubJson(), clubJson(id: presaleOrg, slug: 'atlas-presale', name: 'Club Presale')]
@@ -967,7 +961,10 @@ void main() {
       final c = await start(tester, follows: memberOfPresaleClub());
       await tester.pump(const Duration(milliseconds: 300));
       expect(
-        find.text('Réservée aux membres à jour de cotisation, inscrits avant le ${day('2026-11-15T12:07:33Z')}'),
+        find.text(
+          'Réservée aux membres à jour de cotisation, inscrits avant le '
+          '${day(cutoffOf('not_eligible_not_member_paid'))}',
+        ),
         findsOneWidget,
       );
       await tester.tap(find.byKey(const Key('dues.seeClub')));
@@ -983,7 +980,7 @@ void main() {
         ..detail = presale()
         ..room = roomOf(presale())
         ..joins.add(() => sale.real('not_eligible_not_member_paid', dir: 'club'));
-      await start(tester, follows: memberOfPresaleClub(joinedAt: '2026-11-15T12:07:33Z'));
+      await start(tester, follows: memberOfPresaleClub(joinedAt: cutoffOf('not_eligible_not_member_paid')));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('à jour de cotisation'), findsOneWidget);
       expect(find.byKey(const Key('dues.seeClub')), findsNothing);
@@ -1059,7 +1056,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(
           text(tester, 'holder.$row.refusal'),
-          'Tarif réservé aux membres à jour de cotisation, inscrits avant le ${day(presaleStart)}',
+          'Tarif réservé aux membres à jour de cotisation, inscrits avant le '
+          '${day(cutoffOf('order_409_members_only_paid'))}',
         );
         // Only the fan's own place links to their cotisation; a friend's is theirs to pay.
         final seeClub = find.byKey(const Key('dues.seeClub'), skipOffstage: false);
@@ -1084,7 +1082,11 @@ void main() {
       final en = lookupAppLocalizations(const Locale('en'));
       ApiError e(Map<String, Object?> details) =>
           ApiError(status: 409, code: 'MEMBERS_ONLY', message: 'x', details: details);
-      final paid = e({'field': 'items[0].holders[0]', 'member_joined_before': null, 'paid_required': true});
+      // Real run: an event with no sale start reads member_joined_before null.
+      final paid = e(
+        realAnswer('order_409_members_only_paid_any', dir: 'club').body['details']! as Map<String, Object?>,
+      );
+      expect(paid.details['member_joined_before'], isNull);
       expect(holderRefusalText(l, paid, zone), 'Tarif réservé aux membres à jour de cotisation');
       expect(holderRefusalText(ar, paid, zone), 'هاد السعر غير للأعضاء اللي خالصين واجب الانخراط');
       expect(holderRefusalText(en, paid, zone), 'Members-only price: membership fee paid up');

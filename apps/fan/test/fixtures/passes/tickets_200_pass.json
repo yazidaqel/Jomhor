@@ -1,0 +1,139 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 200,
+ "body": {
+  "server_time": "2026-11-15T20:38:25.510696500Z",
+  "tickets": [
+   {
+    "id": "0900adb1-a2f2-401d-a3b5-4c600f717905",
+    "ticket_no": "0F71 7905",
+    "status": "VALID",
+    "holder_label": "Yazid A.",
+    "seat_label": null,
+    "event": {
+     "id": 32,
+     "title": "FL-29 real run 8755 match 1",
+     "event_type": "FOOTBALL_MATCH",
+     "status": "ON_SALE",
+     "starts_at": "2027-03-13T19:00:00Z",
+     "doors_open_at": null,
+     "timezone": "Africa/Casablanca",
+     "venue": {
+      "name": "Grand Stade",
+      "city": "Casablanca"
+     },
+     "metadata": {
+      "opponent": "FL-29 1"
+     },
+     "organizer": {
+      "id": "a7a5fc00-0000-4000-8000-000000000001",
+      "slug": "atlas-fc",
+      "name": "ATLAS FC",
+      "crest_url": null
+     }
+    },
+    "zone": {
+     "id": 2,
+     "code": "EST",
+     "name": "Est"
+    },
+    "gate_codes": [
+     "P3",
+     "P5",
+     "P6"
+    ],
+    "gates": [
+     {
+      "code": "P3",
+      "name": "Porte 3",
+      "directions": "Angle Nord-Est. Depuis le tramway (station Stade), tournez à gauche et longez les grilles.",
+      "latitude": 33.58421,
+      "longitude": -7.64598
+     },
+     {
+      "code": "P5",
+      "name": "Porte 5",
+      "directions": "Entre le virage Nord et la tribune Est, face à la station de taxis.",
+      "latitude": 33.58402,
+      "longitude": -7.64531
+     },
+     {
+      "code": "P6",
+      "name": "Porte 6",
+      "directions": "Tribune Est, au milieu de l'avenue du Stade. Fouille avant le portique.",
+      "latitude": 33.58318,
+      "longitude": -7.64489
+     }
+    ],
+    "transfer_until": "2027-03-13T17:30:00Z",
+    "transferred": null,
+    "pass_id": "26408456-db0f-4468-a3ab-1bfa1ff9149b"
+   },
+   {
+    "id": "5a3b4350-e459-4f23-8476-09f4f19f962b",
+    "ticket_no": "F19F 962B",
+    "status": "VALID",
+    "holder_label": "Yazid A.",
+    "seat_label": null,
+    "event": {
+     "id": 33,
+     "title": "FL-29 real run 8755 match 2",
+     "event_type": "FOOTBALL_MATCH",
+     "status": "ON_SALE",
+     "starts_at": "2027-04-03T19:00:00Z",
+     "doors_open_at": null,
+     "timezone": "Africa/Casablanca",
+     "venue": {
+      "name": "Grand Stade",
+      "city": "Casablanca"
+     },
+     "metadata": {
+      "opponent": "FL-29 2"
+     },
+     "organizer": {
+      "id": "a7a5fc00-0000-4000-8000-000000000001",
+      "slug": "atlas-fc",
+      "name": "ATLAS FC",
+      "crest_url": null
+     }
+    },
+    "zone": {
+     "id": 2,
+     "code": "EST",
+     "name": "Est"
+    },
+    "gate_codes": [
+     "P3",
+     "P5",
+     "P6"
+    ],
+    "gates": [
+     {
+      "code": "P3",
+      "name": "Porte 3",
+      "directions": "Angle Nord-Est. Depuis le tramway (station Stade), tournez à gauche et longez les grilles.",
+      "latitude": 33.58421,
+      "longitude": -7.64598
+     },
+     {
+      "code": "P5",
+      "name": "Porte 5",
+      "directions": "Entre le virage Nord et la tribune Est, face à la station de taxis.",
+      "latitude": 33.58402,
+      "longitude": -7.64531
+     },
+     {
+      "code": "P6",
+      "name": "Porte 6",
+      "directions": "Tribune Est, au milieu de l'avenue du Stade. Fouille avant le portique.",
+      "latitude": 33.58318,
+      "longitude": -7.64489
+     }
+    ],
+    "transfer_until": "2027-04-03T17:30:00Z",
+    "transferred": null,
+    "pass_id": "26408456-db0f-4468-a3ab-1bfa1ff9149b"
+   }
+  ]
+ }
+}

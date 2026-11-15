@@ -1,11 +1,11 @@
 {
- "source": "contract-first (docs/04-api.md, Lot 5 step 3, POST /fan/product-orders): replace with a captured answer once BE-52 runs",
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
  "status": 409,
  "body": {
   "code": "PRODUCT_NOT_ON_SALE",
-  "message": "PRODUCT_NOT_ON_SALE",
+  "message": "This product is no longer on sale",
   "details": {
-   "sales_close_at": "2027-02-20T11:00:00Z"
+   "sales_close_at": "2026-11-15T20:38:11Z"
   }
  }
 }

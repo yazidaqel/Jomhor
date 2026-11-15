@@ -1,12 +1,12 @@
 {
- "source": "contract-first (docs/04-api.md error table, Lot 5 step 3, MEMBERS_ONLY on POST /fan/orders: + details.paid_required): replace with a captured answer once BE-54 runs",
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
  "status": 409,
  "body": {
   "code": "MEMBERS_ONLY",
   "message": "Members-only price",
   "details": {
    "field": "items[0].holders[0]",
-   "member_joined_before": "2026-11-15T15:28:49Z",
+   "member_joined_before": "2026-11-15T20:42:40Z",
    "paid_required": true
   }
  }

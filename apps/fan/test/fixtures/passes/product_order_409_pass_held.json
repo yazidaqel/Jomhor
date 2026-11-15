@@ -1,11 +1,11 @@
 {
- "source": "contract-first (docs/04-api.md, Lot 5 step 3, POST /fan/product-orders): replace with a captured answer once BE-53 runs",
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
  "status": 409,
  "body": {
   "code": "PASS_HELD",
-  "message": "PASS_HELD",
+  "message": "A pass of this series is already held",
   "details": {
-   "pass_id": "c1000000-0000-4000-8000-000000000001",
+   "pass_id": "26408456-db0f-4468-a3ab-1bfa1ff9149b",
    "status": "ACTIVE"
   }
  }

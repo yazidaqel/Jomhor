@@ -107,6 +107,10 @@ class Product {
 
   bool get isPass => kind == 'PASS';
 
+  /// Sales closed at the read: `GET /fan/products` lists every product with `on_sale` true, one past its
+  /// `sales_close_at` too (the order would be refused `PRODUCT_NOT_ON_SALE`).
+  bool get closed => !fetchedAt.isBefore(salesCloseAt);
+
   /// What the buy CTA charges now: the plan's first amount, else the price (both from the server).
   int get chargeMad => firstAmountMad ?? priceMad;
 }

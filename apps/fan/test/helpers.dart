@@ -326,11 +326,23 @@ Map<String, Object?> roomJson({
 }) => {'status': status, 'opens_at': at, 'eligibility': eligibility};
 
 /// An answer captured from the dev API in the FL-26 and FL-27 real runs (2026-11-15), queue and admission tokens
-/// replaced by `qt-real` and `adm-real`. [dir] `goldens`: design content in the shape of a captured answer.
+/// replaced by `qt-real` and `adm-real`; [dir] `passes` and `club`: the FL-29/FL-30 real run. [dir] `goldens*`: design
+/// content in the shape of a captured answer.
 ({int status, Map<String, Object?> body}) realAnswer(String name, {String dir = 'queue'}) {
   final j = jsonDecode(File('test/fixtures/$dir/$name.json').readAsStringSync()) as Map<String, Object?>;
   return (status: j['status']! as int, body: j['body']! as Map<String, Object?>);
 }
+
+/// Every key path of a JSON value, list items merged: a design answer can't show a field the server doesn't send, or
+/// miss one. `metadata` is the organizer's free-form jsonb: not walked.
+Set<String> keyPaths(Object? v, [String at = '']) => switch (v) {
+  Map<String, Object?>() when at != '.metadata' => {
+    for (final MapEntry(:key, :value) in v.entries) ...keyPaths(value, '$at.$key'),
+    at,
+  },
+  List<Object?>() => {for (final x in v) ...keyPaths(x, '$at[]'), at},
+  _ => {at},
+};
 
 /// A fake backend for one event (id 1) with a waiting room; `/fan/queue` shaped as docs/04-api.md.
 class RoomSale {

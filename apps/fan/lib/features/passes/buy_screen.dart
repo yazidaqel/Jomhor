@@ -101,10 +101,14 @@ class _BuyState extends ConsumerState<_Buy> {
     final p = widget.product;
     final state = ref.watch(buyProvider(p.id));
     final soldOut = p.soldOut || state.soldOut;
-    final off = soldOut || state.closed;
+    final off = soldOut || state.closed || p.closed;
     final club = p.club;
     final pass = p.pass;
-    final error = state.error;
+    final error = switch (state.error) {
+      final e? => apiErrorText(l, e),
+      null when p.closed => l.errorProductNotOnSale,
+      null => null,
+    };
 
     return Column(
       children: [
@@ -183,7 +187,7 @@ class _BuyState extends ConsumerState<_Buy> {
                 children: [
                   if (error != null) ...[
                     Text(
-                      apiErrorText(l, error),
+                      error,
                       key: const Key('buy.error'),
                       style: JomhorType.bodySmall.copyWith(color: Theme.of(context).colorScheme.error),
                     ),

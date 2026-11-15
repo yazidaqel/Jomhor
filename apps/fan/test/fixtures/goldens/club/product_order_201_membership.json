@@ -1,0 +1,33 @@
+{
+ "source": "design content for the goldens and the screen tests (contract-first, docs/04-api.md Lot 5 step 3), in the shape of the FL-29 real run's test/fixtures/club/product_order_201_membership.json (club_test checks the shapes match)",
+ "status": 201,
+ "body": {
+  "id": "d1000000-0000-4000-8000-000000000002",
+  "status": "RESERVED",
+  "reserved_until": "2027-02-20T12:08:00Z",
+  "total_mad": 20000,
+  "product": {
+   "id": "b1000000-0000-4000-8000-000000000002",
+   "kind": "MEMBERSHIP",
+   "name": "Saison 2026-27"
+  },
+  "pass_id": null,
+  "items": [
+   {
+    "product_id": "b1000000-0000-4000-8000-000000000002",
+    "price_category_id": null,
+    "zone_id": null,
+    "zone_name": null,
+    "name": "Saison 2026-27",
+    "qty": 1,
+    "unit_price_mad": 20000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "group": null
+ }
+}
