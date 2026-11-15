@@ -122,23 +122,24 @@ class WaitingRoomFanApiTest extends QueueFixture {
         String device = "device-" + UUID.randomUUID();
         String unranked = JsonPath.read(body(join(f, r.event(), device, "10.0.9.1").andExpect(status().isCreated())),
                 "$.queue_token");
-        assertThat(claims(unranked).keySet()).containsExactlyInAnyOrder("iss", "aud", "sub", "evt", "exp");
+        assertThat(claims(unranked).keySet()).containsExactlyInAnyOrder("iss", "aud", "sub", "evt", "rm", "exp");
         assertThat(claims(unranked)).containsEntry("iss", "jomhor").containsEntry("aud", "queue")
-                .containsEntry("evt", r.event())
+                .containsEntry("evt", r.event()).containsEntry("rm", r.id().toString())
                 .containsEntry("exp", Instant.parse(CUTOFF).getEpochSecond());
         assertThat(jwtHeader(unranked)).isEqualTo(Map.of("alg", "HS256"));
 
         tick(SALE);
         String ranked = JsonPath.read(body(poll(unranked).andExpect(status().isOk())), "$.queue_token");
-        assertThat(claims(ranked).keySet()).containsExactlyInAnyOrder("iss", "aud", "sub", "evt", "exp", "rnk");
+        assertThat(claims(ranked).keySet()).containsExactlyInAnyOrder("iss", "aud", "sub", "evt", "rm", "exp", "rnk");
         assertThat(claims(ranked)).containsEntry("rnk", 1);
 
         tick("2099-04-01T10:00:10Z");
         String admitted = body(poll(ranked).andExpect(status().isOk()));
         String admission = JsonPath.read(admitted, "$.admission.token");
-        assertThat(claims(admission).keySet()).containsExactlyInAnyOrder("aud", "sub", "evt", "ent", "exp");
+        assertThat(claims(admission).keySet()).containsExactlyInAnyOrder("aud", "sub", "evt", "ent", "rm", "exp");
         assertThat(claims(admission)).containsEntry("aud", "admission").containsEntry("sub", f.id().toString())
-                .containsEntry("evt", r.event()).containsEntry("ent", claims(ranked).get("sub"));
+                .containsEntry("evt", r.event()).containsEntry("ent", claims(ranked).get("sub"))
+                .containsEntry("rm", r.id().toString());
         for (String t : List.of(unranked, ranked, admission)) {
             String decoded = claims(t).toString();
             assertThat(decoded).doesNotContain(phone).doesNotContain(phone.substring(1)).doesNotContain(device);
@@ -154,6 +155,71 @@ class WaitingRoomFanApiTest extends QueueFixture {
         // A queue or admission token is not a fan JWT.
         unauthorized(mvc.perform(get("/fan/me").header("Authorization", "Bearer " + ranked)));
         unauthorized(mvc.perform(get("/fan/me").header("Authorization", "Bearer " + admission)));
+    }
+
+    // ---------- phases, poll_after_s (BE-48) ----------
+
+    /**
+     * Q167-Q169: joins, eligibility and the fan {@code room} follow the current phase. A presale with a member rule
+     * refuses a non-member and shows the next phase; once the general sale opens (the tick ends the presale), a join
+     * creates a new entry in the new phase's room and a presale queue token polls ENDED.
+     */
+    @Test
+    void joinsFollowTheCurrentPhaseAndAnEarlierPhasesTokenPollsEnded() throws Exception {
+        Room r = room("""
+                {"label": "Pr\u00e9vente", "eligibility": {"member_joined_before": "2099-01-01T00:00:00Z"}}""");
+        UUID two = phase(r, 2, """
+                {"label": "Vente g\u00e9n\u00e9rale", "starts_at": "2099-04-02T10:00:00Z"}""");
+        tick(OPENS);
+        Fan member = fan();
+        Fan other = fan();
+        jdbc.sql("insert into memberships (organizer_id, user_id, number, joined_at) "
+                + "values (?, ?, 1, '2098-06-01T00:00:00Z')").params(r.admin().org(), member.id()).update();
+
+        String event = body(mvc.perform(get("/fan/events/" + r.event())).andExpect(status().isOk()));
+        assertThat((Integer) JsonPath.read(event, "$.room.phase")).isEqualTo(1);
+        assertThat((Integer) JsonPath.read(event, "$.room.next.phase")).isEqualTo(2);
+        assertThat((String) JsonPath.read(event, "$.room.next.opens_at")).isEqualTo("2099-04-02T09:30:00Z");
+        String json = body(join(other, r.event()).andExpect(status().isConflict()));
+        assertThat((String) JsonPath.read(json, "$.details.reason")).isEqualTo("NOT_MEMBER");
+        String presale = JsonPath.read(body(join(member, r.event()).andExpect(status().isCreated())), "$.queue_token");
+        assertThat(claims(presale)).containsEntry("rm", r.id().toString());
+
+        tick("2099-04-02T09:30:00Z"); // phase 2's pre-queue opens: phase 1 ends
+        json = body(poll(presale).andExpect(status().isOk()));
+        assertThat((String) JsonPath.read(json, "$.status")).isEqualTo("ENDED");
+        assertThat((Integer) JsonPath.read(json, "$.poll_after_s")).isZero();
+        event = body(mvc.perform(get("/fan/events/" + r.event())).andExpect(status().isOk()));
+        assertThat((Integer) JsonPath.read(event, "$.room.phase")).isEqualTo(2);
+        assertThat((Object) JsonPath.read(event, "$.room.next")).isNull();
+
+        String general = JsonPath.read(body(join(member, r.event()).andExpect(status().isCreated())), "$.queue_token");
+        assertThat(claims(general)).containsEntry("rm", two.toString());
+        assertThat(claims(general).get("sub")).isNotEqualTo(claims(presale).get("sub")); // a new entry
+        join(other, r.event()).andExpect(status().isCreated()); // phase 2 sets no rule
+        assertThat(jdbc.sql("select count(*) from queue_entries where user_id = ?").param(member.id())
+                .query(Long.class).single()).isEqualTo(2);
+        poll(general).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PRE_QUEUE"));
+    }
+
+    /** Q181: WAITING polls every 2 s under 20 s of wait, 5 s under 120 s, else 15 s (± 20 %). Q180: the seed. */
+    @Test
+    void pollAfterFollowsTheEstimatedWait() throws Exception {
+        Room r = room("{\"admission_rate_per_min\": 60}");
+        tick(OPENS);
+        String unranked = JsonPath.read(body(join(fan(), r.event()).andExpect(status().isCreated())), "$.queue_token");
+        tick(SALE); // the draw seeds the measured rate with 60/min: the wait is position seconds from the first minute
+        UUID entry = UUID.fromString((String) claims(unranked).get("sub"));
+        for (int[] c : new int[][] {{10, 2, 2}, {60, 4, 6}, {300, 12, 18}}) {
+            jdbc.sql("update queue_entries set rank = ? where id = ?").params(c[0], entry).update();
+            jdbc.sql("update waiting_rooms set ranked_count = ? where id = ?").params(c[0], r.id()).update();
+            memo.invalidate();
+            String json = body(poll(unranked).andExpect(status().isOk()));
+            assertThat((String) JsonPath.read(json, "$.status")).isEqualTo("WAITING");
+            assertThat((Integer) JsonPath.read(json, "$.position")).isEqualTo(c[0]);
+            assertThat((Integer) JsonPath.read(json, "$.estimated_wait_s")).isEqualTo(c[0]);
+            assertThat((Integer) JsonPath.read(json, "$.poll_after_s")).as("wait %d s", c[0]).isBetween(c[1], c[2]);
+        }
     }
 
     // ---------- device and IP limits ----------

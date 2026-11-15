@@ -155,7 +155,7 @@ class LoadSeeder implements ApplicationRunner {
                 events.createPrice(ORG, event, sud, "Plein tarif", 8_000, 500, Event.Audience.ALL).id(),
                 events.createPrice(ORG, event, est, "Plein tarif", 12_000, 500, Event.Audience.ALL).id());
         events.publish(ORG, SEEDER, event);
-        rooms.put(ORG, SEEDER, event, new WaitingRoomService.Input(30, rate, new Rule(7, null, null)));
+        rooms.put(ORG, SEEDER, event, 1, new WaitingRoomService.Input(null, null, 30, rate, new Rule(7, null, null)));
 
         UUID hotVenue = venues.create(ORG, "Stade Rangée Chaude", "Casablanca", 200_000, null).id();
         int hotZone = venues.createZone(ORG, hotVenue, "HOT", "Zone chaude", 200_000, false).id();

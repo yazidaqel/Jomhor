@@ -30,7 +30,7 @@ class CheckSqlTest extends QueueFixture {
         tick(OPENS);
         Fan f = fan();
         join(f, r.event()).andExpect(status().isCreated());
-        call(r.admin(), post("/org/events/" + r.event() + "/room/end")).andExpect(status().isOk());
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/1/end")).andExpect(status().isOk());
         memo.invalidate();
         jdbc.sql("update events set sale_starts_at = now() - interval '1 minute' where id = ?").param(r.event())
                 .update();

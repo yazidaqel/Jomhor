@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,9 +23,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /**
- * POST and GET /fan/queue (docs/04-api.md §Fan, §Waiting room). A join writes one entry per account per room; a poll
- * reads the room from this instance's memo and the rank from its signed token, so a ranked fan still waiting costs no
- * SQL. The entry is read only while the token has no rank, and written once at the turn (admitted_at).
+ * POST and GET /fan/queue (docs/04-api.md §Fan, §Waiting room). Everything works on the event's current phase
+ * (WaitingRoom#current). A join writes one entry per account per room (phase); a poll reads the room from this
+ * instance's memo and the rank from its signed token, so a ranked fan still waiting costs no SQL. The entry is read
+ * only while the token has no rank, and written once at the turn (admitted_at).
  */
 // ponytail: the queue lives in Postgres (plan Q139). If the BE-45 smoke shows joins under target, move entries to a
 // sorted set per room (Redis/Valkey) behind QueueEntries; the token contract stays.
@@ -74,7 +76,8 @@ public class QueueService {
     }
 
     /**
-     * Checks in 04 order: event visible (404), room live and sales open (QUEUE_NOT_OPEN), eligibility (NOT_ELIGIBLE),
+     * Checks in 04 order: event visible (404), current phase live and sales open (QUEUE_NOT_OPEN: NO_ROOM without a
+     * phase, ENDED when every phase has, NOT_STARTED + opens_at), eligibility against that phase's rule (NOT_ELIGIBLE),
      * device limit, then the per-IP limit only when an entry is created or moved back. {@code deviceId} is validated
      * by the caller (16-64 of [A-Za-z0-9_-]); {@code clientIp} comes from the trusted-proxy chain. Soft limits, no
      * lock: racing joins can overshoot by those in flight.
@@ -83,14 +86,14 @@ public class QueueService {
         Inventory.SaleEvent sale = inventory.saleEvent(eventId).filter(e -> !e.draft())
                 .orElseThrow(() -> ApiException.notFound("Event not found"));
         UUID org = sale.organizerId();
-        WaitingRoom room = rooms.find(org, eventId).orElseThrow(() -> notOpen("NO_ROOM", null));
-        Instant now = Instant.now();
-        Status status = room.statusAt(now); // a tick running late never keeps fans out once joins are open
-        if (status == Status.SCHEDULED) {
-            throw notOpen("NOT_STARTED", room.opensAt());
+        List<WaitingRoom> phases = rooms.list(org, eventId);
+        if (phases.isEmpty()) {
+            throw notOpen("NO_ROOM", null);
         }
-        if (status == Status.ENDED) {
-            throw notOpen("ENDED", null);
+        Instant now = Instant.now();
+        WaitingRoom room = WaitingRoom.current(phases, now).orElseThrow(() -> notOpen("ENDED", null));
+        if (room.statusAt(now) == Status.SCHEDULED) { // a tick running late never keeps fans out once joins are open
+            throw notOpen("NOT_STARTED", room.opensAt());
         }
         if (sale.window() != Inventory.SaleWindow.OPEN && sale.window() != Inventory.SaleWindow.NOT_STARTED) {
             throw notOpen("CLOSED", null);
@@ -125,8 +128,9 @@ public class QueueService {
 
     /**
      * The poll. Missing, bad or expired token, or a purged entry → 401. Then the per-entry limit (QUEUE_RATE_LIMITED
-     * POLL, no SQL). A room no longer in the memo has ENDED. A ranked token still waiting reads nothing; an unranked
-     * one reads its entry; the turn writes admitted_at once.
+     * POLL, no SQL). A token whose room isn't the event's current phase in the memo (it has ENDED, or the next phase
+     * has opened) → ENDED. A ranked token still waiting reads nothing; an unranked one reads its entry; the turn writes
+     * admitted_at once.
      */
     public View poll(String token) {
         Instant now = Instant.now();
@@ -136,11 +140,11 @@ public class QueueService {
             throw new ApiException("QUEUE_RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Polling too fast",
                     Map.of("reason", "POLL", "retry_after_s", polls.retryAfterS()));
         }
-        Optional<WaitingRoom> live = memo.get(q.eventId());
+        Optional<WaitingRoom> live = memo.current(q.eventId(), now).filter(r -> r.id().equals(q.roomId()));
         if (live.isEmpty()) {
             Instant saleStartsAt = inventory.saleEvent(q.eventId()).map(Inventory.SaleEvent::saleStartsAt).orElse(null);
             return new View(q.eventId(), "ENDED", saleStartsAt, null, 0, 0, null, false, null,
-                    tokens.queue(q.entryId(), q.eventId(), q.rank(), q.expiresAt()), 0, now);
+                    tokens.queue(q.entryId(), q.eventId(), q.roomId(), q.rank(), q.expiresAt()), 0, now);
         }
         WaitingRoom room = live.get();
         QueueEntry entry = null;
@@ -173,7 +177,7 @@ public class QueueService {
     private View view(WaitingRoom room, QueueEntry entry, UUID entryId, Integer tokenRank, Instant cutoff,
                       Instant now) {
         Integer rank = entry == null ? tokenRank : entry.rank();
-        String queueToken = tokens.queue(entryId, room.eventId(), rank, cutoff);
+        String queueToken = tokens.queue(entryId, room.eventId(), room.id(), rank, cutoff);
         Status status = room.statusAt(now);
         int rate = status == Status.PAUSED ? 0 : room.measuredRatePerMin();
         int inRoom = status == Status.PRE_QUEUE ? room.joinedCount()
@@ -182,7 +186,7 @@ public class QueueService {
             Instant expiresAt = turnEnd(entry.admittedAt(), cutoff);
             if (now.isBefore(expiresAt)) {
                 Admission admission = new Admission(
-                        tokens.admission(entry.userId(), room.eventId(), entryId, expiresAt), expiresAt);
+                        tokens.admission(entry.userId(), room.eventId(), room.id(), entryId, expiresAt), expiresAt);
                 return new View(room.eventId(), "ADMITTED", room.saleStartsAt(), null, inRoom, rate, null,
                         room.soldOut(), admission, queueToken, 0, now);
             }
@@ -197,7 +201,7 @@ public class QueueService {
         }
         Integer position = rank == null ? null : Math.max(1, rank - room.admittedThrough());
         Long wait = position == null || rate == 0 ? null : (position * 60L + rate - 1) / rate;
-        int after = position == null ? 2 : jitter(wait != null && wait < 120 ? 5 : 15);
+        int after = position == null ? 2 : jitter(wait == null ? 15 : wait < 20 ? 2 : wait < 120 ? 5 : 15);
         return new View(room.eventId(), status == Status.PAUSED ? "PAUSED" : "WAITING", room.saleStartsAt(),
                 position, inRoom, rate, wait, room.soldOut(), null, queueToken, after, now);
     }
@@ -218,24 +222,37 @@ public class QueueService {
     }
 
     /**
-     * 04 POST /fan/orders admission step, decided from this instance's memo and the token's signature only (no SQL of
-     * the request; the memo reloads by itself once per TTL). No room, one ENDED, or one SCHEDULED before its
-     * opens_at: no token needed, empty. A live room (PRE_QUEUE, OPEN, PAUSED, or SCHEDULED past opens_at while the
-     * tick catches up: fail closed, by the memo row alone) needs the caller's admission token for this event, else 409
-     * ADMISSION_REQUIRED {@code MISSING}, {@code INVALID} (bad signature, another user or another event) or
-     * {@code EXPIRED}; it is returned for the split members' eligibility.
+     * 04 POST /fan/orders admission step, decided from this instance's memo, the clock and the token's signature only
+     * (no SQL of the request; the memo reloads by itself once per TTL), on the event's current phase. None (no phase,
+     * or every phase ENDED): no token needed, empty. A DRAFT event: 409 EVENT_NOT_ON_SALE {@code NOT_ON_SALE}, the
+     * answer the event check gives it, so its rooms and sale start never show (fail closed: a memo up to one TTL
+     * behind a publish refuses, it never skips the token). A SCHEDULED one (before its opens_at; between two phases): 409
+     * EVENT_NOT_ON_SALE {@code NOT_STARTED} with that phase's sale start. A live one (PRE_QUEUE, OPEN, PAUSED, or
+     * SCHEDULED past opens_at while the tick catches up: fail closed, by the memo row alone) needs the caller's
+     * admission token for this event and this phase's room, else 409 ADMISSION_REQUIRED {@code MISSING},
+     * {@code INVALID} (bad signature, another user, another event or another phase) or {@code EXPIRED}; it is returned
+     * for the split members' eligibility.
      */
     public Optional<WaitingRoom> requireAdmission(UUID userId, int eventId, String token) {
         Instant now = Instant.now();
-        Optional<WaitingRoom> room = memo.get(eventId).filter(r -> r.statusAt(now).live());
+        Optional<WaitingRoom> room = memo.current(eventId, now);
         if (room.isEmpty()) {
             return room;
+        }
+        if (room.get().eventDraft()) {
+            throw new ApiException("EVENT_NOT_ON_SALE", HttpStatus.CONFLICT, "Event is not on sale",
+                    Map.of("reason", "NOT_ON_SALE"));
+        }
+        if (room.get().statusAt(now) == Status.SCHEDULED) {
+            throw new ApiException("EVENT_NOT_ON_SALE", HttpStatus.CONFLICT, "Event is not on sale",
+                    Map.of("reason", "NOT_STARTED", "sale_starts_at", room.get().saleStartsAt().toString()));
         }
         if (token == null || token.isBlank()) {
             throw admissionRequired("MISSING");
         }
+        UUID roomId = room.get().id();
         RoomTokens.Admission a = tokens.readAdmission(token)
-                .filter(t -> t.eventId() == eventId && t.userId().equals(userId))
+                .filter(t -> t.eventId() == eventId && t.userId().equals(userId) && t.roomId().equals(roomId))
                 .orElseThrow(() -> admissionRequired("INVALID"));
         if (!now.isBefore(a.expiresAt())) {
             throw admissionRequired("EXPIRED");
@@ -244,7 +261,8 @@ public class QueueService {
     }
 
     /**
-     * 04 §Waiting room Eligibility, against the event's organizer; the first rule failed is the reason. {@code field}:
+     * 04 §Waiting room Eligibility, against the event's organizer and {@code room}'s (the current phase's) rule; the
+     * first rule failed is the reason. {@code field}:
      * null for the caller's own join (details: the reason and the rule's figures), else the holder path of a split
      * {@code pays} member (04 POST /fan/orders, NOT_ELIGIBLE): the details are that path alone, no reason and no rule
      * figure, so a buyer can't probe another phone's account age, membership or attendance.

@@ -110,7 +110,7 @@ class Lot5OnSaleFlowTest extends QueueFixture {
                 .param(orderId).query(Long.class).single()).isEqualTo(2);
 
         // ---------- (5) guard: no token → 409, decided before any SQL beyond the session check ----------
-        memo.get(r.event()); // warm this instance's memo right before counting
+        memo.rooms(r.event()); // warm this instance's memo right before counting
         long before = statements.count();
         String guarded = body(order(second, r, null, 1).andExpect(status().isConflict()));
         assertThat(statements.count() - before).isEqualTo(1);
@@ -118,7 +118,7 @@ class Lot5OnSaleFlowTest extends QueueFixture {
         assertThat((String) JsonPath.read(guarded, "$.details.reason")).isEqualTo("MISSING");
 
         // ---------- (6) controls: pause freezes positions, resume continues ----------
-        call(r.admin(), post("/org/events/" + r.event() + "/room/pause")).andExpect(status().isOk());
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/1/pause")).andExpect(status().isOk());
         step();
         step();
         assertThat(roomRow(r.id())).containsEntry("status", "PAUSED").containsEntry("admitted_through", 1);
@@ -127,7 +127,7 @@ class Lot5OnSaleFlowTest extends QueueFixture {
         assertThat((Integer) JsonPath.read(paused, "$.position")).isEqualTo(1);
         assertThat((Integer) JsonPath.read(paused, "$.rate_per_min")).isZero();
 
-        call(r.admin(), post("/org/events/" + r.event() + "/room/resume")).andExpect(status().isOk());
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/1/resume")).andExpect(status().isOk());
         step();
         assertThat(roomRow(r.id())).containsEntry("status", "OPEN").containsEntry("admitted_through", 2);
         assertThat((String) JsonPath.read(poll(second), "$.status")).isEqualTo("ADMITTED");
@@ -160,7 +160,7 @@ class Lot5OnSaleFlowTest extends QueueFixture {
         assertThat((String) JsonPath.read(soldOut, "$.status")).isEqualTo("WAITING");
 
         // ---------- end: polls stop, orders need no token (OPS releases one more place first) ----------
-        call(r.admin(), post("/org/events/" + r.event() + "/room/end")).andExpect(status().isOk());
+        call(r.admin(), post("/org/events/" + r.event() + "/rooms/1/end")).andExpect(status().isOk());
         memo.invalidate();
         assertThat((String) JsonPath.read(poll(second), "$.status")).isEqualTo("ENDED");
         call(caller(r.admin().org(), "OPS"), patch("/org/events/" + r.event() + "/prices/" + r.price()),

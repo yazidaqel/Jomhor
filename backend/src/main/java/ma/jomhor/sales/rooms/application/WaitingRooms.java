@@ -8,33 +8,44 @@ import ma.jomhor.sales.rooms.domain.WaitingRoom;
 import ma.jomhor.sales.rooms.domain.WaitingRoom.Config;
 import ma.jomhor.sales.rooms.domain.WaitingRoom.Status;
 
-/** Persistence port for waiting_rooms. Every method but {@link #live()} is scoped to one organizer. */
+/**
+ * Persistence port for waiting_rooms, one row per sale phase of an event. Every method but {@link #live()} and the
+ * tick's is scoped to one organizer. A phase's {@code saleStartsAt} is its starts_at, or the event's sale_starts_at for
+ * phase 1.
+ */
 public interface WaitingRooms {
 
-    Optional<WaitingRoom> find(UUID org, int eventId);
+    /** The event's rooms, every status, by phase. */
+    List<WaitingRoom> list(UUID org, int eventId);
 
-    /** The room's status, its row locked against the tick and other writers until the transaction ends. */
-    Optional<Status> lock(UUID org, int eventId);
+    Optional<WaitingRoom> find(UUID org, int eventId, int phase);
 
-    /** The room's status, its row held (for share) until the transaction ends: the tick skips it meanwhile. */
-    Optional<Status> share(UUID org, int eventId);
+    /** The phase's status, its row locked against the tick and other writers until the transaction ends. */
+    Optional<Status> lock(UUID org, int eventId, int phase);
 
-    void insert(UUID org, int eventId, Config config);
+    /** The phase's status, its row held (for share) until the transaction ends: the tick skips it meanwhile. */
+    Optional<Status> share(UUID org, int eventId, int phase);
 
-    void update(UUID org, int eventId, Config config);
+    /** {@code startsAt}: null for phase 1. */
+    void insert(UUID org, int eventId, int phase, String label, Instant startsAt, Config config);
 
-    void setStatus(UUID org, int eventId, Status status);
+    void update(UUID org, int eventId, int phase, String label, Instant startsAt, Config config);
+
+    void setStatus(UUID org, int eventId, int phase, Status status);
 
     /** Every organizer's rooms not ENDED (the memo). */
     List<WaitingRoom> live();
 
     // ---------- the room tick (04 §Waiting room Tick): by room id, each row carrying its organizer ----------
 
-    /** What the tick reads and writes of a room; the event's times are read without a lock. */
-    record Tick(UUID id, UUID organizerId, int eventId, Status status, int preQueueMin, int admissionRatePerMin,
-                Instant saleStartsAt, Instant refundCutoffAt, int joinedCount, int rankedCount, int admittedThrough,
-                int measuredRatePerMin, Instant rateMarkAt, int rateMarkThrough, boolean soldOut, Instant lastTickAt,
-                Instant drawnAt) {}
+    /**
+     * What the tick reads and writes of a room; the event's times and {@code nextOpensAt} (the opens_at of the next
+     * phase not ENDED, null when none) are read without a lock.
+     */
+    record Tick(UUID id, UUID organizerId, int eventId, int phase, Status status, int preQueueMin,
+                int admissionRatePerMin, Instant saleStartsAt, Instant refundCutoffAt, Instant nextOpensAt,
+                int joinedCount, int rankedCount, int admittedThrough, int measuredRatePerMin, Instant rateMarkAt,
+                int rateMarkThrough, boolean soldOut, Instant lastTickAt, Instant drawnAt) {}
 
     /** Ids of every organizer's rooms not ENDED. */
     List<UUID> liveIds();

@@ -86,7 +86,7 @@ Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 
 ### 1.8 OPS: the room -> 201: pre-queue 30 min, 6 fans/min (slow, to watch positions), verified >= 7 days
-PUT {{base}}/org/events/{{eventId}}/room
+PUT {{base}}/org/events/{{eventId}}/rooms/1
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 Content-Type: application/json
@@ -215,8 +215,8 @@ X-Queue-Token: {{saraQueue}}
 > {% client.global.set("saraQueue", response.body.queue_token);
      if (response.body.admission) client.global.set("saraAdmission", response.body.admission.token); %}
 
-### 3.1 OPS: the room -> OPEN, drawn_at, figures {joined 3, waiting, admitted, ...}
-GET {{base}}/org/events/{{eventId}}/room
+### 3.1 OPS: the rooms -> phase 1 OPEN, drawn_at, figures {joined 3, waiting, admitted, ...}
+GET {{base}}/org/events/{{eventId}}/rooms
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 
@@ -267,17 +267,17 @@ Content-Type: application/json
 # window; after 5.5 the room is sold out and Karim, back in the queue (6.4), waits with sold_out true.
 
 ### 6.1 OPS: pause -> PAUSED. Polls (2.13-2.15) of waiting fans show PAUSED, positions frozen, rate_per_min 0
-POST {{base}}/org/events/{{eventId}}/room/pause
+POST {{base}}/org/events/{{eventId}}/rooms/1/pause
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 
 ### 6.2 OPS: resume -> OPEN, admission continues
-POST {{base}}/org/events/{{eventId}}/room/resume
+POST {{base}}/org/events/{{eventId}}/rooms/1/resume
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 
 ### 6.3 OPS: move the rate to 800/min (applies from the next tick)
-PUT {{base}}/org/events/{{eventId}}/room
+PUT {{base}}/org/events/{{eventId}}/rooms/1
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 Content-Type: application/json
@@ -296,7 +296,7 @@ Content-Type: application/json
 > {% client.global.set("karimQueue", response.body.queue_token); %}
 
 ### 6.5 OPS: end the room -> ENDED (irreversible); polls say ENDED
-POST {{base}}/org/events/{{eventId}}/room/end
+POST {{base}}/org/events/{{eventId}}/rooms/1/end
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}
 

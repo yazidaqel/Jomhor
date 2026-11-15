@@ -120,6 +120,23 @@ class MultiInstanceTest extends QueueFixture {
         assertThat(roomRow(r.id())).containsEntry("admitted_through", 150);
     }
 
+    /** BE-48: both instances tick at phase 2's opens_at: phase 1 ends once, with one audit, and phase 2 opens. */
+    @Test
+    void theNextPhaseEndsThePreviousOnceOnBoth() throws Exception {
+        Room r = room("{}");
+        UUID two = phase(r, 2, "{\"pre_queue_min\": 0, \"starts_at\": \"2099-04-02T10:00:00Z\"}");
+        tickBoth(OPENS);
+        tickBoth(SALE);
+        tickBoth("2099-04-02T10:00:00Z");
+        assertThat(roomRow(r.id()).get("status")).isEqualTo("ENDED");
+        assertThat(roomRow(two).get("status")).isEqualTo("OPEN");
+        tickBoth("2099-04-02T10:00:01Z");
+        assertThat(jdbc.sql("""
+                        select count(*) from audit_log where action = 'room.end' and target = ?
+                          and payload ->> 'reason' = 'NEXT_PHASE'""")
+                .param(String.valueOf(r.event())).query(Integer.class).single()).isOne();
+    }
+
     @Test
     void fanMessagesOnBothSendAtMostOneRunsCapPerPeriod() throws Exception {
         UUID org = organizer("Multi Messages FC");

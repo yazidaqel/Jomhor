@@ -156,7 +156,7 @@ public class EventService {
         Instant saleStartsAt = or(in.saleStartsAt(), e.saleStartsAt());
         checkSaleStart(saleStartsAt, startsAt);
         if (!Objects.equals(saleStartsAt, e.saleStartsAt())) {
-            rooms.checkSaleStartMovable(org, eventId); // a SCHEDULED room follows: its opens_at is derived
+            rooms.checkSaleStartMovable(org, eventId, saleStartsAt); // a SCHEDULED phase 1 follows (opens_at is derived)
         }
         String metadata = in.metadata() == null || in.metadata().isNull()
                 ? e.metadata() : metadata(e.eventType(), in.metadata());

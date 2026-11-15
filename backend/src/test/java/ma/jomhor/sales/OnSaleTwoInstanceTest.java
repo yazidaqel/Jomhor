@@ -143,9 +143,9 @@ class OnSaleTwoInstanceTest extends QueueFixture {
         call(a, patch("/org/events/" + event), "{\"sale_starts_at\": \"%s\"}".formatted(sale))
                 .andExpect(status().isOk());
         call(a, post("/org/events/" + event + "/publish")).andExpect(status().isOk());
-        call(a, put("/org/events/" + event + "/room"), "{\"admission_rate_per_min\": 600}")
+        call(a, put("/org/events/" + event + "/rooms/1"), "{\"admission_rate_per_min\": 600}")
                 .andExpect(status().isCreated());
-        return jdbc.sql("select id from waiting_rooms where event_id = ?").param(event).query(UUID.class).single();
+        return jdbc.sql("select id from waiting_rooms where event_id = ? and phase = 1").param(event).query(UUID.class).single();
     }
 
     private int draws(int event) {
@@ -225,7 +225,7 @@ class OnSaleTwoInstanceTest extends QueueFixture {
             assertThat(movedBack()).isEmpty();
         } finally {
             unguard();
-            call(a, post("/org/events/" + event + "/room/end")).andExpect(status().isOk());
+            call(a, post("/org/events/" + event + "/rooms/1/end")).andExpect(status().isOk());
         }
     }
 
@@ -399,7 +399,7 @@ class OnSaleTwoInstanceTest extends QueueFixture {
             assertThat(movedBack()).isEmpty();
         } finally {
             unguard();
-            call(a, post("/org/events/" + event + "/room/end")).andExpect(status().isOk());
+            call(a, post("/org/events/" + event + "/rooms/1/end")).andExpect(status().isOk());
         }
     }
 
@@ -408,9 +408,9 @@ class OnSaleTwoInstanceTest extends QueueFixture {
      * turn buys), so at least one call to B is cut off by the close whatever the timing; then lets the row go. The
      * order never commits: its connection was aborted by the close.
      */
-    private void closeBWithAnOrderWaiting(int event, String blocker) throws Exception {
+    private void closeBWithAnOrderWaiting(int event, UUID room, String blocker) throws Exception {
         Fan f = mintFan();
-        String admission = tokens.admission(f.id(), event, UUID.randomUUID(), Instant.now().plusSeconds(600));
+        String admission = tokens.admission(f.id(), event, room, UUID.randomUUID(), Instant.now().plusSeconds(600));
         try (var waiter = Executors.newSingleThreadExecutor(); Connection lock = dataSource.getConnection()) { // lock closes first, so waiter.close() never waits on a held row
             lock.setAutoCommit(false);
             int pid;
@@ -514,7 +514,7 @@ class OnSaleTwoInstanceTest extends QueueFixture {
                         Thread.sleep(1);
                     }
                     closeAt[0] = (Integer) roomRow(room).get("admitted_through");
-                    closeBWithAnOrderWaiting(event, blocker);
+                    closeBWithAnOrderWaiting(event, room, blocker);
                     return null;
                 });
             }

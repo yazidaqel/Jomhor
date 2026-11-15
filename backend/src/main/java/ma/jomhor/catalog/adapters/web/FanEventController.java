@@ -36,10 +36,16 @@ class FanEventController {
     /** 04 §Club directory: no id here, organizer_id sits beside it. */
     record OrganizerDto(String slug, String name, String crestUrl) {}
 
-    /** Lot 5 (04 §Fan): null without a room or once it has ENDED; eligibility null when no rule is set. */
-    record RoomDto(String status, Instant opensAt, EligibilityDto eligibility) {}
+    /**
+     * Lot 5 (04 §Fan): the current phase; null without a phase or once every phase has ENDED; eligibility null when
+     * the phase sets no rule; next null when no later phase is left.
+     */
+    record RoomDto(int phase, String label, String status, Instant opensAt, Instant saleStartsAt,
+                   EligibilityDto eligibility, NextDto next) {}
 
     record EligibilityDto(Instant verifiedBefore, Instant memberJoinedBefore, Integer minEventsAttended) {}
+
+    record NextDto(int phase, String label, Instant opensAt, Instant saleStartsAt) {}
 
     record EventDto(int id, UUID organizerId, OrganizerDto organizer, Event.Status status, Event.Type eventType,
                     String title, Instant startsAt, Instant doorsOpenAt, String timezone, VenueDto venue,
@@ -47,9 +53,12 @@ class FanEventController {
                     Instant saleStartsAt, Instant salesCloseAt, boolean onSale, boolean soldOut, Long fromPriceMad,
                     int perAccountLimit, RoomDto room) {
         static EventDto of(Event.Listing e, EventRooms rooms) {
-            RoomDto room = rooms.publicRoom(e.id()).map(r -> new RoomDto(r.status(), r.opensAt(),
-                    r.eligibility() == null ? null : new EligibilityDto(r.eligibility().verifiedBefore(),
-                            r.eligibility().memberJoinedBefore(), r.eligibility().minEventsAttended()))).orElse(null);
+            RoomDto room = rooms.publicRoom(e.id()).map(r -> new RoomDto(r.phase(), r.label(), r.status(),
+                    r.opensAt(), r.saleStartsAt(), r.eligibility() == null ? null
+                            : new EligibilityDto(r.eligibility().verifiedBefore(), r.eligibility().memberJoinedBefore(),
+                                    r.eligibility().minEventsAttended()),
+                    r.next() == null ? null : new NextDto(r.next().phase(), r.next().label(), r.next().opensAt(),
+                            r.next().saleStartsAt()))).orElse(null);
             return new EventDto(e.id(), e.organizerId(),
                     new OrganizerDto(e.organizer().slug(), e.organizer().name(), e.organizer().crestUrl()), e.status(),
                     e.eventType(), e.title(), e.startsAt(), e.doorsOpenAt(), e.timezone(),
