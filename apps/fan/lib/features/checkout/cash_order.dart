@@ -9,8 +9,6 @@ import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
-import 'package:jomhor_fan/features/passes/pass.dart' show homeZone;
-import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -36,12 +34,9 @@ class CashOrder extends ConsumerWidget {
       null => null,
     };
     final event = detail?.event;
-    // Lot 5 step 3: a product order has no event; its product's name and zone stand in.
-    final product = switch (order.product) {
-      final p? => ref.watch(productProvider(p.id)).value,
-      null => null,
-    };
-    final zone = event?.timezone ?? (order.product == null ? null : product?.timezone ?? homeZone);
+    // Lot 5 step 3: a product order has no event; its product's name, zone and methods stand in.
+    final product = order.product;
+    final zone = event?.timezone ?? product?.timezone;
     final left = view.left;
     final hosted = [...?(detail?.paymentMethods ?? product?.paymentMethods)?.where((m) => m.hosted)];
     final where = [...?cash?.points.map((p) => p.name), ...?cash?.networks].join(l.listSeparator);
@@ -356,11 +351,13 @@ class _Step extends StatelessWidget {
   );
 }
 
-/// The code's deadline passed (or the order expired): say so, back to the event (Q55: no fan cancel, it just ends).
+/// The code's deadline passed (or the order expired): say so, back to the event (Q55: no fan cancel, it just ends),
+/// or to the product to buy it again (Lot 5 step 3).
 class CashExpired extends StatelessWidget {
-  const new({required this.eventId, super.key});
+  const new({required this.eventId, this.productId, super.key});
 
   final int? eventId;
+  final String? productId;
 
   @override
   Widget build(BuildContext context) {
@@ -381,6 +378,14 @@ class CashExpired extends StatelessWidget {
         const SizedBox(height: JomhorSpace.xl),
         if (eventId case final id?) ...[
           FilledButton(onPressed: () => context.go('/events/$id'), child: Text(l.backToEvent)),
+          const SizedBox(height: JomhorSpace.s),
+        ],
+        if (productId case final id?) ...[
+          FilledButton(
+            key: const Key('cash.retryProduct'),
+            onPressed: () => context.go('/products/$id'),
+            child: Text(l.retry),
+          ),
           const SizedBox(height: JomhorSpace.s),
         ],
         OutlinedButton(onPressed: () => context.go('/'), child: Text(l.backHome)),

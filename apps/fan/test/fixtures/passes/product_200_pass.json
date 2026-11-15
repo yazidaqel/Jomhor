@@ -1,0 +1,67 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 3, GET /fan/products/{id}): replace with a captured answer once BE-51 runs",
+ "status": 200,
+ "body": {
+  "id": "b1000000-0000-4000-8000-000000000001",
+  "organizer_id": "0b8e7a52-0000-4000-8000-000000000001",
+  "organizer": {
+   "slug": "atlas-fc",
+   "name": "Atlas FC",
+   "crest_url": null
+  },
+  "timezone": "Africa/Casablanca",
+  "kind": "PASS",
+  "name": "Abonnement Tribune Est",
+  "price_mad": 150000,
+  "sales_close_at": "2027-05-31T23:00:00Z",
+  "remaining": 2,
+  "sold_out": false,
+  "valid_until": null,
+  "pass": {
+   "series": {
+    "id": "e1000000-0000-4000-8000-000000000001",
+    "name": "Saison 2026-27",
+    "starts_on": "2026-08-01",
+    "ends_on": "2027-06-30"
+   },
+   "zone": {
+    "id": 3,
+    "code": "E",
+    "name": "Tribune Est"
+   },
+   "venue": {
+    "name": "Grand Stade",
+    "city": "Casablanca",
+    "timezone": "Africa/Casablanca"
+   },
+   "events": [
+    {
+     "id": 7,
+     "title": "Atlas FC vs Rapid Oued",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2027-03-13T19:00:00Z"
+    },
+    {
+     "id": 8,
+     "title": "Atlas FC vs Olympique Tensift",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2027-04-03T19:00:00Z"
+    }
+   ]
+  },
+  "plans": [
+   {
+    "installments": 1,
+    "amounts_mad": [
+     150000
+    ]
+   }
+  ],
+  "payment_methods": [
+   "CARD",
+   "WALLET",
+   "CASH_AGENCY"
+  ],
+  "cash_until": "2027-05-31T21:00:00Z"
+ }
+}

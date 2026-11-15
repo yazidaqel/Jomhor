@@ -46,7 +46,7 @@ class FanOrder {
       _ => null,
     },
     product: switch (j['product']) {
-      {'id': final String id, 'kind': final String kind, 'name': final String name} => (id: id, kind: kind, name: name),
+      final Map<String, Object?> p => OrderProduct.fromJson(p),
       _ => null,
     },
     passId: j['pass_id'] as String?,
@@ -104,8 +104,41 @@ class FanOrder {
   bool get settled => status != 'RESERVED' && status != 'AWAITING_CASH';
 }
 
-/// `product` of a product order: `{id, kind, name}` (`PASS` or `MEMBERSHIP`).
-typedef OrderProduct = ({String id, String kind, String name});
+/// `product` of a product order (`PASS` or `MEMBERSHIP`), read from the product even once it is off sale: what it
+/// is, the time zone its dates show in, and the methods `/pay` takes for it.
+class OrderProduct {
+  const new({
+    required this.id,
+    required this.kind,
+    required this.name,
+    this.timezone = 'Africa/Casablanca',
+    this.paymentMethods = const [PayMethod.card],
+    this.cashUntil,
+  });
+
+  factory fromJson(Map<String, Object?> j) => OrderProduct(
+    id: j['id']! as String,
+    kind: j['kind']! as String,
+    name: j['name']! as String,
+    timezone: j['timezone'] as String? ?? 'Africa/Casablanca',
+    paymentMethods: switch (j['payment_methods']) {
+      final List<Object?> list => [...list.map(PayMethod.of).nonNulls],
+      _ => const [PayMethod.card],
+    },
+    cashUntil: _instant(j['cash_until']),
+  );
+
+  final String id;
+  final String kind;
+  final String name;
+  final String timezone;
+  final List<PayMethod> paymentMethods;
+
+  /// Last moment a cash code can be bought; null when the organizer has no cash (as `GET /fan/events/{id}`).
+  final DateTime? cashUntil;
+
+  bool get isPass => kind == 'PASS';
+}
 
 class OrderItem {
   new({
@@ -218,14 +251,14 @@ class OrderRow {
   });
 
   factory fromJson(Map<String, Object?> j) {
-    final e = j['event'] as Map<String, Object?>?;
+    // A product order's row: `event` null, `product: {id, kind, name, timezone}`.
+    final e = (j['event'] ?? j['product'])! as Map<String, Object?>;
     return OrderRow(
       id: j['id']! as String,
       status: j['status']! as String,
-      eventTitle: e?['title'] as String? ?? (j['product']! as Map<String, Object?>)['name']! as String,
-      eventStartsAt: _instant(e?['starts_at']),
-      // ponytail: a product row has no zone in the contract; Morocco's, as the notifications use for a membership.
-      timezone: e?['timezone'] as String? ?? 'Africa/Casablanca',
+      eventTitle: (e['title'] ?? e['name'])! as String,
+      eventStartsAt: _instant(e['starts_at']),
+      timezone: e['timezone']! as String,
       reservedUntil: _instant(j['reserved_until']),
       payCode: j['pay_code'] as String?,
       groupRole: j['group_role'] as String?,

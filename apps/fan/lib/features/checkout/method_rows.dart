@@ -29,9 +29,12 @@ List<MethodRow> methodRowsOf(
 
 /// The cash code's deadline as the app can guess it before `/pay`: `least(now + 24 h, sales close)` on the server
 /// time of the event read (docs/plans/lot-3.md Q45). `/pay` answers the real `reserved_until`.
-DateTime cashDeadline(FanEvent e) {
-  final day = e.fetchedAt.add(const Duration(hours: 24));
-  return day.isBefore(e.salesCloseAt) ? day : e.salesCloseAt;
+DateTime cashDeadline(FanEvent e) => cashDeadlineAt(e.fetchedAt, e.salesCloseAt);
+
+/// `least(serverNow + 24 h, salesCloseAt)`; [salesCloseAt] null (unknown): 24 h from [serverNow]. Events and products.
+DateTime cashDeadlineAt(DateTime serverNow, DateTime? salesCloseAt) {
+  final day = serverNow.add(const Duration(hours: 24));
+  return salesCloseAt != null && salesCloseAt.isBefore(day) ? salesCloseAt : day;
 }
 
 /// The CTA under the rows: "Payer {total}" / "Payer {total} par wallet" / "Obtenir mon code cash".

@@ -448,7 +448,7 @@
   "passHolderHelp": "السمية اللي غادي تكون على كل تذكرة ديال الاشتراك، بحال البطاقة الوطنية.",
   "passSeasonRange": "{from} – {to}",
   "membershipValidUntil": "كارط العضوية صالحة حتى {date}",
-  "productHoldLeft": "محجوز ليك · {time}",
+  "productHoldLeft": "{minutes, plural, =1{محجوز ليك · باقية دقيقة وحدة} =2{محجوز ليك · باقيين جوج دقايق} few{محجوز ليك · باقيين {minutes} دقايق} other{محجوز ليك · باقية {minutes} دقيقة}}",
   "productHolder": "مولا التذكرة · {name}",
   "productCaptionPass": "التذاكر كتوصلك فالتطبيق مع كل ماتش كيتنشر",
   "productCaptionMembership": "كارط العضوية كتولي مخلصة غير تخلص",
@@ -456,5 +456,6 @@
   "orderPaidMembershipBody": "كارط العضوية ديالك مخلصة.",
   "seePass": "شوف الاشتراك ديالي",
   "seeMemberCard": "شوف كارط العضوية",
-  "errorProductNotOnSale": "البيع تسد لهاد المنتوج."
+  "errorProductNotOnSale": "البيع تسد لهاد المنتوج.",
+  "passSeason": "الموسم"
 }

@@ -1711,8 +1711,16 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String productHoldLeft(String time) {
-    return 'محجوز ليك · $time';
+  String productHoldLeft(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'محجوز ليك · باقية $minutes دقيقة',
+      few: 'محجوز ليك · باقيين $minutes دقايق',
+      two: 'محجوز ليك · باقيين جوج دقايق',
+      one: 'محجوز ليك · باقية دقيقة وحدة',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1740,4 +1748,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get errorProductNotOnSale => 'البيع تسد لهاد المنتوج.';
+
+  @override
+  String get passSeason => 'الموسم';
 }

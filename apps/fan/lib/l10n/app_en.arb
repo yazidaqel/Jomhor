@@ -448,7 +448,7 @@
   "passHolderHelp": "The name on every ticket of your pass, as on your ID card.",
   "passSeasonRange": "{from} – {to}",
   "membershipValidUntil": "Membership card valid until {date}",
-  "productHoldLeft": "Held for you · {time}",
+  "productHoldLeft": "{minutes, plural, =1{Held for you · 1 min left} other{Held for you · {minutes} min left}}",
   "productHolder": "Holder · {name}",
   "productCaptionPass": "Tickets in the app for every match published",
   "productCaptionMembership": "Membership card up to date as soon as you pay",
@@ -456,5 +456,6 @@
   "orderPaidMembershipBody": "Your membership card is up to date.",
   "seePass": "See my season pass",
   "seeMemberCard": "See my member card",
-  "errorProductNotOnSale": "Sales are closed for this product."
+  "errorProductNotOnSale": "Sales are closed for this product.",
+  "passSeason": "Season"
 }

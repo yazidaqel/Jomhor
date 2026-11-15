@@ -1,0 +1,13 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 3, POST /fan/product-orders): replace with a captured answer once BE-52 runs",
+ "status": 422,
+ "body": {
+  "code": "VALIDATION_FAILED",
+  "message": "VALIDATION_FAILED",
+  "details": {
+   "fields": {
+    "holder_name": "invalid"
+   }
+  }
+ }
+}

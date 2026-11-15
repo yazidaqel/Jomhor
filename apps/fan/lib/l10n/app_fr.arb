@@ -687,8 +687,8 @@
   "@passSeasonRange": {"description": "Screen 13 pass card: the series' months.", "placeholders": {"from": {"type": "String"}, "to": {"type": "String"}}},
   "membershipValidUntil": "Carte membre valable jusqu'au {date}",
   "@membershipValidUntil": {"description": "Screen 13 buy for a MEMBERSHIP product: valid_until.", "placeholders": {"date": {"type": "String"}}},
-  "productHoldLeft": "Réservé pour toi · {time}",
-  "@productHoldLeft": {"description": "Screen 4 product variant: the 8-min hold left (mm:ss).", "placeholders": {"time": {"type": "String"}}},
+  "productHoldLeft": "{minutes, plural, =1{Réservé pour toi · encore 1 min} other{Réservé pour toi · encore {minutes} min}}",
+  "@productHoldLeft": {"description": "Screen 4 product variant: the 8-min hold left, whole minutes rounded up.", "placeholders": {"minutes": {"type": "int"}}},
   "productHolder": "Titulaire · {name}",
   "@productHolder": {"description": "Screen 4 product variant: the holder label of the item.", "placeholders": {"name": {"type": "String"}}},
   "productCaptionPass": "Billets dans l'app à chaque match publié",
@@ -704,5 +704,7 @@
   "seeMemberCard": "Voir ma carte membre",
   "@seeMemberCard": {"description": "Order screen PAID, membership: opens Club."},
   "errorProductNotOnSale": "Les ventes sont closes pour ce produit.",
-  "@errorProductNotOnSale": {"description": "409 PRODUCT_NOT_ON_SALE."}
+  "@errorProductNotOnSale": {"description": "409 PRODUCT_NOT_ON_SALE."},
+  "passSeason": "Saison",
+  "@passSeason": {"description": "Screen 13 pass card: label of the season's months."}
 }

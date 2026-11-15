@@ -1,0 +1,12 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 3, POST /fan/product-orders): replace with a captured answer once BE-53 runs",
+ "status": 409,
+ "body": {
+  "code": "PASS_HELD",
+  "message": "PASS_HELD",
+  "details": {
+   "pass_id": "c1000000-0000-4000-8000-000000000001",
+   "status": "ACTIVE"
+  }
+ }
+}

@@ -1656,8 +1656,14 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String productHoldLeft(String time) {
-    return 'Réservé pour toi · $time';
+  String productHoldLeft(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Réservé pour toi · encore $minutes min',
+      one: 'Réservé pour toi · encore 1 min',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1686,4 +1692,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get errorProductNotOnSale => 'Les ventes sont closes pour ce produit.';
+
+  @override
+  String get passSeason => 'Saison';
 }

@@ -2697,11 +2697,11 @@ abstract class AppLocalizations {
   /// **'Carte membre valable jusqu\'au {date}'**
   String membershipValidUntil(String date);
 
-  /// Screen 4 product variant: the 8-min hold left (mm:ss).
+  /// Screen 4 product variant: the 8-min hold left, whole minutes rounded up.
   ///
   /// In fr, this message translates to:
-  /// **'Réservé pour toi · {time}'**
-  String productHoldLeft(String time);
+  /// **'{minutes, plural, =1{Réservé pour toi · encore 1 min} other{Réservé pour toi · encore {minutes} min}}'**
+  String productHoldLeft(int minutes);
 
   /// Screen 4 product variant: the holder label of the item.
   ///
@@ -2750,6 +2750,12 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Les ventes sont closes pour ce produit.'**
   String get errorProductNotOnSale;
+
+  /// Screen 13 pass card: label of the season's months.
+  ///
+  /// In fr, this message translates to:
+  /// **'Saison'**
+  String get passSeason;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

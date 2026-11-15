@@ -142,14 +142,15 @@ class _OrderState extends ConsumerWidget {
     if (order.paid) return _Paid(order: order);
     // A cash code past its deadline (the expiry job may not have swept it yet) or its order expired.
     if (order.awaitingCash || (order.settled && order.paymentMethod == PayMethod.cashAgency)) {
-      return CashExpired(eventId: order.eventId);
+      return CashExpired(eventId: order.eventId, productId: order.product?.id);
     }
     final rePay = ref.watch(rePayProvider(order.id));
     final again = view.freshFor(rePay)
         ? payAgain(order, waitedLong: rePay.waitedLong, holdOver: view.holdOver)
         : PayAgain.no; // Until a read sent after the newest attempt answers.
-    if (order.settled || again == PayAgain.holdOver)
+    if (order.settled || again == PayAgain.holdOver) {
       return _Expired(eventId: order.eventId, productId: order.product?.id);
+    }
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,

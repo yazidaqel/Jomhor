@@ -13,8 +13,15 @@ import 'package:jomhor_fan/features/checkout/order.dart';
 /// the answer's `Date`), counted down on a monotonic stopwatch from the answer.
 class OrderView {
   new(this.order, DateTime? serverDate, DateTime deviceNow, {this.seenAttempts = 0})
-    : _holdLeft = order.reservedUntil?.difference(serverDate ?? deviceNow),
+    : _at = serverDate ?? deviceNow,
+      _holdLeft = order.reservedUntil?.difference(serverDate ?? deviceNow),
       _since = clock.stopwatch()..start();
+
+  /// Server time of the answer (its `Date`, else the device clock).
+  final DateTime _at;
+
+  /// Server time now: the answer's `Date` plus the monotonic time since.
+  DateTime get serverNow => _at.add(_since.elapsed);
 
   final FanOrder order;
 

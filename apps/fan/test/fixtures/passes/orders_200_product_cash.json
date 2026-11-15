@@ -1,0 +1,26 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 3, GET /fan/orders, a product order AWAITING_CASH (event null)): replace with a captured answer once BE-52 runs",
+ "status": 200,
+ "body": {
+  "orders": [
+   {
+    "id": "d1000000-0000-4000-8000-000000000001",
+    "event": null,
+    "channel": "APP",
+    "status": "AWAITING_CASH",
+    "total_mad": 150000,
+    "reserved_until": "2027-02-21T12:00:00Z",
+    "payment_method": "CASH_AGENCY",
+    "pay_code": "4F7K29",
+    "created_at": "2027-02-20T11:58:00Z",
+    "group_role": null,
+    "product": {
+     "id": "b1000000-0000-4000-8000-000000000001",
+     "kind": "PASS",
+     "name": "Abonnement Tribune Est",
+     "timezone": "Africa/Casablanca"
+    }
+   }
+  ]
+ }
+}
