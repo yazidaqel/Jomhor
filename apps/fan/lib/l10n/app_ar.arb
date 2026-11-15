@@ -457,5 +457,19 @@
   "seePass": "شوف الاشتراك ديالي",
   "seeMemberCard": "شوف كارط العضوية",
   "errorProductNotOnSale": "البيع تسد لهاد المنتوج.",
-  "passSeason": "الموسم"
+  "passSeason": "الموسم",
+  "clubDuesUnpaid": "واجب الانخراط {product} · {price}",
+  "clubDuesWhy": "أثمنة المنخرطين والبيع المسبق غير للمنخرطين اللي خالصين الواجب ديالهم.",
+  "clubDuesPay": "خلص الواجب ديالي",
+  "clubDuesPaid": "خالص حتى {date}",
+  "clubDuesExpired": "واجب الانخراط سالا",
+  "clubDuesRenew": "جدّد",
+  "clubJoinDues": "واجب الانخراط {price}",
+  "clubPasses": "الاشتراكات",
+  "errorMembershipPaid": "الواجب ديالك خالص من قبل.",
+  "holderMembersOnlyPaid": "هاد السعر غير للأعضاء اللي خالصين واجب الانخراط وتسجلو قبل {date}",
+  "holderMembersOnlyPaidAny": "هاد السعر غير للأعضاء اللي خالصين واجب الانخراط",
+  "queueNotMemberPaid": "خاص بالأعضاء اللي خالصين واجب الانخراط وتسجلو قبل {date}",
+  "queueNotMemberPaidAny": "خاص بالأعضاء اللي خالصين واجب الانخراط",
+  "duesSeeClub": "شوف واجب الانخراط ديالي"
 }

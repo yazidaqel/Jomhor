@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
+import 'package:jomhor_fan/app/error_text.dart' show needsDues;
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/clock.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
+import 'package:jomhor_fan/features/club/dues.dart' show DuesClubLink;
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/queue/queue.dart';
@@ -402,11 +404,18 @@ class _QueueScreenState extends ConsumerState<QueueScreen> with SingleTickerProv
           title: l.queueNotEligibleTitle,
           body: switch ((reason, e.details)) {
             ('ACCOUNT_TOO_NEW', {'verified_before': final d}) => l.queueAccountTooNew(day(d)),
+            ('NOT_MEMBER', {'paid_required': true, 'member_joined_before': final String d}) => l.queueNotMemberPaid(
+              day(d),
+            ),
+            ('NOT_MEMBER', {'paid_required': true}) => l.queueNotMemberPaidAny,
             ('NOT_MEMBER', {'member_joined_before': final d}) => l.queueNotMember(day(d)),
             ('NOT_ENOUGH_EVENTS', {'min_events_attended': final int n, 'attended': final int a}) =>
               match ? l.queueNotEnoughEvents(n, a) : l.queueNotEnoughEventsAny(n, a),
             _ => null,
           },
+          action: reason == 'NOT_MEMBER' && needsDues(e) && event != null
+              ? DuesClubLink(key: const Key('queue.dues'), organizerId: event.organizerId, refusal: e)
+              : null,
         ),
         // Lot 5 step 2: a later phase may let the fan in.
         if (event == null ? null : nextPhaseLine(l, event, now) case final next?) ...[
@@ -608,11 +617,12 @@ class _InfoRow extends StatelessWidget {
 
 /// An outlined panel: a refusal the fan cannot wait out (not eligible, too many accounts, sales closed).
 class _Panel extends StatelessWidget {
-  const new({required this.icon, required this.title, this.body, super.key});
+  const new({required this.icon, required this.title, this.body, this.action, super.key});
 
   final IconData icon;
   final String title;
   final String? body;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -634,6 +644,7 @@ class _Panel extends StatelessWidget {
             style: JomhorType.body.copyWith(color: JomhorColors.textSecondary),
           ),
         ],
+        if (action case final action?) ...[const SizedBox(height: JomhorSpace.s), Center(child: action)],
       ],
     ),
   );

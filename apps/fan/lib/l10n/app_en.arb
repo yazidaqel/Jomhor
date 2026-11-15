@@ -457,5 +457,19 @@
   "seePass": "See my season pass",
   "seeMemberCard": "See my member card",
   "errorProductNotOnSale": "Sales are closed for this product.",
-  "passSeason": "Season"
+  "passSeason": "Season",
+  "clubDuesUnpaid": "Membership fee {product} · {price}",
+  "clubDuesWhy": "Members' prices and presales are for members whose fee is paid up.",
+  "clubDuesPay": "Pay my membership fee",
+  "clubDuesPaid": "Paid up until {date}",
+  "clubDuesExpired": "Membership fee expired",
+  "clubDuesRenew": "Renew",
+  "clubJoinDues": "Membership fee {price}",
+  "clubPasses": "Season passes",
+  "errorMembershipPaid": "Your membership fee is already paid.",
+  "holderMembersOnlyPaid": "Members-only price: membership fee paid up, joined before {date}",
+  "holderMembersOnlyPaidAny": "Members-only price: membership fee paid up",
+  "queueNotMemberPaid": "Reserved for paid-up members who joined before {date}",
+  "queueNotMemberPaidAny": "Reserved for paid-up members",
+  "duesSeeClub": "See my membership fee"
 }

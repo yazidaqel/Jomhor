@@ -1,0 +1,27 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 3, GET /fan/me/membership, paid_until and paid_required): replace with a captured answer once BE-54 runs",
+ "status": 200,
+ "body": {
+  "member": {
+   "number": 42,
+   "joined_at": "2026-11-03T10:00:00.123456Z",
+   "marketing_push": false,
+   "marketing_whatsapp": false,
+   "paid_until": null
+  },
+  "loyalty": {
+   "events_attended": 8,
+   "tier": {
+    "code": "T2",
+    "name": "Fidèle"
+   },
+   "next_tier": {
+    "code": "T3",
+    "name": "Pilier",
+    "min_events": 10
+   },
+   "last_events": []
+  },
+  "paid_required": true
+ }
+}

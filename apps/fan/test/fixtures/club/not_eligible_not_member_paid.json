@@ -1,0 +1,13 @@
+{
+ "source": "contract-first (docs/04-api.md error table, Lot 5 step 3, NOT_ELIGIBLE NOT_MEMBER on POST /fan/queue/{event_id}/join: + details.paid_required): replace with a captured answer once BE-54 runs",
+ "status": 409,
+ "body": {
+  "code": "NOT_ELIGIBLE",
+  "message": "Not eligible for this sale",
+  "details": {
+   "reason": "NOT_MEMBER",
+   "member_joined_before": "2026-11-15T12:07:33Z",
+   "paid_required": true
+  }
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 3, POST /fan/product-orders, MEMBERSHIP already paid): replace with a captured answer once BE-52 runs",
+ "status": 409,
+ "body": {
+  "code": "MEMBERSHIP_PAID",
+  "message": "MEMBERSHIP_PAID",
+  "details": {
+   "paid_until": "2027-06-30T22:00:00Z"
+  }
+ }
+}

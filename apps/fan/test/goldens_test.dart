@@ -16,7 +16,7 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'cash_order_test.dart' show CashSale, orderId;
-import 'club_test.dart' show ClubBackend, loyaltyJson, memberJson;
+import 'club_test.dart' show ClubBackend, clubProducts, loyaltyJson, memberJson;
 import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
@@ -36,7 +36,8 @@ import 'waitlist_test.dart' show WaitlistSale;
 /// and member (to pay, released). FL-22: screen 10 and the bell with its unread dot on screen 1 and the top bar
 /// (bell then avatar at the end side, the left in AR). FL-26: screen 12 (pre-queue, waiting, the turn, not eligible)
 /// and screen 2 with a room. FL-28: the waitlist on screen 1's hero (to join, on the list) and screen 2 sold out.
-/// FL-29: screen 13 (buy, owned with one ticket issued and one to come) and screen 4's product variant.
+/// FL-29: screen 13 (buy, owned with one ticket issued and one to come) and screen 4's product variant. FL-30:
+/// screen 7 with the cotisation (unpaid, paid) and the Abonnements cards.
 /// Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
@@ -438,6 +439,44 @@ void main() {
         );
         expect(ar ? last < first : first < last, isTrue);
         if (ar) expectArabicRules(tester);
+        await snap('$locale-$name');
+      });
+    }
+
+    // FL-30: screen 7, the club selling a membership (contract-first, test/fixtures/club): the cotisation to pay,
+    // then paid, with the Abonnements card below.
+    for (final (name, paidUntil) in [('7-club-cotisation', null), ('7-club-a-jour', '2027-06-30T22:00:00Z')]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await phone(tester);
+        final before = SharedPreferencesAsyncPlatform.instance;
+        SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+        addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+        final ar = locale == 'ar';
+        final backend =
+            ClubBackend(
+                members: {testOrganizer: memberJson(paidUntil: paidUntil)},
+                loyalty: {testOrganizer: loyaltyJson(tier: ar ? 'وفي' : 'Fidèle', nextTier: ar ? 'ركيزة' : 'Pilier')},
+              )
+              ..paidRequired = true
+              ..products = clubProducts();
+        final c = await pumpJomhor(
+          tester,
+          backend: backend.handle,
+          tokens: MemoryTokenStore('jwt'),
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+          follows: (ids: const [testOrganizer], seen: true, chip: null),
+        );
+        c.read(routerProvider).go('/club');
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(Key(paidUntil == null ? 'club.dues.$testOrganizer.unpaid' : 'club.duesPaid.$testOrganizer')),
+          findsOneWidget,
+        );
+        if (ar) {
+          expectArabicRules(tester);
+          expect(find.textContaining('\u2066'), findsWidgets, reason: 'prices and dates stay LTR isolates');
+        }
         await snap('$locale-$name');
       });
     }

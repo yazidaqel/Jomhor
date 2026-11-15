@@ -1,0 +1,33 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 3, POST /fan/product-orders, MEMBERSHIP): replace with a captured answer once BE-52 runs",
+ "status": 201,
+ "body": {
+  "id": "d1000000-0000-4000-8000-000000000002",
+  "status": "RESERVED",
+  "reserved_until": "2027-02-20T12:08:00Z",
+  "total_mad": 20000,
+  "product": {
+   "id": "b1000000-0000-4000-8000-000000000002",
+   "kind": "MEMBERSHIP",
+   "name": "Saison 2026-27"
+  },
+  "pass_id": null,
+  "items": [
+   {
+    "product_id": "b1000000-0000-4000-8000-000000000002",
+    "price_category_id": null,
+    "zone_id": null,
+    "zone_name": null,
+    "name": "Saison 2026-27",
+    "qty": 1,
+    "unit_price_mad": 20000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "group": null
+ }
+}

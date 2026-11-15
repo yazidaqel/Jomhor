@@ -18,6 +18,17 @@ class PassesRepository {
     return Product.fromJson(res.body! as Map<String, Object?>, fetchedAt: res.date ?? _now());
   }
 
+  /// `GET /fan/products?organizer=` (public): the club's products on sale, passes first, then its membership, and
+  /// the server time of the read (the response `Date`).
+  Future<ClubProducts> products(String organizerId) async {
+    final res = await _api.getPublicResponse('/fan/products', query: {'organizer': organizerId});
+    final at = res.date ?? _now();
+    return (
+      list: [for (final p in res.body! as List<Object?>) Product.fromJson(p! as Map<String, Object?>, fetchedAt: at)],
+      serverAt: at,
+    );
+  }
+
   /// The caller's passes that aren't `CANCELLED`, newest first.
   Future<List<FanPass>> passes() async => [
     for (final p in ((await _api.get('/fan/passes'))! as Map<String, Object?>)['passes']! as List<Object?>)
@@ -42,6 +53,13 @@ final passesRepositoryProvider = Provider<PassesRepository>(
 final FutureProviderFamily<Product, String> productProvider = FutureProvider.autoDispose.family<Product, String>(
   (ref, id) => ref.watch(passesRepositoryProvider).product(id),
 );
+
+/// One club's products on sale and the server time they were read at.
+typedef ClubProducts = ({List<Product> list, DateTime serverAt});
+
+/// Screen 7 for one club: its Abonnements cards and the cotisation's product. Read while the club is shown.
+final FutureProviderFamily<ClubProducts, String> clubProductsProvider = FutureProvider.autoDispose
+    .family<ClubProducts, String>((ref, organizerId) => ref.watch(passesRepositoryProvider).products(organizerId));
 
 /// Billets "Mes abonnements" and screen 13 owned. Signed out: none, with no call. Read on open and on pull to refresh.
 final FutureProvider<List<FanPass>> passesProvider = FutureProvider.autoDispose<List<FanPass>>((ref) async {

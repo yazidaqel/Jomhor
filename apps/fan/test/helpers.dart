@@ -358,6 +358,12 @@ class RoomSale {
   /// Queued answers of POST /fan/orders (default: 409 ADMISSION_REQUIRED).
   final orders = <http.Response Function()>[];
 
+  /// `GET /fan/organizers` rows (default: none).
+  List<Object?> organizers = const [];
+
+  /// `GET /fan/me/membership` per organizer; absent = 404.
+  final memberships = <String, Map<String, Object?>>{};
+
   DateTime get serverNow => clock.now.add(serverSkew);
 
   /// The `GET /fan/queue` shape.
@@ -427,6 +433,11 @@ class RoomSale {
         _ => polls.removeAt(0)(),
       },
       ('GET', '/v1/fan/me') => answer({'id': 'u1', 'phone': '+212600000001', 'display_name': 'Yazid Aqel'}),
+      ('GET', '/v1/fan/organizers') => answer(organizers),
+      ('GET', '/v1/fan/me/membership') => switch (memberships[r.url.queryParameters['organizer']]) {
+        final m? => answer(m),
+        null => apiError(404, 'NOT_FOUND'),
+      },
       ('POST', '/v1/fan/orders') =>
         orders.isEmpty ? refusal(409, 'ADMISSION_REQUIRED', {'reason': 'EXPIRED'}) : orders.removeAt(0)(),
       _ => apiError(404, 'NOT_FOUND'),

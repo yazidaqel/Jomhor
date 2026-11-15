@@ -64,7 +64,7 @@ class MembershipNotifier extends AsyncNotifier<Membership> {
     await _repo.leave(orgId);
     if (!ref.mounted || !ref.read(sessionProvider)) return;
     if (state.value case final m?) {
-      state = AsyncData(Membership(loyalty: m.loyalty));
+      state = AsyncData(Membership(loyalty: m.loyalty, paidRequired: m.paidRequired));
     } else {
       ref.invalidateSelf();
     }

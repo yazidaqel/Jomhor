@@ -11,6 +11,7 @@ import 'package:jomhor_fan/features/checkout/member_pay.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/checkout/product_pay.dart';
+import 'package:jomhor_fan/features/club/club_repository.dart' show membershipProvider;
 import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
@@ -283,7 +284,10 @@ class _Paid extends ConsumerWidget {
                 ),
                 (_?, null) => FilledButton(
                   key: const Key('order.seeClub'),
-                  onPressed: () => context.go('/club'),
+                  onPressed: () {
+                    ref.invalidate(membershipProvider); // Paid up now.
+                    context.go('/club');
+                  },
                   child: Text(l.seeMemberCard),
                 ),
                 _ => FilledButton(

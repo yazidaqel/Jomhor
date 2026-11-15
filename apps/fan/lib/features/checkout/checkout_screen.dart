@@ -8,6 +8,7 @@ import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
 import 'package:jomhor_fan/features/checkout/method_rows.dart';
+import 'package:jomhor_fan/features/club/dues.dart' show DuesClubLink;
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/queue/queue_screen.dart';
@@ -303,7 +304,7 @@ class _FormState extends ConsumerState<_Form> {
                 ],
                 // Lot 5 step 2: who holds this place was refused (members price, holder limit).
                 if (state.refusedRow case (:final row, :final error) when row == i)
-                  if (holderRefusalText(l, error, event.timezone) case final text?)
+                  if (holderRefusalText(l, error, event.timezone) case final text?) ...[
                     Padding(
                       padding: const EdgeInsetsDirectional.only(top: JomhorSpace.s),
                       child: Text(
@@ -312,6 +313,13 @@ class _FormState extends ConsumerState<_Form> {
                         style: JomhorType.bodySmall.copyWith(color: Theme.of(context).colorScheme.error),
                       ),
                     ),
+                    // The fan's own place: their cotisation is on Club. A friend's is theirs to pay.
+                    if (needsDues(error) && !_hasPhone(i))
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: DuesClubLink(key: Key('holder.$i.dues'), organizerId: event.organizerId, refusal: error),
+                      ),
+                  ],
                 const SizedBox(height: JomhorSpace.l),
               ],
               if (_hasFriendPhone) ...[

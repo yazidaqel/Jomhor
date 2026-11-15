@@ -2756,6 +2756,90 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Saison'**
   String get passSeason;
+
+  /// Screen 7 under the member card, unpaid (Lot 5 step 3): the MEMBERSHIP product on sale and its price.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cotisation {product} · {price}'**
+  String clubDuesUnpaid(String product, String price);
+
+  /// Screen 7 cotisation and join sheet: why pay (Q189).
+  ///
+  /// In fr, this message translates to:
+  /// **'Les tarifs membres et les préventes sont réservés aux membres à jour de cotisation.'**
+  String get clubDuesWhy;
+
+  /// Screen 7 cotisation CTA → screen 4 product variant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer ma cotisation'**
+  String get clubDuesPay;
+
+  /// Screen 7 accent chip: paid_until, day in the venue zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'À jour jusqu\'au {date}'**
+  String clubDuesPaid(String date);
+
+  /// Screen 7: paid_until is past.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cotisation expirée'**
+  String get clubDuesExpired;
+
+  /// Screen 7: pay the cotisation again, when a MEMBERSHIP product is on sale.
+  ///
+  /// In fr, this message translates to:
+  /// **'Renouveler'**
+  String get clubDuesRenew;
+
+  /// Join sheet second CTA when the club sells a membership: pays it (and joins).
+  ///
+  /// In fr, this message translates to:
+  /// **'Cotisation {price}'**
+  String clubJoinDues(String price);
+
+  /// Screen 7 section: one card per PASS product on sale → screen 13.
+  ///
+  /// In fr, this message translates to:
+  /// **'Abonnements'**
+  String get clubPasses;
+
+  /// 409 MEMBERSHIP_PAID.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta cotisation est déjà à jour.'**
+  String get errorMembershipPaid;
+
+  /// Screen 4 holder row: 409 MEMBERS_ONLY with paid_required (Lot 5 step 3, Q189).
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif réservé aux membres à jour de cotisation, inscrits avant le {date}'**
+  String holderMembersOnlyPaid(String date);
+
+  /// holderMembersOnlyPaid without a date; also the error text of MEMBERS_ONLY with paid_required.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif réservé aux membres à jour de cotisation'**
+  String get holderMembersOnlyPaidAny;
+
+  /// Screen 12: NOT_ELIGIBLE NOT_MEMBER with paid_required.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réservée aux membres à jour de cotisation, inscrits avant le {date}'**
+  String queueNotMemberPaid(String date);
+
+  /// queueNotMemberPaid without a date.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réservée aux membres à jour de cotisation'**
+  String get queueNotMemberPaidAny;
+
+  /// Link to Club under a refusal that needs the cotisation (screens 4, 12).
+  ///
+  /// In fr, this message translates to:
+  /// **'Voir ma cotisation'**
+  String get duesSeeClub;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

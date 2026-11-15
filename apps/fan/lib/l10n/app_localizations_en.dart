@@ -1692,4 +1692,56 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get passSeason => 'Season';
+
+  @override
+  String clubDuesUnpaid(String product, String price) {
+    return 'Membership fee $product · $price';
+  }
+
+  @override
+  String get clubDuesWhy => 'Members\' prices and presales are for members whose fee is paid up.';
+
+  @override
+  String get clubDuesPay => 'Pay my membership fee';
+
+  @override
+  String clubDuesPaid(String date) {
+    return 'Paid up until $date';
+  }
+
+  @override
+  String get clubDuesExpired => 'Membership fee expired';
+
+  @override
+  String get clubDuesRenew => 'Renew';
+
+  @override
+  String clubJoinDues(String price) {
+    return 'Membership fee $price';
+  }
+
+  @override
+  String get clubPasses => 'Season passes';
+
+  @override
+  String get errorMembershipPaid => 'Your membership fee is already paid.';
+
+  @override
+  String holderMembersOnlyPaid(String date) {
+    return 'Members-only price: membership fee paid up, joined before $date';
+  }
+
+  @override
+  String get holderMembersOnlyPaidAny => 'Members-only price: membership fee paid up';
+
+  @override
+  String queueNotMemberPaid(String date) {
+    return 'Reserved for paid-up members who joined before $date';
+  }
+
+  @override
+  String get queueNotMemberPaidAny => 'Reserved for paid-up members';
+
+  @override
+  String get duesSeeClub => 'See my membership fee';
 }

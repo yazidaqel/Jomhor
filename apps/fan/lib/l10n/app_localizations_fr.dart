@@ -1695,4 +1695,56 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get passSeason => 'Saison';
+
+  @override
+  String clubDuesUnpaid(String product, String price) {
+    return 'Cotisation $product · $price';
+  }
+
+  @override
+  String get clubDuesWhy => 'Les tarifs membres et les préventes sont réservés aux membres à jour de cotisation.';
+
+  @override
+  String get clubDuesPay => 'Payer ma cotisation';
+
+  @override
+  String clubDuesPaid(String date) {
+    return 'À jour jusqu\'au $date';
+  }
+
+  @override
+  String get clubDuesExpired => 'Cotisation expirée';
+
+  @override
+  String get clubDuesRenew => 'Renouveler';
+
+  @override
+  String clubJoinDues(String price) {
+    return 'Cotisation $price';
+  }
+
+  @override
+  String get clubPasses => 'Abonnements';
+
+  @override
+  String get errorMembershipPaid => 'Ta cotisation est déjà à jour.';
+
+  @override
+  String holderMembersOnlyPaid(String date) {
+    return 'Tarif réservé aux membres à jour de cotisation, inscrits avant le $date';
+  }
+
+  @override
+  String get holderMembersOnlyPaidAny => 'Tarif réservé aux membres à jour de cotisation';
+
+  @override
+  String queueNotMemberPaid(String date) {
+    return 'Réservée aux membres à jour de cotisation, inscrits avant le $date';
+  }
+
+  @override
+  String get queueNotMemberPaidAny => 'Réservée aux membres à jour de cotisation';
+
+  @override
+  String get duesSeeClub => 'Voir ma cotisation';
 }

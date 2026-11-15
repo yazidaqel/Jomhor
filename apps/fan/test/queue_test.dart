@@ -15,6 +15,9 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
+import 'package:jomhor_fan/features/club/dues.dart' show duesWouldUnlock;
+import 'package:jomhor_fan/features/club/membership.dart';
+import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/queue/queue.dart';
 import 'package:jomhor_fan/features/queue/queue_screen.dart';
@@ -54,6 +57,7 @@ void main() {
     bool signedIn = true,
     bool keepSecureStorage = false,
     List<Override> overrides = const [],
+    FollowsState follows = (ids: const [], seen: true, chip: null),
   }) async {
     final container = await pumpJomhor(
       tester,
@@ -61,6 +65,7 @@ void main() {
       tokens: MemoryTokenStore(signedIn ? 'jwt' : null),
       clock: clock,
       keepSecureStorage: keepSecureStorage,
+      follows: follows,
       overrides: [wakelockProvider.overrideWithValue(({required on}) async => wake.add(on)), ...overrides],
     );
     container.read(routerProvider).go(location);
@@ -916,6 +921,185 @@ void main() {
       expect(
         apiErrorText(l, const ApiError(status: 409, code: 'MEMBERS_ONLY', message: 'x')),
         'Tarif réservé aux membres',
+      );
+    });
+    // FL-30 (Lot 5 step 3, Q189): the club sells a membership, so "members" means paid up (contract-first,
+    // test/fixtures/club).
+    final presaleOrg = presale()['organizer_id']! as String;
+
+    /// The fan follows Atlas FC then the event's club, a member of the latter since [joinedAt], not paid up.
+    FollowsState memberOfPresaleClub({String joinedAt = '2026-11-03T10:00:00Z'}) {
+      sale
+        ..organizers = [clubJson(), clubJson(id: presaleOrg, slug: 'atlas-presale', name: 'Club Presale')]
+        ..memberships[presaleOrg] = {
+          'member': {
+            'number': 42,
+            'joined_at': joinedAt,
+            'marketing_push': false,
+            'marketing_whatsapp': false,
+            'paid_until': null,
+          },
+          'loyalty': {
+            'events_attended': 0,
+            'tier': {'code': 'T1', 'name': 'Supporter'},
+            'next_tier': null,
+            'last_events': <Object?>[],
+          },
+          'paid_required': true,
+        };
+      return (ids: [testOrganizer, presaleOrg], seen: true, chip: chipAll);
+    }
+
+    /// The card of [org] is the one in view on Club.
+    void expectClubInView(WidgetTester tester, String org) => expect(
+      tester.getCenter(find.byKey(Key('club.card.$org'))).dx,
+      moreOrLessEquals(tester.getCenter(find.byKey(const Key('club.pager'))).dx),
+    );
+
+    testWidgets('screen 12: NOT_MEMBER with paid_required says "à jour de cotisation" and links to Club', (
+      tester,
+    ) async {
+      at('2026-11-15T15:26:52Z');
+      sale
+        ..detail = presale()
+        ..room = roomOf(presale())
+        ..joins.add(() => sale.real('not_eligible_not_member_paid', dir: 'club'));
+      final c = await start(tester, follows: memberOfPresaleClub());
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        find.text('Réservée aux membres à jour de cotisation, inscrits avant le ${day('2026-11-15T12:07:33Z')}'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('dues.seeClub')));
+      await tester.pumpAndSettle();
+      expect(c.read(routerProvider).state.uri.path, '/club');
+      expectClubInView(tester, presaleOrg); // the event's club, not the first followed
+    });
+
+    testWidgets('screen 12: no cotisation link when paying would not lift the refusal', (tester) async {
+      // Joined after the room's cutoff: paying never moves joined_at.
+      at('2026-11-15T15:26:52Z');
+      sale
+        ..detail = presale()
+        ..room = roomOf(presale())
+        ..joins.add(() => sale.real('not_eligible_not_member_paid', dir: 'club'));
+      await start(tester, follows: memberOfPresaleClub(joinedAt: '2026-11-15T12:07:33Z'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('à jour de cotisation'), findsOneWidget);
+      expect(find.byKey(const Key('dues.seeClub')), findsNothing);
+    });
+
+    test('duesWouldUnlock: followed, a member who joined before the cutoff, paid_required', () {
+      ApiError refusal({bool paid = true, String? before = '2026-11-15T12:00:00Z'}) => ApiError(
+        status: 409,
+        code: 'MEMBERS_ONLY',
+        message: 'x',
+        details: {'paid_required': paid, 'member_joined_before': before},
+      );
+      Membership member(String? joinedAt) => Membership.fromJson({
+        'member': joinedAt == null
+            ? null
+            : {'number': 1, 'joined_at': joinedAt, 'marketing_push': false, 'marketing_whatsapp': false},
+        'loyalty': {
+          'events_attended': 0,
+          'tier': {'code': 'T1', 'name': 'x'},
+          'next_tier': null,
+          'last_events': <Object?>[],
+        },
+        'paid_required': true,
+      });
+      final early = member('2026-11-01T00:00:00Z');
+      expect(duesWouldUnlock(refusal(), early, followed: true), isTrue);
+      expect(duesWouldUnlock(refusal(), early, followed: false), isFalse); // Club couldn't show its card
+      expect(duesWouldUnlock(refusal(paid: false), early, followed: true), isFalse);
+      expect(duesWouldUnlock(refusal(), member(null), followed: true), isFalse); // not a member
+      expect(duesWouldUnlock(refusal(), null, followed: true), isFalse); // membership unknown
+      expect(duesWouldUnlock(refusal(), member('2026-11-15T12:00:00Z'), followed: true), isFalse); // at the cutoff
+      expect(duesWouldUnlock(refusal(before: null), member('2026-11-15T12:00:00Z'), followed: true), isTrue);
+    });
+
+    testWidgets('screen 12: NOT_MEMBER without paid_required keeps the step-2 copy and no Club link', (tester) async {
+      at('2026-11-15T15:26:52Z');
+      sale
+        ..detail = presale()
+        ..room = roomOf(presale())
+        ..joins.add(() => sale.real('not_eligible_not_member'));
+      await start(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Réservée aux membres inscrits avant le ${day('2026-11-15T12:07:33Z')}'), findsOneWidget);
+      expect(find.byKey(const Key('dues.seeClub')), findsNothing);
+    });
+
+    for (final (row, link) in [(0, true), (1, false)]) {
+      testWidgets('screen 4: MEMBERS_ONLY with paid_required on row ${row + 1}, Club link: $link', (tester) async {
+        final (:status, :body) = realAnswer('order_409_members_only_paid', dir: 'club');
+        (body['details']! as Map<String, Object?>)['field'] = 'items[0].holders[$row]';
+        sale
+          ..detail = presale()
+          ..room = null
+          ..orders.add(() => sale.answer(body, status));
+        final c = await start(
+          tester,
+          location: '/events/1/checkout?price=${priceId('MEMBERS')}&qty=2',
+          follows: memberOfPresaleClub(),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('holder.1.name')), 'Sara Benali');
+        await tester.enterText(find.byKey(const Key('holder.1.phone')), '0612345678');
+        await tester.dragUntilVisible(
+          find.byKey(const Key('checkout.consent')),
+          find.byType(ListView).last,
+          const Offset(0, -200),
+        );
+        await tester.tap(find.byKey(const Key('checkout.consent')));
+        await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
+        await tester.tap(find.byKey(const Key('checkout.pay')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.byKey(Key('holder.$row.refusal'), skipOffstage: false));
+        await tester.pumpAndSettle();
+        expect(
+          text(tester, 'holder.$row.refusal'),
+          'Tarif réservé aux membres à jour de cotisation, inscrits avant le ${day(presaleStart)}',
+        );
+        // Only the fan's own place links to their cotisation; a friend's is theirs to pay.
+        final seeClub = find.byKey(const Key('dues.seeClub'), skipOffstage: false);
+        expect(seeClub, link ? findsOneWidget : findsNothing);
+        if (link) {
+          await tester.ensureVisible(seeClub);
+          await tester.tap(seeClub);
+          await tester.pumpAndSettle();
+          expect(c.read(routerProvider).state.uri.path, '/club');
+          expectClubInView(tester, presaleOrg);
+          // Pushed: back on screen 4, the form is as the fan left it.
+          c.read(routerProvider).pop();
+          await tester.pumpAndSettle();
+          expect(c.read(routerProvider).state.uri.path, '/events/1/checkout');
+          expect(tester.widget<TextField>(find.byKey(const Key('holder.1.name'))).controller!.text, 'Sara Benali');
+        }
+      });
+    }
+
+    test('paid-up copy in fr, ar and en; without the flag the step-2 copy stays', () {
+      final ar = lookupAppLocalizations(const Locale('ar'));
+      final en = lookupAppLocalizations(const Locale('en'));
+      ApiError e(Map<String, Object?> details) =>
+          ApiError(status: 409, code: 'MEMBERS_ONLY', message: 'x', details: details);
+      final paid = e({'field': 'items[0].holders[0]', 'member_joined_before': null, 'paid_required': true});
+      expect(holderRefusalText(l, paid, zone), 'Tarif réservé aux membres à jour de cotisation');
+      expect(holderRefusalText(ar, paid, zone), 'هاد السعر غير للأعضاء اللي خالصين واجب الانخراط');
+      expect(holderRefusalText(en, paid, zone), 'Members-only price: membership fee paid up');
+      expect(needsDues(paid), isTrue);
+      // No row to put it on: the banner says it too.
+      expect(apiErrorText(l, e({'paid_required': true})), 'Tarif réservé aux membres à jour de cotisation');
+      expect(apiErrorText(l, e({'paid_required': false})), 'Tarif réservé aux membres');
+      expect(needsDues(e(const {})), isFalse);
+      expect(
+        (l.queueNotMemberPaidAny, ar.queueNotMemberPaidAny, en.queueNotMemberPaidAny),
+        (
+          'Réservée aux membres à jour de cotisation',
+          'خاص بالأعضاء اللي خالصين واجب الانخراط',
+          'Reserved for paid-up members',
+        ),
       );
     });
   });

@@ -1751,4 +1751,56 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get passSeason => 'الموسم';
+
+  @override
+  String clubDuesUnpaid(String product, String price) {
+    return 'واجب الانخراط $product · $price';
+  }
+
+  @override
+  String get clubDuesWhy => 'أثمنة المنخرطين والبيع المسبق غير للمنخرطين اللي خالصين الواجب ديالهم.';
+
+  @override
+  String get clubDuesPay => 'خلص الواجب ديالي';
+
+  @override
+  String clubDuesPaid(String date) {
+    return 'خالص حتى $date';
+  }
+
+  @override
+  String get clubDuesExpired => 'واجب الانخراط سالا';
+
+  @override
+  String get clubDuesRenew => 'جدّد';
+
+  @override
+  String clubJoinDues(String price) {
+    return 'واجب الانخراط $price';
+  }
+
+  @override
+  String get clubPasses => 'الاشتراكات';
+
+  @override
+  String get errorMembershipPaid => 'الواجب ديالك خالص من قبل.';
+
+  @override
+  String holderMembersOnlyPaid(String date) {
+    return 'هاد السعر غير للأعضاء اللي خالصين واجب الانخراط وتسجلو قبل $date';
+  }
+
+  @override
+  String get holderMembersOnlyPaidAny => 'هاد السعر غير للأعضاء اللي خالصين واجب الانخراط';
+
+  @override
+  String queueNotMemberPaid(String date) {
+    return 'خاص بالأعضاء اللي خالصين واجب الانخراط وتسجلو قبل $date';
+  }
+
+  @override
+  String get queueNotMemberPaidAny => 'خاص بالأعضاء اللي خالصين واجب الانخراط';
+
+  @override
+  String get duesSeeClub => 'شوف واجب الانخراط ديالي';
 }
