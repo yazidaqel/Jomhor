@@ -70,9 +70,9 @@ const EVENT: EventDetail = {
 }
 // Two zones share "Plein tarif": only the zone tells them apart.
 const PRICES: Price[] = [
-  { id: 'p-nord', zone_id: 3, zone: { code: 'NORD', name: 'Virage Nord' }, name: 'Plein tarif', price_mad: 5_050, quota: 100, sold: 98 },
-  { id: 'p-sud', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Plein tarif', price_mad: 5_000, quota: 100, sold: 0 },
-  { id: 'p-trib', zone_id: 1, zone: { code: 'TRIB', name: 'Tribune' }, name: 'Honneur', price_mad: 15_000, quota: 10, sold: 10 },
+  { id: 'p-nord', zone_id: 3, zone: { code: 'NORD', name: 'Virage Nord' }, name: 'Plein tarif', price_mad: 5_050, quota: 100, sold: 98, audience: 'ALL' },
+  { id: 'p-sud', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Plein tarif', price_mad: 5_000, quota: 100, sold: 0, audience: 'ALL' },
+  { id: 'p-trib', zone_id: 1, zone: { code: 'TRIB', name: 'Tribune' }, name: 'Honneur', price_mad: 15_000, quota: 10, sold: 10, audience: 'ALL' },
 ]
 const LOOKUP: CodeLookup = {
   order_id: '0192f0aa-0000-7000-8000-00000000abcd',

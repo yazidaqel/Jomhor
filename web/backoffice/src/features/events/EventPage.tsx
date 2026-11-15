@@ -143,8 +143,9 @@ function EventEditor({ event }: { event?: EventDetail }) {
     const fields = e instanceof ApiError && e.code === 'VALIDATION_FAILED' ? Object.keys(Object(e.details.fields)) : []
     reveal(fields) // before showFormError focuses the first of them
     showFormError(e, form, t)
-    // Its one rule (also broken by a T0 change alone): before T0 − 60 min.
-    if (fields.includes('sale_starts_at')) form.setError('sale_starts_at', { message: t('events.form.saleBeforeStart') })
+    // Its rule (also broken by a T0 change alone): before T0 − 60 min. Lot 5 step 2: or past a later room phase (PHASE_ORDER).
+    if (fields.includes('sale_starts_at'))
+      form.setError('sale_starts_at', { message: t(e instanceof ApiError && e.details.reason === 'PHASE_ORDER' ? 'events.form.phaseOrder' : 'events.form.saleBeforeStart') })
     // Create with a venue deleted meanwhile (or not this organizer's): 422 on venue_id. Refresh the picker.
     if (!event && fields.includes('venue_id')) {
       form.setError('venue_id', { message: t('events.form.venueGone') })

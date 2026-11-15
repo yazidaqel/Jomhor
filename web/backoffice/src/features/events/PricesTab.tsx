@@ -4,9 +4,10 @@ import { Plus } from 'lucide-react'
 import { Controller, useForm, useWatch, type UseFormRegisterReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { FieldError } from '@/components/ui/field'
+import { FieldDescription, FieldError } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -17,7 +18,7 @@ import { ApiError, path } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { integerInput, showFormError } from '@/lib/forms'
 import { dhInput, formatDh, parseDh } from '@/lib/money'
-import { useEventMutation, usePrices, type EventDetail, type Price } from './api'
+import { PRICE_AUDIENCES, useEventMutation, usePrices, type EventDetail, type Price, type PriceAudience } from './api'
 
 /**
  * B2 Tarifs & quotas: the event's price categories, edited inline one row at a time. `onEditingChange` tells the page
@@ -53,7 +54,7 @@ export function PricesTab({ event, editable, onEditingChange }: { event: EventDe
   const totalQuota = prices.data.reduce((n, p) => n + p.quota, 0)
   const totalAmount = prices.data.reduce((n, p) => n + BigInt(p.quota) * BigInt(p.price_mad), 0n) // centimes, exact
   const done = () => setEditing(null)
-  const columns = editable ? 7 : 6
+  const columns = editable ? 8 : 7
 
   return (
     <Card>
@@ -78,6 +79,7 @@ export function PricesTab({ event, editable, onEditingChange }: { event: EventDe
             <TableRow>
               <TableHead>{t('events.prices.zone')}</TableHead>
               <TableHead>{t('events.prices.name')}</TableHead>
+              <TableHead>{t('events.prices.audience')}</TableHead>
               <TableHead className="text-right">{t('events.prices.price')}</TableHead>
               <TableHead className="text-right">{t('events.prices.quota')}</TableHead>
               <TableHead className="text-right">{t('events.prices.sold')}</TableHead>
@@ -93,6 +95,9 @@ export function PricesTab({ event, editable, onEditingChange }: { event: EventDe
                 <TableRow key={p.id}>
                   <TableCell>{zoneName(zones, p.zone_id)}</TableCell>
                   <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell>
+                    <AudienceTag audience={p.audience} />
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{formatDh(p.price_mad, i18n.language)}</TableCell>
                   <TableCell className="text-right tabular-nums">{p.quota.toLocaleString(i18n.language)}</TableCell>
                   <TableCell className="text-right tabular-nums">{p.sold.toLocaleString(i18n.language)}</TableCell>
@@ -144,6 +149,18 @@ export function PricesTab({ event, editable, onEditingChange }: { event: EventDe
 const usage = (prices: Price[]) => prices.reduce((m, p) => m.set(p.zone_id, (m.get(p.zone_id) ?? 0) + p.quota), new Map<number, number>())
 const zoneName = (zones: Zone[], id: number) => zones.find((z) => z.id === id)?.name ?? String(id)
 
+/** "Membres" stands out as a chip (DESIGN B2); "Tous", the default, stays quiet. */
+function AudienceTag({ audience }: { audience: PriceAudience }) {
+  const { t } = useTranslation()
+  if (audience === 'ALL') return <span className="text-muted-foreground">{t('events.prices.audiences.ALL')}</span>
+  return (
+    <Badge variant="secondary" className="rounded-full">
+      {t('events.prices.audiences.MEMBERS')}
+      <span className="sr-only">{t('events.prices.audienceHintSr', { hint: t('events.prices.audienceHint') })}</span>
+    </Badge>
+  )
+}
+
 function ZoneUsage({ zone, used }: { zone?: Zone; used: number }) {
   const { t } = useTranslation()
   if (!zone) return <TableCell />
@@ -172,6 +189,7 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
       .refine((s) => parseDh(s) !== null, t('events.prices.priceInvalid'))
       .transform((s) => parseDh(s)!),
     quota: integerInput(t('events.prices.quotaInvalid'), 0),
+    audience: z.enum(PRICE_AUDIENCES),
   })
   const form = useForm({
     resolver: zodResolver(schema),
@@ -180,11 +198,12 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
       name: price?.name ?? '',
       price_mad: price ? dhInput(price.price_mad) : '',
       quota: price ? String(price.quota) : '',
+      audience: price?.audience ?? 'ALL',
     },
   })
   const save = useEventMutation<Price>()
   const { errors } = form.formState
-  const zoneId = useWatch({ control: form.control, name: 'zone_id' })
+  const [zoneId, audience] = useWatch({ control: form.control, name: ['zone_id', 'audience'] })
   const zone = venue.zones.find((z) => String(z.id) === zoneId)
   const prices = path('org', 'events', eventId, 'prices')
 
@@ -247,6 +266,32 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
           <CellInput id={`${formId}-name`} form={formId} label={t('events.prices.name')} error={errors.name?.message} registration={form.register('name')} />
         </TableCell>
         <TableCell>
+          <Controller
+            control={form.control}
+            name="audience"
+            render={({ field }) => (
+              <div className="flex w-36 flex-col gap-1">
+                <Select name={field.name} value={field.value} onValueChange={field.onChange} disabled={save.isPending}>
+                  <SelectTrigger ref={field.ref} onBlur={field.onBlur} aria-label={t('events.prices.audience')} aria-describedby={`${formId}-audience-hint`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRICE_AUDIENCES.map((a) => (
+                      <SelectItem key={a} value={a}>
+                        {t(`events.prices.audiences.${a}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Said whatever the choice, so the select's description never changes under a screen reader. */}
+                <FieldDescription id={`${formId}-audience-hint`} className={audience === 'ALL' ? 'sr-only' : 'text-xs whitespace-normal'}>
+                  {t('events.prices.audienceHint')}
+                </FieldDescription>
+              </div>
+            )}
+          />
+        </TableCell>
+        <TableCell>
           <CellInput
             id={`${formId}-price`}
             form={formId}
@@ -281,7 +326,7 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
       </TableRow>
       {errors.root?.message && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={7}>
+          <TableCell colSpan={8}>
             <FieldError>{errors.root.message}</FieldError>
           </TableCell>
         </TableRow>

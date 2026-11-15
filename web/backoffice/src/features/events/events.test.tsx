@@ -529,8 +529,8 @@ const VENUE_DETAIL: VenueDetail = {
 }
 // By zone_id then name, as the API lists them.
 const PRICES: Price[] = [
-  { id: 'p-1', zone_id: 1, zone: { code: 'HONNEUR', name: 'Tribune d’honneur' }, name: 'Plein tarif', price_mad: 20000, quota: 3000, sold: 10 },
-  { id: 'p-2', zone_id: 2, zone: { code: 'NORD', name: 'Tribune Nord' }, name: 'Abonnés', price_mad: 5050, quota: 18000, sold: 0 },
+  { id: 'p-1', zone_id: 1, zone: { code: 'HONNEUR', name: 'Tribune d’honneur' }, name: 'Plein tarif', price_mad: 20000, quota: 3000, sold: 10, audience: 'ALL' },
+  { id: 'p-2', zone_id: 2, zone: { code: 'NORD', name: 'Tribune Nord' }, name: 'Abonnés', price_mad: 5050, quota: 18000, sold: 0, audience: 'MEMBERS' },
 ]
 
 /** stubApi plus the venue detail, prices (kept in state) and publish; event 1 is kept in state too. `handler` answers first. */
@@ -585,15 +585,19 @@ it('prices: rows with the DH price, quota, sold and zone usage, then the total l
   await within(panel).findByText('Plein tarif')
   const rows = within(panel).getAllByRole('row').slice(1)
   const n = (x: number) => x.toLocaleString('fr')
-  expect(cellTexts(rows[0]!).slice(0, 6)).toEqual([
+  expect(cellTexts(rows[0]!).slice(0, 7)).toEqual([
     'Tribune d’honneur',
     'Plein tarif',
+    fr.events.prices.audiences.ALL,
     formatDh(20000, 'fr'),
     n(3000),
     n(10),
     i18n.t('events.prices.zoneUsage', { used: 3000, capacity: 3000 }),
   ])
-  expect(cellTexts(rows[1]!)[2]).toBe(formatDh(5050, 'fr')) // "50,50"
+  // The "Membres" chip, its helper read out with it (sr-only).
+  const membersCell = `${fr.events.prices.audiences.MEMBERS}${i18n.t('events.prices.audienceHintSr', { hint: fr.events.prices.audienceHint })}`
+  expect(cellTexts(rows[1]!)[2]).toBe(membersCell)
+  expect(cellTexts(rows[1]!)[3]).toBe(formatDh(5050, 'fr')) // "50,50"
   expect(cellTexts(rows[2]!)[0]).toBe(
     i18n.t('events.prices.total', { quota: 21000, capacity: 45000, amount: formatDh(3000 * 20000 + 18000 * 5050, 'fr') }),
   )
@@ -620,7 +624,7 @@ it('prices: add a category; "50,555" DH is refused, "50,5" is sent as 5050 centi
     method: 'POST',
     path: '/org/events/1/prices',
     org: 'org-a',
-    body: { zone_id: 2, name: 'Étudiants', price_mad: 5050, quota: 100 },
+    body: { zone_id: 2, name: 'Étudiants', price_mad: 5050, quota: 100, audience: 'ALL' },
   })
   expect(await within(panel).findByText('Étudiants')).toBeTruthy() // refetched
 })
@@ -638,6 +642,25 @@ it('prices: edit starts from the stored values and sends only what changed', asy
   await user.click(within(panel).getByRole('button', { name: fr.common.save }))
   await waitFor(() => expect(writes(calls)).toHaveLength(1))
   expect(writes(calls)).toEqual([{ method: 'PATCH', path: '/org/events/1/prices/p-2', org: 'org-a', body: { quota: 17000 } }])
+})
+
+it('prices: "Accès" select (Tous · Membres, with the members helper); PATCH sends only `audience`', async () => {
+  const membersCell = `${fr.events.prices.audiences.MEMBERS}${i18n.t('events.prices.audienceHintSr', { hint: fr.events.prices.audienceHint })}`
+  const user = userEvent.setup()
+  const calls = stubB2()
+  renderApp('/events/1')
+  const panel = await openTab(user, fr.events.tabs.prices)
+  expect(await within(panel).findByRole('columnheader', { name: fr.events.prices.audience })).toBeTruthy()
+  await user.click(await within(panel).findByRole('button', { name: i18n.t('events.prices.editLabel', { name: 'Plein tarif' }) }))
+  const select = within(panel).getByRole('combobox', { name: fr.events.prices.audience })
+  expect(select.textContent).toBe(fr.events.prices.audiences.ALL)
+  await pick(user, fr.events.prices.audience, fr.events.prices.audiences.MEMBERS)
+  expect(within(panel).getByText(fr.events.prices.audienceHint)).toBeTruthy()
+  await user.click(within(panel).getByRole('button', { name: fr.common.save }))
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)).toEqual([{ method: 'PATCH', path: '/org/events/1/prices/p-1', org: 'org-a', body: { audience: 'MEMBERS' } }])
+  // Refetched: both rows carry the chip.
+  await waitFor(() => expect(within(panel).getAllByRole('row').slice(1, 3).map((r) => cellTexts(r)[2])).toEqual([membersCell, membersCell]))
 })
 
 it.each([
@@ -925,6 +948,22 @@ it('sale opening: a server 422 on sale_starts_at opens Général and shows the F
   await waitFor(() => expect(screen.getByRole('tab', { name: fr.events.tabs.general }).getAttribute('aria-selected')).toBe('true'))
   expect(screen.getByText(fr.events.form.saleBeforeStart)).toBeTruthy()
   expect(field(fr.events.form.saleStartsAt).getAttribute('aria-invalid')).toBe('true')
+})
+
+it('sale opening: a 422 PHASE_ORDER (moved past a later room phase) says so on the field', async () => {
+  const user = userEvent.setup()
+  stubB2('ADMIN', (c) =>
+    c.method === 'PATCH'
+      ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { reason: 'PHASE_ORDER', fields: { sale_starts_at: 'order' } } }, { status: 422 })
+      : undefined,
+  )
+  renderApp('/events/1')
+  const rules = await openTab(user, fr.events.tabs.rules)
+  await user.clear(within(rules).getByLabelText(fr.events.form.perAccountLimit))
+  await user.type(within(rules).getByLabelText(fr.events.form.perAccountLimit), '6')
+  await user.click(saveDraft())
+  expect(await screen.findByText(fr.events.form.phaseOrder)).toBeTruthy()
+  expect(screen.queryByText(fr.events.form.saleBeforeStart)).toBeNull()
 })
 
 it('sale opening: a 409 ROOM_STARTED (the waiting room has started) says the opening is pinned, on the field', async () => {
