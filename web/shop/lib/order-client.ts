@@ -234,6 +234,7 @@ export function errorText(errors: Dict['errors'], r: Result): string {
   }
   if (code === 'VALIDATION_FAILED' && details.reason === 'NO_BUYER_PLACE') return errors.NO_BUYER_PLACE
   if (code === 'SOLD_OUT' && details.product_id) return errors.PASS_SOLD_OUT
+  if (code === 'MEMBERS_ONLY' && details.paid_required === true) return errors.MEMBERS_ONLY_PAID
   if (code === 'PER_ACCOUNT_LIMIT' && details.reason === 'HOLDER') return holderLimitText(errors, details.limit)
   if (code === 'PER_ACCOUNT_LIMIT') return fmt(errors.PER_ACCOUNT_LIMIT, { limit: String(details.limit ?? ''), held: String(details.held ?? '') })
   return Object.hasOwn(errors, code) ? (errors as Record<string, string>)[code]! : errors.generic

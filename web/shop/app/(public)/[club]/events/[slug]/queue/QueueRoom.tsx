@@ -398,7 +398,11 @@ function refusal(copy: Copy, code: string, det: Details, timezone: string, footb
         det.reason === 'ACCOUNT_TOO_NEW'
           ? fmt(c.ACCOUNT_TOO_NEW, { date: date(det.verified_before) })
           : det.reason === 'NOT_MEMBER'
-            ? fmt(c.NOT_MEMBER, { date: date(det.member_joined_before) })
+            ? det.paid_required === true
+              ? date(det.member_joined_before)
+                ? fmt(c.NOT_MEMBER_PAID, { date: date(det.member_joined_before) })
+                : c.NOT_MEMBER_PAID_ANY
+              : fmt(c.NOT_MEMBER, { date: date(det.member_joined_before) })
             : det.reason === 'NOT_ENOUGH_EVENTS'
               ? fmt(football ? c.NOT_ENOUGH_EVENTS : c.NOT_ENOUGH_EVENTS_OTHER, { n: String(det.min_events_attended ?? ''), attended: String(det.attended ?? '') })
               : ''

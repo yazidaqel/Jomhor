@@ -10,7 +10,8 @@ export type Row = { name: string; phone: string; pays?: boolean }
 /**
  * `pays`: the 422 reason on that row's `pays`; `limit`: that friend is over their own per-account limit (409).
  * Lot 5 step 2: `holder` = the limit that row's holder account reached (409 PER_ACCOUNT_LIMIT `HOLDER`, never what it
- * holds); `members` = a members price this holder can't take (409 MEMBERS_ONLY), `before` the join date or null.
+ * holds); `members` = a members price this holder can't take (409 MEMBERS_ONLY), `before` the join date or null, `paid`
+ * whether a paid-up cotisation is needed (Lot 5 step 3 `paid_required`).
  */
 export type RowError = {
   name?: boolean
@@ -18,7 +19,7 @@ export type RowError = {
   pays?: string
   limit?: { limit: number; held: number }
   holder?: { limit: number | null }
-  members?: { before: string | null }
+  members?: { before: string | null; paid: boolean }
 }
 export type Holder = { name: string; phone?: string; pays?: true }
 
@@ -76,7 +77,8 @@ export function rowErrorsFrom422(r: Result): RowError[] {
     }
   }
   if (m && r.data?.code === 'MEMBERS_ONLY') {
-    errors[i] = { ...errors[i], members: { before: typeof details.member_joined_before === 'string' ? details.member_joined_before : null } }
+    const before = typeof details.member_joined_before === 'string' ? details.member_joined_before : null
+    errors[i] = { ...errors[i], members: { before, paid: details.paid_required === true } }
   }
   return errors
 }

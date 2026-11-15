@@ -432,6 +432,10 @@ describe('W8 room (client)', () => {
     ['NOT_ENOUGH_EVENTS', { code: 'NOT_ELIGIBLE', details: { reason: 'NOT_ENOUGH_EVENTS', min_events_attended: 3, attended: 1 } }, 'Il faut 3 matchs au stade · tu en as 1'],
     // The real-run body (Lot 5 step 2 presale, a non-member).
     ['NOT_ELIGIBLE NOT_MEMBER', { code: 'NOT_ELIGIBLE', message: 'Not eligible for this sale', details: { reason: 'NOT_MEMBER', member_joined_before: '2026-01-25T12:30:05Z' } }, 'Vente réservée aux fans vérifiésRéservée aux membres inscrits avant le 25 janv.'],
+    ['NOT_MEMBER paid_required false', { code: 'NOT_ELIGIBLE', details: { reason: 'NOT_MEMBER', member_joined_before: '2026-01-25T12:30:05Z', paid_required: false } }, 'Réservée aux membres inscrits avant le 25 janv.'],
+    // Lot 5 step 3: the presale needs a paid-up cotisation.
+    ['NOT_MEMBER paid_required', { code: 'NOT_ELIGIBLE', details: { reason: 'NOT_MEMBER', member_joined_before: '2026-01-25T12:30:05Z', paid_required: true } }, 'Réservée aux membres à jour de cotisation, inscrits avant le 25 janv.'],
+    ['NOT_MEMBER paid_required, no date', { code: 'NOT_ELIGIBLE', details: { reason: 'NOT_MEMBER', member_joined_before: null, paid_required: true } }, 'Vente réservée aux fans vérifiésRéservée aux membres à jour de cotisation'],
     ['QUEUE_DEVICE_LIMIT', { code: 'QUEUE_DEVICE_LIMIT', details: { limit: 3 } }, fr.room.QUEUE_DEVICE_LIMIT],
     ['QUEUE_NOT_OPEN CLOSED', { code: 'QUEUE_NOT_OPEN', details: { reason: 'CLOSED' } }, fr.room.closed],
   ])('%s: says why, no retry', async (_, body, copy) => {
@@ -839,5 +843,16 @@ describe('Lot 5 step 2 (WS-13): phases, members prices, holder errors, the WS-12
     await submit()
     expect($('#phone-1-error')!.textContent).toBe(fr.errors.MEMBERS_ONLY)
     expect(text()).not.toContain('déjà')
+
+    // Lot 5 step 3: paid_required true → "à jour de cotisation", with the date when there is one.
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'MEMBERS_ONLY', message: '', details: { field: 'items[0].holders[0]', member_joined_before: '2026-01-20T10:00:00Z', paid_required: true } }))
+    await submit()
+    expect($('#name-0-error')!.textContent).toBe('Tarif réservé aux membres à jour de cotisation, inscrits avant le 20 janv.')
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'MEMBERS_ONLY', message: '', details: { field: 'items[0].holders[0]', member_joined_before: null, paid_required: true } }))
+    await submit()
+    expect($('#name-0-error')!.textContent).toBe('Tarif réservé aux membres à jour de cotisation.')
+    fetchMock.mockResolvedValueOnce(json(409, { code: 'MEMBERS_ONLY', message: '', details: { field: 'items[0].holders[0]', member_joined_before: '2026-01-20T10:00:00Z', paid_required: false } }))
+    await submit()
+    expect($('#name-0-error')!.textContent).toBe('Tarif réservé aux membres inscrits avant le 20 janv.')
   })
 })

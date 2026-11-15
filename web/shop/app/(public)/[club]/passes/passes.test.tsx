@@ -299,6 +299,14 @@ it('W3 ?product= sold out → back to W9; unknown product → 404', async () => 
   expect(getAccessFallbackHTTPStatus((await thrown(checkout({ product: '0190f3a2-0000-7000-8000-00000000ffff' }))) as never)).toBe(404)
 })
 
+it('W3 reads the product uncached: Next keeps only 200 answers, so a cached read never sees its off-sale 404 (real run)', async () => {
+  session = TOKEN
+  await thrown(checkout({ product: SOLD_ID }))
+  const [, init] = fetchMock.mock.calls[paths().indexOf(`/fan/products/${SOLD_ID}`)]!
+  expect(init).toMatchObject({ cache: 'no-store' })
+  expect((init as { next?: unknown }).next).toBeUndefined()
+})
+
 // ---------- W4 product order ----------
 
 const w4 = async () => renderToString(await OrderPage({ params: Promise.resolve({ id: ORDER_ID }) }))

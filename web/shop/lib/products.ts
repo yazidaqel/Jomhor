@@ -1,7 +1,7 @@
 import 'server-only'
 import { api, ApiError } from './api'
 import { UUID } from './clubs'
-import { DETAIL_REVALIDATE_S, LIST_REVALIDATE_S, methodsOf, toOrganizer, type Organizer } from './events'
+import { LIST_REVALIDATE_S, methodsOf, toOrganizer, type Organizer } from './events'
 import type { PayMethod } from './order-client'
 
 // Lot 5 step 3: products (season passes, paid membership) and the fan's passes. `/fan/products*` is public (no
@@ -92,10 +92,13 @@ export async function getProducts(organizerId: string): Promise<Product[]> {
   return (Array.isArray(rows) ? rows : []).map(toProduct).filter((p) => p !== null)
 }
 
-/** One product on sale (W3; W4 for its `cash_until`), or null: unknown or off sale (404). Cached 15 s, as an event detail. */
+/**
+ * One product on sale (W3; W4 for its `cash_until`), or null: unknown or off sale (404). Uncached: Next's fetch cache
+ * keeps only 200 answers, so a cached read would serve the product as on sale forever once it goes off sale.
+ */
 export async function getProduct(id: string): Promise<Product | null> {
   try {
-    return toProduct(await api(`/fan/products/${id}`, { next: { revalidate: DETAIL_REVALIDATE_S } }))
+    return toProduct(await api(`/fan/products/${id}`))
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return null
     throw e
