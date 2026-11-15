@@ -510,7 +510,7 @@ Zero SQL on a ranked poll is proven by BE-41's statement counter, not here.
 
 ## 10. Step 2 · Fair on-sale
 
-As of 2026-11-15 · owner: tech-lead · status: **draft for founder agreement**. Branch `feat/lot-5-fair-sale` from `main` (step 1 merged in #19). V24 is the latest migration, so step 2 starts at V25. Ids: Q167–Q183, P117–P128, BE-47–BE-50, FL-27–FL-28, WS-13–WS-14, BO-21.
+As of 2026-11-15 · owner: tech-lead · status: **agreed 2026-11-15** by the founder: members price only for members who joined before `sale_starts_at` (Q170/Q171), waitlist notifies first come with no hold (Q176/Q177), holder cap online and on transfer (Q173), waitlist notices by push + WhatsApp (Q178); the other defaults stand (Q168, Q169, Q183 and the rest). Branch `feat/lot-5-fair-sale` from `main` (step 1 merged in #19). V24 is the latest migration, so step 2 starts at V25. Ids: Q167–Q183, P117–P128, BE-47–BE-50, FL-27–FL-28, WS-13–WS-14, BO-21.
 
 ### 10.1 Scope and exit
 
