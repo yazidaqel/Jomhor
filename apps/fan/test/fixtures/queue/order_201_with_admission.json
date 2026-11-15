@@ -1,0 +1,25 @@
+{
+ "status": 201,
+ "body": {
+  "id": "8a18d2dd-5680-4f29-8654-5ebd68b5ed8b",
+  "status": "RESERVED",
+  "reserved_until": "2026-11-15T11:19:58.784063Z",
+  "total_mad": 5000,
+  "items": [
+   {
+    "price_category_id": "245c63c3-207d-4c0c-88c4-4266982a0223",
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "Plein tarif",
+    "qty": 1,
+    "unit_price_mad": 5000,
+    "holders": [
+     {
+      "label": "Fan V."
+     }
+    ]
+   }
+  ],
+  "group": null
+ }
+}

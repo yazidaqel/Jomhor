@@ -550,9 +550,10 @@ class _Glow extends StatelessWidget {
   );
 }
 
-/// "{n} fans dans la file", rolling when it changes.
+/// "{n} fans dans la file", rolling when it changes. Shown only while the fan is in line, so at least 1: the
+/// server's memo may be a second behind the fan's own join (the real API answers a first join with `in_room` 0).
 class _InRoom extends StatelessWidget {
-  const new({required this.n});
+  const new({required int n}) : n = n < 1 ? 1 : n;
 
   final int n;
 
@@ -639,7 +640,9 @@ class QueueDots extends StatefulWidget {
   State<QueueDots> createState() => _QueueDotsState();
 }
 
-class _QueueDotsState extends State<QueueDots> with SingleTickerProviderStateMixin {
+// The running light is made and dropped as the room goes from unknown to ranked and back (a rejoin): one ticker
+// per light, so not the single-ticker mixin.
+class _QueueDotsState extends State<QueueDots> with TickerProviderStateMixin {
   AnimationController? _run;
 
   @override

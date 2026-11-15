@@ -1,0 +1,10 @@
+{
+ "status": 409,
+ "body": {
+  "code": "QUEUE_DEVICE_LIMIT",
+  "message": "Too many accounts on this device for this sale",
+  "details": {
+   "limit": 3
+  }
+ }
+}

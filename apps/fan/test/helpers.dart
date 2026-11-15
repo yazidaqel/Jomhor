@@ -325,6 +325,13 @@ Map<String, Object?> roomJson({
   Map<String, Object?>? eligibility,
 }) => {'status': status, 'opens_at': at, 'eligibility': eligibility};
 
+/// An answer captured from the dev API in the FL-26 real run (2026-11-15), queue and admission tokens replaced by
+/// `qt-real` and `adm-real`.
+({int status, Map<String, Object?> body}) realAnswer(String name) {
+  final j = jsonDecode(File('test/fixtures/queue/$name.json').readAsStringSync()) as Map<String, Object?>;
+  return (status: j['status']! as int, body: j['body']! as Map<String, Object?>);
+}
+
 /// A fake backend for one event (id 1) with a waiting room; `/fan/queue` shaped as docs/04-api.md.
 class RoomSale {
   new(this.clock, {this.serverSkew = Duration.zero});
@@ -381,6 +388,13 @@ class RoomSale {
 
   http.Response refusal(int status, String code, Map<String, Object?> details) =>
       answer({'code': code, 'message': code, 'details': details}, status);
+
+  /// An answer of the real API (test/fixtures/queue, FL-26 real run), served for event 1.
+  http.Response real(String name) {
+    final (:status, :body) = realAnswer(name);
+    if (body case {'event_id': _}) body['event_id'] = 1;
+    return answer(body, status);
+  }
 
   Map<String, Object?> event() => eventJson(
     onSale: false,

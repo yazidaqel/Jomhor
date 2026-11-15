@@ -1,0 +1,11 @@
+{
+ "status": 409,
+ "body": {
+  "code": "NOT_ELIGIBLE",
+  "message": "Not eligible for this sale",
+  "details": {
+   "reason": "ACCOUNT_TOO_NEW",
+   "verified_before": "2026-11-08T11:11:33Z"
+  }
+ }
+}

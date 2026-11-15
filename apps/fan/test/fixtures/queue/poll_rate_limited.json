@@ -1,0 +1,11 @@
+{
+ "status": 429,
+ "body": {
+  "code": "QUEUE_RATE_LIMITED",
+  "message": "Polling too fast",
+  "details": {
+   "reason": "POLL",
+   "retry_after_s": 1
+  }
+ }
+}

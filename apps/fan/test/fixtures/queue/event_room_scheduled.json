@@ -1,0 +1,63 @@
+{
+ "status": 200,
+ "body": {
+  "id": 17,
+  "organizer_id": "a7a5fc00-0000-4000-8000-000000000001",
+  "organizer": {
+   "slug": "atlas-fc",
+   "name": "ATLAS FC",
+   "crest_url": null
+  },
+  "status": "ON_SALE",
+  "event_type": "FOOTBALL_MATCH",
+  "title": "FL-26 real run · bientôt",
+  "starts_at": "2099-05-01T19:00:00Z",
+  "doors_open_at": null,
+  "timezone": "Africa/Casablanca",
+  "venue": {
+   "name": "Grand Stade",
+   "city": "Casablanca"
+  },
+  "metadata": {
+   "opponent": "FL-26"
+  },
+  "sale_starts_at": "2026-11-15T14:07:33Z",
+  "sales_close_at": "2099-05-01T18:00:00Z",
+  "on_sale": false,
+  "sold_out": false,
+  "from_price_mad": 5000,
+  "per_account_limit": 4,
+  "room": {
+   "status": "SCHEDULED",
+   "opens_at": "2026-11-15T13:37:33Z",
+   "eligibility": null
+  },
+  "zones": [
+   {
+    "id": 2,
+    "code": "EST",
+    "name": "Est",
+    "seated": false,
+    "gate_codes": [
+     "P3",
+     "P5",
+     "P6"
+    ],
+    "prices": [
+     {
+      "price_category_id": "7e3e2b0f-1f77-4cc5-b7d8-621ebc7a1437",
+      "name": "Plein tarif",
+      "price_mad": 5000,
+      "remaining": 4
+     }
+    ]
+   }
+  ],
+  "payment_methods": [
+   "CARD",
+   "WALLET",
+   "CASH_AGENCY"
+  ],
+  "cash_until": "2099-05-01T16:00:00Z"
+ }
+}

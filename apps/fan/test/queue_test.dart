@@ -12,6 +12,8 @@ import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
+import 'package:jomhor_fan/features/checkout/order.dart';
+import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/queue/queue.dart';
 import 'package:jomhor_fan/features/queue/queue_screen.dart';
 import 'package:jomhor_fan/features/queue/queue_store.dart';
@@ -196,14 +198,14 @@ void main() {
 
     testWidgets('QUEUE_RATE_LIMITED POLL is silent and the next poll waits retry_after_s', (tester) async {
       sale.polls
-        ..add(() => sale.refusal(429, 'QUEUE_RATE_LIMITED', {'reason': 'POLL', 'retry_after_s': 2}))
+        ..add(() => sale.real('poll_rate_limited'))
         ..add(() => sale.answer(sale.q()));
       await start(tester);
       await tester.pump(const Duration(seconds: 5));
       await flush(tester);
       expect(find.byKey(const Key('queue.rateLimited')), findsNothing);
       expect(find.byKey(const Key('queue.draw')), findsOneWidget);
-      await tester.pump(const Duration(milliseconds: 1900));
+      await tester.pump(const Duration(milliseconds: 900));
       expect(sale.calls('GET', '/fan/queue'), hasLength(1));
       await tester.pump(const Duration(milliseconds: 100));
       expect(sale.calls('GET', '/fan/queue'), hasLength(2));
@@ -239,7 +241,7 @@ void main() {
         ..add(() => sale.answer(sale.q(status: 'WAITING', position: 40, rate: 500, wait: 5)));
       sale.polls
         ..add(() => sale.answer(sale.q(status: 'WAITING', position: 50, rate: 500, wait: 6)))
-        ..add(() => sale.refusal(401, 'UNAUTHORIZED', {}))
+        ..add(() => sale.real('poll_unauthorized'))
         ..add(() => sale.answer(sale.q(status: 'WAITING', position: 40, rate: 500, wait: 5)));
       await start(tester);
       await tester.pump(const Duration(seconds: 5));
@@ -301,7 +303,7 @@ void main() {
     sale.joins
       ..add(() => sale.answer(sale.q(), 201))
       ..add(() => sale.refusal(409, 'QUEUE_NOT_OPEN', {'reason': 'NOT_STARTED', 'opens_at': '2027-02-20T12:07:00Z'}));
-    sale.polls.add(() => sale.refusal(401, 'UNAUTHORIZED', {}));
+    sale.polls.add(() => sale.real('poll_unauthorized'));
     await start(tester);
     await tester.pump(const Duration(seconds: 5));
     await flush(tester);
@@ -443,31 +445,33 @@ void main() {
       expect(felt, isEmpty);
     });
 
-    testWidgets('POST /fan/orders carries X-Admission-Token; ADMISSION_REQUIRED goes back to screen 12', (
-      tester,
-    ) async {
-      await admit(tester);
-      // The next look at the room finds the turn over.
-      sale.polls
-        ..clear()
-        ..add(() => sale.answer(sale.q(status: 'EXPIRED', pollAfter: 0)));
-      final container = ProviderScope.containerOf(tester.element(find.byType(QueueScreen)));
-      container.read(routerProvider).go('/events/1/checkout?price=pc-1-0&qty=1');
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
-      await tester.tap(find.byKey(const Key('checkout.pay')));
-      await flush(tester);
-      final order = sale.calls('POST', '/fan/orders').single;
-      expect(order.headers['x-admission-token'], 'adm-1');
-      expect(order.url.hasQuery, isFalse);
-      await tester.pumpAndSettle();
-      // Screen 12 asks the room again with the queue token: the turn is over.
-      expect(find.byType(QueueScreen), findsOneWidget);
-      expect(sale.calls('GET', '/fan/queue').last.headers['x-queue-token'], 'qt-1');
-      expect(find.byKey(const Key('queue.expired')), findsOneWidget);
-      final pass = (await container.read(queuePassesProvider.future))[1]!;
-      expect((pass.queueToken, pass.admissionToken), ('qt-1', null));
-    });
+    for (final reason in ['missing', 'invalid', 'invalid_other_user', 'expired']) {
+      testWidgets('POST /fan/orders carries X-Admission-Token; ADMISSION_REQUIRED ($reason, the real answer) goes back '
+          'to screen 12', (tester) async {
+        sale.orders.add(() => sale.real('admission_required_$reason'));
+        await admit(tester);
+        // The next look at the room finds the turn over.
+        sale.polls
+          ..clear()
+          ..add(() => sale.answer(sale.q(status: 'EXPIRED', pollAfter: 0)));
+        final container = ProviderScope.containerOf(tester.element(find.byType(QueueScreen)));
+        container.read(routerProvider).go('/events/1/checkout?price=pc-1-0&qty=1');
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
+        await tester.tap(find.byKey(const Key('checkout.pay')));
+        await flush(tester);
+        final order = sale.calls('POST', '/fan/orders').single;
+        expect(order.headers['x-admission-token'], 'adm-1');
+        expect(order.url.hasQuery, isFalse);
+        await tester.pumpAndSettle();
+        // Screen 12 asks the room again with the queue token: the turn is over.
+        expect(find.byType(QueueScreen), findsOneWidget);
+        expect(sale.calls('GET', '/fan/queue').last.headers['x-queue-token'], 'qt-1');
+        expect(find.byKey(const Key('queue.expired')), findsOneWidget);
+        final pass = (await container.read(queuePassesProvider.future))[1]!;
+        expect((pass.queueToken, pass.admissionToken), ('qt-1', null));
+      });
+    }
 
     testWidgets('EXPIRED: "Ton tour est passé" and "Reprendre une place" joins again', (tester) async {
       sale.joins.add(() => sale.answer(sale.q(status: 'EXPIRED', pollAfter: 0)));
@@ -482,20 +486,18 @@ void main() {
   });
 
   group('refusals', () {
-    for (final (reason, details, copy) in [
-      ('ACCOUNT_TOO_NEW', {'verified_before': '2027-02-13T12:30:00Z'}, (String d) => 'Compte vérifié après le $d'),
-      (
-        'NOT_MEMBER',
-        {'member_joined_before': '2027-01-01T00:00:00Z'},
-        (String d) => 'Réservée aux membres inscrits avant le $d',
-      ),
-      ('NOT_ENOUGH_EVENTS', {'min_events_attended': 3, 'attended': 2}, (_) => 'Il faut 3 matchs au stade · tu en as 2'),
+    for (final (reason, copy) in [
+      ('account_too_new', (String d) => 'Compte vérifié après le $d'),
+      ('not_member', (String d) => 'Réservée aux membres inscrits avant le $d'),
+      ('not_enough_events', (_) => 'Il faut 1 match au stade · tu en as 0'),
     ]) {
-      testWidgets('NOT_ELIGIBLE $reason', (tester) async {
-        sale.joins.add(() => sale.refusal(409, 'NOT_ELIGIBLE', {'reason': reason, ...details}));
+      testWidgets('NOT_ELIGIBLE ${reason.toUpperCase()} (the real answer)', (tester) async {
+        sale.joins.add(() => sale.real('not_eligible_$reason'));
         await start(tester);
         await tester.pump(const Duration(milliseconds: 300));
-        final date = details.values.whereType<String>().firstOrNull;
+        final details = realAnswer('not_eligible_$reason').body['details']! as Map<String, Object?>;
+        expect(details['reason'], reason.toUpperCase());
+        final date = details.values.whereType<String>().where((v) => DateTime.tryParse(v) != null).firstOrNull;
         expect(find.text('Vente réservée aux fans vérifiés'), findsOneWidget);
         expect(find.text(copy(date == null ? '' : venueDay(DateTime.parse(date), zone, 'fr'))), findsOneWidget);
         await tester.pump(const Duration(minutes: 1));
@@ -509,8 +511,8 @@ void main() {
       expect(l.queueNotEnoughEvents(3, 2), 'Il faut 3 matchs au stade · tu en as 2');
     });
 
-    testWidgets('QUEUE_DEVICE_LIMIT', (tester) async {
-      sale.joins.add(() => sale.refusal(409, 'QUEUE_DEVICE_LIMIT', {'limit': 3}));
+    testWidgets('QUEUE_DEVICE_LIMIT (the real answer)', (tester) async {
+      sale.joins.add(() => sale.real('queue_device_limit'));
       await start(tester);
       expect(find.text('Trop de comptes sur ce téléphone pour cette vente'), findsOneWidget);
     });
@@ -621,6 +623,158 @@ void main() {
       );
       final cta = tester.widget<FilledButton>(find.byKey(const Key('event.cta')));
       expect(((cta.child! as Text).data, cta.onPressed != null), ('Rejoindre la file', true));
+    });
+  });
+
+  group('the real API (FL-26 real run, test/fixtures/queue)', () {
+    // The phone's clock as the server's at the first captured answer.
+    setUp(() {
+      clock = TestClock(DateTime.utc(2026, 11, 15, 11, 7, 37));
+      sale = RoomSale(clock);
+    });
+
+    QueueStatus status(String name) => QueueStatus.fromJson(realAnswer(name).body);
+
+    Future<void> next(WidgetTester tester, String answered) async {
+      await tester.pump(Duration(seconds: status(answered).pollAfterS));
+      await flush(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    test('every 2xx answer of /fan/queue parses with the phase the server meant', () {
+      expect(
+        [
+          for (final n in ['join_201_pre_queue', 'join_200_pre_queue', 'join_201_rejoin']) realAnswer(n).status,
+        ],
+        [201, 200, 201],
+      );
+      for (final (name, phase) in [
+        ('join_201_pre_queue', QueuePhase.preQueue),
+        ('join_200_pre_queue', QueuePhase.preQueue),
+        ('poll_pre_queue', QueuePhase.preQueue),
+        ('poll_waiting', QueuePhase.waiting),
+        ('poll_paused', QueuePhase.paused),
+        ('poll_admitted', QueuePhase.admitted),
+        ('poll_expired', QueuePhase.expired),
+        ('join_201_rejoin', QueuePhase.waiting),
+        ('poll_ended', QueuePhase.ended),
+      ]) {
+        expect(status(name).phase, phase, reason: name);
+      }
+      expect(status('poll_waiting').position, isNotNull);
+      expect(status('poll_pre_queue').pollAfterS, inInclusiveRange(1, 30));
+      expect(
+        [
+          for (final n in ['poll_admitted', 'poll_expired', 'poll_ended']) status(n).pollAfterS,
+        ],
+        [0, 0, 0],
+      );
+      final turn = status('poll_admitted');
+      expect(turn.admissionToken, 'adm-real');
+      expect(turn.admissionExpiresAt!.difference(turn.serverTime).inSeconds, inInclusiveRange(599, 600));
+      for (final n in ['poll_waiting', 'poll_expired', 'poll_ended']) {
+        expect(status(n).admissionToken, isNull, reason: n);
+      }
+    });
+
+    test('the event reads its room; the order held with the token reads', () {
+      EventDetail read(String n) => EventDetail.fromJson(realAnswer(n).body, fetchedAt: clock.now);
+      final pre = read('event_room_pre_queue').event.room!;
+      expect(
+        (pre.status, pre.eligibility!.verifiedBefore, pre.eligibility!.memberJoinedBefore),
+        ('PRE_QUEUE', DateTime.utc(2026, 11, 8, 11, 11, 33), null),
+      );
+      final scheduled = read('event_room_scheduled').event.room!;
+      expect((scheduled.status, scheduled.eligibility), ('SCHEDULED', null));
+      expect(read('event_room_ended').event.room, isNull);
+      final order = FanOrder.fromJson(realAnswer('order_201_with_admission').body);
+      expect((order.status, order.totalMad, order.items.single.qty), ('RESERVED', 5000, 1));
+      final notStarted = realAnswer('queue_not_open_not_started').body['details']! as Map<String, Object?>;
+      expect(notStarted['reason'], 'NOT_STARTED');
+      expect(DateTime.tryParse(notStarted['opens_at']! as String), isNotNull);
+    });
+
+    testWidgets('join 201 → pre-queue → POLL 429 → waiting → paused → the turn → an order with the token', (
+      tester,
+    ) async {
+      sale.joins.add(() => sale.real('join_201_pre_queue'));
+      sale.polls
+        ..add(() => sale.real('poll_pre_queue'))
+        ..add(() => sale.real('poll_rate_limited'))
+        ..add(() => sale.real('poll_waiting'))
+        ..add(() => sale.real('poll_paused'))
+        ..add(() => sale.real('poll_admitted'));
+      sale.orders.add(() => sale.real('order_201_with_admission'));
+      await start(tester);
+      expect(find.byKey(const Key('queue.draw')), findsOneWidget);
+      // The first join answers in_room 0 (the memo is a second behind it): the fan still counts.
+      expect(text(tester, 'queue.inRoom'), '1 fan dans la file');
+
+      await next(tester, 'join_201_pre_queue');
+      expect(sale.calls('GET', '/fan/queue'), hasLength(1));
+      expect(text(tester, 'queue.inRoom'), '${status('poll_pre_queue').inRoom} fans dans la file');
+      await next(tester, 'poll_pre_queue');
+      expect(sale.calls('GET', '/fan/queue'), hasLength(2));
+      expect(find.byKey(const Key('queue.rateLimited')), findsNothing);
+      await tester.pump(const Duration(seconds: 1));
+      await flush(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(sale.calls('GET', '/fan/queue'), hasLength(3));
+      expect(text(tester, 'queue.position'), 'N° 2');
+      expect(text(tester, 'queue.ahead'), '1 fan devant toi');
+      // rate_per_min stays 0 until the first measured minute: no estimate rather than a wrong one.
+      expect(find.byKey(const Key('queue.wait')), findsNothing);
+
+      await next(tester, 'poll_waiting');
+      expect(text(tester, 'queue.wait'), l.queuePaused);
+      expect(text(tester, 'queue.position'), 'N° 2');
+
+      await next(tester, 'poll_paused');
+      expect(text(tester, 'queue.turnLeft'), 'Tu as 09:59 pour réserver');
+      await tester.pump(const Duration(minutes: 1));
+      expect(sale.calls('GET', '/fan/queue'), hasLength(5), reason: 'poll_after_s 0: no more polls');
+
+      final container = ProviderScope.containerOf(tester.element(find.byType(QueueScreen)));
+      container.read(routerProvider).go('/events/1/checkout?price=pc-1-0&qty=1');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
+      await tester.tap(find.byKey(const Key('checkout.pay')));
+      await flush(tester);
+      expect(sale.calls('POST', '/fan/orders').single.headers['x-admission-token'], 'adm-real');
+      await tester.pumpAndSettle();
+      expect(find.byType(QueueScreen), findsNothing);
+    });
+
+    testWidgets('the turn passed: EXPIRED → "Reprendre une place" (201) → ENDED → screen 3', (tester) async {
+      FlutterSecureStorage.setMockInitialValues({
+        'queue_passes': jsonEncode({'1': const QueuePass(queueToken: 'qt-real', admissionToken: 'adm-real').toJson()}),
+      });
+      sale.polls.add(() => sale.real('poll_expired'));
+      sale.joins.add(() => sale.real('join_201_rejoin'));
+      final container = await start(tester, keepSecureStorage: true);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(text(tester, 'queue.expired'), 'Ton tour est passé');
+      expect((await container.read(queuePassesProvider.future))[1]!.admissionToken, isNull);
+
+      sale.polls
+        ..clear()
+        ..add(() => sale.real('poll_after_rejoin'))
+        ..add(() => sale.real('poll_ended'));
+      await tester.tap(find.byKey(const Key('queue.rejoin')));
+      await flush(tester);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(sale.calls('POST', '/fan/queue'), hasLength(1));
+      expect(find.byKey(const Key('queue.expired')), findsNothing);
+      // At the back, not ranked yet; in_room 0 again from the memo.
+      expect(find.text(l.queueRankingTitle), findsOneWidget);
+      expect(text(tester, 'queue.inRoom'), '1 fan dans la file');
+      await next(tester, 'join_201_rejoin');
+      expect(text(tester, 'queue.position'), 'N° 1');
+      expect(text(tester, 'queue.ahead'), 'Personne devant toi');
+      await next(tester, 'poll_after_rejoin');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('zones.continue')), findsOneWidget);
+      expect(sale.calls('GET', '/fan/queue'), hasLength(3));
     });
   });
 }

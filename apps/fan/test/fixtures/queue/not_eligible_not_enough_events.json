@@ -1,0 +1,12 @@
+{
+ "status": 409,
+ "body": {
+  "code": "NOT_ELIGIBLE",
+  "message": "Not eligible for this sale",
+  "details": {
+   "reason": "NOT_ENOUGH_EVENTS",
+   "min_events_attended": 1,
+   "attended": 0
+  }
+ }
+}
