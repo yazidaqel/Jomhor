@@ -45,7 +45,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 class EventKeyTest extends OrgApiTest {
 
-    private static final Pattern KEYISH_NAME = Pattern.compile("key|enc|secret", Pattern.CASE_INSENSITIVE);
+    private static final Pattern KEYISH_NAME = Pattern.compile("key|secret|(^|_)enc(_|$)", Pattern.CASE_INSENSITIVE); // "enc" as a word part: not "audience"
     private static final Pattern BASE64_40 = Pattern.compile("[A-Za-z0-9+/_-]{40,}={0,2}");
 
     @Autowired
