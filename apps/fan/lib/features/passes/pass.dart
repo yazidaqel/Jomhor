@@ -163,6 +163,7 @@ class FanPass {
     required this.club,
     required this.series,
     required this.zone,
+    required this.timezone,
     required this.holderLabel,
     this.orderId,
     this.events = const [],
@@ -178,6 +179,7 @@ class FanPass {
       club: Club.fromJson(j['organizer']! as Map<String, Object?>),
       series: _series(j['series']! as Map<String, Object?>),
       zone: _zone(j['zone']! as Map<String, Object?>),
+      timezone: j['timezone'] as String? ?? homeZone,
       holderLabel: j['holder_label']! as String,
       orderId: j['order_id'] as String?,
       events: [
@@ -202,6 +204,9 @@ class FanPass {
   final Club club;
   final Series series;
   final PassZone zone;
+
+  /// The zone venue's time zone: the season's event times show in it.
+  final String timezone;
   final String holderLabel;
 
   /// The purchase order while `PENDING` (to resume payment), else null.

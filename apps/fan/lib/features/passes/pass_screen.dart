@@ -128,8 +128,7 @@ class _Owned extends StatelessWidget {
                 key: Key('pass.event.${e.id}'),
                 title: e.title,
                 startsAt: e.startsAt,
-                // The row carries no zone of its own (docs/04-api.md `/fan/passes`): Morocco's, where every venue is.
-                timezone: homeZone,
+                timezone: pass.timezone,
                 // A ticket that lands while the screen is open swaps in.
                 trailing: AnimatedSwitcher(
                   duration: motionOf(context, JomhorMotion.base),

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/app/session.dart';
+import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
@@ -48,6 +49,9 @@ class PassSale {
 
   /// `GET /fan/passes` fixture; null = no pass.
   String? passes;
+
+  /// A whole `GET /fan/passes` body to serve instead of the fixture.
+  Map<String, Object?>? passesBody;
 
   /// `GET /fan/tickets` rows.
   List<Map<String, Object?>> tickets = [];
@@ -100,7 +104,11 @@ class PassSale {
         return answer({'payment_id': 'p1', 'method': 'CARD', 'redirect_url': cardPage});
       }(),
       ('GET', '/v1/fan/orders') => orders == null ? answer({'orders': <Object?>[]}) : fixture(orders!),
-      ('GET', '/v1/fan/passes') => passes == null ? answer({'passes': <Object?>[]}) : fixture(passes!),
+      ('GET', '/v1/fan/passes') => switch ((passesBody, passes)) {
+        (final body?, _) => answer(body),
+        (_, final name?) => fixture(name),
+        _ => answer({'passes': <Object?>[]}),
+      },
       ('GET', '/v1/fan/tickets') => answer({'server_time': clock.now.toIso8601String(), 'tickets': tickets}),
       _ => apiError(404, 'NOT_FOUND'),
     };
@@ -372,6 +380,25 @@ void main() {
       expect(find.byKey(const Key('pass.soon.7')), findsOneWidget);
       expect(find.byKey(const Key('pass.soon.8')), findsOneWidget);
       expect(find.byKey(const Key('pass.ticket.7')), findsNothing);
+    });
+
+    testWidgets("a pass at a Europe/Paris venue shows its events in Paris time, not Morocco's", (tester) async {
+      final body = passAnswer('passes_200_active').body;
+      final pass = (body['passes']! as List<Object?>).single! as Map<String, Object?>;
+      pass['timezone'] = 'Europe/Paris';
+      sale.passesBody = body;
+      await start(tester, '/passes/$passId');
+      // Event 8, 2027-04-03T19:00Z: 21:00 in Paris (CEST), 20:00 in Casablanca.
+      final at = DateTime.parse('2027-04-03T19:00:00Z');
+      final clock = venueClock(at, 'Europe/Paris', 'fr');
+      expect(clock, isNot(venueClock(at, 'Africa/Casablanca', 'fr')));
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('pass.event.8')),
+          matching: find.text(l.dotPair(venueDate(at, 'Europe/Paris', 'fr'), l.ltr(clock))),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('signed out: the login first', (tester) async {
