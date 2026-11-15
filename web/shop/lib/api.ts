@@ -29,14 +29,15 @@ function env(name: 'API_BASE_URL'): string {
 /** A backend call that takes longer fails as 502 instead of holding the fan's request. */
 export const BACKEND_TIMEOUT_MS = 10_000
 
-type Options = Omit<RequestInit, 'body'> & { json?: unknown; token?: string }
+/** `onStatus`: told the 2xx status, for handlers that pass it on (200 vs 201). */
+type Options = Omit<RequestInit, 'body'> & { json?: unknown; token?: string; onStatus?: (status: number) => void }
 
 /**
  * Calls `${API_BASE_URL}${path}`. 2xx → parsed JSON (undefined when empty); otherwise throws ApiError.
  * Uncached (`no-store`) unless the caller passes `next: { revalidate }`. Times out after BACKEND_TIMEOUT_MS, or
  * earlier if the caller's `signal` aborts.
  */
-export async function api<T>(path: string, { json, token, headers, signal, ...init }: Options = {}): Promise<T> {
+export async function api<T>(path: string, { json, token, headers, signal, onStatus, ...init }: Options = {}): Promise<T> {
   const h = new Headers(headers)
   h.set('accept', 'application/json')
   if (json !== undefined) h.set('content-type', 'application/json')
@@ -62,7 +63,10 @@ export async function api<T>(path: string, { json, token, headers, signal, ...in
     clearTimeout(timer)
   }
   const data = text ? parse(text) : undefined
-  if (res.ok) return data as T
+  if (res.ok) {
+    onStatus?.(res.status)
+    return data as T
+  }
   throw toApiError(res.status, data)
 }
 

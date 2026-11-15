@@ -8,8 +8,9 @@ import { formatDh } from '@/lib/money'
 import { mmss } from '@/lib/queue'
 import { useAdmission, useHeldPlace, useServerClock } from '@/lib/queue-hooks'
 import { ArrowIcon, CheckIcon } from '../../../../icons'
+import { WaitlistPanel, type WaitlistView } from './Waitlist'
 
-type Copy = Pick<Dict, 'event' | 'order' | 'meta' | 'room'>
+type Copy = Pick<Dict, 'event' | 'order' | 'meta' | 'room' | 'waitlist' | 'errors'>
 
 /** W2 room panel (DESIGN Lot 5): what the server knows, formatted in the venue time zone. */
 export type RoomView = {
@@ -44,6 +45,7 @@ const BARS = ['bg-zone-a', 'bg-zone-b', 'bg-zone-c']
  * `room` (Lot 5) = a live waiting room: until this tab holds a running W8 turn, cards show prices but are disabled
  * ("Accès par la file") and the summary becomes the room panel, which flips to "Rejoindre la file" at `opens_at`.
  * A `MEMBERS` price shows the "Membres" chip and `membersNote`; nothing is pre-blocked (the server decides, Lot 5 step 2).
+ * `waitlist` (Lot 5 step 2) = sold out, on sale, no room: the summary becomes the waitlist panel.
  */
 export function ZonePicker({
   eventId,
@@ -51,6 +53,7 @@ export function ZonePicker({
   limit,
   closed,
   room = null,
+  waitlist = null,
   membersNote = '',
   copy,
   children,
@@ -60,6 +63,7 @@ export function ZonePicker({
   limit: number
   closed: string | null
   room?: RoomView | null
+  waitlist?: WaitlistView | null
   /** "Tarif membres · inscrits avant le {date}". */
   membersNote?: string
   copy: Copy
@@ -153,6 +157,8 @@ export function ZonePicker({
 
       {gated && room ? (
         <RoomPanel room={room} open={room.status !== 'SCHEDULED' || serverNow >= Date.parse(room.opensAt)} held={held} copy={copy.room} />
+      ) : waitlist ? (
+        <WaitlistPanel view={waitlist} copy={copy} />
       ) : (
         <aside
           aria-labelledby="order-title"

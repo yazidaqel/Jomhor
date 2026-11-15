@@ -202,6 +202,16 @@ export const fr = {
       PAUSED: 'admission en pause',
     },
   },
+  waitlist: {
+    join: "Liste d'attente",
+    joined: "Sur la liste d'attente",
+    sheet: 'On te prévient dès que des places se libèrent. Premier arrivé, premier servi.',
+    leave: 'Quitter la liste',
+    channels: 'On te prévient par notification et WhatsApp',
+    NOT_SOLD_OUT: 'Des places sont de nouveau disponibles : choisis ta zone.',
+    ROOM: "La vente passe par la file d'attente.",
+    CLOSED: 'La vente est terminée pour cet événement.',
+  },
   checkout: {
     metaTitle: 'Tes billets',
     title: 'Billets nominatifs',

@@ -198,6 +198,16 @@ export const en: Dict = {
       PAUSED: 'admission paused',
     },
   },
+  waitlist: {
+    join: 'Waitlist',
+    joined: 'On the waitlist',
+    sheet: "We'll tell you as soon as places free up. First come, first served.",
+    leave: 'Leave the list',
+    channels: "We'll let you know by notification and WhatsApp",
+    NOT_SOLD_OUT: 'Places are available again: pick your zone.',
+    ROOM: 'This sale goes through the queue.',
+    CLOSED: 'Sales are closed for this event.',
+  },
   checkout: {
     metaTitle: 'Your tickets',
     title: 'Named tickets',

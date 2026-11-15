@@ -6,6 +6,7 @@ import { fmt, type Dict } from '@/lib/i18n'
 import { loginUrl } from '@/lib/orders'
 import { nextLine, roomTime } from '@/lib/queue'
 import { countdown, formatDateTime, formatShortDate, formatTime } from '@/lib/time'
+import { JOIN_PARAM } from '@/lib/waitlist'
 import { Watermark } from '../../../../brand'
 import { BackIcon, CalendarIcon, CardIcon, PinIcon, QrIcon, TicketIcon } from '../../../../icons'
 import { CountdownTiles } from '../../../countdown'
@@ -48,13 +49,16 @@ function roomView(e: ShopEventDetail, now: number, d: Dict, signedIn: boolean): 
   }
 }
 
-/** W2 · Page événement: hero (server) + zone grid and summary (client, ZonePicker); Lot 5: the room panel. */
+/** W2 · Page événement: hero (server) + zone grid and summary (client, ZonePicker); Lot 5: the room panel, the waitlist. */
 export function EventView({ e, now, d, signedIn = false }: { e: ShopEventDetail; now: number; d: Dict; signedIn?: boolean }) {
   const state = saleState(e, now)
   const label = kicker(d, e)
   const venue = e.venue.city ? `${e.venue.name}, ${e.venue.city}` : e.venue.name
   // The methods this event offers now ("carte bancaire, wallet mobile ou cash en agence").
   const paymentList = new Intl.ListFormat(d.meta.intl, { type: 'disjunction' }).format(e.payment_methods.map((m) => d.event[m]))
+  // Sold out, on sale, no live room (04 PUT /fan/waitlist: the room is the queue while a phase is live, Q179).
+  const path = eventPath(e)
+  const waitlist = state === 'SOLD_OUT' && e.on_sale && !e.room && path ? { eventId: e.id, signedIn, login: loginUrl(`${path}?${JOIN_PARAM}=1`) } : null
   return (
     <main>
       <section className="relative isolate overflow-hidden border-b border-border bg-surface">
@@ -108,8 +112,9 @@ export function EventView({ e, now, d, signedIn = false }: { e: ShopEventDetail;
         limit={e.per_account_limit}
         closed={state === 'ON_SALE' ? null : saleLabel(d, e, state)}
         room={roomView(e, now, d, signedIn)}
+        waitlist={waitlist}
         membersNote={e.sale_starts_at ? fmt(d.event.membersNote, { date: formatShortDate(e.sale_starts_at, e.timezone, d.meta.intl) }) : d.event.membersNoteAny}
-        copy={{ event: d.event, order: d.order, meta: d.meta, room: d.room }}
+        copy={{ event: d.event, order: d.order, meta: d.meta, room: d.room, waitlist: d.waitlist, errors: d.errors }}
       >
         <ul className="grid gap-3 rounded-control border border-border bg-surface p-4 text-body-small text-text-secondary sm:grid-cols-3">
           {(
