@@ -1,0 +1,13 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 409,
+ "body": {
+  "code": "MEMBERS_ONLY",
+  "message": "Members-only price",
+  "details": {
+   "field": "items[0].holders[0]",
+   "member_joined_before": "2026-11-15T20:42:40Z",
+   "paid_required": true
+  }
+ }
+}

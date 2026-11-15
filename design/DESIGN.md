@@ -73,6 +73,7 @@ Icons: 1.8 px stroke, round caps, 20–22 px. No emoji anywhere.
 | 10 | Notifications | — | `/inbox` | Bell on screen 1 |
 | 11 | Clubs | — | `/clubs` | First launch (skippable); Profil → Mes clubs |
 | 12 | File d'attente | — | `/events/:id/queue` | Screen 1 hero / screen 2 CTA while a room is active |
+| 13 | Abonnement | — | `/products/:id` (buy) · `/passes/:id` (owned) | Club "Abonnements"; Billets "Mes abonnements" |
 
 Not mocked yet (Lot 1/4): OTP login, wallet list, transfer flow, order status (cash
 code), membership, profile, gate map. Follow the same components.
@@ -165,6 +166,7 @@ card moves under the zones, CTA becomes sticky bottom bar).
 | W6 | Billet PDF | — | `/api/tickets/[id]/pdf` (proxy, `no-store`) | Server-generated A4 + wallet-size, static QR |
 | W7 | Club | — | `/[club]` | SSR per request; backend reads cached 60 s |
 | W8 | File d'attente | — | `/[club]/events/[slug]/queue` | SSR shell (event header from the cached detail) + client poller calling the API directly |
+| W9 | Abonnements | — | `/[club]/passes` | SSR per request; backend reads cached 60 s |
 
 W2 details: header (crest + club name, nav Matchs / Abonnements / Mes billets / Aide,
 language switch, Se connecter); hero with competition label (fallback "À l'affiche"), 64–80 px uppercase title,
@@ -208,6 +210,7 @@ toggle, organizer switcher (organizer name), user menu (name, role, Se déconnec
 | B9 | Fans · CRM | — | `/crm` (segments, export, campaigns) | 4–5 |
 | B10 | Lieux | — | `/settings/venues/:id` (zones table, gates table, gate → zone checkbox matrix) | 0 |
 | B13 | Salle d'attente | — | `/events/:id/room` | 5 |
+| B14 | Abonnements & adhésions | — | `/products`, `/products/:id` | 5 |
 
 Lot 0 scope of B2: tabs Général, Tarifs & quotas, Portes & zones (venue matrix, read-only;
 per-event override comes in Lot 2). Règles shows only ré-entrée, billets max par compte and gel
@@ -319,6 +322,7 @@ Screens that carry the founder's "wow" bar (inside principles 3, 6 and 7 and `BR
 | 1 · Accueil between matches | The countdown digits roll, the member strip shows tier and matchs at a glance, and the bell has a live inbox: reasons to open the app on a Tuesday. |
 | Arabic everywhere | True RTL done right is the differentiator against incumbents: Cairo display headings, Darija voice ("راك داخل"), mirrored layouts, codes and prices kept LTR in isolates, no broken letter-spacing. Every wow screen ships FR + AR goldens. |
 | 12 · File d'attente | The brand's twelve dots become the fan's walk into the stadium: they light one by one as the queue moves, and the amber twelfth (the supporter who completes the team) swells at "C'est ton tour". The position is a real rank, rolling down in display type, with an honest wait from the measured rate. Before the sale, one plain sentence explains the draw, so arriving early isn't a race. Calm, dark, nothing flashing; leave and come back, your place is kept. FR + AR goldens. |
+| 13 · Abonnement | The season in one card: every match ticket arrives on its own as fixtures are published, with no repeat purchase. FR + AR goldens. |
 
 Under reduced motion, every Lot 4 motion is off (instant states). There are no decorative loops, no parallax, and no gradients or shadows on the brand mark.
 
@@ -369,6 +373,30 @@ These override the screen specs above (see `docs/plans/lot-5.md`).
 | W8 | Screen kept awake while visible (Wake Lock API; silently none where unsupported). `ENDED` as screen 12. |
 | B2 Tarifs & quotas | Column "Accès": select Tous · Membres (helper: "Membres inscrits avant l'ouverture de la vente"). B2 Règles: "File d'attente · {n} phase(s) · {current status}" + "Gérer". |
 | B13 Salle d'attente | **Phases:** one card per phase (N°, label, status badge, sale start and pre-queue time in the venue zone), the live KPIs of step 1 inside the card of the live phase, controls per phase. "Ajouter une phase" (until 5): the step-1 form + "Libellé" (optional, 40) + "Début de la vente" (phase ≥ 2, date-time in the venue zone). `PHASE_ORDER` → field error "Doit ouvrir après le début de la phase précédente". Ending a phase while a later one is scheduled: confirm "Les ventes restent fermées jusqu'à la phase suivante." Eligibility label by `event_type` (Q182). |
+
+## Lot 5 step 3 adjustments
+
+These override the screen specs above (see `docs/plans/lot-5.md` §11).
+
+| Where | Change |
+| --- | --- |
+| Sidebar | Pilotage: + "Abonnements" (B14). |
+| 7 Club | **Cotisation**, under the member card when `paid_required`:<br>• unpaid: row "Cotisation {product} · {price}" + "Payer ma cotisation" → screen 4 (product variant);<br>• paid: accent chip "À jour jusqu'au {date}";<br>• expired: "Cotisation expirée" + "Renouveler" (when a product is on sale);<br>• not a member: the join sheet adds "Cotisation {price}" as a second CTA.<br>**Abonnements**, below: one row card per `PASS` product (name, zone, "{n} matchs annoncés", price) → screen 13. |
+| 13 · Abonnement, buy | Header (crest 20 + product name). Facts: zone, venue, "{n} matchs annoncés" (event rows), "Un billet dans l'app pour chaque match publié". Holder name (prefilled from `display_name`, §Holder names). CTA "Acheter · {first amount}" → screen 4. `sold_out` → "Complet". `PASS_HELD` → the owned view. |
+| 13 · Abonnement, owned | A pass card (as the member card: `surface2`, radius 28, accent band with crest and club name): label "ABONNEMENT", product name in display type, zone, holder label, series dates. Then the series' events as rows with a ticket chip → screen 5 ("Bientôt" before it is published).<br>• `PENDING`: "Paiement en attente" + "Reprendre le paiement" → `/orders/{order_id}`. |
+| 4 Paiement, product variant | Summary line = product name; no zone, quantity or friend rows; methods as for events (cash "24 h"). Caption "Billets dans l'app à chaque match publié" (PASS) or "Carte membre à jour dès le paiement" (MEMBERSHIP). |
+| Billets, 5 Mon billet | Billets: a "Mes abonnements" row per pass (name, status chip) above the tickets. Ticket rows and the screen 5 band carry the chip "Abonnement" when `pass_id` is set. |
+| Orders (app), W4 | A product order shows the product name where the event header goes. A `RESERVED` product order with no attempt shows the method rows (as the screen 9 member variant). `PAID` → screen 13 / "Carte membre à jour". |
+| W2 | Header nav "Abonnements" → W9. |
+| W9 | Club header (as W7), then one card per product: name, price in display type, zone and venue, "{n} matchs annoncés" (expandable), CTA "Acheter" → `/orders/new?product={id}` (signed out → `/login?next=…`). The membership card: "Carte membre · {price} · valable jusqu'au {date}". |
+| W3 | Product variant at `/orders/new?product=`: holder name, methods, CTA. |
+| W3, W8 | When `MEMBERS_ONLY` or `NOT_ELIGIBLE` `NOT_MEMBER` carry `paid_required: true`: "Tarif réservé aux membres à jour de cotisation, inscrits avant le {date}" (without the date when null) / "Réservée aux membres à jour de cotisation…", as the app (screens 3/4/12). |
+| W5 | Section "Mes abonnements" above the tickets: rows with status; `PENDING` → resume. "Abonnement" chip on tickets. |
+| B2 Général | "Série" select (the organizer's series) + "Nouvelle série" dialog (nom, du, au). Disabled with a tooltip on `PASS_TICKETS`. |
+| B2 Tarifs | "Accès" + "Abonnés" (helper "Places des abonnés de la série · jamais vendues"); the price input is fixed at 0 for it. |
+| B14 Abonnements & adhésions | **List:** tabs Abonnements · Adhésions; table (nom, prix, vendus/quota, statut En vente / Hors vente, clôture); "Nouveau" sheet.<br>**PASS form:** nom, série, zone (grouped by venue), prix (DH), quota, clôture des ventes (venue zone), "En vente".<br>**MEMBERSHIP form:** nom, prix, valable jusqu'au, clôture, en vente. Before the first one, a warning card: "La carte membre devient payante: seuls les membres à jour de cotisation ont les tarifs membres et les préventes."<br>**Detail:** KPI cards (Abonnés actifs · En attente de paiement · Encaissé); a per-match table (match, date, émis/attendus, places Abonnés restantes) with an amber row when `issued < expected` ("Ajoute {n} places Abonnés en {zone}" → B2 Tarifs); "Remboursements à faire". FINANCE is read-only. |
+| B9 Membres | KPI "Cotisations à jour" when `paid_required`. |
+| B11 Code cash | A product order shows the product name in place of the event; no print. |
 
 ## Theming per organizer
 

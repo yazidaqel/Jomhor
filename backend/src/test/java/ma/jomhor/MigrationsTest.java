@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,11 +23,99 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV28Apply() {
+    void v1ToV30Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28");
+                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30");
+    }
+
+    /**
+     * V29 + V30: the new checks were validated against every row there was (none is NOT VALID); an event order still
+     * takes its event, a product order (event_id null) is APP or WEB and never a split member; an item is a place or a
+     * product, never both or neither; a PASS category costs 0; products need their kind's fields; one live pass per
+     * account per series; memberships.paid_until starts null.
+     */
+    @Test
+    void productsPassesAndProductOrders() {
+        assertThat(jdbcTemplate.queryForList("""
+                select conname from pg_constraint
+                where conname in ('orders_product', 'order_items_subject', 'price_categories_pass', 'products_kind')
+                  and convalidated""", String.class))
+                .containsExactlyInAnyOrder("orders_product", "order_items_subject", "price_categories_pass",
+                        "products_kind");
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        var zone = jdbcTemplate.queryForObject("insert into zones (organizer_id, venue_id, code, name, capacity) "
+                + "values (?, ?, 'EST', 'Est', 100) returning id", Short.class, org, venue);
+        Integer event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""",
+                Integer.class, org, venue, new byte[32]);
+        var series = jdbcTemplate.queryForObject("""
+                insert into event_series (organizer_id, name, starts_on, ends_on)
+                values (?, 'Saison', '2026-08-01', '2027-06-30') returning id""", UUID.class, org);
+        var user = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+
+        String category = "insert into price_categories (organizer_id, event_id, zone_id, name, price_mad, quota, "
+                + "audience) values (?, ?, ?, ?, ?, 5, ?::price_audience) returning id";
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(category, UUID.class, org, event, zone, "P", 100, "PASS"))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("price_categories_pass");
+        var pass = jdbcTemplate.queryForObject(category, UUID.class, org, event, zone, "Abonnés", 0, "PASS");
+
+        String product = "insert into products (organizer_id, kind, name, price_mad, sales_close_at, quota, series_id, "
+                + "zone_id, valid_until) values (?, ?::product_kind, 'P', ?, now() + interval '1 day', ?, ?, ?, ?) "
+                + "returning id";
+        var validUntil = Timestamp.from(Instant.now().plus(Duration.ofDays(30)));
+        for (Object[] bad : new Object[][] {{"PASS", 100, 3, series, null, null}, {"PASS", 100, null, series, zone, null},
+                {"PASS", 100, 3, series, zone, validUntil}, {"MEMBERSHIP", 100, null, null, null, null}}) {
+            assertThatThrownBy(() -> jdbcTemplate.queryForObject(product, UUID.class, org, bad[0], bad[1], bad[2],
+                    bad[3], bad[4], bad[5])).as(Arrays.toString(bad))
+                    .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("products_kind");
+        }
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(product, UUID.class, org, "MEMBERSHIP", 0, null, null,
+                null, validUntil)).isInstanceOf(DataIntegrityViolationException.class);
+        var passProduct = jdbcTemplate.queryForObject(product, UUID.class, org, "PASS", 150_000, 3, series, zone, null);
+        var membership = jdbcTemplate.queryForObject(product, UUID.class, org, "MEMBERSHIP", 20_000, null, null, null,
+                validUntil);
+        assertThatThrownBy(() -> jdbcTemplate.update("update products set sold = 4 where id = ?", passProduct))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        String newPass = "insert into passes (organizer_id, product_id, series_id, user_id, holder_name, status) "
+                + "values (?, ?, ?, ?, 'Yazid Aqel', ?::pass_status) returning id";
+        jdbcTemplate.queryForObject(newPass, UUID.class, org, passProduct, series, user, "CANCELLED");
+        var live = jdbcTemplate.queryForObject(newPass, UUID.class, org, passProduct, series, user, "PENDING");
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(newPass, UUID.class, org, passProduct, series, user,
+                "ACTIVE")).isInstanceOf(DuplicateKeyException.class);
+
+        // EXPIRED: the expiry job, run by other test classes on this shared database, must never pick these up.
+        String order = "insert into orders (organizer_id, event_id, pass_id, user_id, channel, status, total_mad, "
+                + "reserved_until, group_order_id) values (?, ?, ?, ?, ?::sales_channel, 'EXPIRED', 0, now(), ?) "
+                + "returning id";
+        var eventOrder = jdbcTemplate.queryForObject(order, UUID.class, org, event, null, user, "APP", null);
+        var productOrder = jdbcTemplate.queryForObject(order, UUID.class, org, null, live, user, "WEB", null);
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(order, UUID.class, org, null, null, null, "POS", null))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("orders_product");
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(order, UUID.class, org, null, null, user, "APP",
+                eventOrder)).isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("orders_product");
+        jdbcTemplate.queryForObject(order, UUID.class, org, event, live, user, "APP", null); // the pass's ticket order
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(order, UUID.class, org, event, live, user, "APP", null))
+                .isInstanceOf(DuplicateKeyException.class); // one per pass per event
+
+        String item = "insert into order_items (organizer_id, order_id, price_category_id, product_id, qty, "
+                + "unit_price_mad, holders) values (?, ?, ?, ?, 1, 0, '[{\"name\": \"Yazid Aqel\"}]')";
+        assertThatThrownBy(() -> jdbcTemplate.update(item, org, productOrder, null, null))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("order_items_subject");
+        assertThatThrownBy(() -> jdbcTemplate.update(item, org, productOrder, pass, membership))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("order_items_subject");
+        jdbcTemplate.update(item, org, productOrder, null, passProduct);
+        jdbcTemplate.update(item, org, eventOrder, pass, null);
+
+        jdbcTemplate.update("insert into memberships (organizer_id, user_id, number) values (?, ?, 1)", org, user);
+        assertThat(jdbcTemplate.queryForObject("select paid_until from memberships where organizer_id = ?",
+                Object.class, org)).isNull();
     }
 
     /**

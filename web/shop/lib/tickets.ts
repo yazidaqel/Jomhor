@@ -31,6 +31,8 @@ export type TicketView = {
   transfer_open: boolean
   /** Set on a ticket this holder transferred away (status `CANCELLED`): W5 shows a muted "Transféré à …" row. */
   transferred: { to_label: string; at: string } | null
+  /** Lot 5 step 3: the season pass this ticket comes from (W5 "Abonnement" chip), else null. */
+  pass_id: string | null
 }
 
 /** Path-safe ticket id: tickets are UUIDs. */
@@ -76,6 +78,7 @@ export function toTickets(raw: unknown): TicketView[] {
       transfer_until,
       transfer_open: transfer_until !== null && now < Date.parse(transfer_until),
       transferred: typeof x.to_label === 'string' && typeof x.at === 'string' ? { to_label: x.to_label, at: x.at } : null,
+      pass_id: strOrNull(t.pass_id),
     }
   })
 }

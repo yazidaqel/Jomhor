@@ -45,7 +45,7 @@ export function PendingOrders({ copy }: { copy: Copy }) {
               className="group flex flex-wrap items-center gap-5 rounded-card border border-accent/50 bg-surface p-5 transition duration-200 hover:border-accent motion-safe:hover:-translate-y-0.5"
             >
               <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-1.5">
-                <p className="text-sm text-text-muted">{formatDateTime(o.event.starts_at, o.event.timezone, intl)}</p>
+                {o.event.starts_at && <p className="text-sm text-text-muted">{formatDateTime(o.event.starts_at, o.event.timezone, intl)}</p>}
                 <h3 className="font-display text-[28px] font-extrabold uppercase leading-[0.95] text-balance">{o.event.title}</h3>
                 <p className="flex items-center gap-2 text-sm font-semibold text-accent-hover">
                   <ClockIcon className="size-4 shrink-0" />

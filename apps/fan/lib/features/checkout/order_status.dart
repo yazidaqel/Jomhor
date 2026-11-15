@@ -13,8 +13,15 @@ import 'package:jomhor_fan/features/checkout/order.dart';
 /// the answer's `Date`), counted down on a monotonic stopwatch from the answer.
 class OrderView {
   new(this.order, DateTime? serverDate, DateTime deviceNow, {this.seenAttempts = 0})
-    : _holdLeft = order.reservedUntil?.difference(serverDate ?? deviceNow),
+    : _at = serverDate ?? deviceNow,
+      _holdLeft = order.reservedUntil?.difference(serverDate ?? deviceNow),
       _since = clock.stopwatch()..start();
+
+  /// Server time of the answer (its `Date`, else the device clock).
+  final DateTime _at;
+
+  /// Server time now: the answer's `Date` plus the monotonic time since.
+  DateTime get serverNow => _at.add(_since.elapsed);
 
   final FanOrder order;
 
@@ -86,8 +93,9 @@ Duration? pollAfter(FanOrder order) {
   if (order.settled) {
     return order.paid && (order.group?.initiator ?? false) && order.group!.payable ? OrderStatus.everyCash : null;
   }
-  // A cash code, or a friend's place before any attempt: paid minutes or hours away.
-  final memberWaiting = order.group?.initiator == false && (order.paymentStatus ?? 'FAILED') == 'FAILED';
+  // A cash code, or a friend's place (or a product order, Lot 5 step 3) before any attempt: paid minutes or hours away.
+  final memberWaiting =
+      (order.group?.initiator == false || order.product != null) && (order.paymentStatus ?? 'FAILED') == 'FAILED';
   return order.awaitingCash || memberWaiting ? OrderStatus.everyCash : OrderStatus.every;
 }
 

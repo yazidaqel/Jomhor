@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/app/session.dart';
+import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/club/club_repository.dart';
+import 'package:jomhor_fan/features/club/join_sheet.dart';
 import 'package:jomhor_fan/features/club/membership.dart';
 import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
@@ -17,13 +20,30 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 
 import 'helpers.dart';
 
-/// `member` of `GET /fan/me/membership` (docs/04-api.md §Fan).
-Map<String, Object?> memberJson({int number = 42, bool push = false, bool whatsapp = false}) => {
+/// `member` of `GET /fan/me/membership` (docs/04-api.md §Fan); `paid_until` since Lot 5 step 3 (null = never paid).
+Map<String, Object?> memberJson({int number = 42, bool push = false, bool whatsapp = false, String? paidUntil}) => {
   'number': number,
   'joined_at': '2026-11-03T10:00:00.123456Z',
   'marketing_push': push,
   'marketing_whatsapp': whatsapp,
+  'paid_until': paidUntil,
 };
+
+/// The club's PASS product and its MEMBERSHIP product (design content, test/fixtures/goldens/club/products_200.json),
+/// and the order the membership purchase opens.
+const passProductId = 'b1000000-0000-4000-8000-000000000001';
+const duesProductId = 'b1000000-0000-4000-8000-000000000002';
+const duesOrderId = 'd1000000-0000-4000-8000-000000000002';
+
+/// An answer of test/fixtures/club (captured from the dev API, FL-29/FL-30 real run), as `(status, body)`. [dir]
+/// `goldens/club`: the design content the goldens and the screen tests use, in the captured answer's shape.
+({int status, Object? body}) clubAnswer(String name, {String dir = 'club'}) {
+  final j = jsonDecode(File('test/fixtures/$dir/$name.json').readAsStringSync()) as Map<String, Object?>;
+  return (status: j['status']! as int, body: j['body']);
+}
+
+/// `GET /fan/products?organizer=` for Atlas FC: the pass and the membership, both on sale.
+List<Object?> clubProducts() => clubAnswer('products_200', dir: 'goldens/club').body! as List<Object?>;
 
 /// A `last_events` row; ids from 101, two weeks apart, oldest first.
 Map<String, Object?> pastJson(int id, {bool attended = true, String eventType = 'FOOTBALL_MATCH'}) => {
@@ -65,10 +85,35 @@ class ClubBackend {
   final List<http.Request> requests = [];
   bool putFails = false;
 
+  /// Lot 5 step 3: the club sells a membership (`paid_required`).
+  bool paidRequired = false;
+
+  /// `GET /fan/products` rows; null = 404.
+  List<Object?>? products;
+
+  /// Queued answers of `POST /fan/product-orders` (default: the design membership's 201).
+  final productOrders = <({int status, Object? body})>[];
+
+  /// `/fan/me` `display_name`.
+  String? displayName = 'Yazid Aqel';
+
+  /// A left member's `paid_until`, kept on rejoin (docs/04-api.md: leaving keeps it).
+  String? keptPaidUntil;
+
+  /// `POST /fan/product-orders` answers after this.
+  Duration orderDelay = Duration.zero;
+
+  /// The `Date` of `GET /fan/products` (server time); null = none sent.
+  DateTime? serverDate;
+
   Iterable<http.Request> calls(String method, String path) =>
       requests.where((r) => r.method == method && r.url.path == '/v1$path');
 
-  Map<String, Object?> _membership(String org) => {'member': members[org], 'loyalty': loyalty[org] ?? loyaltyJson()};
+  Map<String, Object?> _membership(String org) => {
+    'member': members[org],
+    'loyalty': loyalty[org] ?? loyaltyJson(),
+    'paid_required': paidRequired,
+  };
 
   Future<http.Response> handle(http.Request r) async {
     requests.add(r);
@@ -93,8 +138,8 @@ class ClubBackend {
         final id = body['organizer_id']! as String;
         final joined = members[id] == null;
         members[id] = {
+          ...memberJson(paidUntil: joined ? keptPaidUntil : null),
           ...?members[id],
-          ...memberJson(),
           'marketing_push': body['marketing_push'],
           'marketing_whatsapp': body['marketing_whatsapp'],
         };
@@ -107,7 +152,19 @@ class ClubBackend {
       case ('GET', '/v1/fan/orders'):
         return json({'orders': <Object?>[]});
       case ('GET', '/v1/fan/me'):
-        return json({'id': 'u1', 'phone': '+212600000001', 'display_name': 'Yazid Aqel', 'locale': 'fr'});
+        return json({'id': 'u1', 'phone': '+212600000001', 'display_name': displayName, 'locale': 'fr'});
+      case ('GET', '/v1/fan/products'):
+        if (products == null) return apiError(404, 'NOT_FOUND');
+        final res = json(products);
+        return serverDate == null
+            ? res
+            : http.Response.bytes(res.bodyBytes, 200, headers: {...res.headers, 'date': HttpDate.format(serverDate!)});
+      case ('POST', '/v1/fan/product-orders'):
+        final (:status, :body) = productOrders.isEmpty
+            ? clubAnswer('product_order_201_membership', dir: 'goldens/club')
+            : productOrders.removeAt(0);
+        await Future<void>.delayed(orderDelay);
+        return json(body, status);
       default:
         return apiError(404, 'NOT_FOUND');
     }
@@ -225,6 +282,7 @@ void main() {
     await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
     await tester.pumpAndSettle();
     expect(find.text('Rejoindre Atlas FC'), findsOneWidget);
+    expect(find.byKey(const Key('club.joinDues')), findsNothing); // the club sells no membership
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('club.optin.push'))).value, isFalse);
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('club.optin.whatsapp'))).value, isFalse);
     await tester.tap(find.byKey(const Key('club.optin.push')));
@@ -590,6 +648,271 @@ void main() {
     expect(find.text('8 matchs au stade'), findsOneWidget); // on its way out
     await tester.pumpAndSettle();
     expect(find.text('8 matchs au stade'), findsNothing);
+  });
+
+  group('FL-30 cotisation and Abonnements (Lot 5 step 3)', () {
+    const only = (ids: [testOrganizer], seen: true, chip: chipAll);
+    final duesPay = find.byKey(const Key('club.duesPay'));
+
+    ClubBackend backend({String? paidUntil, bool member = true, bool required = true, bool membershipOnSale = true}) =>
+        ClubBackend(members: {if (member) testOrganizer: memberJson(paidUntil: paidUntil)})
+          ..paidRequired = required
+          ..products = [
+            for (final p in clubProducts())
+              if (membershipOnSale || (p! as Map<String, Object?>)['kind'] == 'PASS') p,
+          ];
+
+    String path(ProviderContainer c) => c.read(routerProvider).state.uri.path;
+
+    test('the fixtures parse, and the fake backend answers in their shape', () {
+      final paid = Membership.fromJson(clubAnswer('membership_200_paid').body! as Map<String, Object?>);
+      expect((paid.paidRequired, paid.member!.paidUntil), (true, DateTime.utc(2027, 6, 30, 22, 59, 59)));
+      final unpaid = Membership.fromJson(clubAnswer('membership_200_unpaid').body! as Map<String, Object?>);
+      expect((unpaid.paidRequired, unpaid.member!.paidUntil), (true, null));
+      // Before BE-54 (no `paid_required`, no `paid_until`): nothing required.
+      final old = Membership.fromJson({'member': memberJson()..remove('paid_until'), 'loyalty': loyaltyJson()});
+      expect((old.paidRequired, old.member!.paidUntil), (false, null));
+      final fixture = clubAnswer('membership_200_paid').body! as Map<String, Object?>;
+      final fake = {'member': memberJson(), 'loyalty': loyaltyJson(), 'paid_required': true};
+      expect(fake.keys.toSet(), fixture.keys.toSet());
+      expect(memberJson().keys.toSet(), (fixture['member']! as Map<String, Object?>).keys.toSet());
+    });
+
+    test("the design answers (test/fixtures/goldens/club) have the real answers' shape", () {
+      for (final name in ['products_200', 'product_order_201_membership']) {
+        expect(keyPaths(clubAnswer(name, dir: 'goldens/club').body), keyPaths(clubAnswer(name).body), reason: name);
+      }
+    });
+
+    test('real run: the paid membership order reads as a product order (no event, zone or pass)', () {
+      final order = FanOrder.fromJson(clubAnswer('order_200_membership_paid').body! as Map<String, Object?>);
+      expect((order.eventId, order.passId, order.product!.isPass), (null, null, false));
+      expect(order.product!.timezone, 'Africa/Casablanca');
+      expect(order.product!.paymentMethods, [PayMethod.card, PayMethod.wallet, PayMethod.cashAgency]);
+      expect(order.product!.cashUntil, DateTime.utc(2027, 6, 30, 10));
+      expect(order.items.single.zoneId, isNull);
+    });
+
+    testWidgets('real run: screen 7 on the captured products: the cotisation to pay, its order opened; a product '
+        'whose sales closed is not offered', (tester) async {
+      final rows = clubAnswer('products_200').body! as List<Object?>;
+      String idOf(String kind, bool Function(String close) closed) => [
+        for (final p in rows.cast<Map<String, Object?>>())
+          if (p['kind'] == kind && closed(p['sales_close_at']! as String)) p['id']! as String,
+      ].single;
+      // 20:39Z: after the short pass's sales_close_at (20:38:11Z), before the others' (2027).
+      bool before(String at) => DateTime.parse(at).isBefore(DateTime.utc(2026, 11, 15, 20, 39));
+      final b = ClubBackend(members: {testOrganizer: memberJson()})
+        ..paidRequired = true
+        ..products = rows
+        ..serverDate = DateTime.utc(2026, 11, 15, 20, 39)
+        ..productOrders.add(clubAnswer('product_order_201_membership'));
+      final c = await open(tester, b, follows: only);
+      expect(find.byKey(const Key('club.dues.$testOrganizer.unpaid')), findsOneWidget);
+      expect(find.byKey(Key('club.pass.${idOf('PASS', (at) => !before(at))}')), findsOneWidget);
+      expect(find.byKey(Key('club.pass.${idOf('PASS', before)}')), findsNothing);
+      await tester.ensureVisible(duesPay);
+      await tester.tap(find.descendant(of: duesPay, matching: find.byType(FilledButton)));
+      await tester.pumpAndSettle();
+      final post = jsonDecode(b.calls('POST', '/fan/product-orders').single.body) as Map<String, Object?>;
+      expect(post['product_id'], idOf('MEMBERSHIP', (_) => true));
+      final order = clubAnswer('product_order_201_membership').body! as Map<String, Object?>;
+      expect(path(c), '/orders/${order['id']}');
+    });
+
+    test('duesOf: none, unpaid, paid, expired', () {
+      final now = DateTime.utc(2027, 2, 20, 12);
+      Membership m({bool required = true, String? paidUntil, bool member = true}) => Membership.fromJson({
+        'member': member ? memberJson(paidUntil: paidUntil) : null,
+        'loyalty': loyaltyJson(),
+        'paid_required': required,
+      });
+      expect(duesOf(m(required: false), onSale: true, now: now), isNull);
+      expect(duesOf(m(member: false), onSale: true, now: now), isNull);
+      expect(duesOf(m(), onSale: true, now: now), Dues.unpaid);
+      expect(duesOf(m(), onSale: false, now: now), isNull); // nothing to pay
+      expect(duesOf(m(paidUntil: '2027-06-30T22:00:00Z'), onSale: false, now: now), Dues.paid);
+      expect(duesOf(m(paidUntil: '2027-02-20T12:00:00Z'), onSale: false, now: now), Dues.expired); // paid_until > T
+      expect(duesOf(m(paidUntil: '2026-06-30T22:00:00Z'), onSale: true, now: now), Dues.expired);
+    });
+
+    testWidgets('paid_required false: no cotisation row; the Abonnements cards read public, no token', (tester) async {
+      final b = backend(required: false);
+      await open(tester, b, follows: only);
+      expect(find.byKey(const Key('club.dues.$testOrganizer.unpaid')), findsNothing);
+      expect(find.byKey(const Key('club.duesPaid.$testOrganizer')), findsNothing);
+      expect(duesPay, findsNothing);
+      expect(find.text('ABONNEMENTS'), findsOneWidget);
+      expect(find.text('Abonnement Tribune Est'), findsOneWidget);
+      expect(find.text('Tribune Est · 2 matchs annoncés'), findsOneWidget);
+      final read = b.calls('GET', '/fan/products').single;
+      expect(read.url.queryParameters, {'organizer': testOrganizer});
+      expect(read.headers.containsKey('Authorization'), isFalse);
+    });
+
+    testWidgets('unpaid: "Payer ma cotisation" → POST /fan/product-orders (MEMBERSHIP) in the fan name → screen 4', (
+      tester,
+    ) async {
+      final b = backend();
+      final c = await open(tester, b, follows: only);
+      expect(find.byKey(const Key('club.dues.$testOrganizer.unpaid')), findsOneWidget);
+      expect(find.textContaining('Cotisation Saison 2026-27 · '), findsOneWidget);
+      await tester.ensureVisible(duesPay);
+      await tester.tap(find.descendant(of: duesPay, matching: find.text('Payer ma cotisation')));
+      await tester.pumpAndSettle();
+      expect(jsonDecode(b.calls('POST', '/fan/product-orders').single.body), {
+        'product_id': duesProductId,
+        'channel': 'APP',
+        'holder_name': 'Yazid Aqel',
+      });
+      expect(path(c), '/orders/$duesOrderId');
+    });
+
+    testWidgets('unpaid with no name on /fan/me: screen 13 asks for it, nothing ordered yet', (tester) async {
+      final b = backend()..displayName = null;
+      final c = await open(tester, b, follows: only);
+      await tester.ensureVisible(duesPay);
+      await tester.tap(find.descendant(of: duesPay, matching: find.byType(FilledButton)));
+      await tester.pumpAndSettle();
+      expect(path(c), '/products/$duesProductId');
+      expect(b.calls('POST', '/fan/product-orders'), isEmpty);
+    });
+
+    testWidgets("paid: the accent chip \"À jour jusqu'au {date}\", the day in the venue zone", (tester) async {
+      // 23:30 UTC on 30 June: still 30 June in Casablanca (+00 since tzdata 2026e), 1 July on a Paris phone.
+      await open(tester, backend(paidUntil: '2027-06-30T23:30:00Z'), follows: only);
+      expect(find.byKey(const Key('club.duesPaid.$testOrganizer')), findsOneWidget);
+      expect(find.text("À jour jusqu'au 30 juin"), findsOneWidget);
+      expect(duesPay, findsNothing);
+    });
+
+    testWidgets('expired: "Cotisation expirée" + "Renouveler" only with a product on sale', (tester) async {
+      await open(tester, backend(paidUntil: '2026-06-30T22:00:00Z'), follows: only);
+      expect(find.byKey(const Key('club.dues.$testOrganizer.expired')), findsOneWidget);
+      expect(find.text('Cotisation expirée'), findsOneWidget);
+      expect(find.descendant(of: duesPay, matching: find.text('Renouveler')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+
+      await open(tester, backend(paidUntil: '2026-06-30T22:00:00Z', membershipOnSale: false), follows: only);
+      expect(find.text('Cotisation expirée'), findsOneWidget);
+      expect(duesPay, findsNothing);
+    });
+
+    testWidgets('MEMBERSHIP_PAID (paid elsewhere) → the membership is read again → the paid chip', (tester) async {
+      final b = backend()..productOrders.add(clubAnswer('product_order_409_membership_paid'));
+      final c = await open(tester, b, follows: only);
+      b.members[testOrganizer] = memberJson(paidUntil: '2027-06-30T22:00:00Z'); // paid on the shop meanwhile
+      await tester.ensureVisible(duesPay);
+      await tester.tap(find.descendant(of: duesPay, matching: find.byType(FilledButton)));
+      await tester.pumpAndSettle();
+      expect(b.calls('GET', '/fan/me/membership'), hasLength(2));
+      expect(find.byKey(const Key('club.duesPaid.$testOrganizer')), findsOneWidget);
+      expect(find.text("À jour jusqu'au 30 juin"), findsOneWidget);
+      expect(path(c), '/club');
+    });
+
+    testWidgets('not a member: the join sheet adds "Cotisation {price}": PUT with the switches as shown, then the '
+        'POST → screen 4', (tester) async {
+      final b = backend(member: false);
+      final c = await open(tester, b, follows: only);
+      await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('club.optin.whatsapp')));
+      await tester.pump();
+      final dues = find.byKey(const Key('club.joinDues'));
+      expect(find.descendant(of: dues, matching: find.textContaining('Cotisation ')), findsOneWidget);
+      await tester.ensureVisible(dues);
+      await tester.tap(find.descendant(of: dues, matching: find.byType(OutlinedButton)));
+      await tester.pumpAndSettle();
+      // The opt-ins the fan set are kept: the join comes first, then the order.
+      final put = b.calls('PUT', '/fan/me/membership').single;
+      expect(jsonDecode(put.body), {
+        'organizer_id': testOrganizer,
+        'marketing_push': false,
+        'marketing_whatsapp': true,
+      });
+      final post = b.calls('POST', '/fan/product-orders').single;
+      expect(b.requests.indexOf(put), lessThan(b.requests.indexOf(post)));
+      expect((jsonDecode(post.body) as Map)['product_id'], duesProductId);
+      expect(path(c), '/orders/$duesOrderId');
+      expect(find.text('Rejoindre Atlas FC'), findsNothing); // the sheet closed
+    });
+
+    testWidgets('join sheet cotisation: a failed join orders nothing and says why', (tester) async {
+      final b = backend(member: false)..putFails = true;
+      final c = await open(tester, b, follows: only);
+      await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
+      await tester.pumpAndSettle();
+      final dues = find.byKey(const Key('club.joinDues'));
+      await tester.ensureVisible(dues);
+      await tester.tap(find.descendant(of: dues, matching: find.byType(OutlinedButton)));
+      await tester.pumpAndSettle();
+      expect(b.calls('POST', '/fan/product-orders'), isEmpty);
+      expect(find.byKey(const Key('club.joinError')), findsOneWidget);
+      expect(path(c), '/club');
+    });
+
+    testWidgets('join sheet cotisation: the sheet stays locked until the order answers', (tester) async {
+      final b = backend(member: false)..orderDelay = const Duration(seconds: 1);
+      final c = await open(tester, b, follows: only);
+      await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
+      await tester.pumpAndSettle();
+      final dues = find.byKey(const Key('club.joinDues'));
+      await tester.ensureVisible(dues);
+      await tester.tap(find.descendant(of: dues, matching: find.byType(OutlinedButton)));
+      await tester.pump(const Duration(milliseconds: 100)); // joined, the order on its way
+      expect(b.calls('PUT', '/fan/me/membership'), hasLength(1));
+      expect(b.calls('POST', '/fan/product-orders'), hasLength(1));
+      // The sheet's own switches (the member's settings now show under it with the same keys).
+      Finder inSheet(String key) => find.descendant(of: find.byType(JoinSheet), matching: find.byKey(Key(key)));
+      final whatsapp = inSheet('club.optin.whatsapp');
+      expect(tester.widget<SwitchListTile>(whatsapp).onChanged, isNull);
+      expect(tester.widget<SwitchListTile>(inSheet('club.optin.push')).onChanged, isNull);
+      expect(tester.widget<FilledButton>(find.byKey(const Key('club.joinConfirm'))).onPressed, isNull);
+      // A flip or a "Rejoindre" mid-order does nothing: no second PUT, the sheet still open.
+      await tester.tap(whatsapp, warnIfMissed: false);
+      await tester.tap(find.byKey(const Key('club.joinConfirm')), warnIfMissed: false);
+      await tester.pump();
+      expect(tester.widget<SwitchListTile>(whatsapp).value, isFalse);
+      expect(b.calls('PUT', '/fan/me/membership'), hasLength(1));
+      expect(find.text('Rejoindre Atlas FC'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(path(c), '/orders/$duesOrderId');
+      expect(b.calls('PUT', '/fan/me/membership'), hasLength(1));
+    });
+
+    testWidgets('join sheet cotisation: a rejoin already paid up closes the sheet, no order', (tester) async {
+      final b = backend(member: false)..keptPaidUntil = '2027-06-30T22:00:00Z';
+      final c = await open(tester, b, follows: only);
+      await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
+      await tester.pumpAndSettle();
+      final dues = find.byKey(const Key('club.joinDues'));
+      await tester.ensureVisible(dues);
+      await tester.tap(find.descendant(of: dues, matching: find.byType(OutlinedButton)));
+      await tester.pumpAndSettle();
+      expect(b.calls('PUT', '/fan/me/membership'), hasLength(1));
+      expect(b.calls('POST', '/fan/product-orders'), isEmpty);
+      expect(find.text('Rejoindre Atlas FC'), findsNothing);
+      expect(path(c), '/club');
+      expect(find.byKey(const Key('club.duesPaid.$testOrganizer')), findsOneWidget);
+    });
+
+    testWidgets('paid or expired is decided on server time (the products read), not the phone clock', (tester) async {
+      // The phone says 12:00 (paid until 13:00); the server already says 14:00.
+      final b = backend(paidUntil: '2027-02-20T13:00:00Z')..serverDate = DateTime.utc(2027, 2, 20, 14);
+      await open(tester, b, follows: only);
+      expect(find.byKey(const Key('club.dues.$testOrganizer.expired')), findsOneWidget);
+      expect(find.byKey(const Key('club.duesPaid.$testOrganizer')), findsNothing);
+    });
+
+    testWidgets('an Abonnements card → screen 13 buy', (tester) async {
+      final c = await open(tester, backend(), follows: only);
+      final card = find.byKey(const Key('club.pass.$passProductId'));
+      await tester.ensureVisible(card);
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+      expect(path(c), '/products/$passProductId');
+    });
   });
 
   test('signed out, a membership read fails at once instead of hanging', () async {

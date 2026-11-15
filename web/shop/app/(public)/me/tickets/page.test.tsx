@@ -27,10 +27,15 @@ it('W5 not signed in → login, back to /me/tickets', async () => {
 
 it('W5 signed in: the server HTML carries no ticket data (the list loads from /api/tickets in the browser)', async () => {
   session = 'eyJ.token.sig'
+  vi.stubEnv('API_BASE_URL', 'http://backend.test/v1')
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ passes: [] }), { status: 200 }))
   const h = renderToString(await TicketsPage())
   expect(h).toContain('Mes billets')
   expect(h).toContain('Chargement de tes billets')
   expect(h).toContain('href="jomhor-fan://tickets"')
   expect(h).not.toContain(session)
-  expect(fetchMock).not.toHaveBeenCalled()
+  expect(h).not.toContain('Mes abonnements') // none held: no section
+  // Lot 5 step 3: only the passes are read on the server (W5 "Mes abonnements"), never the tickets.
+  expect(fetchMock.mock.calls.map(([u]) => String(u))).toEqual(['http://backend.test/v1/fan/passes'])
+  vi.unstubAllEnvs()
 })

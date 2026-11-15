@@ -21,6 +21,9 @@ import ma.jomhor.sales.application.OrderService.View;
 import ma.jomhor.sales.application.Orders;
 import ma.jomhor.sales.application.PendingPayments.AttemptStatus;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.sales.products.adapters.web.ProductItemDto;
+import ma.jomhor.sales.products.application.ProductService;
+import ma.jomhor.sales.products.domain.Product;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -66,9 +69,23 @@ class OrderController {
     record Reserved(UUID id, Order.Status status, Instant reservedUntil, long totalMad, List<ItemDto> items,
                     Object group) {}
 
-    record OrderDto(UUID id, int eventId, Order.Channel channel, Order.Status status, AttemptStatus paymentStatus,
-                    long totalMad, Instant reservedUntil, Instant paidAt, List<ItemDto> items, List<UUID> ticketIds,
-                    Order.PaymentMethod paymentMethod, CashDto cash, Object group) {}
+    /** {@code items}: {@link ItemDto}s, or {@link ProductItemDto}s on a product order (event_id null). */
+    record OrderDto(UUID id, Integer eventId, Order.Channel channel, Order.Status status, AttemptStatus paymentStatus,
+                    long totalMad, Instant reservedUntil, Instant paidAt, List<?> items, List<UUID> ticketIds,
+                    Order.PaymentMethod paymentMethod, CashDto cash, Object group, ProductDto product, UUID passId) {}
+
+    /** 04 §Club directory organizer, no id. */
+    record OrganizerDto(String slug, String name, String crestUrl) {}
+
+    /**
+     * A product order's product (04 GET /fan/orders/{id}, Lot 5 step 3), read even once it is off sale;
+     * {@code payment_methods} and {@code cash_until} as on /fan/products.
+     */
+    record ProductDto(UUID id, Product.Kind kind, String name, OrganizerDto organizer, String timezone,
+                      List<String> paymentMethods, Instant cashUntil) {}
+
+    /** A product order's row in GET /fan/orders. */
+    record ProductRefDto(UUID id, Product.Kind kind, String name, String timezone) {}
 
     /** Labels only: never a member's phone or full name. {@code pay_url} comes from server config. */
     record MemberDto(UUID orderId, String holderLabel, int places, long totalMad, Order.Status status,
@@ -89,7 +106,7 @@ class OrderController {
 
     record SummaryDto(UUID id, EventRefDto event, Order.Channel channel, Order.Status status, long totalMad,
                       Instant reservedUntil, Order.PaymentMethod paymentMethod, String payCode, Instant createdAt,
-                      Order.GroupRole groupRole) {}
+                      Order.GroupRole groupRole, ProductRefDto product) {}
 
     record OrderList(List<SummaryDto> orders) {}
 
@@ -116,12 +133,22 @@ class OrderController {
         Order o = v.order();
         CashInstructions.Cash c = v.cash();
         return new OrderDto(o.id(), o.eventId(), o.channel(), o.status(),
-                v.attempt() == null ? null : v.attempt().status(), o.totalMad(), o.reservedUntil(), o.paidAt(), items(v),
+                v.attempt() == null ? null : v.attempt().status(), o.totalMad(), o.reservedUntil(), o.paidAt(),
+                v.product() == null ? items(v) : ProductItemDto.of(v),
                 v.ticketIds(), v.attempt() == null ? null : v.attempt().method(),
                 c == null ? null : new CashDto(c.payCode(), c.amountMad(),
                         c.points().stream().map(p -> new CashPointDto(p.name(), p.address(), p.hours())).toList(),
                         c.networks()),
-                group(v.group()));
+                group(v.group()), product(v.product()), o.passId());
+    }
+
+    private static ProductDto product(ProductService.FanView f) {
+        if (f == null) {
+            return null;
+        }
+        Product p = f.product();
+        return new ProductDto(p.id(), p.kind(), p.name(), new OrganizerDto(f.organizer().slug(), f.organizer().name(),
+                f.organizer().crestUrl()), f.timezone(), f.payment().methods(), f.payment().cashUntil());
     }
 
     private static Object group(OrderService.Group g) {
@@ -140,9 +167,11 @@ class OrderController {
         List<SummaryDto> rows = orders.list(UUID.fromString(jwt.getSubject())).stream().map(r -> {
             Orders.Listed o = r.order();
             Inventory.EventLabel e = r.event();
-            return new SummaryDto(o.id(), new EventRefDto(e.id(), e.title(), e.startsAt(), e.timezone()), o.channel(),
-                    o.status(), o.totalMad(), o.reservedUntil(), r.paymentMethod(), r.payCode(), o.createdAt(),
-                    o.groupRole());
+            ProductService.FanView f = r.product();
+            return new SummaryDto(o.id(), e == null ? null : new EventRefDto(e.id(), e.title(), e.startsAt(),
+                    e.timezone()), o.channel(), o.status(), o.totalMad(), o.reservedUntil(), r.paymentMethod(),
+                    r.payCode(), o.createdAt(), o.groupRole(), f == null ? null : new ProductRefDto(f.product().id(),
+                    f.product().kind(), f.product().name(), f.timezone()));
         }).toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new OrderList(rows));
     }

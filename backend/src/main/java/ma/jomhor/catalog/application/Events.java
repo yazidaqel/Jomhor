@@ -2,11 +2,14 @@ package ma.jomhor.catalog.application;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Persistence port for events and price_categories. Every method is scoped by organizer_id; a row of
@@ -20,8 +23,12 @@ public interface Events {
     /** Next events.id, taken before the insert so K_e can be bound to it. */
     int nextId();
 
-    /** Inserts DRAFT {@code eventId} (from nextId) with its encrypted K_e. Empty if the venue is not the organizer's. */
-    Optional<Event> insert(UUID org, int eventId, UUID venueId, Event.Type type, String title, Instant startsAt,
+    /**
+     * Inserts DRAFT {@code eventId} (from nextId) with its encrypted K_e. Empty if the venue is not the organizer's.
+     * {@code seriesId} (may be null) must be the organizer's: the caller checked it.
+     */
+    Optional<Event> insert(UUID org, int eventId, UUID venueId, UUID seriesId, Event.Type type, String title,
+                           Instant startsAt,
                            Instant doorsOpenAt, Instant saleStartsAt, Event.ReentryPolicy reentryPolicy, int perAccountLimit,
                            String metadata, byte[] eventKeyEnc);
 
@@ -36,12 +43,15 @@ public interface Events {
     /** Like find, and locks the event row until the end of the transaction. */
     Optional<Event> lock(UUID org, int eventId);
 
-    /** Writes the mutable columns of {@code event} (title, times, sale opening, status, cutoff, rules, metadata). */
+    /** Writes the mutable columns of {@code event} (series, title, times, sale opening, status, cutoff, rules, metadata). */
     Event update(UUID org, Event event);
 
     List<PriceCategory> prices(UUID org, int eventId);
 
     Optional<PriceCategory> findPrice(UUID org, int eventId, UUID priceId);
+
+    /** Like findPrice, and locks the row until the end of the transaction (a sale's take waits). */
+    Optional<PriceCategory> lockPrice(UUID org, int eventId, UUID priceId);
 
     /** Capacity of the zone if it belongs to this venue. */
     Optional<Integer> zoneCapacity(UUID org, UUID venueId, int zoneId);
@@ -83,12 +93,55 @@ public interface Events {
     /** Zones of the event's venue that have at least one of its price categories, by id, prices by name. */
     List<Event.ZoneListing> zoneListings(UUID org, int eventId);
 
-    /** sold += qty if it stays within quota, in one statement. The only way sold grows. Empty if it doesn't fit. */
+    /** sold += qty if it stays within quota, in one statement. Empty if it doesn't fit. Any audience (the pass job). */
     Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty);
+
+    /**
+     * Like take, but never a PASS category (checked in the same statement): fan orders, till sales and late successes,
+     * so a concurrent audience change can't hand a fan a PASS place.
+     */
+    Optional<PriceCategory> takeSellable(UUID org, int eventId, UUID priceId, int qty);
 
     /** sold -= qty; false if sold < qty (never happens unless holds and sold disagree). */
     boolean giveBack(UUID org, int eventId, UUID priceId, int qty);
 
     /** False if sold > 0. A category referenced by order items fails on its FK. */
     boolean deletePriceIfUnsold(UUID org, int eventId, UUID priceId);
+
+    // ---------- series ----------
+
+    /** By starts_on, then name. */
+    List<Event.Series> series(UUID org);
+
+    Optional<Event.Series> findSeries(UUID org, UUID seriesId);
+
+    /** Like findSeries, and locks the row until the end of the transaction. */
+    Optional<Event.Series> lockSeries(UUID org, UUID seriesId);
+
+    Event.Series insertSeries(UUID org, String name, LocalDate startsOn, LocalDate endsOn);
+
+    /** Writes every field (the caller merged the PATCH under {@link #lockSeries}). */
+    Event.Series updateSeries(UUID org, Event.Series series);
+
+    /** The organizer's zone with its venue. */
+    Optional<Event.ZoneAt> zoneAt(UUID org, int zoneId);
+
+    /**
+     * The series' events at the venue, ON_SALE or GATES_OPEN, by starts_at then id; {@code upcoming}: only those with
+     * starts_at >= now() (database clock).
+     */
+    List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming);
+
+    /** The series' events at the venue that aren't CLOSED (DRAFT included), by starts_at then id. */
+    List<Event.SeriesEvent> seriesEventsNotClosed(UUID org, UUID seriesId, UUID venueId);
+
+    /**
+     * The pass job's events, of every organizer: a series, ON_SALE or GATES_OPEN, refund_cutoff_at after {@code now}.
+     * By id.
+     */
+    List<Event.Ref> withSeriesOnSale(Instant now);
+
+    /** Like find, with {@code for share} on the event row until the end of the caller's transaction (required). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    Optional<Event> share(UUID org, int eventId);
 }

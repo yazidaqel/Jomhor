@@ -4,12 +4,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -25,6 +27,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 
@@ -45,15 +48,21 @@ public class EventService {
     static final int PUBLIC_LIST_MAX = 50;
 
     /**
-     * Create or PATCH input. On PATCH a null field is unchanged (so sale_starts_at can't be cleared); venue_id
-     * and event_type must match if sent.
+     * Create or PATCH input. On PATCH a null field is unchanged (so sale_starts_at and series_id can't be cleared);
+     * venue_id and event_type must match if sent.
      */
     public record EventInput(UUID venueId, Event.Type eventType, String title, Instant startsAt, Instant doorsOpenAt,
                              Instant saleStartsAt, Event.ReentryPolicy reentryPolicy, Integer perAccountLimit,
-                             JsonNode metadata) {}
+                             JsonNode metadata, UUID seriesId) {}
+
+    /** event_series name: 1-60 characters, trimmed (04 /org/series). */
+    static final int SERIES_NAME_MAX = 60;
 
     /** GET /fan/events/{id}: the event, its zones with prices, and how it can be paid. */
     public record PublicEvent(Event.Listing event, List<Event.ZoneListing> zones, PaymentMethods.Options payment) {}
+
+    /** A non-DRAFT event and every zone with one of its categories, PASS ones included (tickets' read model). */
+    public record EventZones(Event.Listing event, List<Event.ZoneListing> zones) {}
 
     /** A zone with at least one of the event's price categories, and those categories (sales' read model). */
     public record PricedZone(int zoneId, String code, String name, List<PriceCategory> prices) {}
@@ -64,16 +73,18 @@ public class EventService {
     private final EventLock gateLock;
     private final PaymentMethods paymentMethods;
     private final EventRooms rooms;
+    private final EventPasses passes;
     private final SecureRandom random = new SecureRandom();
 
     public EventService(Events events, KeyEncryptor keys, AuditLog audit, EventLock gateLock,
-                        PaymentMethods paymentMethods, EventRooms rooms) {
+                        PaymentMethods paymentMethods, EventRooms rooms, EventPasses passes) {
         this.events = events;
         this.keys = keys;
         this.audit = audit;
         this.gateLock = gateLock;
         this.paymentMethods = paymentMethods;
         this.rooms = rooms;
+        this.passes = passes;
     }
 
     public List<Event.Summary> list(UUID org, Status status, Instant from) {
@@ -90,6 +101,7 @@ public class EventService {
         String metadata = metadata(in.eventType(), in.metadata());
         checkDoors(in.doorsOpenAt(), in.startsAt());
         checkSaleStart(in.saleStartsAt(), in.startsAt());
+        checkSeries(org, in.seriesId());
         byte[] key = new byte[32];
         random.nextBytes(key);
         int eventId = events.nextId();
@@ -99,7 +111,8 @@ public class EventService {
         } finally {
             Arrays.fill(key, (byte) 0);
         }
-        events.insert(org, eventId, in.venueId(), in.eventType(), in.title().trim(), in.startsAt(), in.doorsOpenAt(),
+        events.insert(org, eventId, in.venueId(), in.seriesId(), in.eventType(), in.title().trim(), in.startsAt(),
+                        in.doorsOpenAt(),
                         in.saleStartsAt(), in.reentryPolicy() == null ? Event.ReentryPolicy.NONE : in.reentryPolicy(),
                         in.perAccountLimit() == null ? DEFAULT_PER_ACCOUNT_LIMIT : in.perAccountLimit(), metadata, keyEnc)
                 .orElseThrow(() -> invalid("venue_id", "unknown venue"));
@@ -110,6 +123,11 @@ public class EventService {
 
     public Event get(UUID org, int eventId) {
         return events.find(org, eventId).orElseThrow(notFound("Event"));
+    }
+
+    /** 04 GET /org/events/{id} {@code pass_tickets}: pass tickets exist for the event, so its series_id is fixed. */
+    public boolean hasPassTickets(UUID org, int eventId) {
+        return passes.hasPassTickets(org, eventId);
     }
 
     /** Like {@link #get}, and locks the event row until the caller's transaction ends (sales' room writes). */
@@ -158,10 +176,18 @@ public class EventService {
         if (!Objects.equals(saleStartsAt, e.saleStartsAt())) {
             rooms.checkSaleStartMovable(org, eventId, saleStartsAt); // a SCHEDULED phase 1 follows (opens_at is derived)
         }
+        UUID seriesId = or(in.seriesId(), e.seriesId());
+        if (!Objects.equals(seriesId, e.seriesId())) {
+            checkSeries(org, seriesId);
+            if (passes.hasPassTickets(org, eventId)) {
+                throw new ApiException("EVENT_NOT_EDITABLE", HttpStatus.CONFLICT,
+                        "The event already has season-pass tickets", Map.of("reason", "PASS_TICKETS"));
+            }
+        }
         String metadata = in.metadata() == null || in.metadata().isNull()
                 ? e.metadata() : metadata(e.eventType(), in.metadata());
         Instant cutoff = e.status() == Status.ON_SALE ? startsAt.minus(REFUND_FREEZE) : e.refundCutoffAt();
-        return events.update(org, new Event(e.id(), e.venueId(), e.timezone(), e.seriesId(), e.eventType(),
+        return events.update(org, new Event(e.id(), e.venueId(), e.timezone(), seriesId, e.eventType(),
                 in.title() == null ? e.title() : in.title().trim(), startsAt, doors, saleStartsAt, e.status(), cutoff,
                 or(in.reentryPolicy(), e.reentryPolicy()), or(in.perAccountLimit(), e.perAccountLimit()), metadata,
                 e.createdAt()));
@@ -221,17 +247,38 @@ public class EventService {
     /**
      * DRAFT or unknown → 404. sold_out and from_price_mad are taken again from the price rows of the response,
      * so they can't contradict zones[].prices[].remaining (two statements, two READ COMMITTED snapshots).
-     * from_price_mad: ALL categories only, so the public "dès" is a price anyone can pay (plan lot-5 Q172).
+     * from_price_mad: ALL categories only, so the public "dès" is a price anyone can pay (plan lot-5 Q172). PASS
+     * categories are left out of the rows, and a zone with only those is left out (04 §Passes).
      */
     public PublicEvent publicEvent(int eventId) {
-        Event.Listing e = events.listing(eventId).orElseThrow(notFound("Event"));
-        List<Event.ZoneListing> zones = events.zoneListings(e.organizerId(), eventId);
+        EventZones all = eventZones(eventId);
+        Event.Listing e = all.event();
+        List<Event.ZoneListing> zones = all.zones().stream()
+                .map(z -> new Event.ZoneListing(z.id(), z.code(), z.name(), z.seated(), z.gates(),
+                        z.prices().stream().filter(p -> p.audience().sellable()).toList()))
+                .filter(z -> !z.prices().isEmpty())
+                .toList();
         List<Event.PriceListing> left = zones.stream().flatMap(z -> z.prices().stream())
                 .filter(p -> p.remaining() > 0).toList();
         Long fromPrice = left.stream().filter(p -> p.audience() == Event.Audience.ALL)
                 .map(Event.PriceListing::priceMad).min(Long::compare).orElse(null);
         return new PublicEvent(e.withStock(left.isEmpty(), fromPrice), zones,
                 paymentMethods.available(e.organizerId(), e.salesCloseAt(), events.now()));
+    }
+
+    /**
+     * Tickets (wallet, PDF, till slips): the event by id alone and every zone with one of its categories, PASS ones
+     * included, so a ticket's zone is always found. DRAFT or unknown → 404. Never a fan's event view: that is
+     * {@link #publicEvent}.
+     */
+    public EventZones eventZones(int eventId) {
+        Event.Listing e = events.listing(eventId).orElseThrow(notFound("Event"));
+        return new EventZones(e, events.zoneListings(e.organizerId(), eventId));
+    }
+
+    /** The database clock (now()), so time rules agree across instances. */
+    public Instant now() {
+        return events.now();
     }
 
     // ---------- prices ----------
@@ -258,6 +305,7 @@ public class EventService {
     public PriceCategory createPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota,
                                      Event.Audience audience) {
         Event e = lockForPrices(org, eventId);
+        checkPassPrice(audience, priceMad);
         int capacity = events.zoneCapacity(org, e.venueId(), zoneId)
                 .orElseThrow(() -> invalid("zone_id", "must be a zone of the event's venue"));
         checkCapacity(capacity, events.quotaOnZone(org, eventId, zoneId, null) + quota);
@@ -269,10 +317,19 @@ public class EventService {
     public PriceCategory updatePrice(UUID org, int eventId, UUID priceId, Integer zoneId, String name, Long priceMad,
                                      Integer quota, Event.Audience audience) {
         Event e = lockForPrices(org, eventId);
-        PriceCategory p = events.findPrice(org, eventId, priceId).orElseThrow(notFound("Price category"));
+        // Locked: a sale's take waits, so sold can't grow between the PASS_SOLD check and the write.
+        PriceCategory p = events.lockPrice(org, eventId, priceId).orElseThrow(notFound("Price category"));
         if (zoneId != null && zoneId != p.zoneId()) {
             throw invalid("zone_id", "is fixed after create");
         }
+        if (audience != null && (audience == Event.Audience.PASS) != (p.audience() == Event.Audience.PASS)
+                && p.sold() > 0) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("reason", "PASS_SOLD");
+            details.put("fields", Map.of("audience", "can't move to or from PASS once places are sold"));
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
+        }
+        checkPassPrice(or(audience, p.audience()), or(priceMad, p.priceMad()));
         if (quota != null) {
             // The zone can't be gone: the category's FK keeps it.
             int capacity = events.zoneCapacity(org, e.venueId(), p.zoneId()).orElseThrow();
@@ -323,6 +380,102 @@ public class EventService {
             Map<String, Object> details = new LinkedHashMap<>();
             details.put("reason", "NAME_TAKEN");
             details.put("fields", Map.of("name", "already used for this zone"));
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
+        }
+    }
+
+    // ---------- series (04 /org/series) ----------
+
+    public List<Event.Series> series(UUID org) {
+        return events.series(org);
+    }
+
+    /** Another organizer's or unknown → empty. */
+    public Optional<Event.Series> findSeries(UUID org, UUID seriesId) {
+        return events.findSeries(org, seriesId);
+    }
+
+    public Event.Series createSeries(UUID org, String name, LocalDate startsOn, LocalDate endsOn) {
+        return events.insertSeries(org, seriesName(name), startsOn, checkSeriesDates(startsOn, endsOn));
+    }
+
+    /** Null fields unchanged; the merged dates are checked under the series row lock. */
+    @Transactional
+    public Event.Series updateSeries(UUID org, UUID seriesId, String name, LocalDate startsOn, LocalDate endsOn) {
+        Event.Series s = events.lockSeries(org, seriesId).orElseThrow(notFound("Series"));
+        LocalDate from = or(startsOn, s.startsOn());
+        return events.updateSeries(org, new Event.Series(s.id(), name == null ? s.name() : seriesName(name), from,
+                checkSeriesDates(from, or(endsOn, s.endsOn()))));
+    }
+
+    /** A pass product's zone with its venue (sales' products); another organizer's or unknown → empty. */
+    public Optional<Event.ZoneAt> zoneAt(UUID org, int zoneId) {
+        return events.zoneAt(org, zoneId);
+    }
+
+    /**
+     * The series' published (ON_SALE, GATES_OPEN) events at the venue: upcoming only for 04 GET /fan/products
+     * {@code pass.events}, all of them for GET /fan/passes {@code events}.
+     */
+    public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming) {
+        return events.seriesEvents(org, seriesId, venueId, upcoming);
+    }
+
+    /** The series' events at the venue that aren't CLOSED (04 GET /org/products/{id} figures {@code events}). */
+    public List<Event.SeriesEvent> seriesEventsNotClosed(UUID org, UUID seriesId, UUID venueId) {
+        return events.seriesEventsNotClosed(org, seriesId, venueId);
+    }
+
+    /**
+     * The pass job's candidates (04 §Passes Tickets), of every organizer: a series, ON_SALE or GATES_OPEN, cutoff after
+     * {@code now}. Read without a lock: the job re-reads each under {@link #share}.
+     */
+    public List<Event.Ref> withSeriesOnSale(Instant now) {
+        return events.withSeriesOnSale(now);
+    }
+
+    /**
+     * The event with {@code for share} on its row until the caller's transaction ends: the pass job issues under it,
+     * so it runs one after the other with an event PATCH (its series_id and PASS_TICKETS check) and price writes.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Event> share(UUID org, int eventId) {
+        return events.share(org, eventId);
+    }
+
+    /** 04 GET /fan/products {@code payment_methods}, {@code cash_until}: as an event's, closing at {@code salesCloseAt}. */
+    public PaymentMethods.Options paymentOptions(UUID org, Instant salesCloseAt) {
+        return paymentMethods.available(org, salesCloseAt, events.now());
+    }
+
+    private static String seriesName(String name) {
+        String n = name.trim();
+        if (n.isEmpty() || n.length() > SERIES_NAME_MAX) {
+            throw invalid("name", "must be 1-60 characters");
+        }
+        return n;
+    }
+
+    private static LocalDate checkSeriesDates(LocalDate startsOn, LocalDate endsOn) {
+        if (endsOn.isBefore(startsOn)) {
+            throw invalid("ends_on", "must not be before starts_on");
+        }
+        return endsOn;
+    }
+
+    /** 04 POST/PATCH /org/events: {@code series_id} must be one of this organizer's series (422). */
+    private void checkSeries(UUID org, UUID seriesId) {
+        if (seriesId != null && events.findSeries(org, seriesId).isEmpty()) {
+            throw invalid("series_id", "unknown series");
+        }
+    }
+
+    /** 04 §Passes: a PASS category costs 0 (422 on price_mad, details.reason PASS_PRICE). */
+    private static void checkPassPrice(Event.Audience audience, long priceMad) {
+        if (audience == Event.Audience.PASS && priceMad != 0) {
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("reason", "PASS_PRICE");
+            details.put("fields", Map.of("price_mad", "must be 0 for PASS places"));
             throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
         }
     }

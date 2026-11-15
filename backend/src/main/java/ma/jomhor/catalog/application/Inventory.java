@@ -91,8 +91,17 @@ public class Inventory {
         return events.listing(eventId).map(e -> new Availability(e.organizerId(), e.title(), e.onSale(), e.soldOut()));
     }
 
+    /** Every category of the event, PASS ones included (an order's view, settle). */
     public List<SalePrice> prices(UUID org, int eventId) {
         return events.prices(org, eventId).stream().map(Inventory::sale).toList();
+    }
+
+    /**
+     * The categories a fan or a till may buy: PASS ones left out (04 §Passes), so naming one in an order is a 422 on
+     * its price_category_id, and the waitlist's R doesn't count them.
+     */
+    public List<SalePrice> salePrices(UUID org, int eventId) {
+        return prices(org, eventId).stream().filter(p -> p.audience().sellable()).toList();
     }
 
     /**
@@ -127,13 +136,32 @@ public class Inventory {
     /** Takes in UUID order into {@code taken}; returns the first category that doesn't fit, or null. */
     private UUID take(UUID org, int eventId, Map<UUID, Integer> qtyByCategory, Map<UUID, SalePrice> taken) {
         for (var e : new TreeMap<>(qtyByCategory).entrySet()) {
-            Optional<PriceCategory> row = events.take(org, eventId, e.getKey(), e.getValue());
+            Optional<PriceCategory> row = events.takeSellable(org, eventId, e.getKey(), e.getValue()); // never PASS
             if (row.isEmpty()) {
                 return e.getKey();
             }
             taken.put(e.getKey(), sale(row.get()));
         }
         return null;
+    }
+
+    /**
+     * The pass job (04 §Passes Tickets): one place in the first PASS category of the zone with room, by name then id,
+     * with the plain take (PASS places are issued by this job only). Empty: no room, nothing written.
+     */
+    // ponytail: re-reads the event's categories for every pass (up to 500 small reads per batch); pass the batch's
+    // PASS categories in if issuing a big season gets slow.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<SalePrice> takePass(UUID org, int eventId, int zoneId) {
+        for (PriceCategory p : events.prices(org, eventId)) { // by zone, name, id
+            if (p.audience() == Event.Audience.PASS && p.zoneId() == zoneId && p.sold() < p.quota()) {
+                Optional<PriceCategory> row = events.take(org, eventId, p.id(), 1);
+                if (row.isPresent()) {
+                    return row.map(Inventory::sale);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     /** Gives every hold back. Each one must fit (sold ≥ qty): anything else is a bug, ReleaseFailed. */

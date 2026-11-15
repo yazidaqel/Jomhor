@@ -10,12 +10,15 @@ import 'package:jomhor_fan/core/api/api_client.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/club/club_repository.dart';
 import 'package:jomhor_fan/features/club/club_seen.dart';
+import 'package:jomhor_fan/features/club/dues.dart';
 import 'package:jomhor_fan/features/club/join_sheet.dart';
 import 'package:jomhor_fan/features/club/member_card.dart';
 import 'package:jomhor_fan/features/club/membership.dart';
 import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:jomhor_fan/features/clubs/clubs_repository.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
+import 'package:jomhor_fan/features/passes/pass_cards.dart';
+import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -171,6 +174,7 @@ class _ClubScreenState extends ConsumerState<ClubScreen> {
         onRefresh: () async {
           ref
             ..invalidate(membershipProvider)
+            ..invalidate(clubProductsProvider)
             ..invalidate(nextEventsProvider);
           if (ref.read(clubsProvider).hasError) ref.invalidate(clubsProvider);
           if (clubs.value case final list? when list.isNotEmpty) {
@@ -202,8 +206,9 @@ class _ClubScreenState extends ConsumerState<ClubScreen> {
 /// Room for a card at the fan's text size (DESIGN.md §Accessibility: up to 130 %).
 double _cardHeight(BuildContext context) => 100 + MediaQuery.textScalerOf(context).scale(140);
 
-/// Under the pager, for the club shown: "Ta saison" (twelve dots, the count, the tier progress), "Derniers" and, for
-/// a member, the opt-ins and "Quitter le club". Non-members see the season too.
+/// Under the pager, for the club shown: the cotisation and "Abonnements" (Lot 5 step 3), "Ta saison" (twelve dots,
+/// the count, the tier progress), "Derniers" and, for a member, the opt-ins and "Quitter le club". Non-members see
+/// the season too.
 class _ClubDetails extends ConsumerWidget {
   const new({required this.club, super.key});
 
@@ -220,6 +225,8 @@ class _ClubDetails extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        DuesBlock(club: club, membership: m),
+        PassProductCards(products: ref.watch(clubProductsProvider(club.id)).value?.list ?? const []),
         SectionLabel(l.clubSeason),
         Container(
           padding: const EdgeInsets.all(JomhorSpace.xl),

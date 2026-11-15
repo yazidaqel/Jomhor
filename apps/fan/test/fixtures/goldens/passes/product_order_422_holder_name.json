@@ -1,0 +1,13 @@
+{
+ "source": "design content for the goldens and the screen tests (contract-first, docs/04-api.md Lot 5 step 3), in the shape of the FL-29 real run's test/fixtures/passes/product_order_422_holder_name.json (passes_test checks the shapes match)",
+ "status": 422,
+ "body": {
+  "code": "VALIDATION_FAILED",
+  "message": "VALIDATION_FAILED",
+  "details": {
+   "fields": {
+    "holder_name": "invalid"
+   }
+  }
+ }
+}

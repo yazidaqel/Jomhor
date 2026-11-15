@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { AlertCircle, Banknote, Minus, Plus, Store } from 'lucide-react'
+import { AlertCircle, Banknote, CircleCheck, Minus, Plus, Store } from 'lucide-react'
 import { Controller, useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
@@ -44,6 +44,9 @@ import { CloseSessionDialog, OpenSessionDialog } from './SessionDialogs'
 
 // B11 Guichet (DESIGN §Lot 3 adjustments): the till session, a walk-up sale and a cash code's collect, each paid
 // order then opened in the print view. Sale and collect need the caller's open till (else 409 POS_SESSION_REQUIRED).
+
+/** Lot 5 step 3 (Q187): PASS places are issued by the pass job, never sold at a till (422 on the item). */
+const sellable = (prices: Price[]) => prices.filter((p) => p.audience !== 'PASS')
 
 /** Copy for a sale or collect error; PER_ACCOUNT_LIMIT says the cap. */
 function useErrorMessage() {
@@ -183,7 +186,7 @@ function SaleForm({ events }: { events: EventSummary[] }) {
   }
 
   const submit = async (v: SaleValues) => {
-    const list = prices.data ?? []
+    const list = sellable(prices.data ?? [])
     const items = saleItems(list, v.qty, v.holders, v.same_name)
     const shown = list.reduce((sum, p) => sum + (v.qty[p.id] ?? 0) * p.price_mad, 0)
     saleId.current ??= crypto.randomUUID()
@@ -285,8 +288,9 @@ function Places({ eventId, form }: { eventId: string; form: UseFormReturn<SaleVa
     form.setValue('holders', Array.from({ length: placeCount(next) }, (_, i) => holders[i] ?? { name: '', phone: '' }))
   }
   const label = (p: Price) => t('pos.sale.priceName', { zone: p.zone.name, name: p.name })
+  const rows = sellable(prices.data)
   // Place i → its zone and category, in the order of the rows.
-  const places = prices.data.flatMap((p) => Array<string>(qty[p.id] ?? 0).fill(label(p)))
+  const places = rows.flatMap((p) => Array<string>(qty[p.id] ?? 0).fill(label(p)))
   const { errors } = form.formState
 
   return (
@@ -299,7 +303,7 @@ function Places({ eventId, form }: { eventId: string; form: UseFormReturn<SaleVa
           <p className={cn('text-xs tabular-nums', total >= limit ? 'font-medium text-foreground' : 'text-muted-foreground')}>{t('pos.sale.limit', { count: limit })}</p>
         </div>
         <ul className="flex flex-col divide-y rounded-lg border">
-          {prices.data.map((p) => (
+          {rows.map((p) => (
             <PriceRow key={p.id} price={p} label={label(p)} qty={qty[p.id] ?? 0} full={total >= limit} onQty={(q) => setQty(p.id, q)} locale={i18n.language} />
           ))}
         </ul>
@@ -438,7 +442,7 @@ function SaleSummary({ eventId, form, stop }: { eventId: string; form: UseFormRe
   const qty = useWatch({ control: form.control, name: 'qty' })
   const received = useWatch({ control: form.control, name: 'received' })
   const touched = !!form.formState.touchedFields.received
-  const total = (prices.data ?? []).reduce((sum, p) => sum + (qty[p.id] ?? 0) * p.price_mad, 0)
+  const total = sellable(prices.data ?? []).reduce((sum, p) => sum + (qty[p.id] ?? 0) * p.price_mad, 0)
   const change = received.trim() === '' ? undefined : changeDue(received, total)
   // The error waits for the field to be left, unless what is typed can no longer become an amount.
   const invalid = change === null && (touched || !DH_PREFIX.test(received.trim()))
@@ -540,7 +544,8 @@ function CodeTab() {
           </div>
         </CardContent>
       </Card>
-      {code ? <CodeResult code={code} /> : <Card><BrandEmpty title={t('pos.code.label')} description={t('pos.code.empty')} /></Card>}
+      {/* Keyed: a collect's outcome belongs to its code, not to the next one typed. */}
+      {code ? <CodeResult key={code} code={code} /> : <Card><BrandEmpty title={t('pos.code.label')} description={t('pos.code.empty')} /></Card>}
     </div>
   )
 }
@@ -567,6 +572,7 @@ function CodeResult({ code }: { code: string }) {
  * decides (200 replay, or 409). Only a 409 CODE_NOT_PAYABLE on the collect itself says "ne gardez pas l'argent", unless
  * it carries `collected_by_you` (an earlier till of this cashier took it): then "gardez l'argent".
  * An expired or otherwise unpayable lookup can't be this till's (a collected order is PAID): nothing to collect.
+ * A product order (`event` null, Lot 5 step 3) has no ticket: its collect ends on this card, with no print step.
  */
 function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
   const { t, i18n } = useTranslation()
@@ -574,26 +580,32 @@ function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
   const message = useErrorMessage()
   const collect = useCollect(code)
   const tillOpen = useTillOpen()
+  const { event, product } = order
+  const status = codeStatus(order)
   const error = collect.error
-  const refused = (error instanceof ApiError && error.code === 'CODE_NOT_PAYABLE') || (!order.payable && order.status !== 'PAID')
+  const notPayable = error instanceof ApiError && error.code === 'CODE_NOT_PAYABLE'
+  const refused = notPayable || (!order.payable && order.status !== 'PAID')
   // Collected in an earlier till of this cashier (04-api §Point of sale): the cash is counted there, keep it.
-  const earlier = error instanceof ApiError && error.code === 'CODE_NOT_PAYABLE' && error.details.collected_by_you === true
-  const paidHint = !refused && !order.payable
+  const earlier = notPayable && error.details.collected_by_you === true
+  const membershipPaid = (notPayable && error.details.reason === 'MEMBERSHIP_PAID') || (!notPayable && status === 'MEMBERSHIP_PAID')
+  // A product order collected here: nothing to print, the card says it is done.
+  const done = event === null && collect.isSuccess
+  const paidHint = !refused && !done && !order.payable
   const errorText =
     !error || refused ? null : error instanceof ApiError && error.code === 'VALIDATION_FAILED' ? t('pos.code.amountChanged') : message(error)
-  const onCollect = () => collect.mutate(order.amount_mad, { onSuccess: (r) => void navigate(`/pos/print/${r.order_id}`) })
+  const onCollect = () => collect.mutate(order.amount_mad, { onSuccess: (r) => void (event && navigate(`/pos/print/${r.order_id}`)) })
   return (
     <Card>
       <CardHeader>
         <CardDescription className="font-mono tracking-[0.15em]">{displayCode(code)}</CardDescription>
-        <CardTitle className="text-lg">{order.event.title}</CardTitle>
-        <CardDescription>{formatDateTime(order.event.starts_at, i18n.language, order.event.timezone)}</CardDescription>
+        <CardTitle className="text-lg">{event ? event.title : product?.name}</CardTitle>
+        {event && <CardDescription>{formatDateTime(event.starts_at, i18n.language, event.timezone)}</CardDescription>}
       </CardHeader>
       <CardContent className="flex flex-col gap-5 px-6">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={order.payable ? 'default' : 'outline'}>{t(`pos.code.status.${codeStatus(order)}`)}</Badge>
+          <Badge variant={order.payable ? 'default' : 'outline'}>{t(`pos.code.status.${status}`)}</Badge>
           {order.payable && order.reserved_until && (
-            <span className="text-sm text-muted-foreground">{t('pos.code.payableUntil', { time: formatDateTime(order.reserved_until, i18n.language, order.event.timezone) })}</span>
+            <span className="text-sm text-muted-foreground">{t('pos.code.payableUntil', { time: formatDateTime(order.reserved_until, i18n.language, event?.timezone ?? 'Africa/Casablanca') })}</span>
           )}
         </div>
         <dl className="grid grid-cols-2 gap-4">
@@ -624,11 +636,17 @@ function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
           refused && (
             <p role="alert" className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
               <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-              {t('pos.code.notPayable')}
+              {t(membershipPaid ? 'pos.code.membershipPaid' : 'pos.code.notPayable')}
             </p>
           )
         )}
-        {paidHint && <p className="rounded-lg bg-muted px-4 py-3 text-sm">{t('pos.code.paidHint')}</p>}
+        {done && (
+          <p role="status" className="flex items-center gap-2 rounded-lg bg-muted px-4 py-3 text-sm font-medium">
+            <CircleCheck className="size-4 shrink-0" aria-hidden="true" />
+            {t('pos.code.collected', { product: product?.name ?? '' })}
+          </p>
+        )}
+        {paidHint && <p className="rounded-lg bg-muted px-4 py-3 text-sm">{t(event ? 'pos.code.paidHint' : 'pos.code.paidHintProduct')}</p>}
         {errorText && (
           <p role="alert" className="text-sm font-medium text-destructive">
             {errorText}
@@ -637,7 +655,7 @@ function CodeCard({ code, order }: { code: string; order: CodeLookup }) {
         <Button
           size="lg"
           className="h-12 text-base"
-          disabled={!tillOpen || refused || collect.isPending}
+          disabled={!tillOpen || refused || done || collect.isPending}
           aria-describedby={tillOpen ? undefined : 'pos-code-need-session'}
           onClick={onCollect}
         >

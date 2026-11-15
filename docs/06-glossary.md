@@ -5,10 +5,11 @@
 | Jomhor | Jomhor | جمهور | Product name. Arabic/Darija: "the crowd", the fans — the 12th man |
 | organizer | organisateur | المنظم | Tenant: club, promoter, venue |
 | event | événement / match | الحدث / المباراة | One ticketed occurrence; `event_type` says what kind |
-| event_series | saison / édition | الموسم | Groups events; passes attach here |
+| event_series | série | سلسلة | A season, a tour, a festival edition; groups events; passes attach here |
 | zone | tribune / zone | المدرج | Sector of a venue; `zone_id` travels in the QR |
 | gate | porte | البوابة | Physical entrance; serves one or more zones |
-| pass | abonnement | الاشتراك | Season ticket, materialised as one ticket per event |
+| pass | abonnement | اشتراك الموسم | Season pass: every match of the season in one zone, materialised as one ticket per event |
+| pass seats | places abonnés | مقاعد المشتركين | A zone's places for pass holders (price category audience `PASS`) |
 | manifest | manifeste | — | Signed list of an event's tickets downloaded by scanners |
 | K_e | clé d'événement | — | Per-event HMAC key, delivered to enrolled scanners only |
 | K_t | clé de billet | — | Per-ticket key = HMAC(K_e, ticket_id), on the holder's phone |
@@ -24,8 +25,10 @@
 | refund | remboursement | استرجاع | — |
 | transfer | transfert | تحويل | The ticket is cancelled and a new one is issued to the recipient (new QR) |
 | re-issue | réémission | إعادة الإصدار | A new ticket for the same holder after a lost phone |
-| member | membre | منخرط | A fan who joined the organizer's club (free) |
+| member | membre | منخرط | A fan who joined the organizer's club (free to join; the cotisation may be paid) |
 | member number | n° de membre | رقم المنخرط | — |
+| membership fee | cotisation | رسوم العضوية | Paid membership (a `MEMBERSHIP` product) |
+| up to date | à jour | مسدَّد | A member whose membership fee is paid (`paid_until` in the future) |
 | tier | niveau | المستوى | From events attended |
 | split pay | paiement partagé | الدفع المشترك | Each friend pays their own place |
 | campaign | campagne | حملة | — |

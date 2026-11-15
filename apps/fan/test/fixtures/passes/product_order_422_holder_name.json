@@ -1,0 +1,13 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 422,
+ "body": {
+  "code": "VALIDATION_FAILED",
+  "message": "Invalid request body",
+  "details": {
+   "fields": {
+    "holder_name": "2 to 60 letters of one script: Latin with spaces, apostrophes, dots or hyphens, or Arabic with spaces or hyphens"
+   }
+  }
+ }
+}

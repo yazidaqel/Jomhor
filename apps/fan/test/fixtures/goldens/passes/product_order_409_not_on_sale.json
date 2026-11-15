@@ -1,0 +1,11 @@
+{
+ "source": "design content for the goldens and the screen tests (contract-first, docs/04-api.md Lot 5 step 3), in the shape of the FL-29 real run's test/fixtures/passes/product_order_409_not_on_sale.json (passes_test checks the shapes match)",
+ "status": 409,
+ "body": {
+  "code": "PRODUCT_NOT_ON_SALE",
+  "message": "PRODUCT_NOT_ON_SALE",
+  "details": {
+   "sales_close_at": "2027-02-20T11:00:00Z"
+  }
+ }
+}

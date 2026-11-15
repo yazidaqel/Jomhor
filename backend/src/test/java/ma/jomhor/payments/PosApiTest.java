@@ -361,8 +361,11 @@ class PosApiTest extends PaymentTest {
         String typed = "jmh-" + c.code().substring(0, 4).toLowerCase().replace('0', 'o').replace('1', 'l') + " "
                 + c.code().substring(4).replace('1', 'I');
         String json = body(call(cashier, get("/org/pos/codes/" + typed)).andExpect(status().isOk()));
-        assertKeys(json, "$", "order_id", "status", "payable", "reserved_until", "amount_mad", "places", "event", "holders");
+        assertKeys(json, "$", "order_id", "status", "payable", "reserved_until", "amount_mad", "places", "event", "holders",
+                "product", "reason");
         assertKeys(json, "$.event", "id", "title", "starts_at", "timezone");
+        assertThat((Object) JsonPath.read(json, "$.product")).isNull();
+        assertThat((Object) JsonPath.read(json, "$.reason")).isNull();
         assertThat(JsonPath.<String>read(json, "$.order_id")).isEqualTo(c.orderId());
         assertThat(JsonPath.<String>read(json, "$.status")).isEqualTo("AWAITING_CASH");
         assertThat(JsonPath.<Boolean>read(json, "$.payable")).isTrue();
@@ -379,8 +382,9 @@ class PosApiTest extends PaymentTest {
         }
         // past its hold: not payable any more
         jdbc.sql("update orders set reserved_until = now() - interval '1 second' where id = ?::uuid").param(c.orderId()).update();
-        call(cashier, get("/org/pos/codes/" + c.code())).andExpect(jsonPath("$.payable").value(false))
-                .andExpect(jsonPath("$.status").value("AWAITING_CASH"));
+        json = body(call(cashier, get("/org/pos/codes/" + c.code())).andExpect(jsonPath("$.payable").value(false))
+                .andExpect(jsonPath("$.status").value("AWAITING_CASH")));
+        assertThat((Object) JsonPath.read(json, "$.reason")).isNull(); // only MEMBERSHIP_PAID has a reason
     }
 
     @Test

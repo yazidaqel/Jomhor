@@ -1,0 +1,163 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15); only this run's rows (other clients' real runs had products of the same club on sale)",
+ "status": 200,
+ "body": [
+  {
+   "id": "772caba4-89e1-45ef-9518-9a9f3e341e3c",
+   "organizer_id": "a7a5fc00-0000-4000-8000-000000000001",
+   "organizer": {
+    "slug": "atlas-fc",
+    "name": "ATLAS FC",
+    "crest_url": null
+   },
+   "timezone": "Africa/Casablanca",
+   "kind": "PASS",
+   "name": "FL-29 Abonnement Tribune Est 8755",
+   "price_mad": 150000,
+   "sales_close_at": "2027-06-30T12:00:00Z",
+   "remaining": 2,
+   "sold_out": false,
+   "valid_until": null,
+   "pass": {
+    "series": {
+     "id": "ff84c471-816b-4c9c-827e-76203350508b",
+     "name": "FL-29 real run 8755",
+     "starts_on": "2026-08-01",
+     "ends_on": "2027-06-30"
+    },
+    "zone": {
+     "id": 2,
+     "code": "EST",
+     "name": "Est"
+    },
+    "venue": {
+     "name": "Grand Stade",
+     "city": "Casablanca",
+     "timezone": "Africa/Casablanca"
+    },
+    "events": [
+     {
+      "id": 32,
+      "title": "FL-29 real run 8755 match 1",
+      "event_type": "FOOTBALL_MATCH",
+      "starts_at": "2027-03-13T19:00:00Z"
+     },
+     {
+      "id": 33,
+      "title": "FL-29 real run 8755 match 2",
+      "event_type": "FOOTBALL_MATCH",
+      "starts_at": "2027-04-03T19:00:00Z"
+     }
+    ]
+   },
+   "plans": [
+    {
+     "installments": 1,
+     "amounts_mad": [
+      150000
+     ]
+    }
+   ],
+   "payment_methods": [
+    "CARD",
+    "WALLET",
+    "CASH_AGENCY"
+   ],
+   "cash_until": "2027-06-30T10:00:00Z"
+  },
+  {
+   "id": "da730380-17c0-48b0-b004-08b1a3b7c31c",
+   "organizer_id": "a7a5fc00-0000-4000-8000-000000000001",
+   "organizer": {
+    "slug": "atlas-fc",
+    "name": "ATLAS FC",
+    "crest_url": null
+   },
+   "timezone": "Africa/Casablanca",
+   "kind": "PASS",
+   "name": "FL-29 Abonnement court 8755",
+   "price_mad": 100000,
+   "sales_close_at": "2026-11-15T20:38:11Z",
+   "remaining": 5,
+   "sold_out": false,
+   "valid_until": null,
+   "pass": {
+    "series": {
+     "id": "ff84c471-816b-4c9c-827e-76203350508b",
+     "name": "FL-29 real run 8755",
+     "starts_on": "2026-08-01",
+     "ends_on": "2027-06-30"
+    },
+    "zone": {
+     "id": 2,
+     "code": "EST",
+     "name": "Est"
+    },
+    "venue": {
+     "name": "Grand Stade",
+     "city": "Casablanca",
+     "timezone": "Africa/Casablanca"
+    },
+    "events": [
+     {
+      "id": 32,
+      "title": "FL-29 real run 8755 match 1",
+      "event_type": "FOOTBALL_MATCH",
+      "starts_at": "2027-03-13T19:00:00Z"
+     },
+     {
+      "id": 33,
+      "title": "FL-29 real run 8755 match 2",
+      "event_type": "FOOTBALL_MATCH",
+      "starts_at": "2027-04-03T19:00:00Z"
+     }
+    ]
+   },
+   "plans": [
+    {
+     "installments": 1,
+     "amounts_mad": [
+      100000
+     ]
+    }
+   ],
+   "payment_methods": [
+    "CARD",
+    "WALLET"
+   ],
+   "cash_until": "2026-11-15T18:38:11Z"
+  },
+  {
+   "id": "45244e2b-a8f8-49c5-b164-dfd4bb0a7206",
+   "organizer_id": "a7a5fc00-0000-4000-8000-000000000001",
+   "organizer": {
+    "slug": "atlas-fc",
+    "name": "ATLAS FC",
+    "crest_url": null
+   },
+   "timezone": "Africa/Casablanca",
+   "kind": "MEMBERSHIP",
+   "name": "FL-30 Carte membre 8755",
+   "price_mad": 20000,
+   "sales_close_at": "2027-06-30T12:00:00Z",
+   "remaining": null,
+   "sold_out": false,
+   "valid_until": "2027-06-30T22:59:59Z",
+   "pass": null,
+   "plans": [
+    {
+     "installments": 1,
+     "amounts_mad": [
+      20000
+     ]
+    }
+   ],
+   "payment_methods": [
+    "CARD",
+    "WALLET",
+    "CASH_AGENCY"
+   ],
+   "cash_until": "2027-06-30T10:00:00Z"
+  }
+ ]
+}

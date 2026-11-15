@@ -63,7 +63,7 @@ class FanTicketController {
 
     record TicketDto(UUID id, String ticketNo, Ticket.Status status, String holderLabel, String seatLabel,
                      EventDto event, ZoneDto zone, List<String> gateCodes, List<GateDto> gates, Instant transferUntil,
-                     TransferredDto transferred,
+                     TransferredDto transferred, UUID passId,
                      @JsonProperty("k_t") @JsonInclude(JsonInclude.Include.NON_NULL) String ticketKey) {
 
         static TicketDto of(TicketService.Held h) {
@@ -83,7 +83,7 @@ class FanTicketController {
                     t.transferred() == null ? null : new TransferredDto(
                             t.transferred().toName() == null ? null : HolderNames.label(t.transferred().toName()),
                             t.transferred().at()),
-                    h.ticketKey());
+                    t.passId(), h.ticketKey());
         }
 
         @Override

@@ -103,8 +103,10 @@ export function CheckoutForm(props: {
   const holderError = (e: RowError | undefined) =>
     e?.members
       ? e.members.before
-        ? fmt(c.membersOnly, { date: formatShortDate(e.members.before, props.timezone, copy.meta.intl) })
-        : copy.errors.MEMBERS_ONLY
+        ? fmt(e.members.paid ? c.membersOnlyPaid : c.membersOnly, { date: formatShortDate(e.members.before, props.timezone, copy.meta.intl) })
+        : e.members.paid
+          ? copy.errors.MEMBERS_ONLY_PAID
+          : copy.errors.MEMBERS_ONLY
       : e?.holder
         ? holderLimitText(copy.errors, e.holder.limit)
         : null

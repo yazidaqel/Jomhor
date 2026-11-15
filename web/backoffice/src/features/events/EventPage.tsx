@@ -43,12 +43,14 @@ import {
   useEvent,
   useEventMutation,
   type EventDetail,
+  type EventWrite,
   type EventForm,
   type EventValues,
 } from './api'
 import { StatusBadge } from './EventsPage'
 import { DevicesTab } from './DevicesTab'
 import { PricesTab } from './PricesTab'
+import { SeriesField } from './SeriesField'
 
 type Tab = 'general' | 'prices' | 'gates' | 'devices' | 'rules'
 // Règles fields; every other form field is on Général. Both tabs are one form (one save, one PATCH).
@@ -96,6 +98,9 @@ function EventEditor({ event }: { event?: EventDetail }) {
   })
   const [rowEditing, setRowEditing] = useState(false) // a price row is open on Tarifs & quotas
   const [publishRefused, setPublishRefused] = useState(false) // EVENT_NOT_EDITABLE on publish, shown on the page
+  // Pass tickets exist, so the series stays: from the server copy, or a PASS_TICKETS refusal (a ticket issued meanwhile).
+  const [lockedBy409, setLockedBy409] = useState(false)
+  const seriesLocked = !!event?.pass_tickets || lockedBy409
   const refusedAlert = useRef<HTMLParagraphElement>(null)
 
   // doors_open_at and sale_starts_at cannot be cleared (04-api §Organizer): once set, they stay required.
@@ -110,7 +115,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
     values: event && toForm(event),
     resetOptions: { keepDirtyValues: true, keepErrors: true },
   })
-  const save = useEventMutation()
+  const save = useEventMutation<EventWrite>()
   const { errors, isDirty } = form.formState
   const [type, venueId] = useWatch({ control: form.control, name: ['event_type', 'venue_id'] })
   const metadataKeys = METADATA_KEYS[type]
@@ -125,12 +130,15 @@ function EventEditor({ event }: { event?: EventDetail }) {
       if (fields.some((f) => !RULES_FIELDS.includes(f.split('.')[0]!))) setTab('general')
       else if (fields.length) setTab('rules')
     })
-  const onSaved = (e: EventDetail) => {
+  /** A write's answer has no `pass_tickets`, which a write never changes: the cached one stays (false on create). */
+  const cacheEvent = (e: EventWrite) =>
+    queryClient.setQueryData<EventDetail>(['org', organizerId, 'events', String(e.id)], (old) => ({ ...e, pass_tickets: old?.pass_tickets ?? false }))
+  const onSaved = (e: EventWrite) => {
     if (event) {
       form.reset(toForm(e)) // nothing dirty any more, before `values` follows the new server copy
       toast.success(t('events.saved'), { id: 'event-saved' }) // a second save replaces the toast
     }
-    queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
+    cacheEvent(e)
     if (!event) void navigate(`/events/${encodeURIComponent(e.id)}`)
   }
   const onError = (e: unknown) => {
@@ -139,6 +147,13 @@ function EventEditor({ event }: { event?: EventDetail }) {
     if (e instanceof ApiError && e.code === 'EVENT_NOT_EDITABLE' && e.details.reason === 'ROOM_STARTED') {
       reveal(['sale_starts_at'])
       return form.setError('sale_starts_at', { message: t('events.form.roomStarted') }, { shouldFocus: true })
+    }
+    // Lot 5 step 3: pass tickets were issued for this event under its series, which can no longer change.
+    if (e instanceof ApiError && e.code === 'EVENT_NOT_EDITABLE' && e.details.reason === 'PASS_TICKETS') {
+      reveal(['series_id'])
+      setLockedBy409(true)
+      form.resetField('series_id')
+      return void toast.error(t('events.series.locked'), { id: 'series-locked' })
     }
     const fields = e instanceof ApiError && e.code === 'VALIDATION_FAILED' ? Object.keys(Object(e.details.fields)) : []
     reveal(fields) // before showFormError focuses the first of them
@@ -212,7 +227,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
                 event={event}
                 dirty={unsaved}
                 onPublished={(e) => {
-                  queryClient.setQueryData(['org', organizerId, 'events', String(e.id)], e)
+                  cacheEvent(e)
                   setPublishRefused(false)
                   toast.success(t('events.publish.done'))
                 }}
@@ -330,6 +345,25 @@ function EventEditor({ event }: { event?: EventDetail }) {
                           </Field>
                         )
                       }}
+                    />
+                    <Controller
+                      control={form.control}
+                      name="series_id"
+                      render={({ field }) => (
+                        <div className="md:col-span-2">
+                          <SeriesField
+                            id="event-series"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            fieldRef={field.ref}
+                            disabled={!editable || save.isPending}
+                            locked={seriesLocked ? t('events.series.locked') : undefined}
+                            hint={t('events.series.hint')}
+                            error={err(errors.series_id)}
+                          />
+                        </div>
+                      )}
                     />
                     <WallTimeInput
                       id="event-starts-at"
@@ -472,7 +506,7 @@ function PublishAction({
 }: {
   event: EventDetail
   dirty: boolean
-  onPublished: (e: EventDetail) => void
+  onPublished: (e: EventWrite) => void
   /** EVENT_NOT_EDITABLE: the event is no longer a draft, so this button (and its dialog) is about to go. */
   onRefused: () => void
   /** Where focus goes after that refusal: the publish button it would return to is about to unmount. */
@@ -481,7 +515,7 @@ function PublishAction({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const refused = useRef(false)
-  const publish = useEventMutation()
+  const publish = useEventMutation<EventWrite>()
   return (
     <AlertDialog
       open={open}

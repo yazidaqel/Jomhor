@@ -50,6 +50,11 @@ public class OrganizerService {
         }
     }
 
+    /** The organizer as fans see it (listed or not, slug null when unlisted); unknown → 404. */
+    public Organizer get(UUID org) {
+        return accounts.organizer(org).orElseThrow(() -> ApiException.notFound("Organizer not found"));
+    }
+
     /** GET /fan/organizers: listed organizers, by name then id. */
     public List<Organizer> listed() {
         return accounts.listedOrganizers();

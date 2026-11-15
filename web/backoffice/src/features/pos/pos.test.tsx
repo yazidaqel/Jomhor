@@ -56,6 +56,7 @@ const EVENT: EventDetail = {
   venue_id: 'v-1',
   timezone: CASA,
   series_id: null,
+  pass_tickets: false,
   event_type: 'FOOTBALL_MATCH',
   title: EVENTS[0]!.title,
   starts_at: STARTS,
@@ -82,7 +83,20 @@ const LOOKUP: CodeLookup = {
   amount_mad: 30_000,
   places: 2,
   event: { id: 1, title: 'Atlas FC vs Rapid Oued', starts_at: STARTS, timezone: CASA },
+  product: null,
+  reason: null,
   holders: ['Yazid A.', 'Salma B.'],
+}
+// Lot 5 step 3: a product order's code (a membership here): no event, the product's name, one place.
+const PRODUCT_LOOKUP: CodeLookup = {
+  ...LOOKUP,
+  order_id: '0192f0aa-0000-7000-8000-0000000c0715',
+  reserved_until: at(HOUR),
+  amount_mad: 25_000,
+  places: 1,
+  event: null,
+  product: { name: 'Carte membre 2026-2027' },
+  holders: ['Yazid A.'],
 }
 // `holder_name` is not in the print shape; a server sending it anyway must not get it on paper.
 const PRINT = {
@@ -165,12 +179,13 @@ it('cash code display: JMH, 4 symbols, 2 symbols, missing ones as underscores; b
   expect(readCode('4f-u!').invalid).toEqual(['U', '!'])
 })
 
-it('code status: an AWAITING_CASH order that is no longer payable reads as expired', () => {
-  expect(codeStatus({ payable: true, status: 'AWAITING_CASH' })).toBe('payable')
-  expect(codeStatus({ payable: false, status: 'AWAITING_CASH' })).toBe('EXPIRED')
-  expect(codeStatus({ payable: false, status: 'EXPIRED' })).toBe('EXPIRED')
-  expect(codeStatus({ payable: false, status: 'PAID' })).toBe('PAID')
-  expect(codeStatus({ payable: false, status: 'CANCELLED' })).toBe('other')
+it('code status: an AWAITING_CASH order no longer payable reads as expired, unless the reason is a membership already paid', () => {
+  expect(codeStatus({ payable: true, status: 'AWAITING_CASH', reason: null })).toBe('payable')
+  expect(codeStatus({ payable: false, status: 'AWAITING_CASH', reason: null })).toBe('EXPIRED')
+  expect(codeStatus({ payable: false, status: 'EXPIRED', reason: null })).toBe('EXPIRED')
+  expect(codeStatus({ payable: false, status: 'PAID', reason: null })).toBe('PAID')
+  expect(codeStatus({ payable: false, status: 'CANCELLED', reason: null })).toBe('other')
+  expect(codeStatus({ payable: false, status: 'AWAITING_CASH', reason: 'MEMBERSHIP_PAID' })).toBe('MEMBERSHIP_PAID')
 })
 
 it('change calculator: received DH text − total centimes, integer maths', () => {
@@ -303,7 +318,7 @@ it('B11 Code cash: typo-safe input, masked preview, lookup by the 6 symbols with
   expect(calls.some((c) => c.path.startsWith('/org/pos/codes'))).toBe(false)
   await user.type(input, '9')
 
-  expect(await within(screen.getByRole('tabpanel', { name: fr.pos.tabs.code })).findByText(LOOKUP.event.title)).toBeTruthy()
+  expect(await within(screen.getByRole('tabpanel', { name: fr.pos.tabs.code })).findByText(LOOKUP.event!.title)).toBeTruthy()
   expect(calls.find((c) => c.path === '/org/pos/codes/4F7K29')!.org).toBe('org-a')
   expect(screen.getByText(dh(LOOKUP.amount_mad))).toBeTruthy()
   expect(screen.getByText('Yazid A.')).toBeTruthy()
@@ -625,7 +640,7 @@ it('CASHIER: lands on the Guichet, the sidebar shows only "Guichet", every other
   expect(router.state.location.pathname).toBe('/pos')
   await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
   await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
-  expect(await within(screen.getByRole('tabpanel', { name: fr.pos.tabs.code })).findByText(LOOKUP.event.title)).toBeTruthy()
+  expect(await within(screen.getByRole('tabpanel', { name: fr.pos.tabs.code })).findByText(LOOKUP.event!.title)).toBeTruthy()
 
   // Only what the API lets a CASHIER call (04-api §Organizer, Lot 3).
   const allowed = (c: Call) =>
@@ -790,4 +805,85 @@ it('B11 close: only the gap value is a live region', async () => {
   const live = [...dialog.querySelectorAll('[aria-live]')]
   expect(live).toHaveLength(1)
   expect(live[0]!.textContent).toBe(fr.pos.close.noGap)
+})
+
+it('B11 Vente: a PASS category (season-pass places, 0 DH) is never offered or sent at the till', async () => {
+  const user = userEvent.setup()
+  const pass: Price = { id: 'p-pass', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Abonnés', price_mad: 0, quota: 50, sold: 0, audience: 'PASS' }
+  const calls = stubApi({
+    '/org/events/1/prices': () => Response.json([...PRICES, pass]),
+    '/org/pos/orders': () => Response.json(SALE_ORDER, { status: 201 }),
+  })
+  renderApp('/pos')
+  await fillSale(user)
+  expect(screen.queryByRole('button', { name: i18n.t('pos.sale.more', { name: priceName(pass) }) })).toBeNull()
+  expect(screen.queryByText(priceName(pass))).toBeNull()
+  await user.click(submitSale(5_000))
+  await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.path === '/org/pos/orders')).toBe(true))
+  const post = calls.find((c) => c.method === 'POST' && c.path === '/org/pos/orders')!
+  expect((post.body as { items: { price_category_id: string }[] }).items.map((i) => i.price_category_id)).toEqual([SUD.id])
+})
+
+const productCollect = () => screen.findByRole('button', { name: spaced(i18n.t('pos.code.submit', { amount: formatDh(PRODUCT_LOOKUP.amount_mad, 'fr') })) })
+
+it('B11 Code cash: a product code shows the product, not an event; "Encaisser" collects it and stays on the card, nothing to print', async () => {
+  const user = userEvent.setup()
+  let collected = false
+  const calls = stubApi({
+    '/org/pos/codes/4F7K29': () => Response.json(collected ? { ...PRODUCT_LOOKUP, status: 'PAID', payable: false } : PRODUCT_LOOKUP), // real: reserved_until kept once PAID
+    '/org/pos/codes/4F7K29/collect': () => {
+      collected = true
+      return Response.json({ order_id: PRODUCT_LOOKUP.order_id, status: 'PAID', ticket_ids: [] })
+    },
+  })
+  const { router } = renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  const panel = screen.getByRole('tabpanel', { name: fr.pos.tabs.code })
+  expect(await within(panel).findByText(PRODUCT_LOOKUP.product!.name)).toBeTruthy()
+  expect(within(panel).queryByText(LOOKUP.event!.title)).toBeNull()
+  expect(within(panel).getByText(fr.pos.code.status.payable)).toBeTruthy()
+  expect(within(panel).getByText('Yazid A.')).toBeTruthy()
+
+  const collect = await productCollect()
+  await user.click(collect)
+  const done = await within(panel).findByRole('status')
+  expect(done.textContent).toBe(i18n.t('pos.code.collected', { product: PRODUCT_LOOKUP.product!.name }))
+  await waitFor(() => expect(within(panel).getByText(fr.pos.code.status.PAID)).toBeTruthy()) // the lookup refetched
+  expect(within(panel).queryByText(fr.pos.code.paidHintProduct)).toBeNull()
+  expect(collect).toHaveProperty('disabled', true)
+  expect(within(panel).queryByRole('link')).toBeNull()
+  expect(within(panel).queryByRole('button', { name: fr.pos.sale.printTickets })).toBeNull()
+  expect(router.state.location.pathname).toBe('/pos')
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ path: '/org/pos/codes/4F7K29/collect', org: 'org-a', method: 'POST', body: { amount_mad: 25_000 } }])
+  expect(calls.some((c) => c.path.endsWith('/tickets'))).toBe(false)
+})
+
+it('B11 Code cash: a membership already paid reads "Cotisation déjà à jour" with its own copy, and offers no collect', async () => {
+  stubApi({ '/org/pos/codes/4F7K29': () => Response.json({ ...PRODUCT_LOOKUP, payable: false, reason: 'MEMBERSHIP_PAID' }) })
+  const user = userEvent.setup()
+  renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  expect(await screen.findByText(fr.pos.code.status.MEMBERSHIP_PAID)).toBeTruthy()
+  expect((await screen.findByRole('alert')).textContent).toBe(fr.pos.code.membershipPaid)
+  expect(screen.queryByText(fr.pos.code.notPayable)).toBeNull()
+  expect(await productCollect()).toHaveProperty('disabled', true)
+})
+
+it('B11 Code cash: a collect refused 409 CODE_NOT_PAYABLE MEMBERSHIP_PAID has its own copy, nothing printed', async () => {
+  const user = userEvent.setup()
+  stubApi({
+    '/org/pos/codes/4F7K29': () => Response.json(PRODUCT_LOOKUP),
+    '/org/pos/codes/4F7K29/collect': () => apiError(409, 'CODE_NOT_PAYABLE', { status: 'AWAITING_CASH', reason: 'MEMBERSHIP_PAID' }),
+  })
+  const { router } = renderApp('/pos')
+  await user.click(await screen.findByRole('tab', { name: fr.pos.tabs.code }))
+  await user.type(screen.getByRole('textbox', { name: fr.pos.code.label }), '4F7K29')
+  const collect = await productCollect()
+  await user.click(collect)
+  expect((await screen.findByRole('alert')).textContent).toBe(fr.pos.code.membershipPaid)
+  expect(fr.pos.code.membershipPaid).toContain("ne gardez pas l'argent")
+  expect(collect).toHaveProperty('disabled', true)
+  expect(router.state.location.pathname).toBe('/pos')
 })

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
+import 'package:jomhor_fan/features/events/zone_row.dart' show MembersChip;
+import 'package:jomhor_fan/features/passes/pass.dart';
+import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/features/tickets/pass_hero.dart';
 import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
@@ -16,7 +19,8 @@ import 'package:jomhor_fan/ui/brand.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
-/// Billets tab: held tickets, upcoming then past. Saved tickets show at once (and offline); pull to refresh.
+/// Billets tab: "Mes abonnements" (Lot 5 step 3), then held tickets, upcoming then past. Saved tickets show at once
+/// (and offline); pull to refresh. The passes are read on open and never hold the tickets back (offline: none shown).
 class TicketsScreen extends ConsumerWidget {
   const new({super.key});
 
@@ -25,7 +29,11 @@ class TicketsScreen extends ConsumerWidget {
     final l = AppLocalizations.of(context);
     final state = ref.watch(ticketsProvider).value;
     final snapshot = state?.snapshot;
-    Future<void> refresh() => ref.read(ticketsProvider.notifier).refresh();
+    final passes = ref.watch(passesProvider).value ?? const <FanPass>[];
+    Future<void> refresh() {
+      ref.invalidate(passesProvider);
+      return ref.read(ticketsProvider.notifier).refresh();
+    }
 
     final List<Widget> body;
     if (snapshot == null) {
@@ -89,6 +97,16 @@ class TicketsScreen extends ConsumerWidget {
             const SizedBox(height: JomhorSpace.s),
             Text(l.ticketsTitle, style: JomhorType.h1.copyWith(fontSize: 34)),
             const SizedBox(height: JomhorSpace.xl),
+            if (passes.isNotEmpty) ...[
+              Text(l.passesTitle, style: JomhorType.h2),
+              const SizedBox(height: JomhorSpace.m),
+              for (final (i, p) in passes.indexed)
+                Entrance(
+                  index: i,
+                  child: _PassRow(pass: p),
+                ),
+              const SizedBox(height: JomhorSpace.l),
+            ],
             ...body,
           ],
         ),
@@ -123,7 +141,18 @@ class _TicketRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (e.organizer case final club?) ClubLine(name: club.name, crestUrl: club.crestUrl),
-                  Text(e.title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                  if (t.passId != null)
+                    Wrap(
+                      spacing: JomhorSpace.s,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(e.title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                        MembersChip(key: Key('ticket.passChip.${t.id}'), label: l.passChip),
+                      ],
+                    )
+                  else
+                    Text(e.title, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
                     l.ticketRowFacts(t.zone.name, l.ltr(t.ticketNo)),
@@ -155,6 +184,70 @@ class _TicketRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// A "Mes abonnements" row: crest, the product's name, the zone and the series, and its status chip → screen 13.
+class _PassRow extends StatelessWidget {
+  const new({required this.pass});
+
+  final FanPass pass;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final p = pass;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TapCard(
+        inkKey: Key('passes.row.${p.id}'),
+        onTap: () => context.push('/passes/${p.id}'),
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 14, JomhorSpace.l, 14),
+        child: Row(
+          children: [
+            Crest(name: p.club.name, url: p.club.crestUrl, size: 44),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(p.productName, style: JomhorType.body.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(
+                    l.dotPair(p.zone.name, p.series.name),
+                    style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: JomhorSpace.m),
+            PassStatusChip(pass: p),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Actif" in the accent, "Paiement en attente" muted; nothing for a status this build does not know (3b).
+class PassStatusChip extends StatelessWidget {
+  const new({required this.pass, super.key});
+
+  final FanPass pass;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final key = Key('passes.status.${pass.id}');
+    return switch (pass.status) {
+      'ACTIVE' => MembersChip(key: key, label: l.passActive),
+      'PENDING' => Text(
+        l.passPending,
+        key: key,
+        style: JomhorType.caption.copyWith(color: JomhorColors.textSecondary, fontWeight: FontWeight.w600),
+      ),
+      _ => const SizedBox.shrink(),
+    };
   }
 }
 

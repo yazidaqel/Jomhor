@@ -16,10 +16,11 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import 'cash_order_test.dart' show CashSale, orderId;
-import 'club_test.dart' show ClubBackend, loyaltyJson, memberJson;
+import 'club_test.dart' show ClubBackend, clubProducts, loyaltyJson, memberJson;
 import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
+import 'passes_test.dart' show PassSale, passId, passTicketJson, productId, productOrderId;
 import 'split_pay_test.dart' show SplitBackend, buyerId, karimId, memberId, omarId, saraId;
 import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
 import 'transfer_test.dart' show openTicketJson, transferredJson;
@@ -35,6 +36,8 @@ import 'waitlist_test.dart' show WaitlistSale;
 /// and member (to pay, released). FL-22: screen 10 and the bell with its unread dot on screen 1 and the top bar
 /// (bell then avatar at the end side, the left in AR). FL-26: screen 12 (pre-queue, waiting, the turn, not eligible)
 /// and screen 2 with a room. FL-28: the waitlist on screen 1's hero (to join, on the list) and screen 2 sold out.
+/// FL-29: screen 13 (buy, owned with one ticket issued and one to come) and screen 4's product variant. FL-30:
+/// screen 7 with the cotisation (unpaid, paid) and the Abonnements cards.
 /// Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
@@ -440,6 +443,44 @@ void main() {
       });
     }
 
+    // FL-30: screen 7, the club selling a membership (contract-first, test/fixtures/club): the cotisation to pay,
+    // then paid, with the Abonnements card below.
+    for (final (name, paidUntil) in [('7-club-cotisation', null), ('7-club-a-jour', '2027-06-30T22:00:00Z')]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await phone(tester);
+        final before = SharedPreferencesAsyncPlatform.instance;
+        SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+        addTearDown(() => SharedPreferencesAsyncPlatform.instance = before);
+        final ar = locale == 'ar';
+        final backend =
+            ClubBackend(
+                members: {testOrganizer: memberJson(paidUntil: paidUntil)},
+                loyalty: {testOrganizer: loyaltyJson(tier: ar ? 'وفي' : 'Fidèle', nextTier: ar ? 'ركيزة' : 'Pilier')},
+              )
+              ..paidRequired = true
+              ..products = clubProducts();
+        final c = await pumpJomhor(
+          tester,
+          backend: backend.handle,
+          tokens: MemoryTokenStore('jwt'),
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+          follows: (ids: const [testOrganizer], seen: true, chip: null),
+        );
+        c.read(routerProvider).go('/club');
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(Key(paidUntil == null ? 'club.dues.$testOrganizer.unpaid' : 'club.duesPaid.$testOrganizer')),
+          findsOneWidget,
+        );
+        if (ar) {
+          expectArabicRules(tester);
+          expect(find.textContaining('\u2066'), findsWidgets, reason: 'prices and dates stay LTR isolates');
+        }
+        await snap('$locale-$name');
+      });
+    }
+
     testWidgets('$locale · screen 8 Transférer', (tester) async {
       await phone(tester);
       final clock = TestClock(slotStart.add(const Duration(seconds: 2)));
@@ -821,6 +862,42 @@ void main() {
         await Scrollable.ensureVisible(tester.element(find.byKey(Key(key))), alignment: 0.5);
         await tester.pumpAndSettle();
         if (locale == 'ar') expectArabicRules(tester);
+        await snap('$locale-$name');
+      });
+    }
+
+    // FL-29: screen 13 buy and owned, and screen 4's product variant (contract-first fixtures, test/fixtures/passes).
+    for (final (name, location) in [
+      ('13-abonnement', '/products/$productId'),
+      ('13-abonnement-actif', '/passes/$passId'),
+      ('4-paiement-abonnement', '/orders/$productOrderId'),
+    ]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await phone(tester);
+        final sale = PassSale(TestClock(DateTime.utc(2027, 2, 20, 12)))
+          ..passes = 'passes_200_active'
+          ..tickets = [passTicketJson()];
+        final c = await pumpJomhor(
+          tester,
+          backend: sale.handle,
+          tokens: MemoryTokenStore('jwt'),
+          clock: sale.clock,
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+        );
+        c.read(routerProvider).go(location);
+        await tester.pumpAndSettle();
+        if (locale == 'ar') {
+          expectArabicRules(tester);
+          // The owned card shows no price (the season, not the sale).
+          if (name != '13-abonnement-actif') {
+            expect(
+              find.textContaining('\u20661\u202F500\u00A0DH\u2069'),
+              findsWidgets,
+              reason: 'prices stay LTR isolates',
+            );
+          }
+        }
         await snap('$locale-$name');
       });
     }

@@ -1,0 +1,33 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 201,
+ "body": {
+  "id": "36f2b99c-431d-45b6-a4b4-fe36b48cc2fb",
+  "status": "RESERVED",
+  "reserved_until": "2026-11-15T20:45:12.605803Z",
+  "total_mad": 20000,
+  "product": {
+   "id": "45244e2b-a8f8-49c5-b164-dfd4bb0a7206",
+   "kind": "MEMBERSHIP",
+   "name": "FL-30 Carte membre 8755"
+  },
+  "pass_id": null,
+  "items": [
+   {
+    "product_id": "45244e2b-a8f8-49c5-b164-dfd4bb0a7206",
+    "price_category_id": null,
+    "zone_id": null,
+    "zone_name": null,
+    "name": "FL-30 Carte membre 8755",
+    "qty": 1,
+    "unit_price_mad": 20000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "group": null
+ }
+}

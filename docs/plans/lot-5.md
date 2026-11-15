@@ -1,6 +1,6 @@
 # Lot 5 · Organizer platform: implementation plan
 
-As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 2, §10): BE-51, FL-29, WS-15, BO-22, Q184, P129; next migration V25 (step 2 takes V25–V28). Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
+As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 3, §11): BE-61, FL-32, WS-17, BO-25, Q202, P142; next migration V29 (step 3 takes V29–V32). Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
 
 ## 1. Lot
 
@@ -1336,7 +1336,7 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 
 | # | Owner | Area | Done |
 | --- | --- | --- | --- |
-| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md` | §11.4 **3a parts** applied after the founder agrees; the 3b parts are applied when 3a merges |
+| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md` | §11.4 **3a parts** applied after the founder agrees · 3a parts **done 2026-11-15**; the 3b parts are applied when 3a merges |
 | W0-2 | orchestrator | git | `feat/lot-5-passes` from `main`; later `feat/lot-5-installments`. No new CI job |
 | W0-3 | founder | — | The calls on Q186, Q188, Q189, Q195, Q197. Club: which zones get passes, how many seats per match, season end date, how many installments; "physical card?" (default: no). Meta templates `installment_due` with BE-36 |
 
@@ -1456,3 +1456,7 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 | Waiting room for a pass launch | if a launch is big | Q191, §5.4 deferred run |
 | Meta template `installment_due` | with BE-36 | Q199 |
 | Late fee, auto-cancel of long-suspended passes, staff pass cancel/refund | when the club asks | Q197, Q201 |
+| B14 "Émission en cours" stays on screen past an event's `transfer_until`, when the pass job will never issue again; show "Non émis" then | when polishing B14 | BO-22 review |
+| BE-55 must: read a pass ticket's zone unfiltered (`publicEvent` now drops PASS-only zones, which `TicketService` PDF/heldBy/slips use); take `for share` on the event row when issuing pass tickets so it serialises with the event PATCH's `PASS_TICKETS` check | BE-55 | BE-51 report |
+| 3b (Q198): decide whether a suspended pass blocks a pass ticket already transferred to someone else (BE-55 shows `pass_id` only to the pass holder) | 3b plan | BE-55 review |
+| B14 MEMBERSHIP `paid_members` counts the whole organizer, so a club with two membership products sees the same figure on both; per-product count if a club ever sells two | when asked | BO-22 real run |

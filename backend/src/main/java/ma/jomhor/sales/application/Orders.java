@@ -59,6 +59,18 @@ public interface Orders {
     Order insertMember(UUID org, int eventId, UUID userId, Order.Channel channel, UUID groupOrderId,
                        Instant reservedUntil, long totalMad, List<Order.Item> items);
 
+    /**
+     * A product order (04 POST /fan/product-orders): event_id null, {@code passId} (null for MEMBERSHIP), one item,
+     * RESERVED and held 8 min from now (database clock); total = the item's.
+     */
+    Order insertProduct(UUID org, UUID userId, Order.Channel channel, UUID passId, Order.Item item);
+
+    /**
+     * A pass ticket order (04 §Passes Tickets): PAID now, channel APP, payment_method FREE, total 0, {@code passId}
+     * and {@code eventId} set, the holder as its buyer, with its one item.
+     */
+    Order insertPassTicket(UUID org, int eventId, UUID userId, UUID passId, Order.Item item);
+
     /** The organizer's member orders of this buyer's order, with their items, by id. */
     List<Order> members(UUID org, UUID groupOrderId);
 
@@ -85,6 +97,9 @@ public interface Orders {
 
     /** A locked order, and whether its hold still runs by the database clock (reserved_until > now()). */
     record Locked(Order order, boolean holding) {}
+
+    /** → CANCELLED (a product order that can't be paid, 04 §Products Paid membership). */
+    void cancel(UUID org, UUID orderId);
 
     /** → PAID with the succeeding payment's method and reference (for a cash code, the code). */
     void markPaid(UUID org, UUID orderId, Order.PaymentMethod method, String paymentRef);
@@ -116,13 +131,13 @@ public interface Orders {
     /** Places in the event's AWAITING_CASH orders still held (reserved_until > now()). No lock (04 §Cash codes Cap). */
     long cashHeld(UUID org, int eventId);
 
-    /** A fan's order as GET /fan/orders lists it. */
-    record Listed(UUID id, UUID organizerId, int eventId, Order.Channel channel, Order.Status status, long totalMad,
+    /** A fan's order as GET /fan/orders lists it: {@code eventId} null and {@code productId} set on a product order. */
+    record Listed(UUID id, UUID organizerId, Integer eventId, UUID productId, Order.Channel channel, Order.Status status, long totalMad,
                   Instant reservedUntil, Instant createdAt, Order.GroupRole groupRole) {}
 
     /**
      * The buyer's orders: AWAITING_CASH ones and member orders still RESERVED and held first, then newest first, at
-     * most {@code limit}.
+     * most {@code limit}. Pass ticket orders (pass_id and event_id set) are left out.
      */
     List<Listed> listed(UUID userId, int limit);
 
@@ -139,10 +154,16 @@ public interface Orders {
      */
     List<UUID> claimMembers(Collection<UUID> buyerOrderIds, Collection<UUID> exclude);
 
-    /** RESERVED or AWAITING_CASH → EXPIRED for these (already locked) orders; their items summed per price category. */
+    /**
+     * RESERVED or AWAITING_CASH → EXPIRED for these (already locked) orders; their places summed per price category,
+     * and the product orders in one row per organizer with no hold.
+     */
     List<Expired> expire(Collection<UUID> orderIds);
 
-    /** The places of one price category held by the orders just expired. */
+    /**
+     * The places of one price category held by the orders just expired; {@code hold} null: product orders, which hold
+     * no category place (a product's own count is the product's to give back).
+     */
     record Expired(Hold hold, List<UUID> orderIds) {}
 
     /**
@@ -157,6 +178,9 @@ public interface Orders {
 
     /** The event's payment.refund_required audit rows (matched on the order they name), newest first. */
     List<RefundRequired> refundsRequired(UUID org, int eventId);
+
+    /** The payment.refund_required audit rows of the product's orders (04 GET /org/products/{id}), newest first. */
+    List<RefundRequired> productRefundsRequired(UUID org, UUID productId);
 
     /** amountMad is what the gateway charged; reason SOLD_OUT, PER_ACCOUNT_LIMIT, NOT_PAYABLE or AMOUNT_MISMATCH. */
     record RefundRequired(UUID paymentId, UUID orderId, long amountMad, String reason, Instant at) {}

@@ -1,0 +1,11 @@
+{
+ "source": "design content for the goldens and the screen tests (contract-first, docs/04-api.md Lot 5 step 3), in the shape of the FL-29 real run's test/fixtures/passes/product_order_409_sold_out.json (passes_test checks the shapes match)",
+ "status": 409,
+ "body": {
+  "code": "SOLD_OUT",
+  "message": "SOLD_OUT",
+  "details": {
+   "product_id": "b1000000-0000-4000-8000-000000000001"
+  }
+ }
+}

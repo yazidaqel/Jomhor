@@ -41,6 +41,7 @@ const ticket = (id: string, over: Partial<TicketView> = {}): TicketView => ({
   transfer_until: '2026-02-07T17:30:00Z',
   transfer_open: true,
   transferred: null,
+  pass_id: null,
   ...over,
 })
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -325,4 +326,12 @@ it('"Annuler" closes without sending; "Modifier" goes back to the filled form', 
   expect(dialog()).toBeNull()
   expect(fetchMock).toHaveBeenCalledTimes(1)
   expect(el.querySelector('article')).not.toBeNull()
+})
+
+it('Lot 5 step 3: a season-pass ticket (pass_id) carries the "Abonnement" chip; others do not', async () => {
+  fetchMock.mockResolvedValue(json(200, { tickets: [ticket('t-pass', { pass_id: 'p-1' }), ticket('t-plain')] }))
+  await show()
+  const chips = [...el.querySelectorAll('article')].map((a) => a.querySelector('[data-pass-chip]')?.textContent ?? null)
+  expect(chips).toEqual([d.ticketsPage.passChip, null])
+  expect(d.ticketsPage.passChip).toBe('Abonnement')
 })

@@ -8,7 +8,7 @@ import 'package:jomhor_fan/features/clubs/club.dart';
 /// One club's membership answer: the fan's card ([member], null when not a member) and the loyalty row, which
 /// non-members get too.
 class Membership {
-  const new({required this.loyalty, this.member});
+  const new({required this.loyalty, this.member, this.paidRequired = false});
 
   factory fromJson(Map<String, Object?> j) => Membership(
     member: switch (j['member']) {
@@ -16,10 +16,15 @@ class Membership {
       _ => null,
     },
     loyalty: Loyalty.fromJson(j['loyalty']! as Map<String, Object?>),
+    paidRequired: j['paid_required'] as bool? ?? false,
   );
 
   final Member? member;
   final Loyalty loyalty;
+
+  /// Lot 5 step 3 (Q189): the club sells a membership, so members' rules need a cotisation paid past the date.
+  /// Absent before BE-54: false.
+  final bool paidRequired;
 }
 
 class Member {
@@ -28,6 +33,7 @@ class Member {
     required this.joinedAt,
     required this.marketingPush,
     required this.marketingWhatsapp,
+    this.paidUntil,
   });
 
   factory fromJson(Map<String, Object?> j) => Member(
@@ -35,12 +41,19 @@ class Member {
     joinedAt: DateTime.parse(j['joined_at']! as String).toUtc(),
     marketingPush: j['marketing_push']! as bool,
     marketingWhatsapp: j['marketing_whatsapp']! as bool,
+    paidUntil: switch (j['paid_until']) {
+      final String at => DateTime.parse(at).toUtc(),
+      _ => null,
+    },
   );
 
   final int number;
   final DateTime joinedAt;
   final bool marketingPush;
   final bool marketingWhatsapp;
+
+  /// The cotisation is paid until then; null = never paid.
+  final DateTime? paidUntil;
 
   /// "000042": the card and the Accueil strip.
   String get padded => '$number'.padLeft(6, '0');
@@ -133,3 +146,15 @@ List<SeasonDot> seasonDots(Loyalty loyalty) => [
     if (e.attended) SeasonDot.attended else SeasonDot.missed,
   SeasonDot.next,
 ];
+
+/// The cotisation under the member card (DESIGN.md Lot 5 step 3, screen 7).
+enum Dues { unpaid, paid, expired }
+
+/// Null = no row: the club sells no membership, the fan isn't a member, or never paid with nothing on sale to pay.
+/// [onSale]: a `MEMBERSHIP` product is on sale now.
+Dues? duesOf(Membership m, {required bool onSale, required DateTime now}) => switch (m.member?.paidUntil) {
+  _ when !m.paidRequired || m.member == null => null,
+  final until? when until.isAfter(now) => Dues.paid,
+  _? => Dues.expired,
+  null => onSale ? Dues.unpaid : null,
+};

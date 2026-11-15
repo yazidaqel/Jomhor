@@ -76,4 +76,7 @@ public interface Accounts {
 
     /** The listed organizer with this slug; empty if none. */
     Optional<Organizer> listedOrganizer(String slug);
+
+    /** The organizer with this id, listed or not (slug null when unlisted); empty if none. */
+    Optional<Organizer> organizer(UUID organizerId);
 }

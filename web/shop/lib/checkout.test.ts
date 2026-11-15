@@ -112,10 +112,13 @@ it('rowErrorsFrom422: a pays field carries details.reason; PER_ACCOUNT_LIMIT det
   // Lot 5 step 2: the holder cap (never `held`) and members prices, on the row `details.field` names.
   expect(rowErrorsFrom422({ ...limit, data: { code: 'PER_ACCOUNT_LIMIT', details: { reason: 'HOLDER', limit: 4, field: 'items[0].holders[1]' } } })).toEqual([undefined, { holder: { limit: 4 } }])
   expect(rowErrorsFrom422({ ...limit, data: { code: 'PER_ACCOUNT_LIMIT', details: { reason: 'HOLDER', field: 'items[0].holders[1]' } } })).toEqual([undefined, { holder: { limit: null } }])
-  const members = (before: unknown) => ({ ...limit, data: { code: 'MEMBERS_ONLY', details: { field: 'items[0].holders[0]', member_joined_before: before } } })
-  expect(rowErrorsFrom422(members('2026-01-20T10:00:00Z'))).toEqual([{ members: { before: '2026-01-20T10:00:00Z' } }])
-  expect(rowErrorsFrom422(members(null))).toEqual([{ members: { before: null } }])
-  expect(firstInvalid([{ members: { before: null } }])).toBe('name-0')
+  const members = (before: unknown, paid?: unknown) => ({ ...limit, data: { code: 'MEMBERS_ONLY', details: { field: 'items[0].holders[0]', member_joined_before: before, paid_required: paid } } })
+  expect(rowErrorsFrom422(members('2026-01-20T10:00:00Z'))).toEqual([{ members: { before: '2026-01-20T10:00:00Z', paid: false } }])
+  expect(rowErrorsFrom422(members(null, false))).toEqual([{ members: { before: null, paid: false } }])
+  // Lot 5 step 3: paid_required true only when the backend says exactly true.
+  expect(rowErrorsFrom422(members(null, true))).toEqual([{ members: { before: null, paid: true } }])
+  expect(rowErrorsFrom422(members(null, 'true'))).toEqual([{ members: { before: null, paid: false } }])
+  expect(firstInvalid([{ members: { before: null, paid: false } }])).toBe('name-0')
   expect(firstInvalid([undefined as never, { holder: { limit: null } }])).toBe('phone-1')
 })
 

@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getClub, readFollows } from '@/lib/clubs'
 import { getEvents } from '@/lib/events'
 import { fmt } from '@/lib/i18n'
 import { getI18n } from '@/lib/i18n/server'
 import { Crest } from '../../brand'
+import { TicketIcon } from '../../icons'
 import { Empty, EventGrid, FollowForm, How } from '../event-list'
 
 // Rendered per request (follows cookie, current time); the backend reads are cached 60 s (lib/clubs.ts, lib/events.ts).
@@ -48,6 +50,13 @@ export default async function ClubPage({ params }: Props) {
             <bdi>{club.name}</bdi>
           </h1>
           <FollowForm club={club} following={follows.some((c) => c.id === club.id)} next={`/${club.slug}`} d={d} className="rounded-chip border border-border" />
+          <Link
+            href={`/${club.slug}/passes`}
+            className="flex min-h-touch-min items-center gap-2 rounded-chip border border-border px-3 text-sm font-semibold text-text-secondary transition-colors hover:border-accent hover:text-accent"
+          >
+            <TicketIcon className="size-4" />
+            {d.passes.nav}
+          </Link>
         </div>
       </section>
       <section aria-labelledby="club-events" className="mx-auto w-full max-w-[1180px] px-6 pt-12">

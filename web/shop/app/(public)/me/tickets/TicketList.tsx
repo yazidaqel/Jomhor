@@ -212,6 +212,11 @@ function TicketCard({ t, copy, now, i, leaving, onTransfer, onLeft }: { t: Ticke
               </p>
             )}
             <p className="truncate text-[11px] font-semibold uppercase tracking-[1.5px] opacity-75">{venue}</p>
+            {t.pass_id && (
+              <span data-pass-chip className="w-fit rounded-chip bg-ticket-ink px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[1px] text-ticket-paper">
+                {c.passChip}
+              </span>
+            )}
             <h3 id={`ticket-${t.id}`} className="font-display text-[28px] font-extrabold uppercase leading-[0.95] text-balance">
               {t.event.title}
             </h3>

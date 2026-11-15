@@ -15,7 +15,11 @@ export type CodeLookup = {
   reserved_until: string | null
   amount_mad: number
   places: number
-  event: { id: number; title: string; starts_at: string; timezone: string }
+  /** Null on a product order (Lot 5 step 3): then `product` names it, `places` is 1 and nothing is printed. */
+  event: { id: number; title: string; starts_at: string; timezone: string } | null
+  product: { name: string } | null
+  /** Why `payable` is false: `MEMBERSHIP_PAID` (a membership already paid by another order), else null. */
+  reason: 'MEMBERSHIP_PAID' | null
   holders: string[]
 }
 export type TicketStatus = 'VALID' | 'BLOCKED' | 'REFUNDED' | 'CANCELLED'
@@ -90,9 +94,20 @@ export const usePrintData = (orderId: string) =>
     retry: false,
   })
 
-/** Payable, else why not: PAID, or EXPIRED (also an AWAITING_CASH order past its hold that the expiry job hasn't swept). */
-export const codeStatus = (o: Pick<CodeLookup, 'payable' | 'status'>) =>
-  o.payable ? 'payable' : o.status === 'PAID' ? 'PAID' : o.status === 'EXPIRED' || o.status === 'AWAITING_CASH' ? 'EXPIRED' : 'other'
+/**
+ * Payable, else why not: PAID; MEMBERSHIP_PAID (the server's `reason`); or EXPIRED (also an AWAITING_CASH order past
+ * its hold that the expiry job hasn't swept).
+ */
+export const codeStatus = (o: Pick<CodeLookup, 'payable' | 'status' | 'reason'>) =>
+  o.payable
+    ? 'payable'
+    : o.status === 'PAID'
+      ? 'PAID'
+      : o.reason === 'MEMBERSHIP_PAID'
+        ? 'MEMBERSHIP_PAID'
+        : o.status === 'EXPIRED' || o.status === 'AWAITING_CASH'
+          ? 'EXPIRED'
+          : 'other'
 
 // Crockford base32 (04-api §Cash codes).
 const SYMBOLS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'

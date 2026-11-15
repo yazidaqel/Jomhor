@@ -441,10 +441,14 @@ class TicketBand extends StatelessWidget {
     this.success = false,
     this.crestKey = const Key('ticket.crest'),
     this.titleMaxLines,
+    this.badge,
     super.key,
   });
 
   final String title;
+
+  /// A pill after the overline, in the band's ink: "Abonnement" on a pass ticket (Lot 5 step 3).
+  final String? badge;
 
   /// One line on the member card (screen 7), whose height is fixed; the ticket wraps.
   final int? titleMaxLines;
@@ -484,6 +488,20 @@ class TicketBand extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                 )
                                 .tracked(context),
+                          ),
+                        ),
+                      if (badge case final text?)
+                        Container(
+                          key: const Key('ticket.band.badge'),
+                          margin: const EdgeInsetsDirectional.only(start: JomhorSpace.s),
+                          padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.s, vertical: 2),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: ink.withValues(alpha: 0.5)),
+                            borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
+                          ),
+                          child: Text(
+                            text,
+                            style: JomhorType.caption.copyWith(color: ink, fontWeight: FontWeight.w600, fontSize: 12),
                           ),
                         ),
                     ],
@@ -589,7 +607,13 @@ class _TicketCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TicketBand(overline: label, title: e.title, club: e.organizer, success: entry != null),
+          TicketBand(
+            overline: label,
+            title: e.title,
+            club: e.organizer,
+            success: entry != null,
+            badge: t.passId == null ? null : l.passChip,
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, 18, JomhorSpace.xl, 0),
             child: Row(

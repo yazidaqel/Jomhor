@@ -155,6 +155,10 @@ waitlist:
   # Entries are deleted this long after their event's starts_at (plan Q179).
   retention: ${WAITLIST_RETENTION:30d}
 
+passes:
+  # Season pass tickets (docs/04-api.md §Passes Tickets): the issue job runs this long after the previous run ends.
+  tick: ${PASSES_TICK:30s}
+
 notifications:
   push:
     # Push adapter (docs/04-api.md §Notifications): 'log' = dev/staging, refused under prod; 'fcm' comes with BE-36.

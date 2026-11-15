@@ -1,0 +1,13 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 409,
+ "body": {
+  "code": "NOT_ELIGIBLE",
+  "message": "Not eligible for this sale",
+  "details": {
+   "reason": "NOT_MEMBER",
+   "member_joined_before": "2026-11-15T20:57:10Z",
+   "paid_required": true
+  }
+ }
+}

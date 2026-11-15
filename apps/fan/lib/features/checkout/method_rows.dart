@@ -10,24 +10,31 @@ import 'package:jomhor_fan/ui/motion.dart';
 /// One payment method row: `tooLate` = cash set up but past `cash_until`.
 typedef MethodRow = ({PayMethod method, bool enabled, bool tooLate});
 
-/// The "MOYEN DE PAIEMENT" rows for [d] (DESIGN.md Lot 3, screen 4; also screen 9 member): card and wallet as
-/// offered; cash when offered, or off with "Trop tard pour le cash" when the organizer has cash (`cash_until`) but it
-/// is too late now; no cash row at all without `cash_until`. A row [canPick] refuses is off.
-List<MethodRow> methodRowsOf(EventDetail d, {required bool Function(PayMethod) canPick}) {
-  final offered = d.paymentMethods;
+/// The "MOYEN DE PAIEMENT" rows for the `payment_methods` [offered] and `cash_until` of an event or a product
+/// (DESIGN.md Lot 3, screen 4; also screen 9 member and the product variant): card and wallet as offered; cash when
+/// offered, or off with "Trop tard pour le cash" when the organizer has cash ([cashUntil]) but it is too late now; no
+/// cash row at all without `cash_until`. A row [canPick] refuses is off.
+List<MethodRow> methodRowsOf(
+  List<PayMethod> offered,
+  DateTime? cashUntil, {
+  required bool Function(PayMethod) canPick,
+}) {
   final cash = offered.contains(PayMethod.cashAgency);
   return [
     for (final m in offered.where((m) => m.hosted)) (method: m, enabled: canPick(m), tooLate: false),
     if (cash) (method: PayMethod.cashAgency, enabled: canPick(PayMethod.cashAgency), tooLate: false),
-    if (!cash && d.cashUntil != null) (method: PayMethod.cashAgency, enabled: false, tooLate: true),
+    if (!cash && cashUntil != null) (method: PayMethod.cashAgency, enabled: false, tooLate: true),
   ];
 }
 
 /// The cash code's deadline as the app can guess it before `/pay`: `least(now + 24 h, sales close)` on the server
 /// time of the event read (docs/plans/lot-3.md Q45). `/pay` answers the real `reserved_until`.
-DateTime cashDeadline(FanEvent e) {
-  final day = e.fetchedAt.add(const Duration(hours: 24));
-  return day.isBefore(e.salesCloseAt) ? day : e.salesCloseAt;
+DateTime cashDeadline(FanEvent e) => cashDeadlineAt(e.fetchedAt, e.salesCloseAt);
+
+/// `least(serverNow + 24 h, salesCloseAt)`; [salesCloseAt] null (unknown): 24 h from [serverNow]. Events and products.
+DateTime cashDeadlineAt(DateTime serverNow, DateTime? salesCloseAt) {
+  final day = serverNow.add(const Duration(hours: 24));
+  return salesCloseAt != null && salesCloseAt.isBefore(day) ? salesCloseAt : day;
 }
 
 /// The CTA under the rows: "Payer {total}" / "Payer {total} par wallet" / "Obtenir mon code cash".
@@ -37,12 +44,21 @@ String payCtaText(AppLocalizations l, PayMethod? method, int totalMad) => switch
   _ => l.payCta(l.dh(totalMad)),
 };
 
-/// The rows of [rows] for [event], [selected] marked; tapping an enabled row calls [onSelect].
+/// The rows of [rows], [selected] marked; tapping an enabled row calls [onSelect]. The cash row says
+/// [cashDeadline] in the venue's [timezone].
 class MethodRows extends StatelessWidget {
-  const new({required this.rows, required this.event, required this.selected, required this.onSelect, super.key});
+  const new({
+    required this.rows,
+    required this.cashDeadline,
+    required this.timezone,
+    required this.selected,
+    required this.onSelect,
+    super.key,
+  });
 
   final List<MethodRow> rows;
-  final FanEvent event;
+  final DateTime cashDeadline;
+  final String timezone;
   final PayMethod? selected;
   final ValueChanged<PayMethod> onSelect;
 
@@ -59,7 +75,7 @@ class MethodRows extends StatelessWidget {
             enabled: enabled,
             hint: switch (method) {
               _ when tooLate => l.methodCashTooLate,
-              PayMethod.cashAgency => l.methodCashBefore(venueWhen(cashDeadline(event), event.timezone, l.localeName)),
+              PayMethod.cashAgency => l.methodCashBefore(venueWhen(cashDeadline, timezone, l.localeName)),
               _ => l.instant,
             },
             onTap: () => onSelect(method),

@@ -306,6 +306,9 @@ it.each<[Result, string]>([
   [fail('PER_ACCOUNT_LIMIT', { reason: 'HOLDER', limit: 4, field: 'to_phone' }), 'Ce numéro a atteint la limite de 4 billets pour cet événement'],
   [fail('PER_ACCOUNT_LIMIT', { reason: 'HOLDER', field: 'to_phone' }), 'Ce numéro a atteint la limite de billets pour cet événement'],
   [fail('MEMBERS_ONLY', { field: 'items[0].holders[0]', member_joined_before: null }), 'Tarif réservé aux membres du club.'],
+  [fail('MEMBERS_ONLY', { field: 'items[0].holders[0]', member_joined_before: null, paid_required: false }), 'Tarif réservé aux membres du club.'],
+  // Lot 5 step 3, the real-run body of a free member when the cotisation is paid.
+  [fail('MEMBERS_ONLY', { field: 'items[0].holders[0]', member_joined_before: null, paid_required: true }), 'Tarif réservé aux membres à jour de cotisation.'],
   [fail('ORDER_EXPIRED'), errors.ORDER_EXPIRED],
   [fail('METHOD_NOT_AVAILABLE', { reason: 'TOO_LATE', sales_close_at: '2026-02-07T18:00:00Z' }), errors.METHOD_TOO_LATE],
   [fail('METHOD_NOT_AVAILABLE', { reason: 'CASH_CAP' }), errors.METHOD_CASH_CAP],

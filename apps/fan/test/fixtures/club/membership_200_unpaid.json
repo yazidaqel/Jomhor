@@ -1,0 +1,116 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 200,
+ "body": {
+  "member": {
+   "number": 14,
+   "joined_at": "2026-11-15T20:37:11.502986Z",
+   "marketing_push": false,
+   "marketing_whatsapp": false,
+   "paid_until": null
+  },
+  "loyalty": {
+   "events_attended": 0,
+   "tier": {
+    "code": "T1",
+    "name": "Membre"
+   },
+   "next_tier": {
+    "code": "T2",
+    "name": "Fidèle",
+    "min_events": 3
+   },
+   "last_events": [
+    {
+     "event_id": 14,
+     "title": "ATLAS FC vs Nahda Dakhla",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-08-25T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 13,
+     "title": "ATLAS FC vs Fath Bouregreg",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-09-01T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 12,
+     "title": "ATLAS FC vs Amal Loukkos",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-09-08T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 11,
+     "title": "ATLAS FC vs Najm Ziz",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-09-15T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 10,
+     "title": "ATLAS FC vs Hilal Oriental",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-09-22T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 9,
+     "title": "ATLAS FC vs Racing Tadla",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-09-29T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 8,
+     "title": "ATLAS FC vs Moghreb Côtier",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-10-06T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 7,
+     "title": "ATLAS FC vs Ittihad Saïss",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-10-13T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 6,
+     "title": "ATLAS FC vs Chabab Draa",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-10-20T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 5,
+     "title": "ATLAS FC vs Étoile Souss",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-10-27T16:27:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    },
+    {
+     "event_id": 3,
+     "title": "ATLAS FC vs Union Rif",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2026-10-31T12:31:00Z",
+     "timezone": "Africa/Casablanca",
+     "attended": false
+    }
+   ]
+  },
+  "paid_required": true
+ }
+}

@@ -38,6 +38,17 @@ where p.sold <> coalesce(h.held, 0) + coalesce(h.paid, 0) - coalesce(r.n, 0)
 
 union all
 
+-- A pass product whose sold isn't its passes that aren't CANCELLED (docs/03-schema.sql products; a MEMBERSHIP sells
+-- no pass: 0). No event: ref = the product id.
+select 'PRODUCT_SOLD', null::integer, pr.id::text, format('sold %s, live passes %s', pr.sold, coalesce(n.n, 0))
+from products pr
+left join (select organizer_id, product_id, count(*) as n from passes where status <> 'CANCELLED'
+           group by organizer_id, product_id) n
+  on n.organizer_id = pr.organizer_id and n.product_id = pr.id
+where pr.sold <> coalesce(n.n, 0)
+
+union all
+
 -- Double charge: two SUCCEEDED payments on one order, neither marked payment.refund_required (audit target = the
 -- payment id).
 select 'DOUBLE_CHARGE', o.event_id, o.id::text,
@@ -53,11 +64,13 @@ having count(*) > 1
 
 union all
 
--- A PAID order whose tickets (transferred-away ones left out) aren't its places.
+-- A PAID order whose tickets (transferred-away ones left out) aren't its places. A product order (event_id null,
+-- docs/04-api.md §Products) has no place and so no ticket: its item has no price category.
 select 'TICKETS_PLACES', o.event_id, o.id::text,
        format('tickets %s, places %s', coalesce(t.n, 0), coalesce(i.places, 0))
 from orders o
-left join (select order_id, sum(qty) as places from order_items group by order_id) i on i.order_id = o.id
+left join (select order_id, sum(qty) as places from order_items where price_category_id is not null
+           group by order_id) i on i.order_id = o.id
 left join (select tk.order_id, count(*) as n
            from tickets tk
            where not exists (select 1 from ticket_transfers x where x.ticket_id = tk.id)
@@ -74,7 +87,8 @@ union all
 -- buyers who were within the limit when they bought: read such a row against the event's audit trail (event PATCH)
 -- before calling it a breach.
 -- Deliberately no holder-cap check (04 POST /fan/orders Holder limit): POS sales and a late success's re-reserve
--- bypass it (plan lot-5 Q173), so a row would not be a breach.
+-- bypass it (plan lot-5 Q173), so a row would not be a breach. Pass ticket orders (pass_id and event_id set) are left
+-- out: the pass job issues them without the limit (04 §Passes Tickets), so a holder over it is no breach.
 select 'PER_ACCOUNT_LIMIT', o.event_id, o.user_id::text,
        format('places %s > per_account_limit %s', sum(i.places - coalesce(r.n, 0)), e.per_account_limit)
 from orders o
@@ -82,7 +96,7 @@ join (select order_id, sum(qty) as places from order_items group by order_id) i 
 left join (select order_id, count(*) as n from tickets where status = 'REFUNDED' group by order_id) r
   on r.order_id = o.id and o.status = 'PAID'
 join events e on e.id = o.event_id and e.organizer_id = o.organizer_id
-where o.status in ('RESERVED', 'AWAITING_CASH', 'PAID') and o.user_id is not null
+where o.status in ('RESERVED', 'AWAITING_CASH', 'PAID') and o.user_id is not null and o.pass_id is null
 group by o.event_id, o.user_id, e.per_account_limit
 having sum(i.places - coalesce(r.n, 0)) > e.per_account_limit
 

@@ -32,8 +32,9 @@ import org.springframework.test.web.servlet.ResultActions;
  */
 class MembershipApiTest extends OrgApiTest {
 
-    private static final String[] VIEW = {"member", "loyalty"};
-    private static final String[] MEMBER = {"number", "joined_at", "marketing_push", "marketing_whatsapp"};
+    private static final String[] VIEW = {"member", "loyalty", "paid_required"};
+    private static final String[] MEMBER = {"number", "joined_at", "marketing_push", "marketing_whatsapp",
+            "paid_until"};
     private static final String[] LOYALTY = {"events_attended", "tier", "next_tier", "last_events"};
 
     record Club(UUID org, UUID venue, short zone, UUID gate, UUID device, UUID staff) {}

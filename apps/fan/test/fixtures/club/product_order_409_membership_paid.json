@@ -1,0 +1,11 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 409,
+ "body": {
+  "code": "MEMBERSHIP_PAID",
+  "message": "Membership already paid",
+  "details": {
+   "paid_until": "2027-06-30T22:59:59Z"
+  }
+ }
+}

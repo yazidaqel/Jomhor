@@ -131,7 +131,7 @@ public class TicketService {
      */
     public Slips slips(UUID org, int eventId, UUID orderId) {
         List<Ticket.OfOrder> all = tickets.inOrder(org, orderId);
-        EventService.PublicEvent pe = events.publicEvent(eventId);
+        EventService.EventZones pe = events.eventZones(eventId);
         Map<Integer, Event.ZoneListing> zones = pe.zones().stream()
                 .collect(Collectors.toMap(Event.ZoneListing::id, z -> z));
         List<Ticket.OfOrder> valid = all.stream().filter(t -> t.status() == Ticket.Status.VALID).toList();
@@ -164,7 +164,7 @@ public class TicketService {
         // attended; batch listings and zones by the set of event ids, or bound the past events, when it matters.
         byEvent.forEach((eventId, held) -> {
             UUID org = held.getFirst().organizerId(); // events.id is global: one organizer per event
-            EventService.PublicEvent e = events.publicEvent(eventId);
+            EventService.EventZones e = events.eventZones(eventId);
             Map<Integer, Event.ZoneListing> zones = e.zones().stream()
                     .collect(Collectors.toMap(Event.ZoneListing::id, z -> z));
             List<UUID> keyed = withKeys && e.event().status() != Event.Status.CLOSED
@@ -207,7 +207,7 @@ public class TicketService {
      */
     public Pdf pdf(UUID holderUserId, UUID ticketId) {
         Ticket t = heldValid(holderUserId, ticketId);
-        EventService.PublicEvent pe = events.publicEvent(t.eventId());
+        EventService.EventZones pe = events.eventZones(t.eventId());
         Event.Listing e = pe.event();
         Event.ZoneListing z = pe.zones().stream().filter(zl -> zl.id() == t.zoneId()).findFirst().orElseThrow();
         String token = events.withEventKey(t.organizerId(), t.eventId(),

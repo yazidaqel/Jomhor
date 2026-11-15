@@ -13,6 +13,9 @@ export type MembersSummary = {
   marketing_whatsapp: number
   /** Push opt-in and a live token. */
   reachable_push: number
+  /** Lot 5 step 3: live members with `paid_until > now`; shown only when `paid_required` (the organizer sells a MEMBERSHIP). */
+  paid: number
+  paid_required: boolean
   tiers: { code: string; name: string; members: number }[]
 }
 

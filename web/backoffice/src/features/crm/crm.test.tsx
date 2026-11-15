@@ -51,6 +51,8 @@ const SUMMARY: MembersSummary = {
   marketing_push: 800,
   marketing_whatsapp: 300,
   reachable_push: 640,
+  paid: 0,
+  paid_required: false,
   tiers: [
     { code: 'MEMBRE', name: 'Membre', members: 1000 },
     { code: 'FIDELE', name: 'Fidèle', members: 200 },
@@ -208,6 +210,7 @@ it('Membres: the KPIs and the tier table from the summary, counts only (no name,
   expect(kpi(fr.crm.members.kpi.push).getByText('800')).toBeTruthy()
   expect(kpi(fr.crm.members.kpi.push).getByText(i18n.t('crm.members.kpi.reachable', { n: '640' }))).toBeTruthy()
   expect(kpi(fr.crm.members.kpi.whatsapp).getByText('300')).toBeTruthy()
+  expect(within(panel).queryByText(fr.crm.members.kpi.paid)).toBeNull() // no MEMBERSHIP product: no dues KPI
 
   const rows = within(within(panel).getByRole('table')).getAllByRole('row').slice(1)
   expect(rows.map((r) => cells(r).map((c) => c!.replace(/\s/gu, ' ')))).toEqual([
@@ -218,6 +221,15 @@ it('Membres: the KPIs and the tier table from the summary, counts only (no name,
   // Nothing personal: no phone-like number, not the staff user's name either.
   expect(panel.textContent).not.toMatch(/\+?\d{9,}/)
   expect(panel.textContent).not.toContain('Samira')
+})
+
+it('Membres: "Cotisations à jour" only when paid_required, out of the members', async () => {
+  stubApi('OPS', { handle: (c) => (c.path === '/org/members/summary' ? Response.json({ ...SUMMARY, paid: 987, paid_required: true }) : undefined) })
+  renderApp('/crm')
+  const panel = await screen.findByRole('tabpanel', { name: fr.crm.tabs.members })
+  const card = within((await within(panel).findByText(fr.crm.members.kpi.paid, { selector: 'span' })).closest('[data-slot="card"]') as HTMLElement)
+  expect(card.getByText('987')).toBeTruthy()
+  expect(card.getByText(i18n.t('crm.members.kpi.paidOf', { n: (1234).toLocaleString('fr') }).replace(/\s/gu, ' '))).toBeTruthy()
 })
 
 it('Campagnes: rows with channel, audience, status, the time in the event venue zone and the counts; Annuler only while SCHEDULED', async () => {

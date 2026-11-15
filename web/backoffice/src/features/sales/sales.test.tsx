@@ -37,6 +37,7 @@ const EVENT = {
   venue_id: 'v-1',
   timezone: CASA,
   series_id: null,
+  pass_tickets: false,
   event_type: 'FOOTBALL_MATCH',
   title: 'Atlas FC vs Rapid Oued',
   starts_at: '2026-11-14T19:00:00Z',

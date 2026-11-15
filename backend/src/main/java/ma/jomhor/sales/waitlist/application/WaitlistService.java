@@ -138,7 +138,7 @@ public class WaitlistService {
     /**
      * Skipped when the event isn't on sale at {@code now}, a phase isn't ENDED, or a WAITLIST_OPEN was queued within
      * the cooldown (read from the outbox under the lock, so two instances never notify one event twice in a period,
-     * and a rejoin or a leave doesn't reset it). R = Σ remaining,
+     * and a rejoin or a leave doesn't reset it). R = Σ remaining of the categories fans can buy (no PASS),
      * read without a lock; the R oldest waiting entries (at most 1,000) get notified_at and their messages in this
      * transaction. ponytail: R counts every category, MEMBERS ones too, so a member-only leftover notifies non-members
      * as well (plan Q172); filter by audience if the club complains.
@@ -152,7 +152,7 @@ public class WaitlistService {
         if (last.isPresent() && now.isBefore(last.get().plus(cooldown))) {
             return;
         }
-        long remaining = inventory.prices(org, eventId).stream().mapToLong(Inventory.SalePrice::remaining).sum();
+        long remaining = inventory.salePrices(org, eventId).stream().mapToLong(Inventory.SalePrice::remaining).sum();
         int n = (int) Math.min(remaining, MAX_PER_RUN);
         if (n > 0) {
             List<UUID> users = waitlist.notifyOldest(org, eventId, n, now);

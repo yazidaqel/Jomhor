@@ -1579,4 +1579,172 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get waitlistChannels => 'On te prévient par notification et WhatsApp';
+
+  @override
+  String get passChip => 'Abonnement';
+
+  @override
+  String get passesTitle => 'Mes abonnements';
+
+  @override
+  String get passActive => 'Actif';
+
+  @override
+  String get passPending => 'Paiement en attente';
+
+  @override
+  String get passPendingBody => 'Paiement en attente · ton abonnement s\'active dès que tu as payé.';
+
+  @override
+  String get passResume => 'Reprendre le paiement';
+
+  @override
+  String get passProgramme => 'Au programme';
+
+  @override
+  String get passTicket => 'Billet';
+
+  @override
+  String get passSoon => 'Bientôt';
+
+  @override
+  String get passOneTicketEach => 'Un billet dans l\'app pour chaque match publié';
+
+  @override
+  String get passOneTicketEachAny => 'Un billet dans l\'app pour chaque événement publié';
+
+  @override
+  String passEventsAnnounced(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n matchs annoncés',
+      one: '1 match annoncé',
+      zero: 'Aucun match annoncé pour l\'instant',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String passEventsAnnouncedAny(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n événements annoncés',
+      one: '1 événement annoncé',
+      zero: 'Aucun événement annoncé pour l\'instant',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String passBuy(String amount) {
+    return 'Acheter · $amount';
+  }
+
+  @override
+  String get passHolderHelp => 'Le nom sur chaque billet de ton abonnement, comme sur ta CIN.';
+
+  @override
+  String passSeasonRange(String from, String to) {
+    return '$from – $to';
+  }
+
+  @override
+  String membershipValidUntil(String date) {
+    return 'Carte membre valable jusqu\'au $date';
+  }
+
+  @override
+  String productHoldLeft(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Réservé pour toi · encore $minutes min',
+      one: 'Réservé pour toi · encore 1 min',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String productHolder(String name) {
+    return 'Titulaire · $name';
+  }
+
+  @override
+  String get productCaptionPass => 'Billets dans l\'app à chaque match publié';
+
+  @override
+  String get productCaptionMembership => 'Carte membre à jour dès le paiement';
+
+  @override
+  String get orderPaidPassBody =>
+      'Ton abonnement est actif. Chaque billet arrive dans l\'app dès que son match est publié.';
+
+  @override
+  String get orderPaidMembershipBody => 'Ta carte membre est à jour.';
+
+  @override
+  String get seePass => 'Voir mon abonnement';
+
+  @override
+  String get seeMemberCard => 'Voir ma carte membre';
+
+  @override
+  String get errorProductNotOnSale => 'Les ventes sont closes pour ce produit.';
+
+  @override
+  String get passSeason => 'Saison';
+
+  @override
+  String clubDuesUnpaid(String product, String price) {
+    return 'Cotisation $product · $price';
+  }
+
+  @override
+  String get clubDuesWhy => 'Les tarifs membres et les préventes sont réservés aux membres à jour de cotisation.';
+
+  @override
+  String get clubDuesPay => 'Payer ma cotisation';
+
+  @override
+  String clubDuesPaid(String date) {
+    return 'À jour jusqu\'au $date';
+  }
+
+  @override
+  String get clubDuesExpired => 'Cotisation expirée';
+
+  @override
+  String get clubDuesRenew => 'Renouveler';
+
+  @override
+  String clubJoinDues(String price) {
+    return 'Cotisation $price';
+  }
+
+  @override
+  String get clubPasses => 'Abonnements';
+
+  @override
+  String get errorMembershipPaid => 'Ta cotisation est déjà à jour.';
+
+  @override
+  String holderMembersOnlyPaid(String date) {
+    return 'Tarif réservé aux membres à jour de cotisation, inscrits avant le $date';
+  }
+
+  @override
+  String get holderMembersOnlyPaidAny => 'Tarif réservé aux membres à jour de cotisation';
+
+  @override
+  String queueNotMemberPaid(String date) {
+    return 'Réservée aux membres à jour de cotisation, inscrits avant le $date';
+  }
+
+  @override
+  String get queueNotMemberPaidAny => 'Réservée aux membres à jour de cotisation';
+
+  @override
+  String get duesSeeClub => 'Voir ma cotisation';
 }

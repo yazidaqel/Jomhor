@@ -1,0 +1,11 @@
+{
+ "source": "captured from the dev API (FL-29/FL-30 real run, 2026-11-15)",
+ "status": 409,
+ "body": {
+  "code": "PRODUCT_NOT_ON_SALE",
+  "message": "This product is no longer on sale",
+  "details": {
+   "sales_close_at": "2026-11-15T20:38:11Z"
+  }
+ }
+}

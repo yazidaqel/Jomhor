@@ -34,8 +34,11 @@ class CashOrder extends ConsumerWidget {
       null => null,
     };
     final event = detail?.event;
+    // Lot 5 step 3: a product order has no event; its product's name, zone and methods stand in.
+    final product = order.product;
+    final zone = event?.timezone ?? product?.timezone;
     final left = view.left;
-    final hosted = [...?detail?.paymentMethods.where((m) => m.hosted)];
+    final hosted = [...?(detail?.paymentMethods ?? product?.paymentMethods)?.where((m) => m.hosted)];
     final where = [...?cash?.points.map((p) => p.name), ...?cash?.networks].join(l.listSeparator);
     final rePay = ref.watch(rePayProvider(order.id));
     // The event read (zone, title, methods) may land after the order: its parts fade into fixed, keyed slots, so
@@ -53,7 +56,7 @@ class CashOrder extends ConsumerWidget {
           key: const ValueKey('cash.slot.deadline'),
           child: slot(
             'deadline',
-            until == null || event == null
+            until == null || zone == null
                 ? null
                 : Padding(
                     padding: const EdgeInsets.only(bottom: JomhorSpace.l),
@@ -61,7 +64,7 @@ class CashOrder extends ConsumerWidget {
                       key: const Key('cash.deadline'),
                       accent: true,
                       icon: Icons.schedule_rounded,
-                      text: l.cashHoldBanner(venueWhen(until, event.timezone, l.localeName)),
+                      text: l.cashHoldBanner(venueWhen(until, zone, l.localeName)),
                     ),
                   ),
           ),
@@ -71,19 +74,22 @@ class CashOrder extends ConsumerWidget {
           index: 1,
           child: Text(l.cashTitle, style: JomhorType.h1.copyWith(fontSize: 34)),
         ),
-        slot(
-          'event',
-          event == null
-              ? null
-              : Padding(
-                  key: const ValueKey('cash.event'),
-                  padding: const EdgeInsets.only(top: JomhorSpace.xs),
-                  child: Text(
-                    l.dotPair(event.title, venueWhen(event.startsAt, event.timezone, l.localeName)),
-                    style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
-                  ),
-                ),
-        ),
+        slot('event', switch ((order.product, event)) {
+          (final p?, _) => Padding(
+            key: const ValueKey('cash.product'),
+            padding: const EdgeInsets.only(top: JomhorSpace.xs),
+            child: Text(p.name, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+          ),
+          (_, final event?) => Padding(
+            key: const ValueKey('cash.event'),
+            padding: const EdgeInsets.only(top: JomhorSpace.xs),
+            child: Text(
+              l.dotPair(event.title, venueWhen(event.startsAt, event.timezone, l.localeName)),
+              style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+            ),
+          ),
+          _ => null,
+        }),
         const SizedBox(height: JomhorSpace.l),
         if (cash != null)
           Entrance(
@@ -345,11 +351,13 @@ class _Step extends StatelessWidget {
   );
 }
 
-/// The code's deadline passed (or the order expired): say so, back to the event (Q55: no fan cancel, it just ends).
+/// The code's deadline passed (or the order expired): say so, back to the event (Q55: no fan cancel, it just ends),
+/// or to the product to buy it again (Lot 5 step 3).
 class CashExpired extends StatelessWidget {
-  const new({required this.eventId, super.key});
+  const new({required this.eventId, this.productId, super.key});
 
   final int? eventId;
+  final String? productId;
 
   @override
   Widget build(BuildContext context) {
@@ -370,6 +378,14 @@ class CashExpired extends StatelessWidget {
         const SizedBox(height: JomhorSpace.xl),
         if (eventId case final id?) ...[
           FilledButton(onPressed: () => context.go('/events/$id'), child: Text(l.backToEvent)),
+          const SizedBox(height: JomhorSpace.s),
+        ],
+        if (productId case final id?) ...[
+          FilledButton(
+            key: const Key('cash.retryProduct'),
+            onPressed: () => context.go('/products/$id'),
+            child: Text(l.retry),
+          ),
           const SizedBox(height: JomhorSpace.s),
         ],
         OutlinedButton(onPressed: () => context.go('/'), child: Text(l.backHome)),

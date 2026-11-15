@@ -14,7 +14,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -86,8 +88,9 @@ class EventApiTest extends OrgApiTest {
                 .isEqualTo(a.org());
 
         String got = body(call(a, get("/org/events/" + id)).andExpect(status().isOk()));
-        assertKeys(got, "$", EVENT_KEYS);
-        assertThat(JsonPath.<Object>read(got, "$")).isEqualTo(JsonPath.read(json, "$"));
+        Map<String, Object> read = new HashMap<>(JsonPath.read(got, "$"));
+        assertThat(read.remove("pass_tickets")).isEqualTo(false); // GET only (Lot 5 step 3)
+        assertThat(read).isEqualTo(JsonPath.read(json, "$"));
     }
 
     /** timezone is the venue's, read-only, on every event representation and in list rows (plan Q7). */

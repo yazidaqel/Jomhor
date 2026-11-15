@@ -27,6 +27,7 @@ class FanTicket {
     this.seatLabel,
     this.transferUntil,
     this.transferred,
+    this.passId,
     this._ticketKey,
   }) : _idBytes = _uuidBytes(id);
 
@@ -62,6 +63,7 @@ class FanTicket {
         ),
         _ => null,
       },
+      passId: j['pass_id'] as String?,
       ticketKey: _key(j['k_t']),
     );
   }
@@ -92,6 +94,9 @@ class FanTicket {
 
   /// Set on a ticket this holder transferred away (status `CANCELLED`): "Transféré à Karim B.".
   final Transferred? transferred;
+
+  /// The season pass that issued this ticket (Lot 5 step 3): the "Abonnement" chip; null for a bought ticket.
+  final String? passId;
   final Uint8List _idBytes;
   final Uint8List? _ticketKey;
 
@@ -118,6 +123,7 @@ class FanTicket {
     seatLabel: seatLabel,
     transferUntil: transferUntil,
     transferred: to,
+    passId: passId,
   );
 
   /// Why the fan cannot transfer or re-issue this ticket at [serverNow] (docs/04-api.md transfer row), or null.

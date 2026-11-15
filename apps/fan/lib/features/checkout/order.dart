@@ -20,6 +20,8 @@ class FanOrder {
     this.paymentMethod,
     this.cash,
     this.group,
+    this.product,
+    this.passId,
   });
 
   factory fromJson(Map<String, Object?> j) => FanOrder(
@@ -43,10 +45,23 @@ class FanOrder {
       final Map<String, Object?> g when g['role'] == 'INITIATOR' || g['role'] == 'MEMBER' => OrderGroup.fromJson(g),
       _ => null,
     },
+    product: switch (j['product']) {
+      final Map<String, Object?> p => OrderProduct.fromJson(p),
+      _ => null,
+    },
+    passId: j['pass_id'] as String?,
   );
 
   final String id;
+
+  /// Null for a product order (Lot 5 step 3: a pass or a membership), which has [product] instead.
   final int? eventId;
+
+  /// What a product order sells; null on event orders.
+  final OrderProduct? product;
+
+  /// A pass purchase order: the pass it pays for (screen 13 owned once PAID).
+  final String? passId;
 
   /// `RESERVED`, `PAID`, `EXPIRED`, `CANCELLED` (`AWAITING_CASH` in Lot 3).
   final String status;
@@ -89,6 +104,42 @@ class FanOrder {
   bool get settled => status != 'RESERVED' && status != 'AWAITING_CASH';
 }
 
+/// `product` of a product order (`PASS` or `MEMBERSHIP`), read from the product even once it is off sale: what it
+/// is, the time zone its dates show in, and the methods `/pay` takes for it.
+class OrderProduct {
+  const new({
+    required this.id,
+    required this.kind,
+    required this.name,
+    this.timezone = 'Africa/Casablanca',
+    this.paymentMethods = const [PayMethod.card],
+    this.cashUntil,
+  });
+
+  factory fromJson(Map<String, Object?> j) => OrderProduct(
+    id: j['id']! as String,
+    kind: j['kind']! as String,
+    name: j['name']! as String,
+    timezone: j['timezone'] as String? ?? 'Africa/Casablanca',
+    paymentMethods: switch (j['payment_methods']) {
+      final List<Object?> list => [...list.map(PayMethod.of).nonNulls],
+      _ => const [PayMethod.card],
+    },
+    cashUntil: _instant(j['cash_until']),
+  );
+
+  final String id;
+  final String kind;
+  final String name;
+  final String timezone;
+  final List<PayMethod> paymentMethods;
+
+  /// Last moment a cash code can be bought; null when the organizer has no cash (as `GET /fan/events/{id}`).
+  final DateTime? cashUntil;
+
+  bool get isPass => kind == 'PASS';
+}
+
 class OrderItem {
   new({
     required this.priceCategoryId,
@@ -100,8 +151,8 @@ class OrderItem {
   });
 
   factory fromJson(Map<String, Object?> j) => OrderItem(
-    priceCategoryId: j['price_category_id']! as String,
-    zoneId: j['zone_id']! as int,
+    priceCategoryId: j['price_category_id'] as String?,
+    zoneId: j['zone_id'] as int?,
     name: j['name']! as String,
     qty: j['qty']! as int,
     unitPriceMad: j['unit_price_mad']! as int,
@@ -110,8 +161,9 @@ class OrderItem {
     ],
   );
 
-  final String priceCategoryId;
-  final int zoneId;
+  /// Both null on a membership item; [priceCategoryId] null on any product item.
+  final String? priceCategoryId;
+  final int? zoneId;
   final String name;
   final int qty;
   final int unitPriceMad;
@@ -184,26 +236,28 @@ class CashCode {
 
 typedef CashPoint = ({String name, String? address, String? hours});
 
-/// One row of `GET /fan/orders`: only what screen 1's pending-payment strip reads.
+/// One row of `GET /fan/orders`: only what screen 1's pending-payment strip reads. A product order (Lot 5 step 3)
+/// has `event` null: its product's name stands where the event title goes.
 class OrderRow {
   new({
     required this.id,
     required this.status,
     required this.eventTitle,
-    required this.eventStartsAt,
     required this.timezone,
+    this.eventStartsAt,
     this.reservedUntil,
     this.payCode,
     this.groupRole,
   });
 
   factory fromJson(Map<String, Object?> j) {
-    final e = j['event']! as Map<String, Object?>;
+    // A product order's row: `event` null, `product: {id, kind, name, timezone}`.
+    final e = (j['event'] ?? j['product'])! as Map<String, Object?>;
     return OrderRow(
       id: j['id']! as String,
       status: j['status']! as String,
-      eventTitle: e['title']! as String,
-      eventStartsAt: _instant(e['starts_at'])!,
+      eventTitle: (e['title'] ?? e['name'])! as String,
+      eventStartsAt: _instant(e['starts_at']),
       timezone: e['timezone']! as String,
       reservedUntil: _instant(j['reserved_until']),
       payCode: j['pay_code'] as String?,
@@ -213,8 +267,12 @@ class OrderRow {
 
   final String id;
   final String status;
+
+  /// The event's title, or the product's name.
   final String eventTitle;
-  final DateTime eventStartsAt;
+
+  /// Null for a product order.
+  final DateTime? eventStartsAt;
 
   /// The venue's zone (IANA), for the deadline.
   final String timezone;

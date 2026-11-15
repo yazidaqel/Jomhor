@@ -82,6 +82,7 @@ it('/api/tickets: Bearer from the cookie, no with_keys; the answer has no k_t ev
     transfer_until: null,
     transfer_open: false,
     transferred: null,
+    pass_id: null,
   })
 })
 

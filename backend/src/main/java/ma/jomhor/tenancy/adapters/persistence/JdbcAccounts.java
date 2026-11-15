@@ -148,6 +148,12 @@ class JdbcAccounts implements Accounts {
     }
 
     @Override
+    public Optional<Organizer> organizer(UUID organizerId) {
+        return jdbc.sql("select " + ORGANIZER_COLUMNS + " from organizers where id = ?")
+                .param(organizerId).query((rs, n) -> organizer(rs)).optional();
+    }
+
+    @Override
     public Optional<User> findUser(UUID userId) {
         return jdbc.sql("select " + USER_COLUMNS + " from users where id = ?")
                 .param(userId).query(JdbcAccounts::user).optional();

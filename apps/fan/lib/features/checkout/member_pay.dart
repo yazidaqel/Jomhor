@@ -44,7 +44,11 @@ class _MemberPayState extends ConsumerState<MemberPay> {
     final refused = ref.read(rePayProvider(order.id).notifier).refused;
     final rows = detail == null
         ? const <MethodRow>[]
-        : methodRowsOf(detail, canPick: (m) => !rePay.inFlight && !refused.contains(m));
+        : methodRowsOf(
+            detail.paymentMethods,
+            detail.cashUntil,
+            canPick: (m) => !rePay.inFlight && !refused.contains(m),
+          );
     // The picked row while it is on, else the first one on (a refused row loses the selection).
     final enabled = [
       for (final r in rows)
@@ -114,7 +118,8 @@ class _MemberPayState extends ConsumerState<MemberPay> {
                     if (detail != null)
                       MethodRows(
                         rows: rows,
-                        event: detail.event,
+                        cashDeadline: cashDeadline(detail.event),
+                        timezone: detail.event.timezone,
                         selected: selected,
                         onSelect: (m) => setState(() => _picked = m),
                       ),
