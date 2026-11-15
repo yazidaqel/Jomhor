@@ -113,13 +113,31 @@ class _Body extends ConsumerWidget {
                       children: [
                         for (final p in zone.prices)
                           ChoiceChip(
-                            label: Text(l.dotPair(p.name, l.dh(p.priceMad))),
+                            key: Key('zones.price.${p.priceCategoryId}'),
+                            label: p.membersOnly
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(child: Text(l.dotPair(p.name, l.dh(p.priceMad)))),
+                                      const SizedBox(width: JomhorSpace.s),
+                                      MembersChip(label: l.membersChip),
+                                    ],
+                                  )
+                                : Text(l.dotPair(p.name, l.dh(p.priceMad))),
                             selected: p.priceCategoryId == price.priceCategoryId,
                             onSelected: p.remaining == 0 ? null : (_) => picker.selectPrice(p, perAccountLimit: limit),
                           ),
                       ],
                     ),
-                  ] else
+                  ] else if (price.membersOnly)
+                    Row(
+                      children: [
+                        Text(l.dh(price.priceMad), style: JomhorType.body),
+                        const SizedBox(width: JomhorSpace.s),
+                        MembersChip(label: l.membersChip),
+                      ],
+                    )
+                  else
                     Text(l.dh(price.priceMad), style: JomhorType.body),
                   const SizedBox(height: JomhorSpace.l),
                   Row(

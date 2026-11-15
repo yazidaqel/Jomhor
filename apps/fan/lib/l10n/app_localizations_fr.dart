@@ -1297,7 +1297,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String roomMemberBefore(String date) {
-    return 'membre depuis le $date';
+    return 'membre inscrit avant le $date';
   }
 
   @override
@@ -1483,5 +1483,85 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String turnBar(String time) {
     return 'Ton tour · $time';
+  }
+
+  @override
+  String roomMinEventsAny(int n) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: '$n événements', one: '1 événement');
+    return '$_temp0';
+  }
+
+  @override
+  String queueNotEnoughEventsAny(int n, int attended) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'Il faut $n événements · tu en as $attended',
+      one: 'Il faut 1 événement · tu en as $attended',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String roomStatusScheduled(String time) {
+    return 'file dès $time';
+  }
+
+  @override
+  String roomStatusDraw(String time) {
+    return 'tirage à $time';
+  }
+
+  @override
+  String get roomStatusJoin => 'rejoindre la file';
+
+  @override
+  String get roomStatusResume => 'reprendre ma place';
+
+  @override
+  String get roomStatusChoose => 'choisir mes places';
+
+  @override
+  String get roomStatusOpen => 'file ouverte';
+
+  @override
+  String get roomStatusPaused => 'admission en pause';
+
+  @override
+  String roomNext(String label, String time) {
+    return 'Ensuite : $label · file dès $time';
+  }
+
+  @override
+  String get roomNextDefault => 'Prochaine vente';
+
+  @override
+  String get membersChip => 'Membres';
+
+  @override
+  String membersCaption(String date) {
+    return 'Tarif membres · inscrits avant le $date';
+  }
+
+  @override
+  String get membersCaptionAny => 'Tarif membres';
+
+  @override
+  String holderMembersOnly(String date) {
+    return 'Tarif réservé aux membres inscrits avant le $date';
+  }
+
+  @override
+  String get holderMembersOnlyAny => 'Tarif réservé aux membres';
+
+  @override
+  String holderCapReached(int limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: 'Ce numéro a atteint la limite de $limit billets pour cet événement',
+      one: 'Ce numéro a atteint la limite de 1 billet pour cet événement',
+    );
+    return '$_temp0';
   }
 }

@@ -2202,7 +2202,7 @@ abstract class AppLocalizations {
   /// No description provided for @roomMemberBefore.
   ///
   /// In fr, this message translates to:
-  /// **'membre depuis le {date}'**
+  /// **'membre inscrit avant le {date}'**
   String roomMemberBefore(String date);
 
   /// No description provided for @roomMinEvents.
@@ -2462,6 +2462,108 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Ton tour · {time}'**
   String turnBar(String time);
+
+  /// Screen 2 rule part for an event that is not a match (lot-5 Q182).
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =1{1 événement} other{{n} événements}}'**
+  String roomMinEventsAny(int n);
+
+  /// NOT_ELIGIBLE NOT_ENOUGH_EVENTS for an event that is not a match (lot-5 Q182).
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =1{Il faut 1 événement · tu en as {attended}} other{Il faut {n} événements · tu en as {attended}}}'**
+  String queueNotEnoughEventsAny(int n, int attended);
+
+  /// Screen 2 room line after the phase label, SCHEDULED; also the screen 1/2 CTA after a label.
+  ///
+  /// In fr, this message translates to:
+  /// **'file dès {time}'**
+  String roomStatusScheduled(String time);
+
+  /// Screen 2 room line after the phase label, PRE_QUEUE: the phase's sale start.
+  ///
+  /// In fr, this message translates to:
+  /// **'tirage à {time}'**
+  String roomStatusDraw(String time);
+
+  /// Screens 1 and 2 CTA after a phase label (lower case): joins are open.
+  ///
+  /// In fr, this message translates to:
+  /// **'rejoindre la file'**
+  String get roomStatusJoin;
+
+  /// Screens 1 and 2 CTA after a phase label (lower case): the phone holds a queue token.
+  ///
+  /// In fr, this message translates to:
+  /// **'reprendre ma place'**
+  String get roomStatusResume;
+
+  /// Screens 1 and 2 CTA after a phase label (lower case): the turn is running.
+  ///
+  /// In fr, this message translates to:
+  /// **'choisir mes places'**
+  String get roomStatusChoose;
+
+  /// Screen 2 room line after the phase label, OPEN.
+  ///
+  /// In fr, this message translates to:
+  /// **'file ouverte'**
+  String get roomStatusOpen;
+
+  /// Screen 2 room line after the phase label, PAUSED.
+  ///
+  /// In fr, this message translates to:
+  /// **'admission en pause'**
+  String get roomStatusPaused;
+
+  /// Screens 2 and 12: the next sale phase (room.next).
+  ///
+  /// In fr, this message translates to:
+  /// **'Ensuite : {label} · file dès {time}'**
+  String roomNext(String label, String time);
+
+  /// roomNext label when the next phase has none.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prochaine vente'**
+  String get roomNextDefault;
+
+  /// Screens 2 and 3: chip on a members-only price.
+  ///
+  /// In fr, this message translates to:
+  /// **'Membres'**
+  String get membersChip;
+
+  /// Screen 2 caption under the zones with a members price: the event's sale start.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif membres · inscrits avant le {date}'**
+  String membersCaption(String date);
+
+  /// membersCaption when the event has no sale start (any live member).
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif membres'**
+  String get membersCaptionAny;
+
+  /// Screen 4 holder row: 409 MEMBERS_ONLY.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif réservé aux membres inscrits avant le {date}'**
+  String holderMembersOnly(String date);
+
+  /// holderMembersOnly without a date (member_joined_before null).
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif réservé aux membres'**
+  String get holderMembersOnlyAny;
+
+  /// Screen 4 holder row and screen 8 phone: 409 PER_ACCOUNT_LIMIT reason HOLDER.
+  ///
+  /// In fr, this message translates to:
+  /// **'{limit, plural, =1{Ce numéro a atteint la limite de 1 billet pour cet événement} other{Ce numéro a atteint la limite de {limit} billets pour cet événement}}'**
+  String holderCapReached(int limit);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

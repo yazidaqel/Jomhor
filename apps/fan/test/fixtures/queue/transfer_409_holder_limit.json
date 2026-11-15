@@ -1,0 +1,13 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 2): replace with a captured answer once BE-47/BE-48 run",
+ "status": 409,
+ "body": {
+  "code": "PER_ACCOUNT_LIMIT",
+  "message": "Per-account limit reached",
+  "details": {
+   "reason": "HOLDER",
+   "field": "to_phone",
+   "limit": 4
+  }
+ }
+}

@@ -301,6 +301,17 @@ class _FormState extends ConsumerState<_Form> {
                           : null,
                     ),
                 ],
+                // Lot 5 step 2: who holds this place was refused (members price, holder limit).
+                if (state.refusedRow case (:final row, :final error) when row == i)
+                  if (holderRefusalText(l, error, event.timezone) case final text?)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(top: JomhorSpace.s),
+                      child: Text(
+                        text,
+                        key: Key('holder.$i.refusal'),
+                        style: JomhorType.bodySmall.copyWith(color: Theme.of(context).colorScheme.error),
+                      ),
+                    ),
                 const SizedBox(height: JomhorSpace.l),
               ],
               if (_hasFriendPhone) ...[

@@ -14,11 +14,11 @@ class ZonePick extends Notifier<ZonePickState> {
   @override
   ZonePickState build() => (zone: null, price: null, qty: 0);
 
-  /// The cheapest category still open in [zone], one place.
+  /// [Zone.firstOpen] of [zone], one place.
   void selectZone(Zone zone, {required int perAccountLimit}) {
-    final open = [...zone.prices.where((p) => p.remaining > 0)]..sort((a, b) => a.priceMad.compareTo(b.priceMad));
-    if (open.isEmpty) return;
-    state = (zone: zone, price: open.first, qty: _clamp(1, open.first, perAccountLimit));
+    final first = zone.firstOpen;
+    if (first == null) return;
+    state = (zone: zone, price: first, qty: _clamp(1, first, perAccountLimit));
   }
 
   void selectPrice(Price price, {required int perAccountLimit}) {

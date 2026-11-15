@@ -103,10 +103,18 @@ class _Body extends StatelessWidget {
                 const SizedBox(height: JomhorSpace.s),
                 InfoBanner(
                   key: const Key('event.room'),
-                  text: [l.roomHighDemand, ?eligibilityLine(l, e)].join('\n'),
+                  text: [roomLine(l, e, now), ?eligibilityLine(l, e)].join('\n'),
                   accent: true,
                   icon: Icons.groups_rounded,
                 ),
+                if (nextPhaseLine(l, e, now) case final next?) ...[
+                  const SizedBox(height: JomhorSpace.s),
+                  Text(
+                    next,
+                    key: const Key('event.next'),
+                    style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+                  ),
+                ],
               ],
               const SizedBox(height: JomhorSpace.xxl),
               Text(l.zonesTitle, style: JomhorType.h2),
@@ -116,6 +124,26 @@ class _Body extends StatelessWidget {
                   index: i + 1,
                   child: ZoneRow(zone: z, index: i),
                 ),
+              if (detail.zones.any((z) => z.hasMembersPrice)) ...[
+                const SizedBox(height: JomhorSpace.xs),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.card_membership_outlined, size: 18, color: JomhorColors.textMuted),
+                    const SizedBox(width: JomhorSpace.s),
+                    Expanded(
+                      child: Text(
+                        switch (e.saleStartsAt) {
+                          final at? => l.membersCaption(venueDay(at, e.timezone, l.localeName)),
+                          null => l.membersCaptionAny,
+                        },
+                        key: const Key('event.members'),
+                        style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: JomhorSpace.m),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

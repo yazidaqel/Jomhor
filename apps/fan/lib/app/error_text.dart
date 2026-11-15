@@ -1,4 +1,5 @@
 import 'package:jomhor_fan/core/api/api_client.dart';
+import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/auth/login_controller.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -13,6 +14,7 @@ String errorText(AppLocalizations l, String code) => switch (code) {
   'NOT_FOUND' => l.errorNotFound,
   'EVENT_NOT_ON_SALE' => l.errorNotOnSale,
   'SOLD_OUT' => l.errorSoldOut,
+  'MEMBERS_ONLY' => l.holderMembersOnlyAny,
   'ORDER_EXPIRED' => l.errorOrderExpired,
   'ORDER_NOT_PAYABLE' => l.errorOrderNotPayable,
   ApiError.network => l.errorNetwork,
@@ -29,4 +31,15 @@ String apiErrorText(AppLocalizations l, ApiError e) => switch ((e.code, e.detail
   ('METHOD_NOT_AVAILABLE', {'reason': 'CASH_CAP'}) => l.errorCashCap,
   ('METHOD_NOT_AVAILABLE', _) => l.errorMethodNotConfigured,
   _ => errorText(l, e.code),
+};
+
+/// Lot 5 step 2, said on a holder (screen 4's row, screen 8's phone): `MEMBERS_ONLY` with its date in the venue
+/// [zone], or `PER_ACCOUNT_LIMIT` reason `HOLDER`; null for anything else.
+String? holderRefusalText(AppLocalizations l, ApiError e, String zone) => switch ((e.code, e.details)) {
+  ('MEMBERS_ONLY', {'member_joined_before': final String at}) when DateTime.tryParse(at) != null => l.holderMembersOnly(
+    venueDay(DateTime.parse(at), zone, l.localeName),
+  ),
+  ('MEMBERS_ONLY', _) => l.holderMembersOnlyAny,
+  ('PER_ACCOUNT_LIMIT', {'reason': 'HOLDER', 'limit': final int limit}) => l.holderCapReached(limit),
+  _ => null,
 };

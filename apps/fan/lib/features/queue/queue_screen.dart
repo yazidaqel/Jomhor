@@ -98,11 +98,15 @@ class _QueueScreenState extends ConsumerState<QueueScreen> with SingleTickerProv
   }
 
   void _onChange(QueueView? before, QueueView now) {
-    // No room any more: buy without it.
-    final ended =
-        now.status?.phase == QueuePhase.ended ||
-        (now.error?.code == 'QUEUE_NOT_OPEN' && const {'ENDED', 'NO_ROOM'}.contains(now.error?.details['reason']));
-    if (ended) return context.go('/events/${widget.eventId}/zones');
+    // The room is over: the next phase on screen 2, or buying without a room on screen 3.
+    switch (now.exit) {
+      case QueueExit.event:
+        return context.go('/events/${widget.eventId}');
+      case QueueExit.zones:
+        return context.go('/events/${widget.eventId}/zones');
+      case null:
+        break;
+    }
     // The turn: the amber twelfth swells once, with a haptic (neither under reduced motion). Only on the change
     // itself: a screen opened on a turn already running stays still.
     final was = before?.status?.phase;
@@ -389,6 +393,7 @@ class _QueueScreenState extends ConsumerState<QueueScreen> with SingleTickerProv
     DateTime now,
   ) {
     String day(Object? at) => at is String ? venueDay(DateTime.parse(at), zone, l.localeName) : '';
+    final match = event?.isMatch ?? true;
     return switch ((e.code, e.details['reason'])) {
       ('NOT_ELIGIBLE', final reason) => [
         _Panel(
@@ -399,10 +404,20 @@ class _QueueScreenState extends ConsumerState<QueueScreen> with SingleTickerProv
             ('ACCOUNT_TOO_NEW', {'verified_before': final d}) => l.queueAccountTooNew(day(d)),
             ('NOT_MEMBER', {'member_joined_before': final d}) => l.queueNotMember(day(d)),
             ('NOT_ENOUGH_EVENTS', {'min_events_attended': final int n, 'attended': final int a}) =>
-              l.queueNotEnoughEvents(n, a),
+              match ? l.queueNotEnoughEvents(n, a) : l.queueNotEnoughEventsAny(n, a),
             _ => null,
           },
         ),
+        // Lot 5 step 2: a later phase may let the fan in.
+        if (event == null ? null : nextPhaseLine(l, event, now) case final next?) ...[
+          const SizedBox(height: JomhorSpace.l),
+          Text(
+            next,
+            key: const Key('queue.next'),
+            textAlign: TextAlign.center,
+            style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+          ),
+        ],
       ],
       ('QUEUE_DEVICE_LIMIT', _) => [
         _Panel(key: const Key('queue.deviceLimit'), icon: Icons.phone_android_rounded, title: l.queueDeviceLimit),

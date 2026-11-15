@@ -726,5 +726,70 @@ void main() {
       if (locale == 'ar') expectArabicRules(tester);
       await snap('$locale-2-file-attente');
     });
+
+    // FL-27: a members presale with the general sale next, a members price, the holder-row refusals.
+    Map<String, Object?> presale() => realAnswer('event_room_presale_next').body;
+
+    testWidgets('$locale · screen 2 presale with the next phase', (tester) async {
+      await room(tester, '/events/1', (sale) {
+        sale
+          ..detail = presale()
+          ..room = {...presale()['room']! as Map<String, Object?>};
+      });
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('event.next')), findsOneWidget);
+      expect(find.byKey(const Key('zone.1.members')), findsOneWidget);
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-2-prevente');
+    });
+
+    testWidgets('$locale · screen 3 with a members price', (tester) async {
+      await room(tester, '/events/1/zones', (sale) {
+        sale
+          ..detail = presale()
+          ..room = null;
+      });
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('zone.1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('zones.price.pc-1-1')), findsOneWidget);
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-3-tarif-membres');
+    });
+
+    for (final (name, fixture, row) in [
+      ('4-membres', 'order_409_members_only', 0),
+      ('4-limite-titulaire', 'order_409_holder_limit', 1),
+    ]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await room(tester, '/events/1/checkout?price=pc-1-1&qty=2', (sale) {
+          sale
+            ..detail = presale()
+            ..room = null
+            ..orders.add(() => sale.real(fixture));
+        });
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('holder.1.name')), locale == 'ar' ? 'سارة بنعلي' : 'Sara Benali');
+        await tester.enterText(find.byKey(const Key('holder.1.phone')), '06 12 34 56 78');
+        await tester.pump();
+        await tester.ensureVisible(find.byKey(const Key('checkout.consent')));
+        await tester.tap(find.byKey(const Key('checkout.consent')));
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
+        await tester.tap(find.byKey(const Key('checkout.pay')));
+        await tester.pumpAndSettle();
+        // From the top, down until the refused row's line shows at the bottom: the whole row stays in view.
+        await tester.drag(find.byType(ListView).last, const Offset(0, 3000));
+        await tester.pumpAndSettle();
+        await tester.dragUntilVisible(
+          find.byKey(Key('holder.$row.refusal')),
+          find.byType(ListView).last,
+          const Offset(0, -100),
+        );
+        await tester.pumpAndSettle();
+        if (locale == 'ar') expectArabicRules(tester);
+        await snap('$locale-$name');
+      });
+    }
   }
 }

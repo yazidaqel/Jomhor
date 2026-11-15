@@ -56,6 +56,7 @@ class CheckoutState {
     this.splitTooLate = false,
     this.ownPhones = const {},
     this.limitRow,
+    this.refusedRow,
   });
 
   final CheckoutPhase phase;
@@ -68,6 +69,10 @@ class CheckoutState {
 
   /// The friend's row over their own account limit (`409 PER_ACCOUNT_LIMIT` with `details.field`), with its label.
   final ({int row, String label})? limitRow;
+
+  /// Lot 5 step 2: a row refused for who holds it (`MEMBERS_ONLY`, or `PER_ACCOUNT_LIMIT` reason `HOLDER`), said
+  /// under that row (`holderRefusalText`).
+  final ({int row, ApiError error})? refusedRow;
 
   /// A cash `/pay` is in flight: if the hold hits 0 meanwhile, its answer decides (a code issued means the
   /// order now waits for cash), so the "Réservation expirée" modal waits for it.
@@ -131,6 +136,7 @@ class CheckoutState {
     bool? splitTooLate,
     Set<int>? ownPhones,
     ({int row, String label})? limitRow,
+    ({int row, ApiError error})? refusedRow,
   }) => CheckoutState(
     phase: phase,
     badNames: badNames ?? const {},
@@ -146,6 +152,7 @@ class CheckoutState {
     splitTooLate: splitTooLate ?? this.splitTooLate,
     ownPhones: ownPhones ?? const {},
     limitRow: limitRow,
+    refusedRow: refusedRow,
   );
 }
 
@@ -430,6 +437,7 @@ class CheckoutController extends Notifier<CheckoutState> {
         splitTooLate: s.splitTooLate,
         ownPhones: s.ownPhones,
         limitRow: s.limitRow,
+        refusedRow: s.refusedRow,
       );
 
   CheckoutState _failed(ApiError e, List<HolderInput> holders) {
@@ -459,6 +467,14 @@ class CheckoutController extends Notifier<CheckoutState> {
       }
       if (badNames.isNotEmpty || badPhones.isNotEmpty || ownPhones.isNotEmpty) {
         return state.next(CheckoutPhase.editing, badNames: badNames, badPhones: badPhones, ownPhones: ownPhones);
+      }
+    }
+    // Lot 5 step 2: a place's holder isn't a member early enough, or would hold too many places: said on that row.
+    if ((e.code, e.details)
+        case ('MEMBERS_ONLY', {'field': final String field}) ||
+            ('PER_ACCOUNT_LIMIT', {'reason': 'HOLDER', 'field': final String field})) {
+      if (_holderPath.firstMatch(field) case final m? when int.parse(m[1]!) < holders.length) {
+        return state.next(CheckoutPhase.editing, refusedRow: (row: int.parse(m[1]!), error: e));
       }
     }
     // A friend who pays is over their own limit: said on their row.

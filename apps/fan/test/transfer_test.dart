@@ -274,6 +274,22 @@ void main() {
     expect(fan.ticketReads, reads);
   });
 
+  testWidgets('the recipient holds the limit (409 PER_ACCOUNT_LIMIT HOLDER) → under the phone, no refetch', (
+    tester,
+  ) async {
+    final (c, fan) = await start(tester);
+    final (:status, :body) = realAnswer('transfer_409_holder_limit');
+    fan.onTransfer = (_) => json(body, status);
+    await openSheet(tester, c);
+    await fill(tester, phone: '0612345678');
+    final reads = fan.ticketReads;
+    await hold(tester, 1000);
+    await tester.pumpAndSettle();
+    expect(find.text('Ce numéro a atteint la limite de 4 billets pour cet événement'), findsOneWidget);
+    expect(find.byKey(const Key('transfer.phone')), findsOneWidget, reason: 'back on the form');
+    expect(fan.ticketReads, reads);
+  });
+
   testWidgets('a 422 on name → the name field error', (tester) async {
     final (c, fan) = await start(tester);
     fan.onTransfer = (_) => refusal(422, 'VALIDATION_FAILED', {

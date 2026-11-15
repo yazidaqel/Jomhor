@@ -1,0 +1,12 @@
+{
+ "source": "contract-first (docs/04-api.md, Lot 5 step 2): replace with a captured answer once BE-47/BE-48 run",
+ "status": 409,
+ "body": {
+  "code": "MEMBERS_ONLY",
+  "message": "Members-only price",
+  "details": {
+   "field": "items[0].holders[0]",
+   "member_joined_before": "2027-02-20T12:30:00Z"
+  }
+ }
+}
