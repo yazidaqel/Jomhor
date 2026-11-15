@@ -145,6 +145,25 @@ public class Inventory {
         return null;
     }
 
+    /**
+     * The pass job (04 §Passes Tickets): one place in the first PASS category of the zone with room, by name then id,
+     * with the plain take (PASS places are issued by this job only). Empty: no room, nothing written.
+     */
+    // ponytail: re-reads the event's categories for every pass (up to 500 small reads per batch); pass the batch's
+    // PASS categories in if issuing a big season gets slow.
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<SalePrice> takePass(UUID org, int eventId, int zoneId) {
+        for (PriceCategory p : events.prices(org, eventId)) { // by zone, name, id
+            if (p.audience() == Event.Audience.PASS && p.zoneId() == zoneId && p.sold() < p.quota()) {
+                Optional<PriceCategory> row = events.take(org, eventId, p.id(), 1);
+                if (row.isPresent()) {
+                    return row.map(Inventory::sale);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
     /** Gives every hold back. Each one must fit (sold ≥ qty): anything else is a bug, ReleaseFailed. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void release(List<Hold> holds) {

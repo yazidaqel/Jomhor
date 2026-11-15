@@ -12,13 +12,13 @@ import org.springframework.stereotype.Component;
  * <p>Advisory keys in use. Single-bigint (class << 32) | 32-bit value: 1 OTP phone, 2 OTP IP (JdbcOtpChallenges),
  * 3 this lock, 4 the manifest build (JdbcManifests), 6 the fan-message claim (JdbcFanMessages, one key: the job's
  * try-lock, so one instance sends per tick), 7 the waitlist notice (JdbcWaitlist, (7 << 32) | event id: the waitlist
- * job's try-lock, so one instance notifies an event per run). Two-int, a key space Postgres keeps apart from the bigint one:
+ * job's try-lock, so one instance notifies an event per run), 8 the pass tickets (JdbcPasses, (8 << 32) | event id:
+ * the pass job's try-lock, so one instance issues an event's batch). Two-int, a key space Postgres keeps apart from
+ * the bigint one:
  * (4, hashtext(organizer id)) the organizer's membership lock (JdbcMemberships, PUT/DELETE /fan/me/membership), and
  * (hashtext(user id), event id) the per-account order lock (JdbcOrders), which can meet a membership key only when
  * a user hash is 4: a short wait, never a wrong result. (hashtext(user id), hashtext(series id)) the account's pass
  * series lock (JdbcPasses), which can meet the other two only on a hash equal to an event id or 4: also a short wait.
- * BE-55's passes.tick try-lock (class 8, event id), if taken as the two-int key (8, event id), can meet this series
- * key when hashtext(user) = 8 and hashtext(series) = that event id: a rare wait (a skipped tick), never a wrong result.
  *
  * <p>Scan ingestion's used_since cursor relies on it never skipping a row: seq values are drawn and committed one
  * batch at a time. That holds only while scans.seq's identity sequence has CACHE 1 (the Postgres default, as V11

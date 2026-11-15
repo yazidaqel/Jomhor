@@ -112,6 +112,16 @@ class JdbcProducts implements Products {
                 .param("org", org).param("event", eventId).query(Boolean.class).single();
     }
 
+    @Override
+    public long revenue(UUID org, UUID productId) {
+        return jdbc.sql("""
+                        select coalesce(sum(o.total_mad), 0)
+                        from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
+                        where o.organizer_id = :org and o.event_id is null and o.status = 'PAID' and i.product_id = :product
+                        """)
+                .param("org", org).param("product", productId).query(Long.class).single();
+    }
+
     private static OffsetDateTime ts(Instant i) {
         return i == null ? null : i.atOffset(ZoneOffset.UTC);
     }

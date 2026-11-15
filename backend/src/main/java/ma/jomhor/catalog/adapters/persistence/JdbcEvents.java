@@ -428,16 +428,46 @@ class JdbcEvents implements Events {
 
     @Override
     public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming) {
+        return seriesEvents(org, seriesId, venueId, upcoming, "status in ('ON_SALE', 'GATES_OPEN')");
+    }
+
+    @Override
+    public List<Event.SeriesEvent> seriesEventsNotClosed(UUID org, UUID seriesId, UUID venueId) {
+        return seriesEvents(org, seriesId, venueId, false, "status <> 'CLOSED'");
+    }
+
+    private List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming,
+                                                 String statuses) {
         return jdbc.sql("""
-                        select id, title, event_type, starts_at from events
+                        select id, title, event_type, starts_at, status from events
                         where organizer_id = :org and series_id = :series and venue_id = :venue
-                          and status in ('ON_SALE', 'GATES_OPEN') and (not :upcoming or starts_at >= now())
-                        order by starts_at, id
-                        """)
+                          and (not :upcoming or starts_at >= now()) and\s""" + statuses
+                        + " order by starts_at, id")
                 .param("org", org).param("series", seriesId).param("venue", venueId).param("upcoming", upcoming)
                 .query((rs, n) -> new Event.SeriesEvent(rs.getInt("id"), rs.getString("title"),
-                        Event.Type.valueOf(rs.getString("event_type")), instant(rs, "starts_at")))
+                        Event.Type.valueOf(rs.getString("event_type")), instant(rs, "starts_at"),
+                        Event.Status.valueOf(rs.getString("status"))))
                 .list();
+    }
+
+    @Override
+    public List<Event.Ref> withSeriesOnSale(Instant now) {
+        return jdbc.sql("""
+                        select organizer_id, id from events
+                        where series_id is not null and status in ('ON_SALE', 'GATES_OPEN') and refund_cutoff_at > :now
+                        order by id
+                        """)
+                .param("now", now.atOffset(ZoneOffset.UTC))
+                .query((rs, n) -> new Event.Ref(rs.getObject("organizer_id", UUID.class), rs.getInt("id")))
+                .list();
+    }
+
+    // for share: conflicts with the catalog writers' for no key update (event PATCH and its PASS_TICKETS check, price
+    // writes), not with an order insert's for key share.
+    @Override
+    public Optional<Event> share(UUID org, int eventId) {
+        return jdbc.sql("select " + EVENT_COLUMNS + " from events where organizer_id = :org and id = :id for share")
+                .param("org", org).param("id", eventId).query(JdbcEvents::event).optional();
     }
 
     private static Event.Series series(ResultSet rs, int n) throws SQLException {

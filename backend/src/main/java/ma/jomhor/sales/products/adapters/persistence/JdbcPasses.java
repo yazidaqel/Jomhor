@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,6 +121,63 @@ class JdbcPasses implements Passes {
                         """)
                 .param("org", org).param("pass", passId).param("holder", holderId)
                 .query((rs, n) -> byEvent.put(rs.getInt("event_id"), rs.getObject("id", UUID.class))).list();
+        return byEvent;
+    }
+
+    private static final long LOCK_CLASS = 8; // common.EventLock's list
+
+    @Override
+    public boolean tryLockEvent(int eventId) {
+        return jdbc.sql("select pg_try_advisory_xact_lock(?)").param((LOCK_CLASS << 32) | (eventId & 0xFFFFFFFFL))
+                .query(Boolean.class).single();
+    }
+
+    // ponytail: no index on passes (series_id, status) beyond the unique (series_id, user_id) one, which serves the
+    // series filter; fine for a club's few thousand passes.
+    @Override
+    public List<Due> due(UUID org, UUID seriesId, int eventId, Collection<Integer> zoneIds, int limit) {
+        return jdbc.sql("""
+                        select p.id, p.user_id, p.holder_name, pr.zone_id
+                        from passes p join products pr on pr.id = p.product_id and pr.organizer_id = p.organizer_id
+                        where p.organizer_id = :org and p.series_id = :series and p.status = 'ACTIVE'
+                          and pr.zone_id = any(:zones)
+                          and not exists (select 1 from orders o
+                                          where o.organizer_id = p.organizer_id and o.pass_id = p.id
+                                            and o.event_id = :event)
+                        order by p.created_at, p.id
+                        limit :limit
+                        """)
+                .param("org", org).param("series", seriesId).param("event", eventId)
+                .param("zones", zoneIds.toArray(Integer[]::new)).param("limit", limit)
+                .query((rs, n) -> new Due(rs.getObject("id", UUID.class), rs.getObject("user_id", UUID.class),
+                        rs.getString("holder_name"), rs.getInt("zone_id")))
+                .list();
+    }
+
+    @Override
+    public Map<Pass.Status, Long> countByStatus(UUID org, UUID productId) {
+        Map<Pass.Status, Long> counts = new EnumMap<>(Pass.Status.class);
+        jdbc.sql("""
+                        select status::text as status, count(*) as n from passes
+                        where organizer_id = :org and product_id = :product and status <> 'CANCELLED'
+                        group by status
+                        """)
+                .param("org", org).param("product", productId)
+                .query((rs, n) -> counts.put(Pass.Status.valueOf(rs.getString("status")), rs.getLong("n"))).list();
+        return counts;
+    }
+
+    @Override
+    public Map<Integer, Long> ticketOrdersByEvent(UUID org, UUID productId) {
+        Map<Integer, Long> byEvent = new HashMap<>();
+        jdbc.sql("""
+                        select o.event_id, count(*) as n
+                        from orders o join passes p on p.id = o.pass_id and p.organizer_id = o.organizer_id
+                        where o.organizer_id = :org and p.product_id = :product and o.event_id is not null
+                        group by o.event_id
+                        """)
+                .param("org", org).param("product", productId)
+                .query((rs, n) -> byEvent.put(rs.getInt("event_id"), rs.getLong("n"))).list();
         return byEvent;
     }
 

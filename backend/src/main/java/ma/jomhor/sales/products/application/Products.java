@@ -44,4 +44,7 @@ public interface Products {
 
     /** Whether a pass ticket order (pass_id and event_id set) exists for the event. */
     boolean hasPassTickets(UUID org, int eventId);
+
+    /** Σ total_mad of the product's PAID product orders (04 GET /org/products/{id} {@code revenue_mad}). */
+    long revenue(UUID org, UUID productId);
 }

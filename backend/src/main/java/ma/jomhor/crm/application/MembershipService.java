@@ -90,6 +90,11 @@ public class MembershipService {
                 .isPresent();
     }
 
+    /** Live members with paid_until after now (04 GET /org/products/{id} MEMBERSHIP {@code paid_members}). */
+    public long paidMembers(UUID org) {
+        return memberships.counts(org).paid();
+    }
+
     /** The fan's paid_until in the organizer's club (left or not), or null (never paid, or no membership). */
     public Instant paidUntil(UUID org, UUID userId) {
         return memberships.find(org, userId).map(Member::paidUntil).orElse(null);

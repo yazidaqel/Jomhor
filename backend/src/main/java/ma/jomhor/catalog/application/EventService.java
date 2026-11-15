@@ -27,6 +27,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 
@@ -418,6 +419,28 @@ public class EventService {
      */
     public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming) {
         return events.seriesEvents(org, seriesId, venueId, upcoming);
+    }
+
+    /** The series' events at the venue that aren't CLOSED (04 GET /org/products/{id} figures {@code events}). */
+    public List<Event.SeriesEvent> seriesEventsNotClosed(UUID org, UUID seriesId, UUID venueId) {
+        return events.seriesEventsNotClosed(org, seriesId, venueId);
+    }
+
+    /**
+     * The pass job's candidates (04 §Passes Tickets), of every organizer: a series, ON_SALE or GATES_OPEN, cutoff after
+     * {@code now}. Read without a lock: the job re-reads each under {@link #share}.
+     */
+    public List<Event.Ref> withSeriesOnSale(Instant now) {
+        return events.withSeriesOnSale(now);
+    }
+
+    /**
+     * The event with {@code for share} on its row until the caller's transaction ends: the pass job issues under it,
+     * so it runs one after the other with an event PATCH (its series_id and PASS_TICKETS check) and price writes.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<Event> share(UUID org, int eventId) {
+        return events.share(org, eventId);
     }
 
     /** 04 GET /fan/products {@code payment_methods}, {@code cash_until}: as an event's, closing at {@code salesCloseAt}. */

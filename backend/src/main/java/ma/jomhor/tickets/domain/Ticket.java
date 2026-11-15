@@ -5,10 +5,11 @@ import java.util.UUID;
 
 /**
  * An issued ticket as its holder sees it. Immutable after issue; only {@code status} moves. {@code transferred} is
- * set when this holder transferred it away (it is then CANCELLED), else null.
+ * set when this holder transferred it away (it is then CANCELLED), else null. {@code passId}: its order's season pass
+ * while the pass's holder holds it (a pass ticket, docs/04-api.md §Passes), else null (a transferred one included).
  */
 public record Ticket(UUID id, UUID organizerId, int eventId, int zoneId, Status status, String holderName,
-                     String seatLabel, Instant issuedAt, Transferred transferred) {
+                     String seatLabel, Instant issuedAt, Transferred transferred, UUID passId) {
 
     public enum Status { VALID, CANCELLED, REFUNDED, BLOCKED }
 

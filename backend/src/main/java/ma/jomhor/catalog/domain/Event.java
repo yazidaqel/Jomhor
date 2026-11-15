@@ -94,8 +94,11 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
     public record ZoneAt(int id, String code, String name, UUID venueId, String venueName, String venueCity,
                          String timezone) {}
 
-    /** An event of a series as a pass product lists it (04 GET /fan/products {@code pass.events}). */
-    public record SeriesEvent(int id, String title, Type eventType, Instant startsAt) {}
+    /**
+     * An event of a series as a pass product lists it (04 GET /fan/products {@code pass.events}, the B14 figures'
+     * {@code events}).
+     */
+    public record SeriesEvent(int id, String title, Type eventType, Instant startsAt, Status status) {}
 
     /** remaining = quota - sold. */
     public record PriceListing(UUID priceCategoryId, int zoneId, String name, long priceMad, int remaining,

@@ -29,7 +29,7 @@ class FanTicketApiTest extends PaymentTest {
 
     private static final String[] TICKET_KEYS =
             {"id", "ticket_no", "status", "holder_label", "seat_label", "event", "zone", "gate_codes", "gates", "transfer_until",
-            "transferred"};
+            "transferred", "pass_id"};
     private static final String[] EVENT_KEYS =
             {"id", "title", "event_type", "status", "starts_at", "doors_open_at", "timezone", "venue", "metadata",
             "organizer"};
@@ -99,6 +99,7 @@ class FanTicketApiTest extends PaymentTest {
         assertKeys(json, "$", "server_time", "tickets");
         assertThat(JsonPath.<List<Object>>read(json, "$.tickets")).hasSize(1);
         assertKeys(json, "$.tickets[0]", TICKET_KEYS);
+        assertThat(JsonPath.<Object>read(json, "$.tickets[0].pass_id")).isNull(); // a bought ticket, no pass
         assertKeys(json, "$.tickets[0].event", EVENT_KEYS);
         assertKeys(json, "$.tickets[0].event.venue", "name", "city");
         assertKeys(json, "$.tickets[0].zone", "id", "code", "name");

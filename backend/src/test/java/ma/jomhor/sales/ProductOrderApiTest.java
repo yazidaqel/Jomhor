@@ -408,13 +408,28 @@ class ProductOrderApiTest extends PaymentTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("ORDER_NOT_PAYABLE"));
     }
 
-    /** A success on a held order (no expiry) is cancelled the same way. */
+    /**
+     * A success on a held order (no expiry) is cancelled the same way. BE-55: GET /org/products/{id} lists the flag;
+     * its MEMBERSHIP figures count the paid member and the PAID order's money only.
+     */
     @Test
     void aSecondSuccessOnAHeldOrderCancelsIt() throws Exception {
         Twice t = paidByAnotherOrder();
         callback(approve(t.cardOfA(), PRICE)).andExpect(status().isSeeOther());
         assertThat(orderStatus(t.a())).isEqualTo("CANCELLED");
         assertThat(refundReason(t.cardOfA())).isEqualTo("NOT_PAYABLE");
+
+        String json = body(call(t.club().admin(), get("/org/products/" + t.club().product()))
+                .andExpect(status().isOk()));
+        assertKeys(json, "$.figures", "paid_members", "revenue_mad");
+        assertThat(JsonPath.<Integer>read(json, "$.figures.paid_members")).isOne();
+        assertThat(JsonPath.<Number>read(json, "$.figures.revenue_mad").longValue()).isEqualTo(PRICE);
+        assertKeys(json, "$.refunds_required[0]", "payment_id", "order_id", "amount_mad", "reason", "at");
+        assertThat(JsonPath.<List<String>>read(json, "$.refunds_required[*].payment_id"))
+                .containsExactly(t.cardOfA());
+        assertThat(JsonPath.<Map<String, Object>>read(json, "$.refunds_required[0]"))
+                .containsEntry("order_id", t.a()).containsEntry("reason", "NOT_PAYABLE");
+        assertThat(JsonPath.<Number>read(json, "$.refunds_required[0].amount_mad").longValue()).isEqualTo(PRICE);
     }
 
     /** 04 §Point of sale: collect of such a code → 409 CODE_NOT_PAYABLE MEMBERSHIP_PAID, nothing recorded. */

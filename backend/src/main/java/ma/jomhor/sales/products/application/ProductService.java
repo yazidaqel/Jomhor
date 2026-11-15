@@ -7,11 +7,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import ma.jomhor.catalog.application.EventService;
+import ma.jomhor.catalog.application.Inventory;
 import ma.jomhor.catalog.application.PaymentMethods;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Venue;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.web.ApiException;
+import ma.jomhor.crm.application.MembershipService;
+import ma.jomhor.sales.application.Orders;
+import ma.jomhor.sales.products.domain.Pass;
 import ma.jomhor.sales.products.domain.Product;
 import ma.jomhor.tenancy.application.OrganizerService;
 import ma.jomhor.tenancy.domain.Organizer;
@@ -43,6 +47,27 @@ public class ProductService {
     /** The organizer's row: {@code pass} null for MEMBERSHIP. */
     public record View(Product product, PassScope pass) {}
 
+    /** 04 GET /org/products/{id}: the row, its figures and its refund_required flags (newest first). */
+    public record Detail(View view, Figures figures, List<Orders.RefundRequired> refundsRequired) {}
+
+    /** A product's figures, by kind. */
+    public sealed interface Figures permits PassFigures, MembershipFigures {}
+
+    /**
+     * PASS: passes by status, Σ total_mad of its PAID purchase orders, and per series event at the zone's venue that
+     * isn't CLOSED (by starts_at) its ticket orders, the ACTIVE passes and Σ remaining of its PASS categories in the
+     * zone.
+     */
+    public record PassFigures(PassCounts passes, long revenueMad, List<EventFigures> events) implements Figures {}
+
+    public record PassCounts(long pending, long active, long suspended) {}
+
+    public record EventFigures(int eventId, String title, Instant startsAt, Event.Status status, long issued,
+                               long expected, long passRemaining) {}
+
+    /** MEMBERSHIP: live members paid past now, Σ total_mad of its PAID orders. */
+    public record MembershipFigures(long paidMembers, long revenueMad) implements Figures {}
+
     /**
      * The public row: its organizer; {@code timezone} the zone venue's ({@code Africa/Casablanca} for MEMBERSHIP);
      * {@code pass} and {@code events} (the series' published, upcoming events at the zone's venue) null for
@@ -52,15 +77,23 @@ public class ProductService {
                           List<Event.SeriesEvent> events, PaymentMethods.Options payment) {}
 
     private final Products products;
+    private final Passes passes;
+    private final Orders orders;
     private final EventService events;
+    private final Inventory inventory;
+    private final MembershipService memberships;
     private final OrganizerService organizers;
     private final AuditLog audit;
     private final JsonMapper json;
 
-    ProductService(Products products, EventService events, OrganizerService organizers, AuditLog audit,
-                   JsonMapper json) {
+    ProductService(Products products, Passes passes, Orders orders, EventService events, Inventory inventory,
+                   MembershipService memberships, OrganizerService organizers, AuditLog audit, JsonMapper json) {
         this.products = products;
+        this.passes = passes;
+        this.orders = orders;
         this.events = events;
+        this.inventory = inventory;
+        this.memberships = memberships;
         this.organizers = organizers;
         this.audit = audit;
         this.json = json;
@@ -74,6 +107,31 @@ public class ProductService {
 
     public View get(UUID org, UUID productId) {
         return view(org, products.find(org, productId).orElseThrow(ProductService::notFound));
+    }
+
+    /** 04 GET /org/products/{id}: the row with its figures and refund_required flags. Read without locks. */
+    // ponytail: one prices read per series event (a season has a few dozen); batch by event ids if a series grows.
+    public Detail detail(UUID org, UUID productId) {
+        View v = get(org, productId);
+        Product p = v.product();
+        long revenue = products.revenue(org, p.id());
+        Figures figures;
+        if (v.pass() == null) {
+            figures = new MembershipFigures(memberships.paidMembers(org), revenue);
+        } else {
+            Map<Pass.Status, Long> byStatus = passes.countByStatus(org, p.id());
+            long active = byStatus.getOrDefault(Pass.Status.ACTIVE, 0L);
+            Map<Integer, Long> issued = passes.ticketOrdersByEvent(org, p.id());
+            List<EventFigures> list = events.seriesEventsNotClosed(org, p.seriesId(), v.pass().zone().venueId())
+                    .stream().map(e -> new EventFigures(e.id(), e.title(), e.startsAt(), e.status(),
+                            issued.getOrDefault(e.id(), 0L), active, inventory.prices(org, e.id()).stream()
+                                    .filter(c -> c.audience() == Event.Audience.PASS && c.zoneId() == p.zoneId())
+                                    .mapToLong(Inventory.SalePrice::remaining).sum()))
+                    .toList();
+            figures = new PassFigures(new PassCounts(byStatus.getOrDefault(Pass.Status.PENDING, 0L), active,
+                    byStatus.getOrDefault(Pass.Status.SUSPENDED, 0L)), revenue, list);
+        }
+        return new Detail(v, figures, orders.productRefundsRequired(org, p.id()));
     }
 
     /**

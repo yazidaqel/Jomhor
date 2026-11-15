@@ -1,16 +1,19 @@
 package ma.jomhor.sales;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import ma.jomhor.payments.PaymentTest;
 import ma.jomhor.sales.application.OrderService;
+import ma.jomhor.sales.products.application.PassTicketService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -24,6 +27,9 @@ class CheckSqlTest extends QueueFixture {
 
     @Autowired
     OrderService orderService;
+
+    @Autowired
+    PassTicketService passTickets;
 
     /**
      * A sale with no breach, on a 3-place category (sold out): the fan's order A of 2 places is PAID (2 VALID tickets,
@@ -158,6 +164,43 @@ class CheckSqlTest extends QueueFixture {
 
         sql("update products set sold = sold + 1 where id = ?::uuid", product);
         assertThat(foundFor(product)).containsExactly("PRODUCT_SOLD");
+    }
+
+    /**
+     * BE-55: the pass job issues without the per-account limit (04 §Passes Tickets), so a holder over it through a pass
+     * ticket is no PER_ACCOUNT_LIMIT row, and the pass ticket order is clean; places bought over it still are.
+     */
+    @Test
+    void aPassTicketOverTheLimitIsNoBreach() throws Exception {
+        Sale s = sale(); // the fan holds 3 places: A (2, PAID) and B (1, RESERVED)
+        Caller a = s.room().admin();
+        int event = s.room().event();
+        String series = JsonPath.read(body(call(a, post("/org/series"),
+                "{\"name\": \"Saison\", \"starts_on\": \"2026-08-01\", \"ends_on\": \"2099-06-30\"}")
+                .andExpect(status().isCreated())), "$.id");
+        call(a, patch("/org/events/" + event), "{\"series_id\": \"%s\"}".formatted(series))
+                .andExpect(status().isOk());
+        int zone = jdbc.sql("select zone_id from price_categories where id = ?::uuid").param(s.room().price())
+                .query(Integer.class).single();
+        call(a, post("/org/events/" + event + "/prices"), """
+                {"zone_id": %d, "name": "Abonnés", "price_mad": 0, "quota": 1, "audience": "PASS"}"""
+                .formatted(zone)).andExpect(status().isCreated());
+        String product = JsonPath.read(body(call(a, post("/org/products"), """
+                {"kind": "PASS", "name": "Abonnement", "price_mad": 150000, "quota": 5, "series_id": "%s",
+                 "zone_id": %d, "sales_close_at": "2099-06-30T22:00:00Z", "on_sale": true}""".formatted(series, zone))
+                .andExpect(status().isCreated())), "$.id");
+        String purchase = productOrder(s.fan(), product);
+        callback(PaymentTest.approve(pay(s.fan(), purchase), 150_000)).andExpect(status().isSeeOther());
+        sql("update events set per_account_limit = 3 where id = ?", event);
+
+        passTickets.runAt(Instant.now());
+        String ticketOrder = jdbc.sql("select id::text from orders where event_id = ? and pass_id is not null")
+                .param(event).query(String.class).single();
+        assertThat(found(s)).isEmpty(); // 4 places held at a limit of 3, one of them the pass ticket
+        assertThat(foundFor(ticketOrder)).isEmpty();
+
+        sql("update events set per_account_limit = 2 where id = ?", event);
+        assertThat(found(s)).containsExactly("PER_ACCOUNT_LIMIT");
     }
 
     @Test

@@ -1,5 +1,6 @@
 package ma.jomhor.sales.products.adapters.web;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.sales.products.application.ProductService;
 import ma.jomhor.sales.products.domain.Product;
 import ma.jomhor.tenancy.domain.OrgContext;
@@ -23,8 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * docs/04-api.md §Organizer /org/products*. Roles from OrgContextInterceptor: ADMIN and OPS read and write, FINANCE
- * reads, CASHIER, GATE and SUPERVISOR get 403. GET /org/products/{id} is the list row for now: its figures and
- * refunds_required come with the pass tickets (plan lot-5 BE-55).
+ * reads, CASHIER, GATE and SUPERVISOR get 403. GET /org/products/{id} is the list row + figures + refunds_required;
+ * POST and PATCH return the list row. Money in centimes.
  */
 @RestController
 class OrgProductController {
@@ -65,6 +67,32 @@ class OrgProductController {
         }
     }
 
+    record PassCountsDto(long pending, long active, long suspended) {}
+
+    record EventFiguresDto(int eventId, String title, Instant startsAt, Event.Status status, long issued, long expected,
+                           long passRemaining) {}
+
+    record PassFiguresDto(PassCountsDto passes, long revenueMad, List<EventFiguresDto> events) {}
+
+    record MembershipFiguresDto(long paidMembers, long revenueMad) {}
+
+    record RefundDto(UUID paymentId, UUID orderId, long amountMad, String reason, Instant at) {}
+
+    /** The list row's fields, then figures (by kind) and refunds_required. */
+    record ProductDetailDto(@JsonUnwrapped ProductDto product, Object figures, List<RefundDto> refundsRequired) {
+        static ProductDetailDto of(ProductService.Detail d) {
+            Object figures = switch (d.figures()) {
+                case ProductService.PassFigures f -> new PassFiguresDto(
+                        new PassCountsDto(f.passes().pending(), f.passes().active(), f.passes().suspended()),
+                        f.revenueMad(), f.events().stream().map(e -> new EventFiguresDto(e.eventId(), e.title(),
+                                e.startsAt(), e.status(), e.issued(), e.expected(), e.passRemaining())).toList());
+                case ProductService.MembershipFigures f -> new MembershipFiguresDto(f.paidMembers(), f.revenueMad());
+            };
+            return new ProductDetailDto(ProductDto.of(d.view()), figures, d.refundsRequired().stream()
+                    .map(r -> new RefundDto(r.paymentId(), r.orderId(), r.amountMad(), r.reason(), r.at())).toList());
+        }
+    }
+
     private final ProductService products;
 
     OrgProductController(ProductService products) {
@@ -84,8 +112,8 @@ class OrgProductController {
     }
 
     @GetMapping("/org/products/{id}")
-    ProductDto get(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id) {
-        return ProductDto.of(products.get(org.organizerId(), id));
+    ProductDetailDto get(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id) {
+        return ProductDetailDto.of(products.detail(org.organizerId(), id));
     }
 
     @PatchMapping("/org/products/{id}")

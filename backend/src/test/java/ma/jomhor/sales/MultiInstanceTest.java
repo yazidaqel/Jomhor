@@ -6,7 +6,10 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +23,7 @@ import ma.jomhor.gate.application.ManifestService;
 import ma.jomhor.notifications.application.FanMessageService;
 import ma.jomhor.notifications.application.TicketMessenger;
 import ma.jomhor.sales.application.OrderService;
+import ma.jomhor.sales.products.application.PassTicketService;
 import ma.jomhor.sales.rooms.application.RoomTicks;
 import ma.jomhor.sales.waitlist.application.WaitlistService;
 import org.junit.jupiter.api.AfterAll;
@@ -51,6 +55,9 @@ class MultiInstanceTest extends QueueFixture {
 
     @Autowired
     WaitlistService waitlist;
+
+    @Autowired
+    PassTicketService passTickets;
 
     @BeforeAll
     static void startB() {
@@ -264,5 +271,59 @@ class MultiInstanceTest extends QueueFixture {
 
         assertThat(jdbc.sql("select count(*) from manifests where event_id = ?").param(event)
                 .query(Integer.class).single()).isOne();
+    }
+
+    /**
+     * BE-55: both instances run the pass tickets job at once, twice, over 600 ACTIVE passes (two batches of 500): each
+     * pass gets exactly one ticket order and one ticket for the event, and the PASS category's sold is 600.
+     */
+    @Test
+    void eachPassTicketIsIssuedOnce() throws Exception {
+        Caller a = admin();
+        String venue = venue(a, "Stade");
+        int zone = zone(a, venue, "EST", 600);
+        String series = JsonPath.read(body(call(a, post("/org/series"),
+                "{\"name\": \"Saison\", \"starts_on\": \"2026-08-01\", \"ends_on\": \"2099-06-30\"}")
+                .andExpect(status().isCreated())), "$.id");
+        int event = JsonPath.read(body(call(a, post("/org/events"), """
+                {"venue_id": "%s", "event_type": "FOOTBALL_MATCH", "title": "Match", "starts_at": "2099-05-01T19:00:00Z",
+                 "series_id": "%s"}""".formatted(venue, series)).andExpect(status().isCreated())), "$.id");
+        String pass = JsonPath.read(body(call(a, post("/org/events/" + event + "/prices"), """
+                {"zone_id": %d, "name": "Abonnés", "price_mad": 0, "quota": 600, "audience": "PASS"}""".formatted(zone))
+                .andExpect(status().isCreated())), "$.id");
+        call(a, post("/org/events/" + event + "/publish")).andExpect(status().isOk());
+        UUID product = jdbc.sql("""
+                        insert into products (organizer_id, kind, name, price_mad, sales_close_at, quota, sold, series_id,
+                                              zone_id)
+                        values (?, 'PASS', 'Abonnement', 150000, '2099-06-30T22:00:00Z', 600, 600, ?::uuid, ?)
+                        returning id""").params(a.org(), series, zone).query(UUID.class).single();
+        for (int i = 0; i < 600; i++) {
+            jdbc.sql("insert into passes (organizer_id, product_id, series_id, user_id, holder_name, status)"
+                    + " values (?, ?, ?::uuid, ?, 'Fan Test', 'ACTIVE')").params(a.org(), product, series, user())
+                    .update();
+        }
+
+        PassTicketService onB = b.getBean(PassTicketService.class);
+        Instant now = Instant.parse("2099-01-01T00:00:00Z");
+        for (int run = 0; run < 2; run++) {
+            both(() -> {
+                passTickets.runAt(now);
+                return 0;
+            }, () -> {
+                onB.runAt(now);
+                return 0;
+            });
+        }
+        assertThat(jdbc.sql("""
+                        select count(distinct o.pass_id) || '/' || count(o.id) || '/' || count(t.id)
+                        from orders o left join tickets t on t.order_id = o.id
+                        where o.event_id = ? and o.pass_id is not null""")
+                .param(event).query(String.class).single()).isEqualTo("600/600/600");
+        assertThat(sold(pass)).isEqualTo(600);
+    }
+
+    private int sold(String priceId) {
+        return jdbc.sql("select sold from price_categories where id = ?::uuid").param(priceId).query(Integer.class)
+                .single();
     }
 }

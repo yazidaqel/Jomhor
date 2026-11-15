@@ -153,6 +153,20 @@ class JdbcOrders implements Orders {
         return order;
     }
 
+    // The unique (pass_id, event_id) index (V30) is the backstop: the job issues under its event try-lock.
+    @Override
+    public Order insertPassTicket(UUID org, int eventId, UUID userId, UUID passId, Order.Item item) {
+        Order order = jdbc.sql("""
+                        insert into orders (organizer_id, event_id, user_id, channel, status, total_mad, payment_method,
+                                            reserved_until, paid_at, pass_id)
+                        values (:org, :event, :user, 'APP', 'PAID', 0, 'FREE', now(), now(), :pass)
+                        returning\s""" + ORDER_COLUMNS)
+                .param("org", org).param("event", eventId).param("user", userId).param("pass", passId)
+                .query((rs, n) -> order(rs, List.of(item))).single();
+        insertItems(org, order.id(), List.of(item));
+        return order;
+    }
+
     // Index orders (group_order_id) where group_order_id is not null (V20).
     @Override
     public List<Order> members(UUID org, UUID groupOrderId) {
@@ -482,9 +496,27 @@ class JdbcOrders implements Orders {
                         order by a.at desc, a.id desc
                         """)
                 .param("org", org).param("event", eventId)
-                .query((rs, n) -> new RefundRequired(UUID.fromString(rs.getString("payment_id")),
-                        rs.getObject("order_id", UUID.class), rs.getLong("amount_mad"), rs.getString("reason"),
-                        instant(rs, "at")))
-                .list();
+                .query(JdbcOrders::refundRequired).list();
+    }
+
+    @Override
+    public List<RefundRequired> productRefundsRequired(UUID org, UUID productId) {
+        return jdbc.sql("""
+                        select a.payload ->> 'payment_id' as payment_id, o.id as order_id,
+                               cast(a.payload ->> 'amount_mad' as bigint) as amount_mad, a.payload ->> 'reason' as reason, a.at
+                        from audit_log a
+                        join orders o on o.organizer_id = a.organizer_id and o.id = cast(a.payload ->> 'order_id' as uuid)
+                        join order_items i on i.organizer_id = o.organizer_id and i.order_id = o.id
+                        where a.organizer_id = :org and a.action = 'payment.refund_required' and o.event_id is null
+                          and i.product_id = :product
+                        order by a.at desc, a.id desc
+                        """)
+                .param("org", org).param("product", productId)
+                .query(JdbcOrders::refundRequired).list();
+    }
+
+    private static RefundRequired refundRequired(ResultSet rs, int n) throws SQLException {
+        return new RefundRequired(UUID.fromString(rs.getString("payment_id")), rs.getObject("order_id", UUID.class),
+                rs.getLong("amount_mad"), rs.getString("reason"), instant(rs, "at"));
     }
 }

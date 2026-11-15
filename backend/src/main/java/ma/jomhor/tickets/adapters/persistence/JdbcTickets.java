@@ -26,15 +26,20 @@ class JdbcTickets implements Tickets {
                 Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getString("seat_label"),
                 rs.getObject("issued_at", OffsetDateTime.class).toInstant(),
                 transferredAt == null ? null
-                        : new Ticket.Transferred(rs.getString("to_name"), transferredAt.toInstant()));
+                        : new Ticket.Transferred(rs.getString("to_name"), transferredAt.toInstant()),
+                rs.getObject("pass_id", UUID.class));
     };
 
-    // A holder's ticket and, when this holder transferred it away (not a re-issue: to = from), the new ticket's holder.
+    // A holder's ticket, its order's pass while the ticket is held by that pass's holder (04 GET /fan/tickets pass_id:
+    // null once transferred) and, when this holder transferred it away (not a re-issue: to = from), the new ticket's
+    // holder.
     private static final String HELD = """
             select t.id, t.organizer_id, t.event_id, t.zone_id, t.status, t.holder_name, t.seat_label, t.issued_at,
                    case when tt.to_user_id <> tt.from_user_id then tt.transferred_at end as transferred_at,
-                   nt.holder_name as to_name
+                   nt.holder_name as to_name, case when p.user_id = t.holder_user_id then p.id end as pass_id
             from tickets t
+            join orders o on o.id = t.order_id and o.organizer_id = t.organizer_id
+            left join passes p on p.id = o.pass_id and p.organizer_id = o.organizer_id
             left join ticket_transfers tt on tt.ticket_id = t.id and tt.organizer_id = t.organizer_id
             left join tickets nt on nt.id = tt.new_ticket_id and nt.organizer_id = tt.organizer_id
             where t.holder_user_id = :holder

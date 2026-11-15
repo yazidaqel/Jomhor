@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Persistence port for events and price_categories. Every method is scoped by organizer_id; a row of
@@ -129,4 +131,17 @@ public interface Events {
      * starts_at >= now() (database clock).
      */
     List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId, boolean upcoming);
+
+    /** The series' events at the venue that aren't CLOSED (DRAFT included), by starts_at then id. */
+    List<Event.SeriesEvent> seriesEventsNotClosed(UUID org, UUID seriesId, UUID venueId);
+
+    /**
+     * The pass job's events, of every organizer: a series, ON_SALE or GATES_OPEN, refund_cutoff_at after {@code now}.
+     * By id.
+     */
+    List<Event.Ref> withSeriesOnSale(Instant now);
+
+    /** Like find, with {@code for share} on the event row until the end of the caller's transaction (required). */
+    @Transactional(propagation = Propagation.MANDATORY)
+    Optional<Event> share(UUID org, int eventId);
 }

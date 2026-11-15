@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import ma.jomhor.catalog.OrgApiTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.ResultActions;
@@ -117,7 +119,16 @@ class ProductOrgApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$[0].id").value(membership));
         call(a, get("/org/products?kind=TICKET")).andExpect(status().isBadRequest());
         json = body(call(a, get("/org/products/" + pass)).andExpect(status().isOk()));
-        assertKeys(json, "$", PRODUCT_KEYS);
+        assertKeys(json, "$", concat(PRODUCT_KEYS, "figures", "refunds_required"));
+        assertThat(JsonPath.<Map<String, Object>>read(json, "$.figures.passes"))
+                .containsEntry("pending", 0).containsEntry("active", 0).containsEntry("suspended", 0);
+        assertThat(JsonPath.<Integer>read(json, "$.figures.revenue_mad")).isZero();
+        assertThat(JsonPath.<List<Object>>read(json, "$.figures.events")).isEmpty();
+        assertThat(JsonPath.<List<Object>>read(json, "$.refunds_required")).isEmpty();
+        json = body(call(a, get("/org/products/" + membership)).andExpect(status().isOk()));
+        assertKeys(json, "$", concat(PRODUCT_KEYS, "figures", "refunds_required"));
+        assertThat(JsonPath.<Map<String, Object>>read(json, "$.figures"))
+                .containsEntry("paid_members", 0).containsEntry("revenue_mad", 0);
 
         List<Map<String, Object>> rows = audits(pass);
         assertThat(rows).hasSize(1);
@@ -238,5 +249,9 @@ class ProductOrgApiTest extends OrgApiTest {
         call(b, get("/org/products/" + pass)).andExpect(status().isNotFound());
         call(b, patch("/org/products/" + pass), "{\"name\": \"B\"}").andExpect(status().isNotFound());
         call(a, get("/org/products/" + UUID.randomUUID())).andExpect(status().isNotFound());
+    }
+
+    private static String[] concat(String[] keys, String... extra) {
+        return Stream.concat(Arrays.stream(keys), Arrays.stream(extra)).toArray(String[]::new);
     }
 }

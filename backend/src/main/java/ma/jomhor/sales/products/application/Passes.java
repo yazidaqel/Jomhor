@@ -41,4 +41,34 @@ public interface Passes {
 
     /** Event id → the holder's ticket from the pass's ticket orders (CANCELLED ones left out). */
     Map<Integer, UUID> tickets(UUID org, UUID passId, UUID holderId);
+
+    // ---------- the pass tickets job (04 §Passes Tickets) ----------
+
+    /**
+     * The event's pass-ticket try-lock (common.EventLock class 8), until the end of the transaction: false when
+     * another transaction holds it (another instance is issuing the event's tickets).
+     */
+    boolean tryLockEvent(int eventId);
+
+    /** An ACTIVE pass due a ticket: its holder and its product's zone. {@code holderName} stays out of logs. */
+    record Due(UUID passId, UUID userId, String holderName, int zoneId) {
+        @Override
+        public String toString() {
+            return "Due[" + passId + "]";
+        }
+    }
+
+    /**
+     * Up to {@code limit} ACTIVE passes of the series whose product zone is one of {@code zoneIds} and that have no
+     * ticket order for the event, oldest first.
+     */
+    List<Due> due(UUID org, UUID seriesId, int eventId, Collection<Integer> zoneIds, int limit);
+
+    // ---------- the product figures (04 GET /org/products/{id}) ----------
+
+    /** The product's passes by status (CANCELLED left out). */
+    Map<Pass.Status, Long> countByStatus(UUID org, UUID productId);
+
+    /** Event id → the ticket orders of the product's passes. */
+    Map<Integer, Long> ticketOrdersByEvent(UUID org, UUID productId);
 }

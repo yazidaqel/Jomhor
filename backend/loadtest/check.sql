@@ -87,7 +87,8 @@ union all
 -- buyers who were within the limit when they bought: read such a row against the event's audit trail (event PATCH)
 -- before calling it a breach.
 -- Deliberately no holder-cap check (04 POST /fan/orders Holder limit): POS sales and a late success's re-reserve
--- bypass it (plan lot-5 Q173), so a row would not be a breach.
+-- bypass it (plan lot-5 Q173), so a row would not be a breach. Pass ticket orders (pass_id and event_id set) are left
+-- out: the pass job issues them without the limit (04 §Passes Tickets), so a holder over it is no breach.
 select 'PER_ACCOUNT_LIMIT', o.event_id, o.user_id::text,
        format('places %s > per_account_limit %s', sum(i.places - coalesce(r.n, 0)), e.per_account_limit)
 from orders o
@@ -95,7 +96,7 @@ join (select order_id, sum(qty) as places from order_items group by order_id) i 
 left join (select order_id, count(*) as n from tickets where status = 'REFUNDED' group by order_id) r
   on r.order_id = o.id and o.status = 'PAID'
 join events e on e.id = o.event_id and e.organizer_id = o.organizer_id
-where o.status in ('RESERVED', 'AWAITING_CASH', 'PAID') and o.user_id is not null
+where o.status in ('RESERVED', 'AWAITING_CASH', 'PAID') and o.user_id is not null and o.pass_id is null
 group by o.event_id, o.user_id, e.per_account_limit
 having sum(i.places - coalesce(r.n, 0)) > e.per_account_limit
 
