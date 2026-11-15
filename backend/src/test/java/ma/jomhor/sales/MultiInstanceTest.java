@@ -10,7 +10,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -57,22 +56,6 @@ class MultiInstanceTest extends QueueFixture {
     @AfterAll
     static void stopB() {
         b.close();
-    }
-
-    /** {@code onA} and {@code onB} started together; their results in that order. */
-    private static <T> List<T> both(Callable<T> onA, Callable<T> onB) throws Exception {
-        CountDownLatch start = new CountDownLatch(1);
-        try (var pool = Executors.newFixedThreadPool(2)) {
-            List<Future<T>> runs = List.of(pool.submit(() -> {
-                start.await();
-                return onA.call();
-            }), pool.submit(() -> {
-                start.await();
-                return onB.call();
-            }));
-            start.countDown();
-            return List.of(runs.get(0).get(60, TimeUnit.SECONDS), runs.get(1).get(60, TimeUnit.SECONDS));
-        }
     }
 
     private void tickBoth(String at) throws Exception {

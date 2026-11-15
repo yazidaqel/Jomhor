@@ -12,10 +12,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import ma.jomhor.catalog.OrgApiTest;
 import ma.jomhor.sales.rooms.application.QueueService;
 import ma.jomhor.sales.rooms.application.RoomMemo;
@@ -66,6 +72,25 @@ abstract class QueueFixture extends OrgApiTest {
 
     Room room(String roomJson) throws Exception {
         return room(roomJson, 100);
+    }
+
+    /**
+     * {@code onA} and {@code onB} started together (two instances running one job at once, plan lot-5 BE-43/BE-45);
+     * their results in that order (null allowed).
+     */
+    static <T> List<T> both(Callable<T> onA, Callable<T> onB) throws Exception {
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            List<Future<T>> runs = List.of(pool.submit(() -> {
+                start.await();
+                return onA.call();
+            }), pool.submit(() -> {
+                start.await();
+                return onB.call();
+            }));
+            start.countDown();
+            return Arrays.asList(runs.get(0).get(60, TimeUnit.SECONDS), runs.get(1).get(60, TimeUnit.SECONDS));
+        }
     }
 
     /** One tick of every live room at {@code at}, then this instance's memo reloads on its next read. */
