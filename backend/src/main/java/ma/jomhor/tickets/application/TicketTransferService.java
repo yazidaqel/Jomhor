@@ -13,6 +13,7 @@ import ma.jomhor.common.web.ApiException;
 import ma.jomhor.gate.application.ScanService;
 import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.notifications.application.TicketDeliveryService;
+import ma.jomhor.sales.application.HolderLimit;
 import ma.jomhor.tenancy.application.AuthService;
 import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tickets.domain.Ticket;
@@ -26,7 +27,8 @@ import tools.jackson.databind.json.JsonMapper;
  * locked first: the old ticket goes CANCELLED (its status only), a new ticket is issued through
  * {@link TicketService#issue} in the same order, zone and price category (a new id, so a new K_t), and a
  * ticket_transfers row links them. Price categories, sold and quota are not touched. The next manifest version carries
- * both rows.
+ * both rows. A transfer checks the recipient's holder limit (Lot 5, through sales' {@link HolderLimit}); a re-issue
+ * doesn't (the count is unchanged).
  */
 @Service
 public class TicketTransferService {
@@ -46,10 +48,11 @@ public class TicketTransferService {
     private final AuditLog audit;
     private final JsonMapper json;
     private final AuthService auth;
+    private final HolderLimit holderLimit;
 
     public TicketTransferService(Tickets tickets, TicketService issuer, EventService events, UserService users,
                                  TicketDeliveryService deliveries, FanMessageQueue queue, ScanService scans,
-                                 AuditLog audit, JsonMapper json, AuthService auth) {
+                                 AuditLog audit, JsonMapper json, AuthService auth, HolderLimit holderLimit) {
         this.tickets = tickets;
         this.issuer = issuer;
         this.events = events;
@@ -60,12 +63,14 @@ public class TicketTransferService {
         this.audit = audit;
         this.json = json;
         this.auth = auth;
+        this.holderLimit = holderLimit;
     }
 
     /**
      * To the account of {@code toPhone} (created if new), named {@code name}; one WhatsApp delivery of the new ticket
      * and one TICKET_RECEIVED push to the recipient. The caller's own phone → 422 on to_phone, reason SELF (a
-     * re-issue).
+     * re-issue). The recipient over the holder limit with this ticket → 409 PER_ACCOUNT_LIMIT HOLDER on to_phone,
+     * read under the recipient's per-account lock, taken after the ticket row.
      */
     @Transactional
     public Transferred transfer(UUID caller, UUID ticketId, String toPhone, String name) {
@@ -78,6 +83,7 @@ public class TicketTransferService {
         }
         String holderName = HolderNames.normalize(name).orElseThrow(() -> invalid("name", HolderNames.INVALID, null));
         UUID to = users.holder(toPhone);
+        holderLimit.requireRoom(t.organizerId(), t.eventId(), to, "to_phone");
         UUID newId = replace(t, to, holderName);
         Tickets.Transfer tr = tickets.insertTransfer(t.organizerId(), t.id(), newId, caller, to);
         deliveries.enqueue(t.organizerId(), List.of(newId));

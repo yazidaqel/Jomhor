@@ -66,20 +66,25 @@ where o.status = 'PAID' and coalesce(t.n, 0) <> coalesce(i.places, 0)
 
 union all
 
--- An account holding more than per_account_limit places of an event (RESERVED, AWAITING_CASH, PAID: the
--- POST /fan/orders count). A late success reviving an EXPIRED order is counted on purpose: OrderService.reReserve
--- re-checks this same count under the buyer lock and refuses (payment.refund_required PER_ACCOUNT_LIMIT, the order
--- stays EXPIRED), as 04 §Late success lists. Lowering per_account_limit while ON_SALE is not checked against what was
--- already sold (EventService.update), so it can flag buyers who were within the limit when they bought: read such a
--- row against the event's audit trail (event PATCH) before calling it a breach.
+-- An account holding more than per_account_limit places of an event (RESERVED, AWAITING_CASH, PAID, less the
+-- REFUNDED tickets of the PAID orders: the POST /fan/orders count, plan lot-5 Q175). A late success reviving an
+-- EXPIRED order is counted on purpose: OrderService.reReserve re-checks this same count under the buyer lock and
+-- refuses (payment.refund_required PER_ACCOUNT_LIMIT, the order stays EXPIRED), as 04 §Late success lists. Lowering
+-- per_account_limit while ON_SALE is not checked against what was already sold (EventService.update), so it can flag
+-- buyers who were within the limit when they bought: read such a row against the event's audit trail (event PATCH)
+-- before calling it a breach.
+-- Deliberately no holder-cap check (04 POST /fan/orders Holder limit): POS sales and a late success's re-reserve
+-- bypass it (plan lot-5 Q173), so a row would not be a breach.
 select 'PER_ACCOUNT_LIMIT', o.event_id, o.user_id::text,
-       format('places %s > per_account_limit %s', sum(i.qty), e.per_account_limit)
+       format('places %s > per_account_limit %s', sum(i.places - coalesce(r.n, 0)), e.per_account_limit)
 from orders o
-join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
+join (select order_id, sum(qty) as places from order_items group by order_id) i on i.order_id = o.id
+left join (select order_id, count(*) as n from tickets where status = 'REFUNDED' group by order_id) r
+  on r.order_id = o.id and o.status = 'PAID'
 join events e on e.id = o.event_id and e.organizer_id = o.organizer_id
 where o.status in ('RESERVED', 'AWAITING_CASH', 'PAID') and o.user_id is not null
 group by o.event_id, o.user_id, e.per_account_limit
-having sum(i.qty) > e.per_account_limit
+having sum(i.places - coalesce(r.n, 0)) > e.per_account_limit
 
 union all
 

@@ -1,6 +1,7 @@
 package ma.jomhor.sales;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -9,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.Filter;
+import java.sql.Connection;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -25,9 +27,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
+import javax.sql.DataSource;
 import ma.jomhor.payments.PaymentTest;
 import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.rooms.application.RoomTicks;
+import ma.jomhor.sales.rooms.application.RoomTokens;
 import ma.jomhor.tenancy.application.AuthService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -55,7 +59,8 @@ import org.springframework.web.context.WebApplicationContext;
  * 120-place hot category, admission 600/min on a stepped fixed clock (5 s a step), 30 % of holds abandoned and 5 % of
  * cards refused. Within a step the tick on both instances, the expiry of the previous step's holds on both, and the
  * fans' turns (poll on one instance, order and pay on the other) all run at once; B is closed in the middle of step 2
- * with calls in flight, and a turn whose call to B fails goes on from there on A in the next step. Then check.sql,
+ * with calls in flight (one order surely so: held on a row lock of the test's, on a fourth category no turn buys), and
+ * a turn whose call to B fails goes on from there on A in the next step. Then check.sql,
  * every 201 an order and every order PAID or EXPIRED, sold = paid places = tickets, one draw, and a trigger that logs
  * any move back of last_tick_at, admitted_through or ranked_count. Also the per-IP OTP and join counts shared by both,
  * and the production tick path (RoomTicks.run: the poll sweep and the clock_timestamp() read) on both at once on the
@@ -76,6 +81,12 @@ class OnSaleTwoInstanceTest extends QueueFixture {
 
     @Autowired
     OrderService orderService;
+
+    @Autowired
+    RoomTokens tokens;
+
+    @Autowired
+    DataSource dataSource;
 
     @BeforeAll
     static void startB() {
@@ -378,12 +389,13 @@ class OnSaleTwoInstanceTest extends QueueFixture {
         String hot = price(a, event, zone(a, venue, "NORD", 120), "Virage", 120);
         List<String> prices = List.of(hot, hot, price(a, event, zone(a, venue, "SUD", 60), "Sud", 60),
                 price(a, event, zone(a, venue, "EST", 60), "Est", 60));
+        String blocker = price(a, event, zone(a, venue, "OUEST", 10), "Ouest", 10); // the cut-off order's only
         UUID room = roomFor(a, event, SALE);
         RoomTicks ticksB = b.getBean(RoomTicks.class);
         OrderService ordersB = b.getBean(OrderService.class);
         try {
             guard(room);
-            sale(event, room, prices, ticksB, ordersB);
+            sale(event, room, prices, blocker, ticksB, ordersB);
             assertThat(movedBack()).isEmpty();
         } finally {
             unguard();
@@ -391,8 +403,48 @@ class OnSaleTwoInstanceTest extends QueueFixture {
         }
     }
 
-    private void sale(int event, UUID room, List<String> prices, RoomTicks ticksB, OrderService ordersB)
-            throws Exception {
+    /**
+     * Closes B while one of its orders waits on a row lock the test holds (the {@code blocker} category's, which no
+     * turn buys), so at least one call to B is cut off by the close whatever the timing; then lets the row go. The
+     * order never commits: its connection was aborted by the close.
+     */
+    private void closeBWithAnOrderWaiting(int event, String blocker) throws Exception {
+        Fan f = mintFan();
+        String admission = tokens.admission(f.id(), event, UUID.randomUUID(), Instant.now().plusSeconds(600));
+        try (var waiter = Executors.newSingleThreadExecutor(); Connection lock = dataSource.getConnection()) { // lock closes first, so waiter.close() never waits on a held row
+            lock.setAutoCommit(false);
+            int pid;
+            try (var st = lock.createStatement(); var rs = st.executeQuery("select pg_backend_pid()")) {
+                rs.next();
+                pid = rs.getInt(1);
+            }
+            try (var ps = lock.prepareStatement("select 1 from price_categories where id = ?::uuid for update")) {
+                ps.setString(1, blocker);
+                ps.executeQuery().close();
+            }
+            Future<Res> order = waiter.submit(() -> sendOn(mvcB, post("/fan/orders")
+                    .header("Authorization", "Bearer " + f.token()).header("X-Admission-Token", admission)
+                    .contentType(MediaType.APPLICATION_JSON).content("""
+                            {"event_id": %d, "channel": "APP",
+                             "items": [{"price_category_id": "%s", "qty": 1, "holders": %s}]}"""
+                            .formatted(event, blocker, holders(1)))));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (jdbc.sql("select count(*) from pg_stat_activity where ? = any(pg_blocking_pids(pid))").param(pid)
+                    .query(Integer.class).single() == 0) {
+                assertThat(order.isDone()).as("B's order ended before it waited on the row").isFalse();
+                assertThat(System.nanoTime()).as("B's order waits on the row").isLessThan(deadline);
+                Thread.sleep(5);
+            }
+            bClosing = true;
+            b.close();
+            bUp = false;
+            lock.rollback();
+            assertThatThrownBy(order::get).hasCauseInstanceOf(BDown.class);
+        }
+    }
+
+    private void sale(int event, UUID room, List<String> prices, String blocker, RoomTicks ticksB,
+                      OrderService ordersB) throws Exception {
         // ---------- pre-queue: 300 fans join over both instances ----------
         tickBoth(ticksB, Instant.parse(OPENS));
         List<Fan> fans = IntStream.range(0, 300).mapToObj(i -> mintFan()).toList();
@@ -462,9 +514,7 @@ class OnSaleTwoInstanceTest extends QueueFixture {
                         Thread.sleep(1);
                     }
                     closeAt[0] = (Integer) roomRow(room).get("admitted_through");
-                    bClosing = true;
-                    b.close();
-                    bUp = false;
+                    closeBWithAnOrderWaiting(event, blocker);
                     return null;
                 });
             }

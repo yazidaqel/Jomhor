@@ -650,7 +650,7 @@ class OrderApiTest extends OrgApiTest {
                 } catch (Exception e) {
                     throw new AssertionError("order blocked behind the event lock", e);
                 }
-                assertThat(events.updatePrice(org, s.eventId(), priceId, null, null, 8)).isPresent();
+                assertThat(events.updatePrice(org, s.eventId(), priceId, null, null, 8, null)).isPresent();
             });
         }
         assertThat(sold(s.priceId())).isEqualTo(1);

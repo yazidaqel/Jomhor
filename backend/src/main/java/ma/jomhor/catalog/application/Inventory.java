@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
+import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.catalog.domain.Event.PriceCategory;
 import ma.jomhor.common.web.ApiException;
 import org.springframework.http.HttpStatus;
@@ -42,7 +43,8 @@ public class Inventory {
     public enum SaleWindow { OPEN, NOT_ON_SALE, NOT_STARTED, CLOSED }
 
     /** A price category as a sale sees it, with its zone's name; priceMad in centimes. */
-    public record SalePrice(UUID id, int zoneId, String zoneName, String name, long priceMad) {}
+    public record SalePrice(UUID id, int zoneId, String zoneName, String name, long priceMad,
+                            Event.Audience audience) {}
 
     /** {@code qty} places of a category held by orders, to give back. */
     public record Hold(UUID organizerId, int eventId, UUID priceCategoryId, int qty) {}
@@ -134,6 +136,6 @@ public class Inventory {
     }
 
     private static SalePrice sale(PriceCategory p) {
-        return new SalePrice(p.id(), p.zoneId(), p.zoneName(), p.name(), p.priceMad());
+        return new SalePrice(p.id(), p.zoneId(), p.zoneName(), p.name(), p.priceMad(), p.audience());
     }
 }

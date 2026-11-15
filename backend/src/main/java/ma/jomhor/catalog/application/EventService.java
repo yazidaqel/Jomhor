@@ -221,13 +221,16 @@ public class EventService {
     /**
      * DRAFT or unknown → 404. sold_out and from_price_mad are taken again from the price rows of the response,
      * so they can't contradict zones[].prices[].remaining (two statements, two READ COMMITTED snapshots).
+     * from_price_mad: ALL categories only, so the public "dès" is a price anyone can pay (plan lot-5 Q172).
      */
     public PublicEvent publicEvent(int eventId) {
         Event.Listing e = events.listing(eventId).orElseThrow(notFound("Event"));
         List<Event.ZoneListing> zones = events.zoneListings(e.organizerId(), eventId);
-        Long fromPrice = zones.stream().flatMap(z -> z.prices().stream()).filter(p -> p.remaining() > 0)
+        List<Event.PriceListing> left = zones.stream().flatMap(z -> z.prices().stream())
+                .filter(p -> p.remaining() > 0).toList();
+        Long fromPrice = left.stream().filter(p -> p.audience() == Event.Audience.ALL)
                 .map(Event.PriceListing::priceMad).min(Long::compare).orElse(null);
-        return new PublicEvent(e.withStock(fromPrice == null, fromPrice), zones,
+        return new PublicEvent(e.withStock(left.isEmpty(), fromPrice), zones,
                 paymentMethods.available(e.organizerId(), e.salesCloseAt(), events.now()));
     }
 
@@ -252,17 +255,19 @@ public class EventService {
     }
 
     @Transactional
-    public PriceCategory createPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota) {
+    public PriceCategory createPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota,
+                                     Event.Audience audience) {
         Event e = lockForPrices(org, eventId);
         int capacity = events.zoneCapacity(org, e.venueId(), zoneId)
                 .orElseThrow(() -> invalid("zone_id", "must be a zone of the event's venue"));
         checkCapacity(capacity, events.quotaOnZone(org, eventId, zoneId, null) + quota);
-        return nameUnique(() -> events.insertPrice(org, eventId, zoneId, name.trim(), priceMad, quota));
+        return nameUnique(() -> events.insertPrice(org, eventId, zoneId, name.trim(), priceMad, quota,
+                audience == null ? Event.Audience.ALL : audience));
     }
 
     @Transactional
     public PriceCategory updatePrice(UUID org, int eventId, UUID priceId, Integer zoneId, String name, Long priceMad,
-                                     Integer quota) {
+                                     Integer quota, Event.Audience audience) {
         Event e = lockForPrices(org, eventId);
         PriceCategory p = events.findPrice(org, eventId, priceId).orElseThrow(notFound("Price category"));
         if (zoneId != null && zoneId != p.zoneId()) {
@@ -273,7 +278,8 @@ public class EventService {
             int capacity = events.zoneCapacity(org, e.venueId(), p.zoneId()).orElseThrow();
             checkCapacity(capacity, events.quotaOnZone(org, eventId, p.zoneId(), priceId) + quota);
         }
-        return nameUnique(() -> events.updatePrice(org, eventId, priceId, name == null ? null : name.trim(), priceMad, quota))
+        return nameUnique(() -> events.updatePrice(org, eventId, priceId, name == null ? null : name.trim(), priceMad, quota,
+                audience))
                 .orElseThrow(() -> new ApiException("QUOTA_BELOW_SOLD", HttpStatus.UNPROCESSABLE_CONTENT,
                         "Quota is below the places already sold"));
     }

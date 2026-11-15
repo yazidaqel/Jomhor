@@ -57,12 +57,13 @@ class FanEventController {
         }
     }
 
-    record PriceDto(UUID priceCategoryId, String name, long priceMad, int remaining) {}
+    record PriceDto(UUID priceCategoryId, String name, long priceMad, int remaining, Event.Audience audience) {}
 
     record ZoneDto(int id, String code, String name, boolean seated, List<String> gateCodes, List<PriceDto> prices) {
         static ZoneDto of(Event.ZoneListing z) {
             return new ZoneDto(z.id(), z.code(), z.name(), z.seated(), z.gateCodes(), z.prices().stream()
-                    .map(p -> new PriceDto(p.priceCategoryId(), p.name(), p.priceMad(), p.remaining())).toList());
+                    .map(p -> new PriceDto(p.priceCategoryId(), p.name(), p.priceMad(), p.remaining(),
+                            p.audience())).toList());
         }
     }
 

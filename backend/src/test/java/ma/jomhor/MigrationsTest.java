@@ -19,11 +19,11 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV24Apply() {
+    void v1ToV25Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22", "23", "24");
+                        "17", "18", "19", "20", "21", "22", "23", "24", "25");
     }
 
     /**
@@ -78,6 +78,26 @@ class MigrationsTest extends IntegrationTest {
             assertThatThrownBy(() -> jdbcTemplate.update("update waiting_rooms set " + set + " where event_id = ?",
                     event)).as(set).isInstanceOf(DataIntegrityViolationException.class);
         }
+    }
+
+    /** V25: a category written without an audience (every row before V25) is ALL; holders has its GIN index. */
+    @Test
+    void priceAudienceAndHoldersIndex() {
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        var zone = jdbcTemplate.queryForObject("insert into zones (organizer_id, venue_id, code, name, capacity) "
+                + "values (?, ?, 'NORD', 'Nord', 100) returning id", Short.class, org, venue);
+        Integer event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""",
+                Integer.class, org, venue, new byte[32]);
+        assertThat(jdbcTemplate.queryForObject("""
+                insert into price_categories (organizer_id, event_id, zone_id, name, price_mad, quota)
+                values (?, ?, ?, 'Plein tarif', 5000, 10) returning audience::text""", String.class, org, event, zone))
+                .isEqualTo("ALL");
+        assertThat(jdbcTemplate.queryForList("select indexdef from pg_indexes where tablename = 'order_items'",
+                String.class)).anyMatch(d -> d.contains("USING gin (holders jsonb_path_ops)"));
     }
 
     /** V24: one entry per account per room, one rank per room, 32-byte hashes, positive ranks, organizer required. */

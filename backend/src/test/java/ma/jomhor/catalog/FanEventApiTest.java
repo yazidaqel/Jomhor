@@ -357,7 +357,7 @@ class FanEventApiTest extends OrgApiTest {
         assertKeys(json, "$", detailKeys);
         assertKeys(json, "$.venue", "name", "city");
         assertKeys(json, "$.zones[0]", "id", "code", "name", "seated", "gate_codes", "prices");
-        assertKeys(json, "$.zones[0].prices[0]", "price_category_id", "name", "price_mad", "remaining");
+        assertKeys(json, "$.zones[0].prices[0]", "price_category_id", "name", "price_mad", "remaining", "audience");
         assertNoSecretOrCount(json);
 
         String fan = fanToken(randomPhone());

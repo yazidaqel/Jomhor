@@ -161,7 +161,8 @@ class DevSeeder implements ApplicationRunner {
             long[] p = PRICES.get(zone.code());
             if (p != null) {
                 priceOf.put(zone.code(),
-                        events.createPrice(club.org(), id, zone.id(), "Plein tarif", p[0], (int) p[1]).id());
+                        events.createPrice(club.org(), id, zone.id(), "Plein tarif", p[0], (int) p[1],
+                                Event.Audience.ALL).id());
             }
         }
         events.publish(club.org(), ADMIN, id);

@@ -82,9 +82,9 @@ public class TicketAdminService {
 
     /**
      * 04 POST /org/tickets/{id}/refund: VALID or BLOCKED → REFUNDED, its place released (sold − 1) and a REQUIRED
-     * refund of the item's unit price, in one transaction. The order stays PAID.
+     * refund of the item's unit price, in one transaction. The order stays PAID, and the place no longer counts in its
+     * buyer's per_account_limit (plan lot-5 Q175, sales' Orders.held).
      */
-    // ponytail: the refunded place still counts in the buyer's per_account_limit (plan Q52 residual, Lot 5).
     @Transactional
     public Tickets.Row refund(UUID org, UUID user, UUID ticketId, String reason) {
         String r = reason(reason);

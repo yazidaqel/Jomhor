@@ -32,8 +32,11 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
     public record Summary(int id, String title, Type eventType, Instant startsAt, Status status, UUID venueId,
                           String venueName, String venueTimezone, long quota, long sold) {}
 
+    /** price_categories.audience: MEMBERS = each place held by a member who joined before the sale (04 POST /fan/orders). */
+    public enum Audience { ALL, MEMBERS }
+
     public record PriceCategory(UUID id, int zoneId, String name, long priceMad, int quota, int sold, String zoneName,
-                                String zoneCode) {}
+                                String zoneCode, Audience audience) {}
 
     /**
      * A non-DRAFT event as the public sees it (GET /fan/events*): no key, no quota or sold. {@code onSale},
@@ -71,5 +74,6 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
     public record GateListing(String code, String name, String directions, BigDecimal latitude, BigDecimal longitude) {}
 
     /** remaining = quota - sold. */
-    public record PriceListing(UUID priceCategoryId, int zoneId, String name, long priceMad, int remaining) {}
+    public record PriceListing(UUID priceCategoryId, int zoneId, String name, long priceMad, int remaining,
+                               Audience audience) {}
 }

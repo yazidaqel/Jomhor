@@ -39,6 +39,19 @@ class JdbcOrders implements Orders {
                 .param("user", userId.toString()).param("event", eventId).query((rs, n) -> 1).single();
     }
 
+    // One statement: offset 0 keeps the sorted subquery apart, so the locks are taken in its order.
+    @Override
+    public void lockAccounts(Collection<UUID> userIds, int eventId) {
+        jdbc.sql("""
+                        select pg_advisory_xact_lock(k.h, :event)
+                        from (select hashtext(cast(u as text)) as h
+                              from unnest(cast(:users as uuid[])) as u
+                              order by 1, u offset 0) k
+                        """)
+                .param("users", userIds.toArray(UUID[]::new)).param("event", eventId)
+                .query((rs, n) -> 1).list();
+    }
+
     @Override
     public long held(UUID org, UUID userId, int eventId) {
         // Two sums, each on its own index (orders user_id; orders group_order_id, V20), not one OR over the event.
@@ -53,17 +66,42 @@ class JdbcOrders implements Orders {
                 .param("org", org).param("user", userId).param("event", eventId).query(Long.class).single();
     }
 
+    // Less the REFUNDED tickets of the PAID orders (plan lot-5 Q175): a transfer leaves its order and its count alone.
     private static final String OWN_HELD = """
-            select coalesce(sum(i.qty), 0)
-            from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
-            where o.organizer_id = :org and o.user_id = :user and o.event_id = :event
-              and o.status in ('RESERVED', 'AWAITING_CASH', 'PAID')
+            select (select coalesce(sum(i.qty), 0)
+                    from orders o join order_items i on i.order_id = o.id and i.organizer_id = o.organizer_id
+                    where o.organizer_id = :org and o.user_id = :user and o.event_id = :event
+                      and o.status in ('RESERVED', 'AWAITING_CASH', 'PAID'))
+                 - (select count(*)
+                    from orders o join tickets t on t.order_id = o.id and t.organizer_id = o.organizer_id
+                    where o.organizer_id = :org and o.user_id = :user and o.event_id = :event and o.status = 'PAID'
+                      and t.status = 'REFUNDED')
             """;
 
     @Override
     public long ownHeld(UUID org, UUID userId, int eventId) {
         return jdbc.sql(OWN_HELD).param("org", org).param("user", userId).param("event", eventId).query(Long.class)
                 .single();
+    }
+
+    // Held places by order_items.holders @> (GIN index, V25), then counted in each array; PAID places by their
+    // tickets (index tickets holder_user_id), so a transferred-away (CANCELLED) or REFUNDED place no longer counts.
+    @Override
+    public long holding(UUID org, UUID holderId, int eventId) {
+        return jdbc.sql("""
+                        select (select coalesce(sum((select count(*) from jsonb_array_elements(i.holders) h
+                                                     where h ->> 'user_id' = cast(:holder as text))), 0)
+                                from order_items i
+                                join orders o on o.id = i.order_id and o.organizer_id = i.organizer_id
+                                where i.organizer_id = :org
+                                  and i.holders @> jsonb_build_array(jsonb_build_object('user_id', cast(:holder as text)))
+                                  and o.event_id = :event and o.status in ('RESERVED', 'AWAITING_CASH'))
+                             + (select count(*) from tickets
+                                where organizer_id = :org and event_id = :event and holder_user_id = cast(:holder as uuid)
+                                  and status in ('VALID', 'BLOCKED'))
+                        """)
+                .param("org", org).param("holder", holderId.toString()).param("event", eventId)
+                .query(Long.class).single();
     }
 
     @Override

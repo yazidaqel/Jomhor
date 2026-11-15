@@ -58,6 +58,25 @@ class CheckSqlTest extends QueueFixture {
         jdbc.sql(sql).params(params).update();
     }
 
+    /**
+     * Plan lot-5 Q175: a staff refund frees its place in the buyer's limit, so buying it back at the limit is no
+     * PER_ACCOUNT_LIMIT row; a limit below what the buyer then holds still is.
+     */
+    @Test
+    void aRefundThenRebuyIsNoLimitBreach() throws Exception {
+        Sale s = sale(); // the fan holds 3 places: A (2, PAID) and B (1, RESERVED)
+        sql("update events set per_account_limit = 3 where id = ?", s.room().event());
+        UUID refunded = jdbc.sql("select min(id::text)::uuid from tickets where order_id = ?::uuid").param(s.paid())
+                .query(UUID.class).single();
+        call(s.room().admin(), post("/org/tickets/" + refunded + "/refund"), "{\"reason\": \"Doublon\"}")
+                .andExpect(status().isOk());
+        order(s.fan(), s.room(), null, 1).andExpect(status().isCreated());
+        assertThat(found(s)).isEmpty();
+
+        sql("update events set per_account_limit = 2 where id = ?", s.room().event());
+        assertThat(found(s)).containsExactly("PER_ACCOUNT_LIMIT");
+    }
+
     @Test
     void eachCheckFiresOnItsOwnBreach() throws Exception {
         // Oversell: both tickets of A transferred, and the old ones left VALID: 4 VALID tickets on a 3-place category.

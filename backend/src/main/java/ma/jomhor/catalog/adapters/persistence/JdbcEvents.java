@@ -35,7 +35,7 @@ class JdbcEvents implements Events {
             reentry_policy, per_account_limit, metadata::text as metadata, created_at""";
     // zone_name and zone_code by scalar subqueries, so the same list works after select and returning.
     private static final String PRICE_COLUMNS = """
-            id, zone_id, name, price_mad, quota, sold,
+            id, zone_id, name, price_mad, quota, sold, audience::text as audience,
             (select z.name from zones z where z.id = price_categories.zone_id
                and z.organizer_id = price_categories.organizer_id) as zone_name,
             (select z.code from zones z where z.id = price_categories.zone_id
@@ -178,30 +178,33 @@ class JdbcEvents implements Events {
     }
 
     @Override
-    public PriceCategory insertPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota) {
+    public PriceCategory insertPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota,
+                                     Event.Audience audience) {
         return jdbc.sql("""
-                        insert into price_categories (organizer_id, event_id, zone_id, name, price_mad, quota)
-                        values (:org, :event, :zone, :name, :price, :quota)
+                        insert into price_categories (organizer_id, event_id, zone_id, name, price_mad, quota, audience)
+                        values (:org, :event, :zone, :name, :price, :quota, cast(:audience as price_audience))
                         returning\s""" + PRICE_COLUMNS)
                 .param("org", org).param("event", eventId).param("zone", zoneId).param("name", name)
-                .param("price", priceMad).param("quota", quota)
+                .param("price", priceMad).param("quota", quota).param("audience", audience.name())
                 .query(JdbcEvents::price).single();
     }
 
     // sold <= new quota in the same statement: a concurrent sale can't slip between check and write.
     @Override
     public Optional<PriceCategory> updatePrice(UUID org, int eventId, UUID priceId, String name, Long priceMad,
-                                               Integer quota) {
+                                               Integer quota, Event.Audience audience) {
         return jdbc.sql("""
                         update price_categories set
                           name = coalesce(cast(:name as text), name),
                           price_mad = coalesce(cast(:price as bigint), price_mad),
-                          quota = coalesce(cast(:quota as integer), quota)
+                          quota = coalesce(cast(:quota as integer), quota),
+                          audience = coalesce(cast(:audience as price_audience), audience)
                         where organizer_id = :org and event_id = :event and id = :id
                           and sold <= coalesce(cast(:quota as integer), quota)
                         returning\s""" + PRICE_COLUMNS)
                 .param("org", org).param("event", eventId).param("id", priceId)
                 .param("name", name).param("price", priceMad).param("quota", quota)
+                .param("audience", audience == null ? null : audience.name())
                 .query(JdbcEvents::price).optional();
     }
 
@@ -259,7 +262,7 @@ class JdbcEvents implements Events {
                    coalesce(e.status = 'ON_SALE' and now() >= coalesce(e.sale_starts_at, '-infinity')
                             and now() < e.refund_cutoff_at, false) as on_sale,
                    coalesce(bool_and(pc.sold >= pc.quota), true) as sold_out,
-                   min(pc.price_mad) filter (where pc.sold < pc.quota) as from_price_mad
+                   min(pc.price_mad) filter (where pc.sold < pc.quota and pc.audience = 'ALL') as from_price_mad
             from events e
             join organizers o on o.id = e.organizer_id
             join venues v on v.id = e.venue_id and v.organizer_id = e.organizer_id
@@ -291,12 +294,14 @@ class JdbcEvents implements Events {
     @Override
     public List<Event.ZoneListing> zoneListings(UUID org, int eventId) {
         Map<Integer, List<Event.PriceListing>> prices = jdbc.sql("""
-                        select id, zone_id, name, price_mad, quota - sold as remaining from price_categories
+                        select id, zone_id, name, price_mad, quota - sold as remaining, audience::text as audience
+                        from price_categories
                         where organizer_id = :org and event_id = :event order by zone_id, name, id
                         """)
                 .param("org", org).param("event", eventId)
                 .query((rs, n) -> new Event.PriceListing(rs.getObject("id", UUID.class), rs.getInt("zone_id"),
-                        rs.getString("name"), rs.getLong("price_mad"), rs.getInt("remaining")))
+                        rs.getString("name"), rs.getLong("price_mad"), rs.getInt("remaining"),
+                        Event.Audience.valueOf(rs.getString("audience"))))
                 .list().stream()
                 .collect(Collectors.groupingBy(Event.PriceListing::zoneId));
         String zoneIds = prices.keySet().stream().map(String::valueOf).collect(Collectors.joining(",", "{", "}"));
@@ -376,6 +381,6 @@ class JdbcEvents implements Events {
     private static PriceCategory price(ResultSet rs, int n) throws SQLException {
         return new PriceCategory(rs.getObject("id", UUID.class), rs.getInt("zone_id"), rs.getString("name"),
                 rs.getLong("price_mad"), rs.getInt("quota"), rs.getInt("sold"), rs.getString("zone_name"),
-                rs.getString("zone_code"));
+                rs.getString("zone_code"), Event.Audience.valueOf(rs.getString("audience")));
     }
 }
