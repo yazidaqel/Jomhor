@@ -49,12 +49,13 @@ class EventController {
 
     record EventCreate(@NotNull UUID venueId, @NotNull Event.Type eventType, @NotBlank String title,
                        @NotNull Instant startsAt, Instant doorsOpenAt, Instant saleStartsAt,
-                       Event.ReentryPolicy reentryPolicy, @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata) {}
+                       Event.ReentryPolicy reentryPolicy, @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata,
+                       UUID seriesId) {}
 
     record EventPatch(UUID venueId, Event.Type eventType,
                       @Pattern(regexp = NOT_BLANK, message = NOT_BLANK_MESSAGE) String title, Instant startsAt,
                       Instant doorsOpenAt, Instant saleStartsAt, Event.ReentryPolicy reentryPolicy,
-                      @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata) {}
+                      @Min(1) @Max(20) Integer perAccountLimit, JsonNode metadata, UUID seriesId) {}
 
     /** {@code audience} absent: ALL. */
     record PriceCreate(@NotNull Integer zoneId, @NotBlank String name, @NotNull @PositiveOrZero Long priceMad,
@@ -111,7 +112,7 @@ class EventController {
     EventDto create(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @Valid @RequestBody EventCreate body) {
         return EventDto.of(events.create(org.organizerId(), new EventInput(body.venueId(), body.eventType(),
                 body.title(), body.startsAt(), body.doorsOpenAt(), body.saleStartsAt(), body.reentryPolicy(), body.perAccountLimit(),
-                body.metadata())));
+                body.metadata(), body.seriesId())));
     }
 
     @GetMapping("/org/events/{id}")
@@ -124,7 +125,7 @@ class EventController {
                     @Valid @RequestBody EventPatch body) {
         return EventDto.of(events.update(org.organizerId(), id, new EventInput(body.venueId(), body.eventType(),
                 body.title(), body.startsAt(), body.doorsOpenAt(), body.saleStartsAt(), body.reentryPolicy(), body.perAccountLimit(),
-                body.metadata())));
+                body.metadata(), body.seriesId())));
     }
 
     @PostMapping("/org/events/{id}/publish")

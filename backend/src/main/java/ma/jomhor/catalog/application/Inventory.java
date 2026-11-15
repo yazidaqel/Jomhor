@@ -91,8 +91,17 @@ public class Inventory {
         return events.listing(eventId).map(e -> new Availability(e.organizerId(), e.title(), e.onSale(), e.soldOut()));
     }
 
+    /** Every category of the event, PASS ones included (an order's view, settle). */
     public List<SalePrice> prices(UUID org, int eventId) {
         return events.prices(org, eventId).stream().map(Inventory::sale).toList();
+    }
+
+    /**
+     * The categories a fan or a till may buy: PASS ones left out (04 §Passes), so naming one in an order is a 422 on
+     * its price_category_id, and the waitlist's R doesn't count them.
+     */
+    public List<SalePrice> salePrices(UUID org, int eventId) {
+        return prices(org, eventId).stream().filter(p -> p.audience().sellable()).toList();
     }
 
     /**

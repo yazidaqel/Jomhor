@@ -14,6 +14,9 @@ import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
 import 'package:jomhor_fan/features/inbox/inbox_screen.dart';
+import 'package:jomhor_fan/features/passes/buy_screen.dart';
+import 'package:jomhor_fan/features/passes/pass.dart' show isUuid;
+import 'package:jomhor_fan/features/passes/pass_screen.dart';
 import 'package:jomhor_fan/features/profile/profile_screen.dart';
 import 'package:jomhor_fan/features/queue/queue_screen.dart';
 import 'package:jomhor_fan/features/tickets/pass_hero.dart';
@@ -28,6 +31,7 @@ bool needsSession(String path) =>
     path.startsWith('/club/') ||
     path.startsWith('/profile') ||
     path.startsWith('/orders') ||
+    path.startsWith('/passes') ||
     path == '/inbox' ||
     RegExp('^/events/[^/]+/(zones|checkout|queue)').hasMatch(path);
 
@@ -133,6 +137,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         redirect: (context, state) => isTicketId(state.pathParameters['id']!) ? null : '/tickets',
         builder: (context, state) =>
             TicketScreen(id: state.pathParameters['id']!, origin: PassOrigin.values.asNameMap()[state.extra]),
+      ),
+      // Screen 13 (Lot 5 step 3): a product to buy (public, like events), or a pass the fan holds.
+      GoRoute(
+        path: '/products/:id',
+        redirect: (context, state) => isUuid(state.pathParameters['id']!) ? null : '/',
+        builder: (context, state) => BuyScreen(productId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/passes/:id',
+        redirect: (context, state) => isUuid(state.pathParameters['id']!) ? null : '/tickets',
+        builder: (context, state) => PassScreen(passId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/orders/:id',

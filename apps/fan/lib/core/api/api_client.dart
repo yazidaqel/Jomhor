@@ -47,7 +47,8 @@ DateTime? _date(String? header) {
 }
 
 /// JSON client for the fan API. [get], [post], [patch], [put] and [delete] send `Authorization: Bearer` when a
-/// token is stored. Public endpoints (`GET /fan/events*`, `GET /fan/organizers*`, `POST /fan/auth/*`) go through
+/// token is stored. Public endpoints (`GET /fan/events*`, `GET /fan/organizers*`, `GET /fan/products*`,
+/// `POST /fan/auth/*`) go through
 /// [getPublic] and [postPublic], which never do; [get] and [post] refuse those paths.
 ///
 /// A query value is a String, or an `Iterable<String>` for a repeated parameter (`?organizer=a&organizer=b`).
@@ -77,7 +78,7 @@ class ApiClient {
   /// [get] plus the server's `Date` header (e.g. to tell whether a hold is still running on server time).
   Future<ApiResponse> getResponse(String path, {Map<String, Object>? query}) {
     // A public read through the authenticated path would leak the token to a public, cacheable URL.
-    if (path.startsWith('/fan/events') || path.startsWith('/fan/organizers')) {
+    if (path.startsWith('/fan/events') || path.startsWith('/fan/organizers') || path.startsWith('/fan/products')) {
       throw ArgumentError.value(path, 'path', 'public endpoint: use getPublic');
     }
     return _send('GET', path, query: query, auth: true);

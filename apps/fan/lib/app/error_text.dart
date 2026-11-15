@@ -17,6 +17,7 @@ String errorText(AppLocalizations l, String code) => switch (code) {
   'MEMBERS_ONLY' => l.holderMembersOnlyAny,
   'ORDER_EXPIRED' => l.errorOrderExpired,
   'ORDER_NOT_PAYABLE' => l.errorOrderNotPayable,
+  'PRODUCT_NOT_ON_SALE' => l.errorProductNotOnSale,
   ApiError.network => l.errorNetwork,
   _ => l.errorGeneric,
 };

@@ -67,15 +67,15 @@ final checkoutRepositoryProvider = Provider<CheckoutRepository>(
   (ref) => CheckoutRepository(ref.watch(apiClientProvider)),
 );
 
-/// The order of an upcoming event that waits on the fan and runs out first, judged on server time [now]: an
-/// AWAITING_CASH order with its PENDING code, or a place a friend kept (a MEMBER order still RESERVED, DESIGN.md Lot
-/// 4 screen 1). An AWAITING_CASH order without a code (`pay_code` null, e.g. after a network amount mismatch) is
-/// left out.
+/// The order of an upcoming event (or a product, which has no date) that waits on the fan and runs out first,
+/// judged on server time [now]: an AWAITING_CASH order with its PENDING code, or a place a friend kept (a MEMBER
+/// order still RESERVED, DESIGN.md Lot 4 screen 1). An AWAITING_CASH order without a code (`pay_code` null, e.g.
+/// after a network amount mismatch) is left out.
 OrderRow? pendingCash(List<OrderRow> rows, DateTime now) {
   final waiting = [
     for (final o in rows)
       if ((o.status == 'AWAITING_CASH' && o.payCode != null || o.status == 'RESERVED' && o.groupRole == 'MEMBER') &&
-          o.eventStartsAt.isAfter(now) &&
+          (o.eventStartsAt?.isAfter(now) ?? true) &&
           (o.reservedUntil?.isAfter(now) ?? false))
         o,
   ]..sort((a, b) => a.reservedUntil!.compareTo(b.reservedUntil!));

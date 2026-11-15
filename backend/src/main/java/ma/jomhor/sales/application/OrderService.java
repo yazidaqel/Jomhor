@@ -187,7 +187,7 @@ public class OrderService {
             throw notOnSale(event);
         }
         UUID org = event.organizerId();
-        Map<UUID, SalePrice> prices = byId(inventory.prices(org, eventId));
+        Map<UUID, SalePrice> prices = byId(inventory.salePrices(org, eventId));
         Checked checked = check(prices, items, users.get(userId).phone());
         // Each pays phone → the path of its first place, in place order.
         Map<String, String> payers = new LinkedHashMap<>();
@@ -264,7 +264,7 @@ public class OrderService {
         if (event.window() != Inventory.SaleWindow.OPEN) {
             throw notOnSale(event);
         }
-        Checked checked = check(byId(inventory.prices(org, eventId)), items, null);
+        Checked checked = check(byId(inventory.salePrices(org, eventId)), items, null);
         if (checked.places() > event.perAccountLimit()) {
             throw new ApiException("PER_ACCOUNT_LIMIT", HttpStatus.CONFLICT, "Per-account limit reached",
                     Map.of("limit", event.perAccountLimit(), "held", 0));

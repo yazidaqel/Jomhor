@@ -2,6 +2,7 @@ package ma.jomhor.catalog.domain;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,8 +33,21 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
     public record Summary(int id, String title, Type eventType, Instant startsAt, Status status, UUID venueId,
                           String venueName, String venueTimezone, long quota, long sold) {}
 
-    /** price_categories.audience: MEMBERS = each place held by a member who joined before the sale (04 POST /fan/orders). */
-    public enum Audience { ALL, MEMBERS }
+    /**
+     * price_categories.audience: MEMBERS = each place held by a member who joined before the sale (04 POST /fan/orders);
+     * PASS = places for the season-pass holders of the event's series (04 §Passes), price 0.
+     */
+    public enum Audience {
+        ALL, MEMBERS, PASS;
+
+        /**
+         * Sold to fans and at a till. PASS places are issued by the pass job only: every fan and POS read and check
+         * (rows, from_price_mad, sold_out, a room's sold_out, the waitlist's R, an order's items) leaves them out.
+         */
+        public boolean sellable() {
+            return this != PASS;
+        }
+    }
 
     public record PriceCategory(UUID id, int zoneId, String name, long priceMad, int quota, int sold, String zoneName,
                                 String zoneCode, Audience audience) {}
@@ -72,6 +86,16 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
 
     /** A gate as fans see it (04 /fan/tickets {@code gates[]}): coordinates both or neither, scale 6. */
     public record GateListing(String code, String name, String directions, BigDecimal latitude, BigDecimal longitude) {}
+
+    /** event_series (04 /org/series): a season, a tour, a festival edition. */
+    public record Series(UUID id, String name, LocalDate startsOn, LocalDate endsOn) {}
+
+    /** A zone with its venue (a pass product's zone, 04 §Passes). */
+    public record ZoneAt(int id, String code, String name, UUID venueId, String venueName, String venueCity,
+                         String timezone) {}
+
+    /** An event of a series as a pass product lists it (04 GET /fan/products {@code pass.events}). */
+    public record SeriesEvent(int id, String title, Type eventType, Instant startsAt) {}
 
     /** remaining = quota - sold. */
     public record PriceListing(UUID priceCategoryId, int zoneId, String name, long priceMad, int remaining,

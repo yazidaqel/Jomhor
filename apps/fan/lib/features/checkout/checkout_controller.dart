@@ -105,7 +105,7 @@ class CheckoutState {
 
   /// The "MOYEN DE PAIEMENT" rows for [d] ([methodRowsOf]). A row `/pay` refused, or any row once the hosted page
   /// opened or while a request runs, is off.
-  List<MethodRow> methodRows(EventDetail d) => methodRowsOf(d, canPick: _canPick);
+  List<MethodRow> methodRows(EventDetail d) => methodRowsOf(d.paymentMethods, d.cashUntil, canPick: _canPick);
 
   /// What screen 4's summary and CTA show (DESIGN.md Lot 4, screen 4): the places the buyer pays and their total,
   /// and the places friends pay themselves. Before the hold, from the rows ([paying] rows whose friend pays, at

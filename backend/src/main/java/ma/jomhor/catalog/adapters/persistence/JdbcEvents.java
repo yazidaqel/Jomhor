@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -79,18 +80,21 @@ class JdbcEvents implements Events {
 
     // insert ... select from venues: the venue must be this organizer's, in the same statement.
     @Override
-    public Optional<Event> insert(UUID org, int eventId, UUID venueId, Event.Type type, String title, Instant startsAt,
-                                  Instant doorsOpenAt, Instant saleStartsAt, Event.ReentryPolicy reentryPolicy,
-                                  int perAccountLimit, String metadata, byte[] eventKeyEnc) {
+    public Optional<Event> insert(UUID org, int eventId, UUID venueId, UUID seriesId, Event.Type type, String title,
+                                  Instant startsAt, Instant doorsOpenAt, Instant saleStartsAt,
+                                  Event.ReentryPolicy reentryPolicy, int perAccountLimit, String metadata,
+                                  byte[] eventKeyEnc) {
         return jdbc.sql("""
-                        insert into events (id, organizer_id, venue_id, event_type, title, starts_at, doors_open_at,
-                                            sale_starts_at, event_key_enc, reentry_policy, per_account_limit, metadata)
+                        insert into events (id, organizer_id, venue_id, series_id, event_type, title, starts_at,
+                                            doors_open_at, sale_starts_at, event_key_enc, reentry_policy,
+                                            per_account_limit, metadata)
                         overriding system value
-                        select :id, organizer_id, id, cast(:type as event_type), :title, :starts, :doors, :sale,
+                        select :id, organizer_id, id, :series, cast(:type as event_type), :title, :starts, :doors, :sale,
                                :key, cast(:reentry as reentry_policy), :limit, cast(:metadata as jsonb)
                         from venues where organizer_id = :org and id = :venue
                         returning\s""" + EVENT_COLUMNS)
-                .param("id", eventId).param("org", org).param("venue", venueId).param("type", type.name()).param("title", title)
+                .param("id", eventId).param("org", org).param("venue", venueId).param("series", seriesId)
+                .param("type", type.name()).param("title", title)
                 .param("starts", ts(startsAt)).param("doors", ts(doorsOpenAt)).param("sale", ts(saleStartsAt))
                 .param("key", eventKeyEnc)
                 .param("reentry", reentryPolicy.name()).param("limit", perAccountLimit).param("metadata", metadata)
@@ -126,13 +130,14 @@ class JdbcEvents implements Events {
     @Override
     public Event update(UUID org, Event e) {
         return jdbc.sql("""
-                        update events set title = :title, starts_at = :starts, doors_open_at = :doors, sale_starts_at = :sale,
+                        update events set series_id = :series, title = :title, starts_at = :starts, doors_open_at = :doors, sale_starts_at = :sale,
                           status = cast(:status as event_status), refund_cutoff_at = :cutoff,
                           reentry_policy = cast(:reentry as reentry_policy), per_account_limit = :limit,
                           metadata = cast(:metadata as jsonb)
                         where organizer_id = :org and id = :id
                         returning\s""" + EVENT_COLUMNS)
-                .param("org", org).param("id", e.id()).param("title", e.title()).param("starts", ts(e.startsAt()))
+                .param("org", org).param("id", e.id()).param("series", e.seriesId()).param("title", e.title())
+                .param("starts", ts(e.startsAt()))
                 .param("doors", ts(e.doorsOpenAt())).param("sale", ts(e.saleStartsAt())).param("status", e.status().name())
                 .param("cutoff", ts(e.refundCutoffAt())).param("reentry", e.reentryPolicy().name())
                 .param("limit", e.perAccountLimit()).param("metadata", e.metadata())
@@ -252,7 +257,8 @@ class JdbcEvents implements Events {
                 .list();
     }
 
-    // Public reads. on_sale mirrors forSale's OPEN; remaining = quota - sold, never sold or quota themselves.
+    // Public reads. on_sale mirrors forSale's OPEN; remaining = quota - sold, never sold or quota themselves. sold_out
+    // and from_price_mad leave PASS places out (Event.Audience.sellable; the "des" price is ALL only).
     // Of organizers only slug, name and the crest (04 §Club directory); o.id is its key, so grouping by it is enough.
     private static final String LISTING = """
             select e.id, e.organizer_id, o.slug as organizer_slug, o.name as organizer_name,
@@ -261,7 +267,7 @@ class JdbcEvents implements Events {
                    e.refund_cutoff_at, e.per_account_limit,
                    coalesce(e.status = 'ON_SALE' and now() >= coalesce(e.sale_starts_at, '-infinity')
                             and now() < e.refund_cutoff_at, false) as on_sale,
-                   coalesce(bool_and(pc.sold >= pc.quota), true) as sold_out,
+                   coalesce(bool_and(pc.sold >= pc.quota) filter (where pc.audience <> 'PASS'), true) as sold_out,
                    min(pc.price_mad) filter (where pc.sold < pc.quota and pc.audience = 'ALL') as from_price_mad
             from events e
             join organizers o on o.id = e.organizer_id
@@ -347,6 +353,80 @@ class JdbcEvents implements Events {
                         where organizer_id = :org and event_id = :event and id = :id and sold >= :qty
                         """)
                 .param("org", org).param("event", eventId).param("id", priceId).param("qty", qty).update() == 1;
+    }
+
+    // ---------- series ----------
+
+    private static final String SERIES_COLUMNS = "id, name, starts_on, ends_on";
+
+    @Override
+    public List<Event.Series> series(UUID org) {
+        return jdbc.sql("select " + SERIES_COLUMNS + " from event_series where organizer_id = :org"
+                        + " order by starts_on, name, id")
+                .param("org", org).query(JdbcEvents::series).list();
+    }
+
+    @Override
+    public Optional<Event.Series> findSeries(UUID org, UUID seriesId) {
+        return jdbc.sql("select " + SERIES_COLUMNS + " from event_series where organizer_id = :org and id = :id")
+                .param("org", org).param("id", seriesId).query(JdbcEvents::series).optional();
+    }
+
+    @Override
+    public Optional<Event.Series> lockSeries(UUID org, UUID seriesId) {
+        return jdbc.sql("select " + SERIES_COLUMNS
+                        + " from event_series where organizer_id = :org and id = :id for no key update")
+                .param("org", org).param("id", seriesId).query(JdbcEvents::series).optional();
+    }
+
+    @Override
+    public Event.Series insertSeries(UUID org, String name, LocalDate startsOn, LocalDate endsOn) {
+        return jdbc.sql("insert into event_series (organizer_id, name, starts_on, ends_on)"
+                        + " values (:org, :name, :from, :to) returning " + SERIES_COLUMNS)
+                .param("org", org).param("name", name).param("from", startsOn).param("to", endsOn)
+                .query(JdbcEvents::series).single();
+    }
+
+    @Override
+    public Event.Series updateSeries(UUID org, Event.Series s) {
+        return jdbc.sql("update event_series set name = :name, starts_on = :from, ends_on = :to"
+                        + " where organizer_id = :org and id = :id returning " + SERIES_COLUMNS)
+                .param("org", org).param("id", s.id()).param("name", s.name()).param("from", s.startsOn())
+                .param("to", s.endsOn())
+                .query(JdbcEvents::series).single();
+    }
+
+    @Override
+    public Optional<Event.ZoneAt> zoneAt(UUID org, int zoneId) {
+        return jdbc.sql("""
+                        select z.id, z.code, z.name, v.id as venue_id, v.name as venue_name, v.city, v.timezone
+                        from zones z join venues v on v.id = z.venue_id and v.organizer_id = z.organizer_id
+                        where z.organizer_id = :org and z.id = :id
+                        """)
+                .param("org", org).param("id", zoneId)
+                .query((rs, n) -> new Event.ZoneAt(rs.getInt("id"), rs.getString("code"), rs.getString("name"),
+                        rs.getObject("venue_id", UUID.class), rs.getString("venue_name"), rs.getString("city"),
+                        rs.getString("timezone")))
+                .optional();
+    }
+
+    @Override
+    public List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId) {
+        return jdbc.sql("""
+                        select id, title, event_type, starts_at from events
+                        where organizer_id = :org and series_id = :series and venue_id = :venue
+                          and status in ('ON_SALE', 'GATES_OPEN') and starts_at >= now()
+                        order by starts_at, id
+                        """)
+                .param("org", org).param("series", seriesId).param("venue", venueId)
+                .query((rs, n) -> new Event.SeriesEvent(rs.getInt("id"), rs.getString("title"),
+                        Event.Type.valueOf(rs.getString("event_type")), instant(rs, "starts_at")))
+                .list();
+    }
+
+    private static Event.Series series(ResultSet rs, int n) throws SQLException {
+        return new Event.Series(rs.getObject("id", UUID.class), rs.getString("name"),
+                rs.getObject("starts_on", LocalDate.class), rs.getObject("ends_on", LocalDate.class));
     }
 
     private static OffsetDateTime ts(Instant i) {

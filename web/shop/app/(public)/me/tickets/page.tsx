@@ -1,9 +1,12 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
+import { ApiError } from '@/lib/api'
 import { currentSession } from '@/lib/http'
 import { getI18n } from '@/lib/i18n/server'
 import { loginUrl } from '@/lib/orders'
+import { getPasses, type PassView } from '@/lib/products'
 import { PhoneIcon } from '../../../icons'
+import { MyPasses } from './MyPasses'
 import { PendingOrders } from './PendingOrders'
 import { TicketList } from './TicketList'
 
@@ -18,10 +21,19 @@ const APP_TICKETS_URL = 'jomhor-fan://tickets'
 
 /**
  * W5 · `/me/tickets`. Not signed in → login and back. The tickets themselves load in the browser from `/api/tickets`
- * (no ticket data, and never a key, in this HTML); the pending cash orders above them from `/api/orders`.
+ * (no ticket data, and never a key, in this HTML); the pending cash orders above them from `/api/orders`. Lot 5 step 3:
+ * "Mes abonnements" first, server-rendered from `GET /fan/passes` (no key in a pass; a failed read hides the section).
  */
 export default async function TicketsPage() {
-  if (!(await currentSession())) redirect(loginUrl('/me/tickets'))
+  const token = await currentSession()
+  if (!token) redirect(loginUrl('/me/tickets'))
+  let passes: PassView[] = []
+  try {
+    passes = await getPasses(token)
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) redirect(loginUrl('/me/tickets'))
+    console.error('passes read failed', e)
+  }
   const { d } = await getI18n()
   const c = d.ticketsPage
   return (
@@ -51,6 +63,7 @@ export default async function TicketsPage() {
         </div>
       </section>
       <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-12 px-6 pt-10 pb-16">
+        <MyPasses passes={passes} d={d} />
         <PendingOrders copy={{ ticketsPage: d.ticketsPage, meta: d.meta }} />
         <TicketList
           copy={{

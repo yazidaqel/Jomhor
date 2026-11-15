@@ -92,13 +92,18 @@ export async function placeOrder(
   method: PayMethod,
   onWait: (seconds: number) => void,
   signal: AbortSignal,
-  { random = Math.random, existingId, admission }: { random?: () => number; existingId?: string; admission?: string } = {},
+  {
+    random = Math.random,
+    existingId,
+    admission,
+    create = '/api/orders',
+  }: { random?: () => number; existingId?: string; admission?: string; /** Lot 5 step 3: `/api/product-orders`. */ create?: string } = {},
 ): Promise<Placed> {
   let orderId = existingId
   let reservedUntil: string | null | undefined // the hold of an order created here
   if (!orderId) {
     const headers = admission ? { 'x-admission-token': admission } : undefined
-    const created = await withBusyRetry(() => postJson('/api/orders', order, 'POST', signal, headers), onWait, signal, random)
+    const created = await withBusyRetry(() => postJson(create, order, 'POST', signal, headers), onWait, signal, random)
     if (!created.ok) return { kind: 'failed', result: created }
     orderId = String(created.data!.id)
     reservedUntil = typeof created.data!.reserved_until === 'string' ? created.data!.reserved_until : null
@@ -217,8 +222,8 @@ export function canRetryPay(o: OrderStatus, msOnPage: number, renderedAt: number
 }
 
 /**
- * Copy for an error answer: reason-specific for EVENT_NOT_ON_SALE, METHOD_NOT_AVAILABLE and split pay's
- * NO_BUYER_PLACE (a 422 on `items`, no row to mark), limit numbers for PER_ACCOUNT_LIMIT (HOLDER: the limit only).
+ * Copy for an error answer: reason-specific for EVENT_NOT_ON_SALE, METHOD_NOT_AVAILABLE, split pay's NO_BUYER_PLACE
+ * (a 422 on `items`, no row to mark) and a pass product's SOLD_OUT (`product_id`), limit numbers for PER_ACCOUNT_LIMIT (HOLDER: the limit only).
  */
 export function errorText(errors: Dict['errors'], r: Result): string {
   const code = errorCode(r)
@@ -228,6 +233,7 @@ export function errorText(errors: Dict['errors'], r: Result): string {
     return errors[`METHOD_${details.reason}`]
   }
   if (code === 'VALIDATION_FAILED' && details.reason === 'NO_BUYER_PLACE') return errors.NO_BUYER_PLACE
+  if (code === 'SOLD_OUT' && details.product_id) return errors.PASS_SOLD_OUT
   if (code === 'PER_ACCOUNT_LIMIT' && details.reason === 'HOLDER') return holderLimitText(errors, details.limit)
   if (code === 'PER_ACCOUNT_LIMIT') return fmt(errors.PER_ACCOUNT_LIMIT, { limit: String(details.limit ?? ''), held: String(details.held ?? '') })
   return Object.hasOwn(errors, code) ? (errors as Record<string, string>)[code]! : errors.generic

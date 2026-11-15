@@ -49,6 +49,7 @@ import {
 import { StatusBadge } from './EventsPage'
 import { DevicesTab } from './DevicesTab'
 import { PricesTab } from './PricesTab'
+import { SeriesField } from './SeriesField'
 
 type Tab = 'general' | 'prices' | 'gates' | 'devices' | 'rules'
 // Règles fields; every other form field is on Général. Both tabs are one form (one save, one PATCH).
@@ -96,6 +97,7 @@ function EventEditor({ event }: { event?: EventDetail }) {
   })
   const [rowEditing, setRowEditing] = useState(false) // a price row is open on Tarifs & quotas
   const [publishRefused, setPublishRefused] = useState(false) // EVENT_NOT_EDITABLE on publish, shown on the page
+  const [seriesLocked, setSeriesLocked] = useState(false) // PASS_TICKETS: pass tickets exist, the series stays
   const refusedAlert = useRef<HTMLParagraphElement>(null)
 
   // doors_open_at and sale_starts_at cannot be cleared (04-api §Organizer): once set, they stay required.
@@ -139,6 +141,13 @@ function EventEditor({ event }: { event?: EventDetail }) {
     if (e instanceof ApiError && e.code === 'EVENT_NOT_EDITABLE' && e.details.reason === 'ROOM_STARTED') {
       reveal(['sale_starts_at'])
       return form.setError('sale_starts_at', { message: t('events.form.roomStarted') }, { shouldFocus: true })
+    }
+    // Lot 5 step 3: pass tickets were issued for this event under its series, which can no longer change.
+    if (e instanceof ApiError && e.code === 'EVENT_NOT_EDITABLE' && e.details.reason === 'PASS_TICKETS') {
+      reveal(['series_id'])
+      setSeriesLocked(true)
+      form.resetField('series_id')
+      return void toast.error(t('events.series.locked'), { id: 'series-locked' })
     }
     const fields = e instanceof ApiError && e.code === 'VALIDATION_FAILED' ? Object.keys(Object(e.details.fields)) : []
     reveal(fields) // before showFormError focuses the first of them
@@ -330,6 +339,25 @@ function EventEditor({ event }: { event?: EventDetail }) {
                           </Field>
                         )
                       }}
+                    />
+                    <Controller
+                      control={form.control}
+                      name="series_id"
+                      render={({ field }) => (
+                        <div className="md:col-span-2">
+                          <SeriesField
+                            id="event-series"
+                            value={field.value}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            fieldRef={field.ref}
+                            disabled={!editable || save.isPending}
+                            locked={seriesLocked ? t('events.series.locked') : undefined}
+                            hint={t('events.series.hint')}
+                            error={err(errors.series_id)}
+                          />
+                        </div>
+                      )}
                     />
                     <WallTimeInput
                       id="event-starts-at"

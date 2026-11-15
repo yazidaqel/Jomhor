@@ -10,6 +10,7 @@ import {
   LogOut,
   MapPin,
   RadioTower,
+  Repeat,
   Smartphone,
   Store,
   Users,
@@ -63,13 +64,13 @@ const POS_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'CASHIER']
 const home = (role: Role) => (role === 'CASHIER' ? '/pos' : '/')
 const allowed = (role: Role, pathname: string) => (/^\/pos(\/|$)/.test(pathname) ? POS_ROLES.includes(role) : role !== 'CASHIER')
 
-type Section = 'overview' | 'events' | 'sales' | 'liveGates' | 'venues' | 'devices' | 'pos' | 'finance' | 'crm'
+type Section = 'overview' | 'events' | 'sales' | 'products' | 'liveGates' | 'venues' | 'devices' | 'pos' | 'finance' | 'crm'
 type NavKey = Section | 'invitations'
 // no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others); no `roles`:
 // every role but CASHIER.
 type NavItem = { key: NavKey; icon: LucideIcon; to?: string; roles?: readonly Role[] }
 // Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Portes en direct and Appareils in Lot 2,
-// Guichet and Finance (its Encaissements page) in Lot 3, Fans · CRM in Lot 4.
+// Guichet and Finance (its Encaissements page) in Lot 3, Fans · CRM in Lot 4, Abonnements in Lot 5 step 3.
 const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: NavItem[] }[] = [
   {
     group: 'manage',
@@ -77,6 +78,7 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
       { key: 'overview', icon: LayoutDashboard, to: '/' },
       { key: 'events', icon: CalendarDays, to: '/events' },
       { key: 'sales', icon: ChartNoAxesColumn, to: '/sales' },
+      { key: 'products', icon: Repeat, to: '/products', roles: ['ADMIN', 'OPS', 'FINANCE'] },
     ],
   },
   {
@@ -119,7 +121,9 @@ const section = (pathname: string): Section | null =>
                   ? 'finance'
                   : pathname.startsWith('/crm')
                     ? 'crm'
-                    : null
+                    : pathname.startsWith('/products')
+                      ? 'products'
+                      : null
 
 const initials = (name: string) =>
   name

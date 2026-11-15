@@ -335,7 +335,8 @@ class _FormState extends ConsumerState<_Form> {
               const SizedBox(height: JomhorSpace.xs),
               MethodRows(
                 rows: state.methodRows(widget.detail),
-                event: event,
+                cashDeadline: cashDeadline(event),
+                timezone: event.timezone,
                 selected: selected,
                 onSelect: ref.read(checkoutControllerProvider(args).notifier).select,
               ),

@@ -44,6 +44,8 @@ export function OrderStatus({
   eventHref,
   methods,
   member = false,
+  paidBody,
+  ticketsLink = true,
   copy,
   children,
 }: {
@@ -57,6 +59,9 @@ export function OrderStatus({
   methods: OnlineMethod[]
   /** A split-pay member's order (04 `group.role` MEMBER): once EXPIRED, "La place a été libérée". */
   member?: boolean
+  /** Lot 5 step 3, a product order: the PAID line in place of the tickets one, and whether "Mes billets" is offered. */
+  paidBody?: string
+  ticketsLink?: boolean
   copy: Copy
   children?: React.ReactNode
 }) {
@@ -237,10 +242,10 @@ export function OrderStatus({
               )}
             </span>
             <h1 className="font-display text-hero uppercase sm:text-[56px]">{title(c, shown, wasCash, member)}</h1>
-            <p className="text-body text-text-secondary">{body(c, shown, member)}</p>
+            <p className="text-body text-text-secondary">{(paid && paidBody) || body(c, shown, member)}</p>
             {order.status === 'PAID' && order.ticket_count < places && <p className="text-body text-text-secondary">{c.paidOthers}</p>}
           </div>
-          {paid && (
+          {paid && ticketsLink && (
             <Link href="/me/tickets" className={`${cta} gap-2 self-start motion-safe:animate-rise`}>
               <TicketIcon className="size-5" />
               {c.tickets}

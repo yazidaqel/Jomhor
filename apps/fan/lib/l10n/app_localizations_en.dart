@@ -1576,4 +1576,111 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get waitlistChannels => 'We\'ll let you know by notification and WhatsApp';
+
+  @override
+  String get passChip => 'Season pass';
+
+  @override
+  String get passesTitle => 'My season passes';
+
+  @override
+  String get passActive => 'Active';
+
+  @override
+  String get passPending => 'Payment pending';
+
+  @override
+  String get passPendingBody => 'Payment pending · your pass is active as soon as you pay.';
+
+  @override
+  String get passResume => 'Resume payment';
+
+  @override
+  String get passProgramme => 'Coming up';
+
+  @override
+  String get passTicket => 'Ticket';
+
+  @override
+  String get passSoon => 'Soon';
+
+  @override
+  String get passOneTicketEach => 'A ticket in the app for every match published';
+
+  @override
+  String get passOneTicketEachAny => 'A ticket in the app for every event published';
+
+  @override
+  String passEventsAnnounced(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n matches announced',
+      one: '1 match announced',
+      zero: 'No match announced yet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String passEventsAnnouncedAny(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n events announced',
+      one: '1 event announced',
+      zero: 'No event announced yet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String passBuy(String amount) {
+    return 'Buy · $amount';
+  }
+
+  @override
+  String get passHolderHelp => 'The name on every ticket of your pass, as on your ID card.';
+
+  @override
+  String passSeasonRange(String from, String to) {
+    return '$from – $to';
+  }
+
+  @override
+  String membershipValidUntil(String date) {
+    return 'Membership card valid until $date';
+  }
+
+  @override
+  String productHoldLeft(String time) {
+    return 'Held for you · $time';
+  }
+
+  @override
+  String productHolder(String name) {
+    return 'Holder · $name';
+  }
+
+  @override
+  String get productCaptionPass => 'Tickets in the app for every match published';
+
+  @override
+  String get productCaptionMembership => 'Membership card up to date as soon as you pay';
+
+  @override
+  String get orderPaidPassBody =>
+      'Your season pass is active. Each ticket lands in the app as soon as its match is published.';
+
+  @override
+  String get orderPaidMembershipBody => 'Your membership card is up to date.';
+
+  @override
+  String get seePass => 'See my season pass';
+
+  @override
+  String get seeMemberCard => 'See my member card';
+
+  @override
+  String get errorProductNotOnSale => 'Sales are closed for this product.';
 }

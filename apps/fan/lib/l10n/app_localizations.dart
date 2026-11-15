@@ -2594,6 +2594,162 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'On te prévient par notification et WhatsApp'**
   String get waitlistChannels;
+
+  /// Screen 13 title and pass card overline; chip on pass tickets (Billets rows, screen 5 band). Lot 5 step 3.
+  ///
+  /// In fr, this message translates to:
+  /// **'Abonnement'**
+  String get passChip;
+
+  /// Billets: section above the tickets, one row per pass (GET /fan/passes).
+  ///
+  /// In fr, this message translates to:
+  /// **'Mes abonnements'**
+  String get passesTitle;
+
+  /// Billets pass row: status ACTIVE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Actif'**
+  String get passActive;
+
+  /// Billets pass row: status PENDING.
+  ///
+  /// In fr, this message translates to:
+  /// **'Paiement en attente'**
+  String get passPending;
+
+  /// Screen 13 owned, PENDING banner.
+  ///
+  /// In fr, this message translates to:
+  /// **'Paiement en attente · ton abonnement s\'active dès que tu as payé.'**
+  String get passPendingBody;
+
+  /// Screen 13 owned, PENDING: opens /orders/{order_id}.
+  ///
+  /// In fr, this message translates to:
+  /// **'Reprendre le paiement'**
+  String get passResume;
+
+  /// Screen 13 buy and owned: section of the season's events.
+  ///
+  /// In fr, this message translates to:
+  /// **'Au programme'**
+  String get passProgramme;
+
+  /// Screen 13 owned: chip of an event whose ticket is issued (opens screen 5).
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet'**
+  String get passTicket;
+
+  /// Screen 13 owned: an event whose ticket isn't issued yet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Bientôt'**
+  String get passSoon;
+
+  /// Screen 13: what a pass gives (every event is a match).
+  ///
+  /// In fr, this message translates to:
+  /// **'Un billet dans l\'app pour chaque match publié'**
+  String get passOneTicketEach;
+
+  /// passOneTicketEach when the season's events aren't all matches.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un billet dans l\'app pour chaque événement publié'**
+  String get passOneTicketEachAny;
+
+  /// Screen 13 buy: the series' events listed by the product.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =0{Aucun match annoncé pour l\'instant} =1{1 match annoncé} other{{n} matchs annoncés}}'**
+  String passEventsAnnounced(int n);
+
+  /// passEventsAnnounced when the events aren't all matches.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =0{Aucun événement annoncé pour l\'instant} =1{1 événement annoncé} other{{n} événements annoncés}}'**
+  String passEventsAnnouncedAny(int n);
+
+  /// Screen 13 buy CTA: the plan's first amount, as the server sent it.
+  ///
+  /// In fr, this message translates to:
+  /// **'Acheter · {amount}'**
+  String passBuy(String amount);
+
+  /// Screen 13 buy: helper under the holder name.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le nom sur chaque billet de ton abonnement, comme sur ta CIN.'**
+  String get passHolderHelp;
+
+  /// Screen 13 pass card: the series' months.
+  ///
+  /// In fr, this message translates to:
+  /// **'{from} – {to}'**
+  String passSeasonRange(String from, String to);
+
+  /// Screen 13 buy for a MEMBERSHIP product: valid_until.
+  ///
+  /// In fr, this message translates to:
+  /// **'Carte membre valable jusqu\'au {date}'**
+  String membershipValidUntil(String date);
+
+  /// Screen 4 product variant: the 8-min hold left (mm:ss).
+  ///
+  /// In fr, this message translates to:
+  /// **'Réservé pour toi · {time}'**
+  String productHoldLeft(String time);
+
+  /// Screen 4 product variant: the holder label of the item.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titulaire · {name}'**
+  String productHolder(String name);
+
+  /// Screen 4 product variant caption, PASS.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billets dans l\'app à chaque match publié'**
+  String get productCaptionPass;
+
+  /// Screen 4 product variant caption, MEMBERSHIP.
+  ///
+  /// In fr, this message translates to:
+  /// **'Carte membre à jour dès le paiement'**
+  String get productCaptionMembership;
+
+  /// Order screen PAID, pass purchase.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ton abonnement est actif. Chaque billet arrive dans l\'app dès que son match est publié.'**
+  String get orderPaidPassBody;
+
+  /// Order screen PAID, membership.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ta carte membre est à jour.'**
+  String get orderPaidMembershipBody;
+
+  /// Order screen PAID, pass purchase: opens screen 13 owned.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voir mon abonnement'**
+  String get seePass;
+
+  /// Order screen PAID, membership: opens Club.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voir ma carte membre'**
+  String get seeMemberCard;
+
+  /// 409 PRODUCT_NOT_ON_SALE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les ventes sont closes pour ce produit.'**
+  String get errorProductNotOnSale;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

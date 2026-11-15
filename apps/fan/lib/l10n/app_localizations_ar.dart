@@ -1630,4 +1630,114 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get waitlistChannels => 'غادي نعلموك بنوتيفيكاسيون و واتساب';
+
+  @override
+  String get passChip => 'اشتراك';
+
+  @override
+  String get passesTitle => 'اشتراكاتي';
+
+  @override
+  String get passActive => 'خدام';
+
+  @override
+  String get passPending => 'الخلاص كيتسنى';
+
+  @override
+  String get passPendingBody => 'الخلاص كيتسنى · الاشتراك ديالك كيتفعل غير تخلص.';
+
+  @override
+  String get passResume => 'كمل الخلاص';
+
+  @override
+  String get passProgramme => 'البرنامج';
+
+  @override
+  String get passTicket => 'التذكرة';
+
+  @override
+  String get passSoon => 'قريبا';
+
+  @override
+  String get passOneTicketEach => 'تذكرة فالتطبيق لكل ماتش كيتنشر';
+
+  @override
+  String get passOneTicketEachAny => 'تذكرة فالتطبيق لكل حدث كيتنشر';
+
+  @override
+  String passEventsAnnounced(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n ماتش مبرمج',
+      few: '$n ماتشات مبرمجين',
+      two: 'جوج ماتشات مبرمجين',
+      one: 'ماتش واحد مبرمج',
+      zero: 'حتى ماتش ما تبرمج دابا',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String passEventsAnnouncedAny(int n) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: '$n حدث مبرمج',
+      few: '$n أحداث مبرمجين',
+      two: 'جوج أحداث مبرمجين',
+      one: 'حدث واحد مبرمج',
+      zero: 'حتى حدث ما تبرمج دابا',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String passBuy(String amount) {
+    return 'شري · $amount';
+  }
+
+  @override
+  String get passHolderHelp => 'السمية اللي غادي تكون على كل تذكرة ديال الاشتراك، بحال البطاقة الوطنية.';
+
+  @override
+  String passSeasonRange(String from, String to) {
+    return '$from – $to';
+  }
+
+  @override
+  String membershipValidUntil(String date) {
+    return 'كارط العضوية صالحة حتى $date';
+  }
+
+  @override
+  String productHoldLeft(String time) {
+    return 'محجوز ليك · $time';
+  }
+
+  @override
+  String productHolder(String name) {
+    return 'مولا التذكرة · $name';
+  }
+
+  @override
+  String get productCaptionPass => 'التذاكر كتوصلك فالتطبيق مع كل ماتش كيتنشر';
+
+  @override
+  String get productCaptionMembership => 'كارط العضوية كتولي مخلصة غير تخلص';
+
+  @override
+  String get orderPaidPassBody => 'الاشتراك ديالك خدام. كل تذكرة كتوصلك فالتطبيق غير يتنشر الماتش ديالها.';
+
+  @override
+  String get orderPaidMembershipBody => 'كارط العضوية ديالك مخلصة.';
+
+  @override
+  String get seePass => 'شوف الاشتراك ديالي';
+
+  @override
+  String get seeMemberCard => 'شوف كارط العضوية';
+
+  @override
+  String get errorProductNotOnSale => 'البيع تسد لهاد المنتوج.';
 }

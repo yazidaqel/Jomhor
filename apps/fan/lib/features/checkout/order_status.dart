@@ -86,8 +86,9 @@ Duration? pollAfter(FanOrder order) {
   if (order.settled) {
     return order.paid && (order.group?.initiator ?? false) && order.group!.payable ? OrderStatus.everyCash : null;
   }
-  // A cash code, or a friend's place before any attempt: paid minutes or hours away.
-  final memberWaiting = order.group?.initiator == false && (order.paymentStatus ?? 'FAILED') == 'FAILED';
+  // A cash code, or a friend's place (or a product order, Lot 5 step 3) before any attempt: paid minutes or hours away.
+  final memberWaiting =
+      (order.group?.initiator == false || order.product != null) && (order.paymentStatus ?? 'FAILED') == 'FAILED';
   return order.awaitingCash || memberWaiting ? OrderStatus.everyCash : OrderStatus.every;
 }
 

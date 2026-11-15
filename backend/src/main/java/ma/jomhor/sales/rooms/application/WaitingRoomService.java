@@ -195,7 +195,7 @@ public class WaitingRoomService {
     /**
      * Per room: {@code waiting} = its ranked fans not yet admitted (counts of the last tick) plus its entries not ranked
      * yet. Event-wide, read once: {@code paid} as GET /sales (places in PAID orders), {@code quota} and
-     * {@code remaining} over the price categories, the active holds.
+     * {@code remaining} over the price categories fans can buy (no PASS), the active holds.
      */
     private List<View> views(UUID org, int eventId, List<WaitingRoom> phases) {
         if (phases.isEmpty()) {
@@ -205,6 +205,9 @@ public class WaitingRoomService {
         long quota = 0;
         long sold = 0;
         for (Event.PriceCategory p : events.prices(org, eventId)) {
+            if (!p.audience().sellable()) {
+                continue; // PASS places: not for the room's fans (04 §Passes)
+            }
             quota += p.quota();
             sold += p.sold();
         }

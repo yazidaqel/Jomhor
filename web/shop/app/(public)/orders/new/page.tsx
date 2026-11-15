@@ -14,6 +14,7 @@ import { formatDateTime } from '@/lib/time'
 import { Crest } from '../../../brand'
 import { Steps } from '../../steps'
 import { CheckoutForm } from './CheckoutForm'
+import { ProductCheckout } from './product-checkout'
 import { TurnBar } from './TurnBar'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,11 +25,13 @@ export async function generateMetadata(): Promise<Metadata> {
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
 
 /**
- * W3 · `/orders/new?event=&price=&qty=` (W2 Continuer). Malformed query or unknown event/price → 404; not signed in
+ * W3 · `/orders/new?event=&price=&qty=` (W2 Continuer), or `?product=` (W9 Acheter, Lot 5 step 3: product-checkout.tsx). Malformed query or unknown event/price → 404; not signed in
  * (or session revoked) → login, back here after; sale not open or price sold out → the event page, which says why.
  */
 export default async function CheckoutPage({ searchParams }: Props) {
-  const q = parseCheckout(await searchParams)
+  const sp = await searchParams
+  if (sp.product !== undefined) return ProductCheckout({ id: sp.product })
+  const q = parseCheckout(sp)
   if (!q) notFound()
   const token = await currentSession()
   if (!token) redirect(loginUrl(checkoutPath(q)))

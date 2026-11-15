@@ -155,7 +155,7 @@ class DevSeeder implements ApplicationRunner {
                 .put("opponent", d.opponent()).put("competition", "Championnat").put("matchday", d.matchday());
         Instant onSale = now.plus(UPCOMING.kickoff()); // sold first, moved after
         int id = events.create(club.org(), new EventInput(club.venue(), Event.Type.FOOTBALL_MATCH, d.title(), onSale,
-                onSale.minus(d.doors()), null, null, null, metadata)).id();
+                onSale.minus(d.doors()), null, null, null, metadata, null)).id();
         Map<String, UUID> priceOf = new HashMap<>();
         for (var zone : venues.get(club.org(), club.venue()).zones()) {
             long[] p = PRICES.get(zone.code());
@@ -201,6 +201,6 @@ class DevSeeder implements ApplicationRunner {
     private void move(Club club, int id, Demo d, Instant now) {
         Instant kickoff = now.plus(d.kickoff());
         events.update(club.org(), id, new EventInput(null, null, null, kickoff, kickoff.minus(d.doors()), null, null, null,
-                null));
+                null, null));
     }
 }

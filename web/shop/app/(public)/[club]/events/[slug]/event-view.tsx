@@ -66,13 +66,25 @@ export function EventView({ e, now, d, signedIn = false }: { e: ShopEventDetail;
         <div aria-hidden="true" className="absolute -top-40 -end-40 -z-10 size-[420px] glow opacity-[0.2] md:-top-64 md:size-[680px]" />
         <Watermark club={e.organizer} />
         <div className="mx-auto max-w-[1180px] px-6 pt-6 pb-12 md:pb-16">
-          <Link
-            href="/"
-            className="-ms-2 inline-flex min-h-touch-min items-center gap-2 rounded-chip px-2 text-sm text-text-secondary transition-colors hover:text-text"
-          >
-            <BackIcon className="size-4" />
-            {d.event.back}
-          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Link
+              href="/"
+              className="-ms-2 inline-flex min-h-touch-min items-center gap-2 rounded-chip px-2 text-sm text-text-secondary transition-colors hover:text-text"
+            >
+              <BackIcon className="size-4" />
+              {d.event.back}
+            </Link>
+            {/* Lot 5 step 3: the club's season passes (W9). */}
+            {e.organizer.slug && (
+              <Link
+                href={`/${e.organizer.slug}/passes`}
+                className="inline-flex min-h-touch-min items-center gap-2 rounded-chip border border-border px-3 text-sm font-semibold text-text-secondary transition-colors hover:border-accent hover:text-accent"
+              >
+                <TicketIcon className="size-4" />
+                {d.passes.nav}
+              </Link>
+            )}
+          </div>
           <div className="mt-4 flex flex-wrap items-end justify-between gap-8 md:mt-8">
             <div className="flex min-w-0 flex-[1_1_560px] flex-col gap-4">
               <div className={`flex flex-col gap-2 ${rise}`}>

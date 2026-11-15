@@ -39,6 +39,7 @@ void main() {
 
     expect(() => api.get('/fan/events/e1'), throwsArgumentError);
     expect(() => api.get('/fan/organizers'), throwsArgumentError);
+    expect(() => api.get('/fan/products/p1'), throwsArgumentError); // Lot 5 step 3: public, no token.
   });
 
   test('a list query value repeats the parameter (`Mes clubs`: organizer=a&organizer=b)', () async {

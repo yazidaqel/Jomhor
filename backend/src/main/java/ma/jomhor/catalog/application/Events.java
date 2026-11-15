@@ -2,6 +2,7 @@ package ma.jomhor.catalog.application;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,8 +21,12 @@ public interface Events {
     /** Next events.id, taken before the insert so K_e can be bound to it. */
     int nextId();
 
-    /** Inserts DRAFT {@code eventId} (from nextId) with its encrypted K_e. Empty if the venue is not the organizer's. */
-    Optional<Event> insert(UUID org, int eventId, UUID venueId, Event.Type type, String title, Instant startsAt,
+    /**
+     * Inserts DRAFT {@code eventId} (from nextId) with its encrypted K_e. Empty if the venue is not the organizer's.
+     * {@code seriesId} (may be null) must be the organizer's: the caller checked it.
+     */
+    Optional<Event> insert(UUID org, int eventId, UUID venueId, UUID seriesId, Event.Type type, String title,
+                           Instant startsAt,
                            Instant doorsOpenAt, Instant saleStartsAt, Event.ReentryPolicy reentryPolicy, int perAccountLimit,
                            String metadata, byte[] eventKeyEnc);
 
@@ -36,7 +41,7 @@ public interface Events {
     /** Like find, and locks the event row until the end of the transaction. */
     Optional<Event> lock(UUID org, int eventId);
 
-    /** Writes the mutable columns of {@code event} (title, times, sale opening, status, cutoff, rules, metadata). */
+    /** Writes the mutable columns of {@code event} (series, title, times, sale opening, status, cutoff, rules, metadata). */
     Event update(UUID org, Event event);
 
     List<PriceCategory> prices(UUID org, int eventId);
@@ -91,4 +96,28 @@ public interface Events {
 
     /** False if sold > 0. A category referenced by order items fails on its FK. */
     boolean deletePriceIfUnsold(UUID org, int eventId, UUID priceId);
+
+    // ---------- series ----------
+
+    /** By starts_on, then name. */
+    List<Event.Series> series(UUID org);
+
+    Optional<Event.Series> findSeries(UUID org, UUID seriesId);
+
+    /** Like findSeries, and locks the row until the end of the transaction. */
+    Optional<Event.Series> lockSeries(UUID org, UUID seriesId);
+
+    Event.Series insertSeries(UUID org, String name, LocalDate startsOn, LocalDate endsOn);
+
+    /** Writes every field (the caller merged the PATCH under {@link #lockSeries}). */
+    Event.Series updateSeries(UUID org, Event.Series series);
+
+    /** The organizer's zone with its venue. */
+    Optional<Event.ZoneAt> zoneAt(UUID org, int zoneId);
+
+    /**
+     * The series' events at the venue, ON_SALE or GATES_OPEN, starts_at >= now() (database clock), by starts_at then
+     * id.
+     */
+    List<Event.SeriesEvent> seriesEvents(UUID org, UUID seriesId, UUID venueId);
 }

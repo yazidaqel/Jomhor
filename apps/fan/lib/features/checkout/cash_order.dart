@@ -9,6 +9,8 @@ import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
+import 'package:jomhor_fan/features/passes/pass.dart' show homeZone;
+import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
@@ -34,8 +36,14 @@ class CashOrder extends ConsumerWidget {
       null => null,
     };
     final event = detail?.event;
+    // Lot 5 step 3: a product order has no event; its product's name and zone stand in.
+    final product = switch (order.product) {
+      final p? => ref.watch(productProvider(p.id)).value,
+      null => null,
+    };
+    final zone = event?.timezone ?? (order.product == null ? null : product?.timezone ?? homeZone);
     final left = view.left;
-    final hosted = [...?detail?.paymentMethods.where((m) => m.hosted)];
+    final hosted = [...?(detail?.paymentMethods ?? product?.paymentMethods)?.where((m) => m.hosted)];
     final where = [...?cash?.points.map((p) => p.name), ...?cash?.networks].join(l.listSeparator);
     final rePay = ref.watch(rePayProvider(order.id));
     // The event read (zone, title, methods) may land after the order: its parts fade into fixed, keyed slots, so
@@ -53,7 +61,7 @@ class CashOrder extends ConsumerWidget {
           key: const ValueKey('cash.slot.deadline'),
           child: slot(
             'deadline',
-            until == null || event == null
+            until == null || zone == null
                 ? null
                 : Padding(
                     padding: const EdgeInsets.only(bottom: JomhorSpace.l),
@@ -61,7 +69,7 @@ class CashOrder extends ConsumerWidget {
                       key: const Key('cash.deadline'),
                       accent: true,
                       icon: Icons.schedule_rounded,
-                      text: l.cashHoldBanner(venueWhen(until, event.timezone, l.localeName)),
+                      text: l.cashHoldBanner(venueWhen(until, zone, l.localeName)),
                     ),
                   ),
           ),
@@ -71,19 +79,22 @@ class CashOrder extends ConsumerWidget {
           index: 1,
           child: Text(l.cashTitle, style: JomhorType.h1.copyWith(fontSize: 34)),
         ),
-        slot(
-          'event',
-          event == null
-              ? null
-              : Padding(
-                  key: const ValueKey('cash.event'),
-                  padding: const EdgeInsets.only(top: JomhorSpace.xs),
-                  child: Text(
-                    l.dotPair(event.title, venueWhen(event.startsAt, event.timezone, l.localeName)),
-                    style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
-                  ),
-                ),
-        ),
+        slot('event', switch ((order.product, event)) {
+          (final p?, _) => Padding(
+            key: const ValueKey('cash.product'),
+            padding: const EdgeInsets.only(top: JomhorSpace.xs),
+            child: Text(p.name, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted)),
+          ),
+          (_, final event?) => Padding(
+            key: const ValueKey('cash.event'),
+            padding: const EdgeInsets.only(top: JomhorSpace.xs),
+            child: Text(
+              l.dotPair(event.title, venueWhen(event.startsAt, event.timezone, l.localeName)),
+              style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
+            ),
+          ),
+          _ => null,
+        }),
         const SizedBox(height: JomhorSpace.l),
         if (cash != null)
           Entrance(

@@ -40,8 +40,11 @@ export type EventDetail = {
   created_at: string
 }
 
-/** Lot 5 step 2: MEMBERS = each place held by a live member who joined before the sale opened (04 POST /fan/orders). */
-export const PRICE_AUDIENCES = ['ALL', 'MEMBERS'] as const
+/**
+ * Lot 5 step 2: MEMBERS = each place held by a live member who joined before the sale opened (04 POST /fan/orders).
+ * Lot 5 step 3: PASS = places of the series' season-pass holders, issued by the pass job, never sold; price 0.
+ */
+export const PRICE_AUDIENCES = ['ALL', 'MEMBERS', 'PASS'] as const
 export type PriceAudience = (typeof PRICE_AUDIENCES)[number]
 /** `zone`: read-only (Lot 3), so a till can tell two zones' "Plein tarif" apart without the venue (CASHIER can't read it). */
 export type Price = {
@@ -54,6 +57,12 @@ export type Price = {
   sold: number
   audience: PriceAudience
 }
+
+/** 04 §Organizer /org/series (Lot 5 step 3): a season, a tour, a festival edition. Dates are `YYYY-MM-DD`. */
+export type Series = { id: string; name: string; starts_on: string; ends_on: string }
+export const useSeries = () => useOrgQuery<Series[]>(['series'], '/org/series')
+/** Series write: refetches this organizer's series list only. */
+export const useSeriesMutation = () => useOrgMutation(['series'], (body: Omit<Series, 'id'>, send) => send<Series>({ method: 'POST', path: '/org/series', body }))
 
 export const useEvents = () => useOrgQuery<EventSummary[]>(['events'], '/org/events')
 export const useEvent = (id: string) => useOrgQuery<EventDetail>(['events', id], path('org', 'events', id))
@@ -99,6 +108,7 @@ export function eventSchema(t: TFunction, zone: string | undefined, doorsRequire
         .string()
         .refine((s) => (s === '' ? !saleRequired : WALL.test(s)), t(saleRequired ? 'events.form.saleRequired' : 'events.form.dateInvalid')),
       venue_id: z.string().min(1, t('events.form.venueRequired')),
+      series_id: z.string(), // '' = none; once set it can't be cleared (PATCH null = unchanged)
       per_account_limit: integerInput(t('events.form.limitInvalid'), 1, 20),
       // Raw text for every type's fields; only the current type's are checked (below) and sent (toBody). The others
       // may hold a hidden value from a type picked before, or a stored key that is free for this type.
@@ -144,6 +154,7 @@ export const emptyForm = (): EventForm => ({
   doors_open_at: '',
   sale_starts_at: '',
   venue_id: '',
+  series_id: '',
   per_account_limit: '4',
   metadata: { opponent: '', competition: '', headliner: '', matchday: '' },
 })
@@ -155,6 +166,7 @@ export const toForm = (e: EventDetail): EventForm => ({
   doors_open_at: e.doors_open_at ? utcToWall(e.doors_open_at, e.timezone) : '',
   sale_starts_at: e.sale_starts_at ? utcToWall(e.sale_starts_at, e.timezone) : '',
   venue_id: e.venue_id,
+  series_id: e.series_id ?? '',
   per_account_limit: String(e.per_account_limit),
   metadata: { opponent: str(e.metadata.opponent), competition: str(e.metadata.competition), headliner: str(e.metadata.headliner), matchday: str(e.metadata.matchday) },
 })
@@ -177,6 +189,7 @@ function toBody(v: EventValues, existing: Record<string, unknown>, zone: string)
     starts_at: wallToUtc(v.starts_at, zone),
     ...(v.doors_open_at && { doors_open_at: wallToUtc(v.doors_open_at, zone) }),
     ...(v.sale_starts_at && { sale_starts_at: wallToUtc(v.sale_starts_at, zone) }),
+    ...(v.series_id && { series_id: v.series_id }),
     per_account_limit: v.per_account_limit,
     metadata,
   }

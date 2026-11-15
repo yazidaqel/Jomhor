@@ -11,6 +11,8 @@ import { RoomPage } from '@/features/room/RoomPage'
 import { ReconciliationPage } from '@/features/reconciliation/ReconciliationPage'
 import { OverviewPage } from '@/features/overview/OverviewPage'
 import { PosPage } from '@/features/pos/PosPage'
+import { ProductPage } from '@/features/products/ProductPage'
+import { ProductsPage } from '@/features/products/ProductsPage'
 import { PrintPage } from '@/features/pos/PrintPage'
 import { SalesIndexPage, SalesPage } from '@/features/sales/SalesPage'
 import { TicketsPage } from '@/features/tickets/TicketsPage'
@@ -35,6 +37,8 @@ export const routes: RouteObject[] = [
       { path: 'events/:id/room', element: <RoomPage /> },
       { path: 'sales', element: <SalesIndexPage /> },
       { path: 'live', element: <LiveIndexPage /> },
+      { path: 'products', element: <ProductsPage /> },
+      { path: 'products/:id', element: <ProductPage /> },
       { path: 'devices', element: <DevicesPage /> },
       { path: 'pos', element: <PosPage /> },
       { path: 'finance/cash', element: <CashPage /> },

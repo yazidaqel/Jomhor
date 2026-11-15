@@ -10,6 +10,8 @@ import 'package:jomhor_fan/features/checkout/group_view.dart';
 import 'package:jomhor_fan/features/checkout/member_pay.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
+import 'package:jomhor_fan/features/checkout/product_pay.dart';
+import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
@@ -61,6 +63,7 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
             OrderVariant.cash => CashOrder(view: view),
             OrderVariant.group => GroupView(view: view),
             OrderVariant.member => MemberPay(view: view),
+            OrderVariant.product => ProductPay(view: view),
             OrderVariant.memberExpired => const Padding(
               padding: EdgeInsets.all(JomhorSpace.xl),
               child: MemberExpired(),
@@ -97,6 +100,10 @@ enum OrderVariant {
   /// A friend's place released unpaid ([MemberExpired]).
   memberExpired,
 
+  /// Screen 4 product variant (Lot 5 step 3): a pass or membership order, RESERVED with no attempt or a FAILED one
+  /// ([ProductPay]).
+  product,
+
   /// Everything else: waiting for the bank, paid, expired, pay again ([_OrderState]).
   plain,
 }
@@ -106,6 +113,12 @@ enum OrderVariant {
 OrderVariant orderVariant(OrderView view, RePayState rePay) {
   final order = view.order;
   if (order.awaitingCash && !view.holdOver) return OrderVariant.cash;
+  if (order.product != null && order.status == 'RESERVED') {
+    final again = view.freshFor(rePay)
+        ? payAgain(order, waitedLong: rePay.waitedLong, holdOver: view.holdOver)
+        : PayAgain.no;
+    return again == PayAgain.notStarted || again == PayAgain.failed ? OrderVariant.product : OrderVariant.plain;
+  }
   final group = order.group;
   if (group == null) return OrderVariant.plain;
   if (group.initiator) return order.paid ? OrderVariant.group : OrderVariant.plain;
@@ -126,7 +139,7 @@ class _OrderState extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     final order = view.order;
-    if (order.paid) return const _Paid();
+    if (order.paid) return _Paid(order: order);
     // A cash code past its deadline (the expiry job may not have swept it yet) or its order expired.
     if (order.awaitingCash || (order.settled && order.paymentMethod == PayMethod.cashAgency)) {
       return CashExpired(eventId: order.eventId);
@@ -135,7 +148,8 @@ class _OrderState extends ConsumerWidget {
     final again = view.freshFor(rePay)
         ? payAgain(order, waitedLong: rePay.waitedLong, holdOver: view.holdOver)
         : PayAgain.no; // Until a read sent after the newest attempt answers.
-    if (order.settled || again == PayAgain.holdOver) return _Expired(eventId: order.eventId);
+    if (order.settled || again == PayAgain.holdOver)
+      return _Expired(eventId: order.eventId, productId: order.product?.id);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -173,11 +187,12 @@ class _OrderState extends ConsumerWidget {
   }
 }
 
-/// The hold is over (or the order settled unpaid): say so and offer a new order for the same event.
+/// The hold is over (or the order settled unpaid): say so and offer a new order for the same event or product.
 class _Expired extends StatelessWidget {
-  const new({required this.eventId});
+  const new({required this.eventId, this.productId});
 
   final int? eventId;
+  final String? productId;
 
   @override
   Widget build(BuildContext context) {
@@ -192,15 +207,26 @@ class _Expired extends StatelessWidget {
           FilledButton(onPressed: () => context.go('/events/$id/zones'), child: Text(l.expiredCta)),
           const SizedBox(height: JomhorSpace.s),
         ],
+        if (productId case final id?) ...[
+          FilledButton(
+            key: const Key('order.retryProduct'),
+            onPressed: () => context.go('/products/$id'),
+            child: Text(l.retry),
+          ),
+          const SizedBox(height: JomhorSpace.s),
+        ],
         OutlinedButton(onPressed: () => context.go('/'), child: Text(l.backHome)),
       ],
     );
   }
 }
 
-/// "C'est validé !" slides up into place (DESIGN.md principle 6: motion that means something).
+/// "C'est validé !" slides up into place (DESIGN.md principle 6: motion that means something). A pass purchase goes
+/// on to screen 13 owned, a membership to the club card (Lot 5 step 3).
 class _Paid extends ConsumerWidget {
-  const new();
+  const new({required this.order});
+
+  final FanOrder order;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -239,17 +265,36 @@ class _Paid extends ConsumerWidget {
               const SizedBox(height: JomhorSpace.m),
               Text(l.orderPaidTitle, style: JomhorType.h1, textAlign: TextAlign.center),
               const SizedBox(height: JomhorSpace.s),
-              Text(l.orderPaidBody, textAlign: TextAlign.center),
+              Text(switch (order.product?.kind) {
+                null => l.orderPaidBody,
+                'PASS' => l.orderPaidPassBody,
+                _ => l.orderPaidMembershipBody,
+              }, textAlign: TextAlign.center),
               const SizedBox(height: JomhorSpace.xl),
-              FilledButton(
-                key: const Key('order.seeTickets'),
-                onPressed: () {
-                  // The Billets list was read before this payment (a cash code may be paid hours later).
-                  unawaited(ref.read(ticketsProvider.notifier).refresh());
-                  context.go('/tickets');
-                },
-                child: Text(l.seeTickets),
-              ),
+              switch ((order.product, order.passId)) {
+                (_?, final passId?) => FilledButton(
+                  key: const Key('order.seePass'),
+                  onPressed: () {
+                    ref.invalidate(passesProvider); // ACTIVE now.
+                    context.go('/passes/$passId');
+                  },
+                  child: Text(l.seePass),
+                ),
+                (_?, null) => FilledButton(
+                  key: const Key('order.seeClub'),
+                  onPressed: () => context.go('/club'),
+                  child: Text(l.seeMemberCard),
+                ),
+                _ => FilledButton(
+                  key: const Key('order.seeTickets'),
+                  onPressed: () {
+                    // The Billets list was read before this payment (a cash code may be paid hours later).
+                    unawaited(ref.read(ticketsProvider.notifier).refresh());
+                    context.go('/tickets');
+                  },
+                  child: Text(l.seeTickets),
+                ),
+              },
             ],
           ),
         ),

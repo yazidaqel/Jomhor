@@ -12,8 +12,8 @@ import type { Venue, VenueDetail } from '@/features/venues/api'
 import { createQueryClient } from '@/lib/queryClient'
 import { session } from '@/lib/session'
 import { formatDh } from '@/lib/money'
-import type { EventDetail, EventSummary, Price } from './api'
-import { offsetLabel, utcToWall, wallToUtc } from '@/lib/time'
+import type { EventDetail, EventSummary, Price, Series } from './api'
+import { formatDay, offsetLabel, utcToWall, wallToUtc } from '@/lib/time'
 
 beforeAll(() => {
   // Radix needs these; jsdom does not implement them.
@@ -142,6 +142,8 @@ const detail = (over: Partial<EventDetail> = {}): EventDetail => ({
   ...over,
 })
 
+const SERIES: Series[] = [{ id: 's-1', name: 'Saison 2026-27', starts_on: '2026-08-15', ends_on: '2027-06-30' }]
+
 type Call = { method: string; path: string; org: string | null; body: unknown }
 type Handler = (call: Call) => Response | undefined
 
@@ -163,6 +165,7 @@ function stubApi(role: Role = 'ADMIN', handler: Handler = () => undefined, event
       const key = `${call.method} ${call.path}`
       if (key === 'GET /org/me') return Response.json(me(role))
       if (key === 'GET /org/venues') return Response.json(VENUES)
+      if (key === 'GET /org/series') return Response.json(SERIES)
       if (key === 'GET /org/events') return Response.json(LIST)
       if (key === 'GET /org/events/1') return Response.json(event)
       if (key === 'PATCH /org/events/1') return Response.json((event = { ...event, ...(call.body as Partial<EventDetail>) }))
@@ -245,7 +248,7 @@ it('create: football metadata goes inside metadata, empty keys left out, T0 sent
   expect(screen.getByRole('tab', { name: `${fr.events.tabs.gates} (${fr.events.tabs.afterSave})` })).toHaveProperty('disabled', true)
   expect(screen.getByRole('tab', { name: fr.events.tabs.rules })).toHaveProperty('disabled', false)
   expect(screen.getByText(fr.events.form.zoneUnknown, { selector: '#event-starts-at-hint' })).toBeTruthy()
-  expect(screen.queryByLabelText(/Série/)).toBeNull() // Q11
+  expect(screen.getByRole('combobox', { name: fr.events.series.label }).textContent).toBe(fr.events.series.placeholder) // Lot 5 step 3 (Q11 lifted)
 
   await user.type(field(fr.events.form.title), 'Atlas FC vs Rapid Oued')
   setDateTime(fr.events.form.startsAt, RAMADAN)
@@ -1047,4 +1050,120 @@ it('?tab=prices (Aperçu shortcut) opens a saved event on Tarifs & quotas; a new
   renderApp('/events/new?tab=prices')
   await screen.findByRole('heading', { name: fr.events.new })
   expect(screen.getByRole('tab', { name: fr.events.tabs.general }).getAttribute('aria-selected')).toBe('true')
+})
+
+// ---- Lot 5 step 3: Série, PASS tariffs ----
+
+const seriesOption = (s: Series) => i18n.t('events.series.option', { name: s.name, from: formatDay(s.starts_on, 'fr'), to: formatDay(s.ends_on, 'fr') })
+
+it('série: "Nouvelle série" → POST /org/series (ends before start refused first), picked, then the save PATCHes series_id only', async () => {
+  const user = userEvent.setup()
+  let series = [...SERIES]
+  const calls = stubApi('ADMIN', (c) => {
+    if (c.method === 'GET' && c.path === '/org/series') return Response.json(series)
+    if (c.method === 'POST' && c.path === '/org/series') {
+      const s = { id: 's-2', ...(c.body as Omit<Series, 'id'>) }
+      series = [...series, s]
+      return Response.json(s, { status: 201 })
+    }
+    return undefined
+  })
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  await user.click(screen.getByRole('button', { name: fr.events.series.new }))
+  const dialog = await screen.findByRole('dialog', { name: fr.events.series.new })
+  await user.type(within(dialog).getByLabelText(fr.events.series.name), 'Saison 2027-28')
+  fireEvent.change(within(dialog).getByLabelText(fr.events.series.startsOn), { target: { value: '2027-08-15' } })
+  fireEvent.change(within(dialog).getByLabelText(fr.events.series.endsOn), { target: { value: '2027-08-14' } })
+  await user.click(within(dialog).getByRole('button', { name: fr.common.create }))
+  expect(await within(dialog).findByText(fr.events.series.endsBeforeStart)).toBeTruthy()
+  expect(writes(calls)).toEqual([])
+
+  fireEvent.change(within(dialog).getByLabelText(fr.events.series.endsOn), { target: { value: '2028-06-30' } })
+  await user.click(within(dialog).getByRole('button', { name: fr.common.create }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  const select = screen.getByRole('combobox', { name: fr.events.series.label })
+  expect(select.textContent).toBe(seriesOption({ id: 's-2', name: 'Saison 2027-28', starts_on: '2027-08-15', ends_on: '2028-06-30' }))
+  expect(writes(calls)).toHaveLength(1) // the dialog's submit never reaches the event form
+
+  await user.click(saveDraft())
+  await waitFor(() => expect(writes(calls)).toHaveLength(2))
+  expect(writes(calls)).toEqual([
+    { method: 'POST', path: '/org/series', org: 'org-a', body: { name: 'Saison 2027-28', starts_on: '2027-08-15', ends_on: '2028-06-30' } },
+    { method: 'PATCH', path: '/org/events/1', org: 'org-a', body: { series_id: 's-2' } },
+  ])
+})
+
+it('série: PASS_TICKETS → the series is put back, the select disabled, its reason in a tooltip', async () => {
+  const user = userEvent.setup()
+  const other: Series = { id: 's-2', name: 'Coupe du Trône', starts_on: '2026-09-01', ends_on: '2027-05-31' }
+  const calls = stubApi(
+    'ADMIN',
+    (c) => {
+      if (c.method === 'GET' && c.path === '/org/series') return Response.json([...SERIES, other])
+      if (c.method === 'PATCH') return Response.json({ code: 'EVENT_NOT_EDITABLE', message: 'x', details: { reason: 'PASS_TICKETS' } }, { status: 409 })
+      return undefined
+    },
+    detail({ series_id: 's-1' }),
+  )
+  renderApp('/events/1')
+  await screen.findByRole('heading', { name: 'Atlas FC vs Rapid Oued' })
+  await waitFor(() => expect(screen.getByRole('combobox', { name: fr.events.series.label }).textContent).toBe(seriesOption(SERIES[0]!)))
+  await pick(user, fr.events.series.label, seriesOption(other))
+  await user.click(saveDraft())
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)[0]!.body).toEqual({ series_id: 's-2' })
+
+  const select = await waitFor(() => {
+    const s = screen.getByRole('combobox', { name: fr.events.series.label })
+    expect(s).toHaveProperty('disabled', true)
+    return s
+  })
+  expect(select.textContent).toBe(seriesOption(SERIES[0]!))
+  expect(screen.queryByRole('button', { name: fr.events.series.new })).toBeNull()
+  await user.hover(select.parentElement!)
+  expect((await screen.findByRole('tooltip')).textContent).toBe(fr.events.series.locked)
+})
+
+it('prices: "Accès · Abonnés" fixes the price at 0 with its helper and sends audience PASS, price_mad 0', async () => {
+  const user = userEvent.setup()
+  const calls = stubB2()
+  renderApp('/events/1')
+  const panel = await openTab(user, fr.events.tabs.prices)
+  await user.click(await within(panel).findByRole('button', { name: fr.events.prices.add }))
+  await pick(user, fr.events.prices.zone, 'Tribune Nord')
+  await user.type(within(panel).getByLabelText(fr.events.prices.name), 'Abonnés saison')
+  await user.type(within(panel).getByLabelText(fr.events.prices.price), '80')
+  await pick(user, fr.events.prices.audience, fr.events.prices.audiences.PASS)
+  const price = within(panel).getByLabelText(fr.events.prices.price) as HTMLInputElement
+  expect(price.value).toBe('0')
+  expect(price.readOnly).toBe(true)
+  expect(within(panel).getByText(fr.events.prices.passHint)).toBeTruthy()
+  await user.type(within(panel).getByLabelText(fr.events.prices.quota), '500')
+  await user.click(within(panel).getByRole('button', { name: fr.common.create }))
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)[0]).toEqual({
+    method: 'POST',
+    path: '/org/events/1/prices',
+    org: 'org-a',
+    body: { zone_id: 2, name: 'Abonnés saison', price_mad: 0, quota: 500, audience: 'PASS' },
+  })
+  // The row's chip says "Abonnés", its helper read out with it.
+  const chip = `${fr.events.prices.audiences.PASS}${i18n.t('events.prices.audienceHintSr', { hint: fr.events.prices.passHint })}`
+  const row = (await within(panel).findByText('Abonnés saison', { selector: 'td' })).closest('tr')!
+  expect(cellTexts(row)[2]).toBe(chip)
+})
+
+it('prices: PASS_PRICE lands on the price with its copy', async () => {
+  const user = userEvent.setup()
+  stubB2('ADMIN', (c) =>
+    c.method === 'PATCH' ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { reason: 'PASS_PRICE', fields: { price_mad: 'x' } } }, { status: 422 }) : undefined,
+  )
+  renderApp('/events/1')
+  const panel = await openTab(user, fr.events.tabs.prices)
+  await user.click(await within(panel).findByRole('button', { name: i18n.t('events.prices.editLabel', { name: 'Plein tarif' }) }))
+  await pick(user, fr.events.prices.audience, fr.events.prices.audiences.PASS)
+  await user.click(within(panel).getByRole('button', { name: fr.common.save }))
+  expect(await within(panel).findByText(fr.events.prices.passPrice)).toBeTruthy()
+  expect(within(panel).getByLabelText(fr.events.prices.price).getAttribute('aria-invalid')).toBe('true')
 })

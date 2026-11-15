@@ -18,6 +18,7 @@ import { ApiError, path } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { integerInput, showFormError } from '@/lib/forms'
 import { dhInput, formatDh, parseDh } from '@/lib/money'
+import { cn } from '@/lib/utils'
 import { PRICE_AUDIENCES, useEventMutation, usePrices, type EventDetail, type Price, type PriceAudience } from './api'
 
 /**
@@ -149,14 +150,17 @@ export function PricesTab({ event, editable, onEditingChange }: { event: EventDe
 const usage = (prices: Price[]) => prices.reduce((m, p) => m.set(p.zone_id, (m.get(p.zone_id) ?? 0) + p.quota), new Map<number, number>())
 const zoneName = (zones: Zone[], id: number) => zones.find((z) => z.id === id)?.name ?? String(id)
 
-/** "Membres" stands out as a chip (DESIGN B2); "Tous", the default, stays quiet. */
+/** The helper under "Accès" (DESIGN B2, Lot 1 and Lot 5 step 3). */
+const HINT = { ALL: 'events.prices.audienceHint', MEMBERS: 'events.prices.audienceHint', PASS: 'events.prices.passHint' } as const
+
+/** "Membres" and "Abonnés" stand out as chips (DESIGN B2); "Tous", the default, stays quiet. */
 function AudienceTag({ audience }: { audience: PriceAudience }) {
   const { t } = useTranslation()
   if (audience === 'ALL') return <span className="text-muted-foreground">{t('events.prices.audiences.ALL')}</span>
   return (
-    <Badge variant="secondary" className="rounded-full">
-      {t('events.prices.audiences.MEMBERS')}
-      <span className="sr-only">{t('events.prices.audienceHintSr', { hint: t('events.prices.audienceHint') })}</span>
+    <Badge variant="secondary" className={audience === 'PASS' ? 'rounded-full border-primary/20 bg-primary/10 text-foreground' : 'rounded-full'}>
+      {t(`events.prices.audiences.${audience}`)}
+      <span className="sr-only">{t('events.prices.audienceHintSr', { hint: t(HINT[audience]) })}</span>
     </Badge>
   )
 }
@@ -213,6 +217,9 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
     if (e instanceof ApiError && e.code === 'QUOTA_BELOW_SOLD')
       return form.setError('quota', { message: t('events.prices.quotaBelowSold', { sold: price?.sold ?? 0 }) }, { shouldFocus: true })
     showFormError(e, form, t)
+    // Lot 5 step 3: a PASS category is always free (422 on price_mad, reason PASS_PRICE).
+    if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'PASS_PRICE')
+      form.setError('price_mad', { message: t('events.prices.passPrice') })
     // A name already used for this zone: 422 on `name` with `details.reason` NAME_TAKEN (04-api). Any other 422 on
     // `name` keeps the generic field copy.
     if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'NAME_TAKEN')
@@ -271,7 +278,16 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
             name="audience"
             render={({ field }) => (
               <div className="flex w-36 flex-col gap-1">
-                <Select name={field.name} value={field.value} onValueChange={field.onChange} disabled={save.isPending}>
+                <Select
+                  name={field.name}
+                  value={field.value}
+                  onValueChange={(a) => {
+                    field.onChange(a)
+                    // Pass places are never sold: their price is 0, fixed (04 PASS_PRICE).
+                    if (a === 'PASS') form.setValue('price_mad', '0', { shouldValidate: form.formState.isSubmitted })
+                  }}
+                  disabled={save.isPending}
+                >
                   <SelectTrigger ref={field.ref} onBlur={field.onBlur} aria-label={t('events.prices.audience')} aria-describedby={`${formId}-audience-hint`}>
                     <SelectValue />
                   </SelectTrigger>
@@ -285,7 +301,7 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
                 </Select>
                 {/* Said whatever the choice, so the select's description never changes under a screen reader. */}
                 <FieldDescription id={`${formId}-audience-hint`} className={audience === 'ALL' ? 'sr-only' : 'text-xs whitespace-normal'}>
-                  {t('events.prices.audienceHint')}
+                  {t(HINT[audience])}
                 </FieldDescription>
               </div>
             )}
@@ -297,6 +313,7 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
             form={formId}
             label={t('events.prices.price')}
             numeric="decimal"
+            readOnly={audience === 'PASS'}
             error={errors.price_mad?.message}
             registration={form.register('price_mad')}
           />
@@ -335,7 +352,15 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
   )
 }
 
-function CellInput(props: { id: string; form: string; label: string; numeric?: 'numeric' | 'decimal'; error?: string; registration: UseFormRegisterReturn }) {
+function CellInput(props: {
+  id: string
+  form: string
+  label: string
+  numeric?: 'numeric' | 'decimal'
+  readOnly?: boolean
+  error?: string
+  registration: UseFormRegisterReturn
+}) {
   return (
     <div className="flex min-w-24 flex-col gap-1">
       <Input
@@ -343,7 +368,8 @@ function CellInput(props: { id: string; form: string; label: string; numeric?: '
         form={props.form}
         aria-label={props.label}
         inputMode={props.numeric}
-        className={props.numeric ? 'text-right' : undefined}
+        readOnly={props.readOnly}
+        className={cn(props.numeric && 'text-right', props.readOnly && 'bg-muted text-muted-foreground')}
         aria-invalid={!!props.error}
         aria-describedby={props.error ? `${props.id}-error` : undefined}
         {...props.registration}
