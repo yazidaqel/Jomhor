@@ -1,0 +1,533 @@
+### Lot 5 step 3a demo, season passes and paid membership (IntelliJ HTTP client): plan lot-5 §11.1 Exit 3a (1)-(8)
+### on one instance; Lot5PassesFlowTest runs the same flow in CI on a fixed clock.
+#
+# Start the backend with the dev profile on port 8080, so @base and the card redirect (PUBLIC_BASE_URL, dev default
+# http://localhost:8080/v1) agree; the dev profile alone serves on 8090 (dev seed: ATLAS FC with a cash point,
+# Admin Dev +212600000001, Caissier Dev +212600000002, Ops Dev +212600000003, Grand Stade with Tribune Est and Nord;
+# the pass tickets job and the order expiry job run every 30 s; the simulated card gateway is on):
+#   docker compose up -d && SERVER_PORT=8080 GATE_MANIFEST_LEAD=2400h SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# GATE_MANIFEST_LEAD: a scanner gets an event's manifest only from starts_at minus this lead (default 3h). The demo
+# matches are in January and February 2027, so 2400h (100 days) lets the scanner load match 1 and admit a pass
+# ticket offline (Exit 3a step 3) today; it changes nothing else.
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phones are made up.
+# Card payments: open the response's redirect_url in a browser and click "Approuver" right away (8 min hold).
+#
+# Each run makes a new series, so passes start afresh. Creating the MEMBERSHIP product (2.2) makes ATLAS FC's
+# membership paid: from then on every "Tarif membres" of the dev club needs paid_until (plan lot-5 Q189).
+# A re-run needs new fan phones (Yazid's cotisation is paid to @validUntil: 7.2 would answer MEMBERSHIP_PAID).
+# At the end, backend/loadtest/check.sql must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@opsPhone = +212600000003
+@cashierPhone = +212600000002
+@yazidPhone = +212611153001
+@karimPhone = +212611153002
+@salmaPhone = +212611153003
+@omarPhone = +212611153004
+@nadiaPhone = +212611153005
+@hamzaPhone = +212611153006
+@code = 123456
+# 30 June 2027, end of day in Casablanca (UTC+1); both products close at noon that day.
+@validUntil = 2027-06-30T22:59:59Z
+@closeAt = 2027-06-30T12:00:00Z
+
+### ---------- (1) B2: the series "Saison 2026-27", three matches, "Abonnés" in Tribune Est ----------
+
+### 1.1 OPS (Ops Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 1.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 1.3 OPS: the Grand Stade zones (keeps Est and Nord)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("estId", response.body.zones.find(z => z.code === "EST").id);
+     client.global.set("nordId", response.body.zones.find(z => z.code === "NORD").id); %}
+
+### 1.4 OPS: the series -> 201
+POST {{base}}/org/series
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"name": "Saison 2026-27", "starts_on": "2026-08-01", "ends_on": "2027-06-30"}
+
+> {% client.global.set("seriesId", response.body.id); %}
+
+### 1.5 OPS: match 1 in the series (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo abonnés 1",
+ "starts_at": "2027-01-10T19:00:00Z", "series_id": "{{seriesId}}", "metadata": {"opponent": "Démo 1"}}
+
+> {% client.global.set("m1", response.body.id); %}
+
+### 1.6 OPS: match 2 in the series (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo abonnés 2",
+ "starts_at": "2027-01-24T19:00:00Z", "series_id": "{{seriesId}}", "metadata": {"opponent": "Démo 2"}}
+
+> {% client.global.set("m2", response.body.id); %}
+
+### 1.7 OPS: match 3 in the series (stays DRAFT until step 6)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo abonnés 3",
+ "starts_at": "2027-02-07T19:00:00Z", "series_id": "{{seriesId}}", "metadata": {"opponent": "Démo 3"}}
+
+> {% client.global.set("m3", response.body.id); %}
+
+### 1.8 OPS: match 1 "Abonnés" in Tribune Est (Accès: Abonnés, 0 DH, quota 2)
+POST {{base}}/org/events/{{m1}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Abonnés", "price_mad": 0, "quota": 2, "audience": "PASS"}
+
+> {% client.global.set("abo1Id", response.body.id); %}
+
+### 1.9 OPS: match 2 "Abonnés" (quota 2)
+POST {{base}}/org/events/{{m2}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Abonnés", "price_mad": 0, "quota": 2, "audience": "PASS"}
+
+### 1.10 OPS: match 3 "Abonnés" (quota 3: room for every pass once it is published)
+POST {{base}}/org/events/{{m3}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Abonnés", "price_mad": 0, "quota": 3, "audience": "PASS"}
+
+### 1.11 OPS: match 1 "Tarif membres" in Nord (Accès: Membres, 30 DH), for step 7
+POST {{base}}/org/events/{{m1}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{nordId}}, "name": "Tarif membres", "price_mad": 3000, "quota": 10, "audience": "MEMBERS"}
+
+> {% client.global.set("membersId", response.body.id); %}
+
+### 1.12 OPS: publish match 1 (DRAFT -> ON_SALE)
+POST {{base}}/org/events/{{m1}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 1.13 OPS: publish match 2
+POST {{base}}/org/events/{{m2}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (2) B14: the pass and the cotisation, both on sale ----------
+
+### 2.1 OPS: "Abonnement Tribune Est" (PASS, 1 500 DH, quota 3) -> 201
+POST {{base}}/org/products
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"kind": "PASS", "name": "Abonnement Tribune Est", "price_mad": 150000, "quota": 3, "series_id": "{{seriesId}}",
+ "zone_id": {{estId}}, "sales_close_at": "{{closeAt}}", "on_sale": true}
+
+> {% client.global.set("passId", response.body.id); %}
+
+### 2.2 OPS: "Carte membre 2026-27" (MEMBERSHIP, 200 DH, valid until 30 June 2027) -> 201 (B14 warns first)
+POST {{base}}/org/products
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"kind": "MEMBERSHIP", "name": "Carte membre 2026-27", "price_mad": 20000, "valid_until": "{{validUntil}}",
+ "sales_close_at": "{{closeAt}}", "on_sale": true}
+
+> {% client.global.set("cardId", response.body.id); %}
+
+### 2.3 W9 / screen 13: the club's passes (public) -> the pass, remaining 3, pass.events = matches 1 and 2
+GET {{base}}/fan/products?organizer={{org}}&kind=PASS
+
+### ---------- (3) Yazid, a free member, buys the pass by card ----------
+
+### 3.1 Yazid: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}"}
+
+### 3.2 Yazid: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("yazidToken", response.body.token); %}
+
+### 3.3 Yazid joins the club for free -> 201 (200 if already a member)
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": false, "marketing_whatsapp": false}
+
+### 3.4 Yazid orders the pass -> 201 RESERVED, total_mad 150000, pass_id
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "APP", "holder_name": "Yazid Aqel"}
+
+> {% client.global.set("yazidOrder", response.body.id); %}
+
+### 3.5 Yazid pays by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{yazidOrder}}/pay
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 3.6 Yazid's passes -> ACTIVE
+GET {{base}}/fan/passes
+Authorization: Bearer {{yazidToken}}
+
+### 3.7 Yazid's tickets, within about 30 s -> matches 1 and 2, each with pass_id (the "Abonnement" chip); keeps the
+### match 2 ticket for step 8: re-run until both tickets show. The scanner app, assigned to match 1, admits the
+### match 1 one offline (its manifest is available now thanks to GATE_MANIFEST_LEAD, header).
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{yazidToken}}
+
+> {% client.global.set("yazidM2Ticket",
+       response.body.tickets.find(t => t.event.id == client.global.get("m2") && t.pass_id)?.id); %}
+
+### 3.8 A second pass of the series -> 409 PASS_HELD {pass_id, status: ACTIVE}
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "APP", "holder_name": "Yazid Aqel"}
+
+### ---------- (4) Salma's order is left unpaid; Karim pays his by a cash code at the till ----------
+
+### 4.1 Salma: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{salmaPhone}}"}
+
+### 4.2 Salma: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{salmaPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("salmaToken", response.body.token); %}
+
+### 4.3 Salma orders the pass and never pays -> 201 RESERVED; it expires 8 min later (step 5.1)
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "APP", "holder_name": "Salma Tazi"}
+
+### 4.4 Karim: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}"}
+
+### 4.5 Karim: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("karimToken", response.body.token); %}
+
+### 4.6 Karim orders the pass on the shop (W9) -> 201 RESERVED
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "WEB", "holder_name": "Karim Alaoui"}
+
+> {% client.global.set("karimOrder", response.body.id); %}
+
+### 4.7 Omar: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}"}
+
+### 4.8 Omar: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{omarPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("omarToken", response.body.token); %}
+
+### 4.9 Omar orders the pass while Salma's order still holds a place (Yazid, Salma, Karim: 3 of 3) -> 409 SOLD_OUT
+### {product_id}
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "APP", "holder_name": "Omar Idrissi"}
+
+### 4.10 Karim takes a cash code -> 200 {pay_code, reserved_until (24 h), amount_mad 150000}
+POST {{base}}/fan/orders/{{karimOrder}}/pay
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"method": "CASH_AGENCY"}
+
+> {% client.global.set("karimCode", response.body.pay_code); %}
+
+### 4.11 Cashier (Caissier Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}"}
+
+### 4.12 Cashier: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("cashierToken", response.body.token); %}
+
+### 4.13 Cashier: open the till -> 201 (200 with the one already open)
+POST {{base}}/org/pos/sessions
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Guichet stade"}
+
+### 4.14 B11: the code -> payable, event null, product {name: "Abonnement Tribune Est"}, places 1
+GET {{base}}/org/pos/codes/{{karimCode}}
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+
+### 4.15 B11: collect 1 500 DH -> 200 PAID, ticket_ids [] (the pass job issues them)
+POST {{base}}/org/pos/codes/{{karimCode}}/collect
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"amount_mad": 150000}
+
+### 4.16 Karim's tickets (W5), within about 30 s -> matches 1 and 2, with pass_id
+GET {{base}}/fan/tickets
+Authorization: Bearer {{karimToken}}
+
+### ---------- (5) expiry and quota ----------
+
+### 5.1 Once 8 min (plus up to 30 s) have passed since 4.3, Salma's order has expired -> remaining 1
+GET {{base}}/fan/products/{{passId}}
+
+### 5.2 Omar orders the pass again -> 201 RESERVED
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "APP", "holder_name": "Omar Idrissi"}
+
+> {% client.global.set("omarOrder", response.body.id); %}
+
+### 5.3 Omar pays by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{omarOrder}}/pay
+Authorization: Bearer {{omarToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 5.4 B14, about 30 s later -> passes {pending 0, active 3}, revenue_mad 450000; matches 1 and 2: issued 2,
+### expected 3, pass_remaining 0 ("2/3 émis", "Ajoute 1 place Abonnés en Tribune Est"); match 3 (DRAFT): issued 0
+GET {{base}}/org/products/{{passId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 5.5 OPS raises match 1's "Abonnés" to 3 -> 200
+PATCH {{base}}/org/events/{{m1}}/prices/{{abo1Id}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"quota": 3}
+
+### 5.6 Omar's tickets, within about 30 s -> match 1, with pass_id
+GET {{base}}/fan/tickets
+Authorization: Bearer {{omarToken}}
+
+### ---------- (6) OPS publishes match 3: every active pass gets its ticket ----------
+
+### 6.1 OPS: publish match 3
+POST {{base}}/org/events/{{m3}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 6.2 B14, about 30 s later -> issued 3, 2, 3
+GET {{base}}/org/products/{{passId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (7) paid membership ----------
+
+### 7.1 Yazid (free member) picks "Tarif membres" -> 409 MEMBERS_ONLY {paid_required: true}
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"event_id": {{m1}}, "channel": "APP", "items": [{"price_category_id": "{{membersId}}", "qty": 1,
+  "holders": [{"name": "Yazid Aqel"}]}]}
+
+### 7.2 Yazid orders the cotisation -> 201 RESERVED, pass_id null
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"product_id": "{{cardId}}", "channel": "APP", "holder_name": "Yazid Aqel"}
+
+> {% client.global.set("cardOrder", response.body.id); %}
+
+### 7.3 Yazid takes a cash code -> 200 {pay_code, amount_mad 20000}
+POST {{base}}/fan/orders/{{cardOrder}}/pay
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"method": "CASH_AGENCY"}
+
+> {% client.global.set("cardCode", response.body.pay_code); %}
+
+### 7.4 B11: the code -> product {name: "Carte membre 2026-27"}, event null
+GET {{base}}/org/pos/codes/{{cardCode}}
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+
+### 7.5 B11: collect 200 DH -> 200 PAID
+POST {{base}}/org/pos/codes/{{cardCode}}/collect
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"amount_mad": 20000}
+
+### 7.6 Yazid's card -> member.paid_until = @validUntil ("À jour jusqu'au 30 juin 2027"), paid_required true
+GET {{base}}/fan/me/membership?organizer={{org}}
+Authorization: Bearer {{yazidToken}}
+
+### 7.7 Yazid picks "Tarif membres" again -> 201 RESERVED, total_mad 3000
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"event_id": {{m1}}, "channel": "APP", "items": [{"price_category_id": "{{membersId}}", "qty": 1,
+  "holders": [{"name": "Yazid Aqel"}]}]}
+
+> {% client.global.set("membersOrder", response.body.id); %}
+
+### 7.8 Yazid pays by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{membersOrder}}/pay
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 7.9 Nadia: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{nadiaPhone}}"}
+
+### 7.10 Nadia: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{nadiaPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("nadiaToken", response.body.token); %}
+
+### 7.11 Nadia joins for free -> 201
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{nadiaToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": false, "marketing_whatsapp": false}
+
+### 7.12 Nadia picks "Tarif membres" -> 409 MEMBERS_ONLY {field, member_joined_before: null, paid_required: true}
+### ("Tarif réservé aux membres à jour de cotisation")
+POST {{base}}/fan/orders
+Authorization: Bearer {{nadiaToken}}
+Content-Type: application/json
+
+{"event_id": {{m1}}, "channel": "APP", "items": [{"price_category_id": "{{membersId}}", "qty": 1,
+  "holders": [{"name": "Nadia Berrada"}]}]}
+
+### 7.13 B14: the cotisation -> figures {paid_members: 1, revenue_mad: 20000}
+GET {{base}}/org/products/{{cardId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- a pass ticket transferred ----------
+
+### 8.1 Yazid transfers his match 2 ticket to Hamza -> 201 {transfer_id, to_label}
+POST {{base}}/fan/tickets/{{yazidM2Ticket}}/transfer
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"to_phone": "{{hamzaPhone}}", "name": "Hamza Chraibi"}
+
+### 8.2 OPS: match 2's tickets held by Hamza (Yazid no longer sees the new one) -> 1 VALID, transferred_from set
+POST {{base}}/org/events/{{m2}}/tickets/search
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{hamzaPhone}}"}
+
+### 8.3 Hamza: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{hamzaPhone}}"}
+
+### 8.4 Hamza: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{hamzaPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("hamzaToken", response.body.token); %}
+
+### 8.5 Hamza's tickets -> match 2, pass_id null (no "Abonnement" chip). Then (8): run check.sql (header): no rows.
+GET {{base}}/fan/tickets
+Authorization: Bearer {{hamzaToken}}
