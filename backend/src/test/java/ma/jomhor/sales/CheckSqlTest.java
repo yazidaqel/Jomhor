@@ -5,6 +5,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import ma.jomhor.payments.PaymentTest;
@@ -14,7 +16,7 @@ import org.springframework.http.MediaType;
 /**
  * backend/loadtest/check.sql (plan lot-5 §5 BE-44): a clean sale has no row, and each of its eight checks fires, alone,
  * on one crafted breach, each on a fresh event (the file is scoped by event_id: the shared test database holds other
- * classes' deliberate breaches). Also the definition of sold: a REFUNDED ticket on a PAID order counts one place less.
+ * classes' deliberate breaches; a product order's rows, by its ref). Also the definition of sold: a REFUNDED ticket on a PAID order counts one place less.
  */
 class CheckSqlTest extends QueueFixture {
 
@@ -75,6 +77,40 @@ class CheckSqlTest extends QueueFixture {
 
         sql("update events set per_account_limit = 2 where id = ?", s.room().event());
         assertThat(found(s)).containsExactly("PER_ACCOUNT_LIMIT");
+    }
+
+    /** check.sql rows about one ref (a product order's rows have no event_id). */
+    private List<Object> foundFor(String ref) throws Exception {
+        String check = Files.readString(Path.of("loadtest/check.sql")).strip();
+        return jdbc.sql("select * from (" + check.substring(0, check.length() - 1) + "\n) c where ref = ?")
+                .param(ref).query().listOfRows().stream().map(b -> b.get("breach")).toList();
+    }
+
+    /**
+     * BE-52: a PAID product order (docs/04-api.md §Products) has no place and no ticket, so it is clean, and the sale
+     * beside it too; a ticket on it is a TICKETS_PLACES row.
+     */
+    @Test
+    void aPaidProductOrderIsCleanAndATicketOnItIsABreach() throws Exception {
+        Sale s = sale();
+        String product = JsonPath.read(body(call(s.room().admin(), post("/org/products"), """
+                {"kind": "MEMBERSHIP", "name": "Cotisation", "price_mad": 15000, "valid_until": "2099-07-01T00:00:00Z",
+                 "sales_close_at": "2099-06-30T22:00:00Z", "on_sale": true}""").andExpect(status().isCreated())), "$.id");
+        String order = JsonPath.read(body(mvc.perform(post("/fan/product-orders")
+                .header("Authorization", "Bearer " + s.fan().token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"product_id\": \"%s\", \"channel\": \"APP\", \"holder_name\": \"Nadia Berrada\"}"
+                        .formatted(product))).andExpect(status().isCreated())), "$.id");
+        callback(PaymentTest.approve(pay(s.fan(), order), 15_000)).andExpect(status().isSeeOther());
+        assertThat(jdbc.sql("select status::text from orders where id = ?::uuid").param(order).query(String.class)
+                .single()).isEqualTo("PAID");
+        assertThat(foundFor(order)).isEmpty();
+        assertThat(found(s)).isEmpty();
+
+        sql("""
+                insert into tickets (organizer_id, order_id, event_id, zone_id, price_category_id, status)
+                select organizer_id, ?::uuid, event_id, zone_id, price_category_id, 'VALID' from tickets
+                where order_id = ?::uuid limit 1""", order, s.paid());
+        assertThat(foundFor(order)).containsExactly("TICKETS_PLACES");
     }
 
     @Test

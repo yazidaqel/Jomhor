@@ -53,11 +53,13 @@ having count(*) > 1
 
 union all
 
--- A PAID order whose tickets (transferred-away ones left out) aren't its places.
+-- A PAID order whose tickets (transferred-away ones left out) aren't its places. A product order (event_id null,
+-- docs/04-api.md §Products) has no place and so no ticket: its item has no price category.
 select 'TICKETS_PLACES', o.event_id, o.id::text,
        format('tickets %s, places %s', coalesce(t.n, 0), coalesce(i.places, 0))
 from orders o
-left join (select order_id, sum(qty) as places from order_items group by order_id) i on i.order_id = o.id
+left join (select order_id, sum(qty) as places from order_items where price_category_id is not null
+           group by order_id) i on i.order_id = o.id
 left join (select tk.order_id, count(*) as n
            from tickets tk
            where not exists (select 1 from ticket_transfers x where x.ticket_id = tk.id)

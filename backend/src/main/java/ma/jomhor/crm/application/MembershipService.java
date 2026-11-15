@@ -13,6 +13,7 @@ import ma.jomhor.tenancy.application.OrganizerService;
 import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tenancy.domain.LoyaltyTier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** GET/PUT/DELETE /fan/me/membership (docs/04-api.md §Fan; plan lot-4 Q57, Q58, Q89-Q91, Q99, Q100). */
@@ -68,6 +69,37 @@ public class MembershipService {
     /** When the fan joined the organizer's club, if a member now (on-sale eligibility); null = not a member. */
     public Instant liveMemberSince(UUID org, UUID userId) {
         return memberships.find(org, userId).filter(Member::live).map(Member::joinedAt).orElse(null);
+    }
+
+    /** The fan's paid_until in the organizer's club (left or not), or null (never paid, or no membership). */
+    public Instant paidUntil(UUID org, UUID userId) {
+        return memberships.find(org, userId).map(Member::paidUntil).orElse(null);
+    }
+
+    /**
+     * 04 §Products Paid membership: a MEMBERSHIP order is being paid (sales' settle, in its transaction). Under the
+     * organizer's membership lock: already paid to {@code validUntil} → false, nothing written (NOT_PAYABLE). Else a
+     * non-member joins (next number, opt-ins off) or a left member rejoins (number kept), audit membership.join, then
+     * paid_until = greatest(paid_until, validUntil), audit membership.paid {product_id, paid_until}.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean paid(UUID org, UUID userId, UUID productId, Instant validUntil) {
+        memberships.lock(org);
+        Optional<Member> existing = memberships.find(org, userId);
+        if (existing.map(Member::paidUntil).filter(p -> !p.isBefore(validUntil)).isPresent()) {
+            return false;
+        }
+        Member m = existing.orElse(null);
+        if (m == null) {
+            m = memberships.insertNext(org, userId, false, false);
+            audit.user(org, userId, "membership.join", m.id().toString(), optIns(false, false));
+        } else if (!m.live() && memberships.rejoin(org, m.id(), false, false)) {
+            audit.user(org, userId, "membership.join", m.id().toString(), optIns(false, false));
+        }
+        Instant until = memberships.pay(org, m.id(), validUntil);
+        audit.user(org, userId, "membership.paid", m.id().toString(),
+                "{\"product_id\": \"%s\", \"paid_until\": \"%s\"}".formatted(productId, until));
+        return true;
     }
 
     /** Events attended at this organizer, as /fan/me/membership counts them (on-sale eligibility). */

@@ -62,7 +62,7 @@ class FakeCashTerminal {
                 <p>Montant : <strong>%s</strong></p>
                 %s
                 <p><a href="fake">Annuler</a></p>
-                """.formatted(TITLE, HtmlUtils.htmlEscape(l.event().title()), Pages.dirhams(l.amountMad()),
+                """.formatted(TITLE, HtmlUtils.htmlEscape(l.title()), Pages.dirhams(l.amountMad()),
                 encaisser(payCode, l.amountMad())));
     }
 

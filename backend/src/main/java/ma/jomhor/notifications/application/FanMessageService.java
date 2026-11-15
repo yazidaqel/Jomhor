@@ -317,17 +317,20 @@ public class FanMessageService {
                 "/events/" + eventId, WAITLIST_OPEN, List.of(a.title(), shopOrigin + "/events/" + eventId));
     }
 
-    /** Stale unless the order has a PENDING code: params [JMH XXXX XX, exact amount, deadline in the venue zone]. */
+    /**
+     * Stale unless the order has a PENDING code: params [JMH XXXX XX, exact amount, deadline in the venue zone; for a
+     * product order, the product's zone (04 §Notifications, Lot 5 step 3)].
+     */
     private Content payCode(UUID org, UUID orderId, String locale) {
         Optional<CashInstructions.Cash> code = cash.pending(org, orderId);
         if (code.isEmpty()) {
             return null;
         }
-        Order o = orders.inOrg(org, orderId).orElseThrow().order();
-        Inventory.EventLabel e = event(o.eventId());
+        OrderService.View v = orders.inOrg(org, orderId).orElseThrow();
+        Order o = v.order();
+        String timezone = o.eventId() == null ? v.product().timezone() : event(o.eventId()).timezone();
         return new Content(null, null, null, PAY_CODE, List.of(CashCode.display(code.get().payCode()),
-                MessageCopy.amount(code.get().amountMad()),
-                MessageCopy.deadline(o.reservedUntil(), e.timezone(), locale)));
+                MessageCopy.amount(code.get().amountMad()), MessageCopy.deadline(o.reservedUntil(), timezone, locale)));
     }
 
     private Inventory.EventLabel event(int eventId) {

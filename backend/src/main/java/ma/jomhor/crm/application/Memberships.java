@@ -28,6 +28,9 @@ public interface Memberships {
     /** Sets both opt-ins of a live membership; true only if one of them changed. */
     boolean setOptIns(UUID org, UUID id, boolean push, boolean whatsapp);
 
+    /** paid_until = greatest(paid_until, {@code validUntil}); the new paid_until. */
+    Instant pay(UUID org, UUID id, Instant validUntil);
+
     /** Leaves a live membership (left_at = now, opt-ins off); its id, or empty if none was live. */
     Optional<UUID> leave(UUID org, UUID userId);
 

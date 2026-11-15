@@ -2,7 +2,9 @@ package ma.jomhor.crm.adapters.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,7 +23,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcMemberships implements Memberships {
 
-    private static final String COLUMNS = "id, number, joined_at, left_at, marketing_push, marketing_whatsapp";
+    private static final String COLUMNS =
+            "id, number, joined_at, left_at, marketing_push, marketing_whatsapp, paid_until";
 
     /** A ticket {@code t} with an admitted scan; DUPLICATE_LATE is derived, so any OK/OVERRIDE IN row will do. */
     private static final String ADMITTED = """
@@ -73,6 +76,13 @@ class JdbcMemberships implements Memberships {
                         where organizer_id = ? and id = ? and left_at is null
                           and (marketing_push, marketing_whatsapp) is distinct from (?, ?)""")
                 .params(push, whatsapp, org, id, push, whatsapp).update() == 1;
+    }
+
+    @Override
+    public Instant pay(UUID org, UUID id, Instant validUntil) {
+        return jdbc.sql("update memberships set paid_until = greatest(paid_until, ?) where organizer_id = ? and id = ? "
+                        + "returning paid_until")
+                .params(validUntil.atOffset(ZoneOffset.UTC), org, id).query(OffsetDateTime.class).single().toInstant();
     }
 
     @Override
@@ -148,8 +158,10 @@ class JdbcMemberships implements Memberships {
 
     private static Member member(ResultSet rs, int n) throws SQLException {
         OffsetDateTime left = rs.getObject("left_at", OffsetDateTime.class);
+        OffsetDateTime paid = rs.getObject("paid_until", OffsetDateTime.class);
         return new Member(rs.getObject("id", UUID.class), rs.getInt("number"),
                 rs.getObject("joined_at", OffsetDateTime.class).toInstant(), left == null ? null : left.toInstant(),
-                rs.getBoolean("marketing_push"), rs.getBoolean("marketing_whatsapp"));
+                rs.getBoolean("marketing_push"), rs.getBoolean("marketing_whatsapp"),
+                paid == null ? null : paid.toInstant());
     }
 }

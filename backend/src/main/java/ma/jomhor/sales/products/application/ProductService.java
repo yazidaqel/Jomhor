@@ -159,6 +159,18 @@ public class ProductService {
         return fanView(p, organizers.get(p.organizerId()));
     }
 
+    // ---------- orders (sales) ----------
+
+    /** The organizer's product, on sale or not (a product order's, which keeps it by FK). */
+    public Product product(UUID org, UUID productId) {
+        return products.find(org, productId).orElseThrow();
+    }
+
+    /** A product order's product as the fan sees it, read even once it is off sale (04 GET /fan/orders/{id}). */
+    public FanView ofOrder(UUID org, UUID productId) {
+        return fanView(product(org, productId), organizers.get(org));
+    }
+
     // ponytail: 2 catalog reads per product (3 on the fan side); batch them by series and zone if a club sells many.
     private View view(UUID org, Product p) {
         return new View(p, scope(org, p));

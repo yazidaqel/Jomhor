@@ -27,6 +27,8 @@ import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.notifications.application.TicketDeliveryService;
 import ma.jomhor.sales.application.Orders.Expired;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.sales.products.application.ProductService;
+import ma.jomhor.sales.products.domain.Product;
 import ma.jomhor.sales.rooms.application.QueueService;
 import ma.jomhor.sales.rooms.domain.WaitingRoom;
 import ma.jomhor.tenancy.application.UserService;
@@ -51,7 +53,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * every holder account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till) → categories;
  * the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
  * ticket row → the recipient's users row → the recipient's per-account lock ({@link HolderLimit}) and no category.
- * So none of them waits in a circle.
+ * A product order (04 §Products) takes no per-account lock and no category; settling a MEMBERSHIP one takes the
+ * organizer's membership lock after the order row. So none of them waits in a circle.
  */
 @Service
 public class OrderService {
@@ -86,9 +89,11 @@ public class OrderService {
     /**
      * An order with what the fan sees of each category, its tickets, its attempt as
      * {@link PendingPayments#latestAttempt} reports it (null before any /pay) and, while it waits for cash, its code.
+     * {@code product}: a product order's product (04 §Products), else null.
      */
     public record View(Order order, Map<UUID, SalePrice> categories, List<UUID> ticketIds,
-                       PendingPayments.Attempt attempt, CashInstructions.Cash cash, Group group) {}
+                       PendingPayments.Attempt attempt, CashInstructions.Cash cash, Group group,
+                       ProductService.FanView product) {}
 
     /**
      * 04 {@code group} of an order: INITIATOR with its member orders (by id), or MEMBER with the buyer's label and
@@ -102,11 +107,11 @@ public class OrderService {
                          Instant reservedUntil, String payUrl) {}
 
     /**
-     * A row of GET /fan/orders: the order, its event, its payment method (null before any /pay) and, while it is
-     * AWAITING_CASH, its PENDING code (else null).
+     * A row of GET /fan/orders: the order, its event (or, on a product order, its product), its payment method (null
+     * before any /pay) and, while it is AWAITING_CASH, its PENDING code (else null).
      */
-    public record Summary(Orders.Listed order, Inventory.EventLabel event, Order.PaymentMethod paymentMethod,
-                          String payCode) {}
+    public record Summary(Orders.Listed order, Inventory.EventLabel event, ProductService.FanView product,
+                          Order.PaymentMethod paymentMethod, String payCode) {}
 
     /** What became of an order whose card payment succeeded. Anything but PAID needs a manual refund. */
     public enum Settlement { PAID, SOLD_OUT, PER_ACCOUNT_LIMIT, NOT_PAYABLE }
@@ -121,6 +126,7 @@ public class OrderService {
     private final FanMessageQueue queue;
     private final QueueService rooms;
     private final MembershipService memberships;
+    private final ProductService products;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
     private final Duration splitHold;
@@ -133,7 +139,7 @@ public class OrderService {
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         CashInstructions cashInstructions, UserService users, TicketDeliveryService deliveries,
                         FanMessageQueue queue, QueueService rooms, MembershipService memberships,
-                        PlatformTransactionManager transactions,
+                        ProductService products, PlatformTransactionManager transactions,
                         @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
                         @Value("${sales.split.hold}") Duration splitHold,
                         @Value("${payments.return-url.web}") String payUrl) {
@@ -147,6 +153,7 @@ public class OrderService {
         this.queue = queue;
         this.rooms = rooms;
         this.memberships = memberships;
+        this.products = products;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
         this.splitHold = splitHold;
@@ -246,7 +253,7 @@ public class OrderService {
             orders.insertMember(org, eventId, byPhone.get(phone), channel, buyer.id(), buyer.reservedUntil(),
                     total(theirs), theirs);
         }
-        return new View(buyer, taken, List.of(), null, null, payers.isEmpty() ? null : group(buyer));
+        return new View(buyer, taken, List.of(), null, null, payers.isEmpty() ? null : group(buyer), null);
     }
 
     /**
@@ -275,7 +282,7 @@ public class OrderService {
         return orders.insertPos(orderId, org, eventId, total(lines), lines)
                 .map(o -> {
                     issue(o, taken);
-                    return new View(o, taken, tickets.ofOrder(org, o.id()), null, null, null);
+                    return new View(o, taken, tickets.ofOrder(org, o.id()), null, null, null, null);
                 });
     }
 
@@ -338,8 +345,18 @@ public class OrderService {
 
     /** The organizer's order with its categories and every ticket of it (the till's view: no buyer). */
     public Optional<View> inOrg(UUID org, UUID orderId) {
-        return orders.findInOrg(org, orderId).map(o -> new View(o, byId(inventory.prices(org, o.eventId())),
-                tickets.ofOrder(org, o.id()), null, null, null));
+        return orders.findInOrg(org, orderId).map(o -> new View(o, categories(o), tickets.ofOrder(org, o.id()), null,
+                null, null, product(o)));
+    }
+
+    /** Every category of the order's event (none for a product order). */
+    private Map<UUID, SalePrice> categories(Order o) {
+        return o.eventId() == null ? Map.of() : byId(inventory.prices(o.organizerId(), o.eventId()));
+    }
+
+    /** A product order's product as the fan sees it, else null. */
+    private ProductService.FanView product(Order o) {
+        return o.eventId() == null ? products.ofOrder(o.organizerId(), o.productId()) : null;
     }
 
     /**
@@ -354,11 +371,10 @@ public class OrderService {
     public View get(UUID userId, UUID orderId) {
         Order order = orders.find(userId, orderId).orElseThrow(() -> ApiException.notFound("Order not found"));
         UUID org = order.organizerId();
-        return new View(order, byId(inventory.prices(org, order.eventId())),
-                tickets.heldInOrder(org, order.id(), userId),
+        return new View(order, categories(order), tickets.heldInOrder(org, order.id(), userId),
                 pendingPayments.latestAttempt(org, order.id(), PAYMENT_GRACE).orElse(null),
                 order.status() == Order.Status.AWAITING_CASH ? cashInstructions.pending(org, order.id()).orElse(null) : null,
-                group(order));
+                group(order), product(order));
     }
 
     /**
@@ -407,11 +423,20 @@ public class OrderService {
         listed.stream().filter(o -> o.status() == Order.Status.AWAITING_CASH)
                 .forEach(o -> awaiting.put(o.id(), o.organizerId()));
         Map<UUID, String> codes = pendingPayments.pendingCodes(awaiting);
-        // ponytail: one event read per distinct event (a fan has a handful); batch it if lists grow.
+        // ponytail: one event or product read per distinct one (a fan has a handful), and inOrg/get build a product
+        // order's full fan view (organizer, zone, payment options) on every call; batch or trim them if lists or
+        // product traffic grow.
         Map<Integer, Inventory.EventLabel> events = new HashMap<>();
-        listed.forEach(o -> events.computeIfAbsent(o.eventId(), id -> inventory.label(id).orElseThrow()));
-        return listed.stream()
-                .map(o -> new Summary(o, events.get(o.eventId()), methods.get(o.id()), codes.get(o.id()))).toList();
+        Map<UUID, ProductService.FanView> bought = new HashMap<>();
+        listed.forEach(o -> {
+            if (o.eventId() == null) {
+                bought.computeIfAbsent(o.productId(), id -> products.ofOrder(o.organizerId(), id));
+            } else {
+                events.computeIfAbsent(o.eventId(), id -> inventory.label(id).orElseThrow());
+            }
+        });
+        return listed.stream().map(o -> new Summary(o, o.eventId() == null ? null : events.get(o.eventId()),
+                o.eventId() == null ? bought.get(o.productId()) : null, methods.get(o.id()), codes.get(o.id()))).toList();
     }
 
     // ---------- payment (called by payments) ----------
@@ -419,7 +444,8 @@ public class OrderService {
     /**
      * The buyer's order, locked for the caller's transaction, if it can take a payment now: RESERVED or
      * AWAITING_CASH and still held. The lock makes a pay and an expiry pass on the same order run one after the
-     * other, so a payment is never accepted for an order the expiry is expiring. Another user's order → 404.
+     * other, so a payment is never accepted for an order the expiry is expiring. Another user's order → 404. A
+     * MEMBERSHIP order whose buyer is already paid to its valid_until → 409 MEMBERSHIP_PAID, before any charge.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Order lockForPayment(UUID userId, UUID orderId) {
@@ -434,32 +460,49 @@ public class OrderService {
         if (!held) {
             throw new ApiException("ORDER_NOT_PAYABLE", HttpStatus.CONFLICT, "Order can't be paid in its current status");
         }
+        Instant paidUntil = membershipPaidUntil(o);
+        if (paidUntil != null) { // 04 §Products Paid membership: refused before any charge
+            throw new ApiException("MEMBERSHIP_PAID", HttpStatus.CONFLICT, "Membership already paid",
+                    Map.of("paid_until", paidUntil.toString()));
+        }
         return o;
     }
 
     /**
+     * A MEMBERSHIP order whose buyer is already paid to its product's valid_until (04 §Products Paid membership): that
+     * paid_until, else null (any other order too). Read without the membership lock: settle checks again under it.
+     */
+    public Instant membershipPaidUntil(Order o) {
+        if (o.eventId() == null) {
+            Product p = products.product(o.organizerId(), o.productId());
+            Instant paid = p.kind() == Product.Kind.MEMBERSHIP ? memberships.paidUntil(o.organizerId(), o.userId())
+                    : null;
+            return paid != null && !paid.isBefore(p.validUntil()) ? paid : null;
+        }
+        return null;
+    }
+
+    /**
      * A cash code is being issued for this RESERVED order, locked by {@link #lockForPayment} (04 POST /pay
-     * CASH_AGENCY): → AWAITING_CASH, held until least(now + 24 h, sales close). Refused with METHOD_NOT_AVAILABLE
-     * TOO_LATE if that leaves less than {@code minWindow}, or CASH_CAP if the event's live cash holds, this order
-     * included, pass {@code maxHeldPercent} % of its quota (counted without a lock: a soft cap, like SALE_BUSY). Both
-     * on the database clock; a refusal rolls the status change back with the caller's transaction. Returns the new
-     * reserved_until.
+     * CASH_AGENCY): → AWAITING_CASH, held until least(now + 24 h, sales close: the event's refund_cutoff_at, or a
+     * product's sales_close_at). Refused with METHOD_NOT_AVAILABLE TOO_LATE if that leaves less than
+     * {@code minWindow}, or, on an event order, CASH_CAP if the event's live cash holds, this order included, pass
+     * {@code maxHeldPercent} % of its quota (counted without a lock: a soft cap, like SALE_BUSY; a product order has
+     * none). Both on the database clock; a refusal rolls the status change back with the caller's transaction.
+     * Returns the new reserved_until.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Instant awaitCash(Order o, Duration minWindow, int maxHeldPercent) {
-        Inventory.SaleEvent event = inventory.saleEvent(o.eventId()).orElseThrow();
-        Instant until = event.refundCutoffAt() == null ? null
-                : orders.awaitCash(o.organizerId(), o.id(), event.refundCutoffAt(), minWindow).orElse(null);
+        Instant close = salesClose(o);
+        Instant until = close == null ? null : orders.awaitCash(o.organizerId(), o.id(), close, minWindow).orElse(null);
         if (until == null) {
-            Map<String, Object> details = new LinkedHashMap<>();
-            details.put("reason", "TOO_LATE");
-            details.put("sales_close_at", event.refundCutoffAt() == null ? null : event.refundCutoffAt().toString());
-            throw methodNotAvailable(details);
+            throw tooLate(close);
         }
         // This order is AWAITING_CASH already (above): the count includes its places.
         // ponytail: the mirrored member places below stay RESERVED, so the cap doesn't count them (plan Q112); count
         // them here if split holds ever crowd the cash cap.
-        if (orders.cashHeld(o.organizerId(), o.eventId()) * 100 > (long) maxHeldPercent * event.quota()) {
+        if (o.eventId() != null && orders.cashHeld(o.organizerId(), o.eventId()) * 100
+                > (long) maxHeldPercent * inventory.saleEvent(o.eventId()).orElseThrow().quota()) {
             throw methodNotAvailable(Map.of("reason", "CASH_CAP"));
         }
         orders.mirrorMembers(o.organizerId(), o.id(), until); // 04 §Split pay Hold, P78
@@ -472,12 +515,21 @@ public class OrderService {
      */
     public void requireCashWindow(Order o, Duration minWindow) {
         if (!orders.holdsFor(o.organizerId(), o.id(), minWindow)) {
-            Instant close = inventory.saleEvent(o.eventId()).orElseThrow().refundCutoffAt();
-            Map<String, Object> details = new LinkedHashMap<>();
-            details.put("reason", "TOO_LATE");
-            details.put("sales_close_at", close == null ? null : close.toString());
-            throw methodNotAvailable(details);
+            throw tooLate(salesClose(o));
         }
+    }
+
+    /** When the order's sales close: its event's refund_cutoff_at (null: never on sale), or its product's. */
+    private Instant salesClose(Order o) {
+        return o.eventId() == null ? products.product(o.organizerId(), o.productId()).salesCloseAt()
+                : inventory.saleEvent(o.eventId()).orElseThrow().refundCutoffAt();
+    }
+
+    private static ApiException tooLate(Instant close) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("reason", "TOO_LATE");
+        details.put("sales_close_at", close == null ? null : close.toString());
+        return methodNotAvailable(details);
     }
 
     /** The order's hold still runs: RESERVED or AWAITING_CASH with reserved_until > now() (payments' /redirect). */
@@ -496,8 +548,10 @@ public class OrderService {
      * the payment's method and reference, one ticket per place, each with one WhatsApp delivery queued to its
      * holder; its split member orders still RESERVED are held until least(now + sales.split.hold, sales close).
      * EXPIRED (a late success, plan Q8) re-reserves the places under the buyer lock with the per-account
-     * limit checked again. Never throws for a business outcome: the payment commits as SUCCEEDED either way, and
-     * anything but PAID is for a manual refund.
+     * limit checked again. A product order (04 §Products) issues no ticket: a MEMBERSHIP one pays the membership
+     * ({@link MembershipService#paid}); when it is already paid to that date the order is CANCELLED (it can't be
+     * charged again) and NOT_PAYABLE returned. Never throws for a business
+     * outcome: the payment commits as SUCCEEDED either way, and anything but PAID is for a manual refund.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Settlement settle(UUID orderId, Order.PaymentMethod method, String paymentRef) {
@@ -514,12 +568,19 @@ public class OrderService {
         } else if (o.status() != Order.Status.RESERVED && o.status() != Order.Status.AWAITING_CASH) {
             return Settlement.NOT_PAYABLE;
         }
-        orders.markPaid(o.organizerId(), o.id(), method, paymentRef);
-        issue(o, byId(inventory.prices(o.organizerId(), o.eventId())));
-        // 04 §Split pay Hold: the members' own deadline starts now (an expired member stays expired, §Late).
-        List<UUID> invited = orders.extendMembers(o.organizerId(), o.id(), splitHold,
-                inventory.saleEvent(o.eventId()).orElseThrow().refundCutoffAt());
-        queue.splitInvites(o.organizerId(), invited); // 04 §Notifications SPLIT_INVITE, once per member and channel
+        if (o.eventId() == null) {
+            if (!productPaid(o)) {
+                orders.cancel(o.organizerId(), o.id());
+                return Settlement.NOT_PAYABLE;
+            }
+            orders.markPaid(o.organizerId(), o.id(), method, paymentRef);
+        } else {
+            orders.markPaid(o.organizerId(), o.id(), method, paymentRef);
+            issue(o, categories(o));
+            // 04 §Split pay Hold: the members' own deadline starts now (an expired member stays expired, §Late).
+            List<UUID> invited = orders.extendMembers(o.organizerId(), o.id(), splitHold, salesClose(o));
+            queue.splitInvites(o.organizerId(), invited); // 04 §Notifications SPLIT_INVITE, once per member and channel
+        }
         // ORDER_PAID (plan lot-4 Q116): a code-holding order paid by any method, or a late success reviving it.
         if ((before == Order.Status.AWAITING_CASH || before == Order.Status.EXPIRED) && o.userId() != null) {
             queue.orderPaid(o.organizerId(), o.id());
@@ -559,10 +620,27 @@ public class OrderService {
         return orders.channel(org, orderId);
     }
 
-    /** Takes the expired order's places again; null if done, else why not. */
+    /**
+     * What a paid product order gives (04 §Products): a MEMBERSHIP pays the buyer's membership up to its valid_until;
+     * false = already paid to that date (nothing written).
+     */
+    private boolean productPaid(Order o) {
+        Product p = products.product(o.organizerId(), o.productId());
+        // TODO(BE-53): replace this throw with the pass branch (activate at settle, re-take on a late success); PASS
+        // orders can't be placed until then.
+        if (p.kind() != Product.Kind.MEMBERSHIP) {
+            throw new IllegalStateException("product order " + o.id() + " of kind " + p.kind());
+        }
+        return memberships.paid(o.organizerId(), o.userId(), p.id(), p.validUntil());
+    }
+
+    /** Takes the expired order's places again; null if done, else why not. A product order holds no place. */
     // ponytail: re-checks the buyer limit only, not the holder limit (plan lot-5 Q173); a holder over it after a late
     // success is rare (a manual refund otherwise). Check holders here too, under their locks, if it ever shows.
     private Settlement reReserve(Order o) {
+        if (o.eventId() == null) {
+            return null;
+        }
         orders.lockBuyer(o.userId(), o.eventId());
         int limit = inventory.saleEvent(o.eventId()).orElseThrow().perAccountLimit();
         if (orders.held(o.organizerId(), o.userId(), o.eventId()) + o.places() > limit) {
@@ -614,9 +692,10 @@ public class OrderService {
         ids.addAll(orders.claimMembers(List.copyOf(ids), paying));
         List<Expired> expired = orders.expire(ids);
         try {
-            inventory.release(expired.stream().map(Expired::hold).toList());
+            // A product order (null hold) has no category place to give back.
+            inventory.release(expired.stream().map(Expired::hold).filter(Objects::nonNull).toList());
         } catch (Inventory.ReleaseFailed e) {
-            List<UUID> orderIds = expired.stream().filter(d -> d.hold().equals(e.hold())).findFirst()
+            List<UUID> orderIds = expired.stream().filter(d -> e.hold().equals(d.hold())).findFirst()
                     .map(Expired::orderIds).orElse(List.of());
             log.error("Expiry batch rolled back: event {}, price category {}, orders {}", e.hold().eventId(),
                     e.hold().priceCategoryId(), orderIds, e);
@@ -683,7 +762,7 @@ public class OrderService {
                     .map(h -> new Order.Holder(h.name(), h.phone() == null ? noPhone : byPhone.get(h.phone())))
                     .toList();
             if (!holding.isEmpty()) {
-                lines.add(new Order.Item(category, holding.size(), taken.get(category).priceMad(), holding));
+                lines.add(new Order.Item(category, null, holding.size(), taken.get(category).priceMad(), holding));
             }
         }
         return lines;

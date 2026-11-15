@@ -42,8 +42,18 @@ public class PosService {
     /** A till sale; {@code replay} = the same sale_id again from the same session (200, nothing written). */
     public record Sold(View view, boolean replay) {}
 
-    /** What a till may see of a cash code (04 §Cash codes Reveals): no name, no phone. */
-    public record Lookup(Order order, boolean payable, long amountMad, Inventory.EventLabel event, List<String> holders) {}
+    /**
+     * What a till may see of a cash code (04 §Cash codes Reveals): no name, no phone. {@code event} null and
+     * {@code productName} set on a product order (04 §Point of sale, Lot 5 step 3).
+     */
+    public record Lookup(Order order, boolean payable, long amountMad, Inventory.EventLabel event, String productName,
+                         List<String> holders) {
+
+        /** The event title, or the product name. */
+        public String title() {
+            return event == null ? productName : event.title();
+        }
+    }
 
     public record Collected(UUID orderId, List<UUID> ticketIds) {}
 
@@ -146,12 +156,14 @@ public class PosService {
     public Lookup lookup(UUID org, String code) {
         Payment p = payments.findCode(org, CashCode.normalise(code).orElseThrow(PosService::codeNotFound))
                 .orElseThrow(PosService::codeNotFound);
-        Order o = orders.inOrg(org, p.orderId()).orElseThrow().order();
+        View v = orders.inOrg(org, p.orderId()).orElseThrow();
+        Order o = v.order();
         boolean payable = o.status() == Order.Status.AWAITING_CASH && p.status() == Payment.Status.PENDING
-                && orders.holding(org, o.id());
+                && orders.holding(org, o.id()) && orders.membershipPaidUntil(o) == null;
         List<String> holders = o.items().stream().flatMap(i -> i.holders().stream())
                 .map(h -> HolderNames.label(h.name())).toList();
-        return new Lookup(o, payable, p.amountMad(), inventory.label(o.eventId()).orElseThrow(), holders);
+        return o.eventId() == null ? new Lookup(o, payable, p.amountMad(), null, v.product().product().name(), holders)
+                : new Lookup(o, payable, p.amountMad(), inventory.label(o.eventId()).orElseThrow(), null, holders);
     }
 
     /**
@@ -189,11 +201,17 @@ public class PosService {
         if (!locked.holding()) {
             throw notPayable("EXPIRED");
         }
+        if (orders.membershipPaidUntil(o) != null) { // paid by another order: nothing collected (04 §Point of sale)
+            throw membershipPaid(o);
+        }
         if (amountMad != o.totalMad()) {
             throw invalid("amount_mad", "the order total");
         }
         payments.collect(org, p.id(), session);
         if (orders.settle(o.id(), Order.PaymentMethod.CASH_AGENCY, c) != Settlement.PAID) {
+            if (o.eventId() == null) { // paid by another order since the check above: the rollback records nothing
+                throw membershipPaid(o);
+            }
             throw new IllegalStateException("payable order " + o.id() + " not settled");
         }
         List<UUID> ticketIds = tickets.ofOrder(org, o.id());
@@ -218,6 +236,9 @@ public class PosService {
         UUID session = payments.tillSession(org, orderId).filter(s -> manager || open.get().equals(s))
                 .orElseThrow(() -> ApiException.notFound("Order not found"));
         Order o = orders.inOrg(org, orderId).orElseThrow().order();
+        if (o.eventId() == null) { // a product order collected at a till: no ticket to print
+            throw ApiException.notFound("Order not found");
+        }
         Map<UUID, Long> prices = new LinkedHashMap<>();
         o.items().forEach(i -> prices.put(i.priceCategoryId(), i.unitPriceMad()));
         TicketService.Slips slips = tickets.slips(org, o.eventId(), orderId);
@@ -254,6 +275,11 @@ public class PosService {
     private static ApiException notPayable(String status) {
         return new ApiException("CODE_NOT_PAYABLE", HttpStatus.CONFLICT, "This code can't be paid",
                 Map.of("status", status));
+    }
+
+    private static ApiException membershipPaid(Order o) {
+        return new ApiException("CODE_NOT_PAYABLE", HttpStatus.CONFLICT, "This code can't be paid",
+                Map.of("status", o.status().name(), "reason", "MEMBERSHIP_PAID"));
     }
 
     private static ApiException invalid(String field, String message) {

@@ -361,7 +361,8 @@ class PosApiTest extends PaymentTest {
         String typed = "jmh-" + c.code().substring(0, 4).toLowerCase().replace('0', 'o').replace('1', 'l') + " "
                 + c.code().substring(4).replace('1', 'I');
         String json = body(call(cashier, get("/org/pos/codes/" + typed)).andExpect(status().isOk()));
-        assertKeys(json, "$", "order_id", "status", "payable", "reserved_until", "amount_mad", "places", "event", "holders");
+        assertKeys(json, "$", "order_id", "status", "payable", "reserved_until", "amount_mad", "places", "event", "holders",
+                "product");
         assertKeys(json, "$.event", "id", "title", "starts_at", "timezone");
         assertThat(JsonPath.<String>read(json, "$.order_id")).isEqualTo(c.orderId());
         assertThat(JsonPath.<String>read(json, "$.status")).isEqualTo("AWAITING_CASH");
