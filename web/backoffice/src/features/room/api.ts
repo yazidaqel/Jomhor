@@ -135,7 +135,7 @@ const dayToUtc = (day: string, zone: string) => wallToUtc(`${day}T00:00`, zone)
  * Ranges per 03 `waiting_rooms`. With "Fans vérifiés" on, each filled rule is checked and at least one is required.
  * `rateOnly` (the room has started): the other fields are the server's and disabled, so only the rate is checked.
  * `saleStartsAt`: the event's (phase 1's). Phase ≥ 2 needs its own "Début de la vente"; the phase order and its range
- * (future, before T0 − 60 min) are the server's (422, PHASE_ORDER).
+ * (future, before T0 − 60 min) are the server's (422 on `starts_at`; the order with `details.reason` PHASE_ORDER).
  */
 export function roomSchema(t: TFunction, zone: string, saleStartsAt: string | null, rateOnly = false, phase = 1) {
   const text = z.string()

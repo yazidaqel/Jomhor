@@ -318,10 +318,12 @@ it('"Ajouter une phase": Annuler closes the new card; at 5 phases the button is 
   expect(screen.getByText(fr.room.phase.max)).toBeTruthy()
 })
 
+// BO-21 real run: the backend's answers verbatim (details.fields carries prose; the page reads the keys only).
 it.each([
-  [{ starts_at: 'order' }, fr.room.form.startsAt],
-  [{ pre_queue_min: 'order' }, fr.room.form.preQueue],
-])('422 PHASE_ORDER on %j → "Doit ouvrir après le début de la phase précédente" on that field', async (fields, label) => {
+  [{ starts_at: "the phase must open after phase 1's sale start" }, fr.room.form.startsAt],
+  [{ pre_queue_min: "the phase must open after phase 1's sale start" }, fr.room.form.preQueue],
+  [{ phase: 'phase 1 must exist first' }, null],
+])('422 PHASE_ORDER on %j → "Doit ouvrir après le début de la phase précédente" on that field (none named: under the form)', async (fields, label) => {
   const user = userEvent.setup()
   stubApi('ADMIN', { rooms: [ROOM('SCHEDULED')], put: (_, phase) => (phase === 2 ? err(422, 'VALIDATION_FAILED', { reason: 'PHASE_ORDER', fields }) : undefined) })
   renderApp('/events/1/room')
@@ -333,7 +335,8 @@ it.each([
 
   expect(await added.findByText(fr.room.form.phaseOrder)).toBeTruthy()
   expect(fr.room.form.phaseOrder).toBe('Doit ouvrir après le début de la phase précédente')
-  expect(added.getByLabelText(label).getAttribute('aria-invalid')).toBe('true')
+  for (const l of [fr.room.form.startsAt, fr.room.form.preQueue])
+    expect(added.getByLabelText(l).getAttribute('aria-invalid')).toBe(String(l === label))
 })
 
 it('zod ranges: 0–1440 min, 1–6000 fans/min, label ≤ 40, and with "Fans vérifiés" 1–365 days, a date up to the sale, 1–50 events, at least one rule', async () => {

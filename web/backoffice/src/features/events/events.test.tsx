@@ -954,7 +954,7 @@ it('sale opening: a 422 PHASE_ORDER (moved past a later room phase) says so on t
   const user = userEvent.setup()
   stubB2('ADMIN', (c) =>
     c.method === 'PATCH'
-      ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { reason: 'PHASE_ORDER', fields: { sale_starts_at: 'order' } } }, { status: 422 })
+      ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { reason: 'PHASE_ORDER', fields: { sale_starts_at: 'must be before phase 2 opens' } } }, { status: 422 })
       : undefined,
   )
   renderApp('/events/1')

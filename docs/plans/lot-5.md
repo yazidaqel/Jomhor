@@ -877,4 +877,5 @@ Gate, manifest, scans, token and vectors: unchanged.
 | Member-only leftovers notifying non-members | if the club complains | `ponytail:` in `WaitlistJob` (R over every category) |
 | Meta template `waitlist_open` | with BE-36 | Q178 |
 | W2 after `WAITLIST_CLOSED`: `router.refresh()` reads the 15 s event cache, so the page can stay stale until it expires; a fresh read when rendered `sold_out` with no room | when polishing W2 | WS-14 review n2 |
+| B13 "Rythme" reads the seed rate (`figures.admitted_last_min`) in the first minute after a draw, with no fans admitted yet, and `estimated_drain_s` 0 instead of null; show it as "—" until the first 60 s re-mark, or seed only the fan estimate | when polishing B13 | BO-21 real run |
 | Event PATCH moving `starts_at` earlier doesn't re-check that phases ≥ 2 start before `starts_at − 60 min` | if it ever matters | BE-48 review m3 |
