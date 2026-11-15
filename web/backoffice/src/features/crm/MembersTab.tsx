@@ -1,4 +1,4 @@
-import { BellRing, MessageCircle, UserPlus, Users } from 'lucide-react'
+import { BadgeCheck, BellRing, MessageCircle, UserPlus, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Kpi } from '@/components/kpi'
 import { BrandEmpty, ErrorNotice, LoadingRows, STICKY_TABLE } from '@/components/page'
@@ -18,13 +18,18 @@ export function MembersTab() {
   const s = summary.data
   return (
     <div className="flex flex-col gap-6 pt-2">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={cn('grid gap-4 sm:grid-cols-2', s.paid_required ? 'xl:grid-cols-5' : 'xl:grid-cols-4')}>
         <Kpi index={0} icon={Users} label={t('crm.members.kpi.members')} value={n(s.members)} />
-        <Kpi index={1} icon={UserPlus} label={t('crm.members.kpi.joined7d')} value={n(s.joined_7d)} />
-        <Kpi index={2} icon={BellRing} label={t('crm.members.kpi.push')} value={n(s.marketing_push)}>
+        {s.paid_required && (
+          <Kpi index={1} icon={BadgeCheck} label={t('crm.members.kpi.paid')} value={n(s.paid)}>
+            {t('crm.members.kpi.paidOf', { n: n(s.members) })}
+          </Kpi>
+        )}
+        <Kpi index={s.paid_required ? 2 : 1} icon={UserPlus} label={t('crm.members.kpi.joined7d')} value={n(s.joined_7d)} />
+        <Kpi index={s.paid_required ? 3 : 2} icon={BellRing} label={t('crm.members.kpi.push')} value={n(s.marketing_push)}>
           {t('crm.members.kpi.reachable', { n: n(s.reachable_push) })}
         </Kpi>
-        <Kpi index={3} icon={MessageCircle} label={t('crm.members.kpi.whatsapp')} value={n(s.marketing_whatsapp)} />
+        <Kpi index={s.paid_required ? 4 : 3} icon={MessageCircle} label={t('crm.members.kpi.whatsapp')} value={n(s.marketing_whatsapp)} />
       </div>
       <Card className={cn('gap-0 overflow-hidden pb-0', STICKY_TABLE)}>
         <CardHeader className="border-b pb-5">

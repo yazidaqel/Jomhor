@@ -1050,6 +1050,8 @@ export const fr = {
         push: 'Opt-in push',
         reachable: '{{n}} joignables',
         whatsapp: 'Opt-in WhatsApp',
+        paid: 'Cotisations à jour',
+        paidOf: 'sur {{n}} membres',
       },
       countsOnly: 'Des totaux uniquement : aucun nom ni numéro de téléphone.',
       tiers: {
@@ -1327,9 +1329,14 @@ export const fr = {
         payable: 'À encaisser',
         PAID: 'Déjà payé',
         EXPIRED: 'Expiré',
+        MEMBERSHIP_PAID: 'Cotisation déjà à jour',
         other: 'Non payable',
       },
       notPayable: "Code déjà payé ou expiré · ne gardez pas l'argent",
+      membershipPaid: "Ce membre a déjà payé sa cotisation par une autre commande · ne gardez pas l'argent.",
+      collected: "Paiement encaissé · rien à imprimer : {{product}} apparaît dans l'application du client.",
+      paidHintProduct:
+        "Ce code est déjà payé. Si vous venez de l'encaisser à cette caisse sans voir la confirmation, cliquez sur Encaisser : rien n'est encaissé deux fois.",
       collectedEarlier: "Ce code a déjà été encaissé dans une de vos caisses précédentes · gardez l'argent, il y est compté.",
       amountChanged: 'Le montant de cette commande a changé. Saisissez le code à nouveau.',
       paidHint:
