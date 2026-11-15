@@ -1456,3 +1456,4 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 | Waiting room for a pass launch | if a launch is big | Q191, §5.4 deferred run |
 | Meta template `installment_due` | with BE-36 | Q199 |
 | Late fee, auto-cancel of long-suspended passes, staff pass cancel/refund | when the club asks | Q197, Q201 |
+| B14 "Émission en cours" stays on screen past an event's `transfer_until`, when the pass job will never issue again; show "Non émis" then | when polishing B14 | BO-22 review |
