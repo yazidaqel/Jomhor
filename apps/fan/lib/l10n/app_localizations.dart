@@ -2853,10 +2853,10 @@ abstract class AppLocalizations {
   /// **'En une fois · {amount}'**
   String planOnce(String amount);
 
-  /// Screen 13 buy plan chip: n payments, the first amount then the others (amounts_mad as sent), every interval_days.
+  /// Screen 13 buy plan chip: n payments, the first amount then the others (amounts_mad as sent), every interval_days; 0 (an interval under a day, the fast demo clock) says no interval.
   ///
   /// In fr, this message translates to:
-  /// **'{n, plural, =1{En 1 fois} other{En {n} fois}} · {first} puis {base} {days, plural, =1{chaque jour} other{tous les {days} jours}}'**
+  /// **'{n, plural, =1{En 1 fois} other{En {n} fois}} · {first} puis {base}{days, plural, =0{} =1{ chaque jour} other{ tous les {days} jours}}'**
   String planSplit(int n, String first, String base, int days);
 
   /// Screen 13 owned (3b): section of the installments.

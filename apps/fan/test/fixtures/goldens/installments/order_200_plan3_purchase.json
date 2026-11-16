@@ -1,0 +1,56 @@
+{
+ "source": "design content for the goldens and the screen tests (contract-first, docs/04-api.md Lot 5 step 3b), in the shape of the FL-31 real run's test/fixtures/installments/order_200_plan3_purchase.json (passes_test checks the shapes match)",
+ "status": 200,
+ "body": {
+  "id": "d1000000-0000-4000-8000-000000000001",
+  "event_id": null,
+  "channel": "APP",
+  "status": "RESERVED",
+  "payment_status": null,
+  "total_mad": 33334,
+  "reserved_until": "2027-02-20T12:08:00Z",
+  "paid_at": null,
+  "items": [
+   {
+    "product_id": "b1000000-0000-4000-8000-000000000001",
+    "price_category_id": null,
+    "zone_id": 3,
+    "zone_name": "Tribune Est",
+    "name": "Abonnement Tribune Est",
+    "qty": 1,
+    "unit_price_mad": 33334,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "ticket_ids": [],
+  "payment_method": null,
+  "cash": null,
+  "group": null,
+  "product": {
+   "id": "b1000000-0000-4000-8000-000000000001",
+   "kind": "PASS",
+   "name": "Abonnement Tribune Est",
+   "organizer": {
+    "slug": "atlas-fc",
+    "name": "Atlas FC",
+    "crest_url": null
+   },
+   "timezone": "Africa/Casablanca",
+   "payment_methods": [
+    "CARD",
+    "WALLET",
+    "CASH_AGENCY"
+   ],
+   "cash_until": "2027-05-31T21:00:00Z"
+  },
+  "installment": {
+   "seq": 1,
+   "of": 3
+  },
+  "pass_id": "c1000000-0000-4000-8000-000000000001"
+ }
+}

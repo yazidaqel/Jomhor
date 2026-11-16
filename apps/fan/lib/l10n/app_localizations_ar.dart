@@ -1825,12 +1825,13 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp1 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'كل $days يوم',
-      few: 'كل $days أيام',
-      two: 'كل جوج أيام',
-      one: 'كل نهار',
+      other: ' كل $days يوم',
+      few: ' كل $days أيام',
+      two: ' كل جوج أيام',
+      one: ' كل نهار',
+      zero: '',
     );
-    return '$_temp0 · $first ومن بعد $base $_temp1';
+    return '$_temp0 · $first ومن بعد $base$_temp1';
   }
 
   @override

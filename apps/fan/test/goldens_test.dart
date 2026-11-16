@@ -903,7 +903,7 @@ void main() {
     }
 
     // FL-31 (Lot 5 step 3b): plans on screen 13 buy (the 3-payment plan picked), the schedule, the suspended pass and
-    // its blocked ticket on screen 5 (contract-first fixtures, test/fixtures/installments).
+    // its blocked ticket on screen 5 (design answers, test/fixtures/goldens/installments).
     for (final (name, location, passes) in [
       ('13-abonnement-plans', '/products/$productId', 'passes_200_schedule'),
       ('13-abonnement-echeancier', '/passes/$passId', 'passes_200_schedule'),
@@ -913,8 +913,8 @@ void main() {
       testWidgets('$locale · screen $name', (tester) async {
         await phone(tester);
         final sale = PassSale(TestClock(DateTime.utc(2027, 2, 20, 12)))
-          ..product = realAnswer('product_200_plans', dir: 'installments').body
-          ..passes = 'installments/$passes'
+          ..product = realAnswer('product_200_plans', dir: 'goldens/installments').body
+          ..passes = 'goldens/installments/$passes'
           ..tickets = [
             if (name == '5-billet-bloque')
               {...passTicketJson(), 'status': 'BLOCKED', 'blocked_by': 'PASS', 'holder_label': holder}..remove('k_t')

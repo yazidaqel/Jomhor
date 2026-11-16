@@ -1,0 +1,81 @@
+{
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): GET /fan/passes right after the till collected seq 2: ACTIVE, suspended_at null, next_due seq 3",
+ "status": 200,
+ "body": {
+  "passes": [
+   {
+    "id": "eaca4d30-f18c-4be0-9fb1-ee056028e2dd",
+    "status": "ACTIVE",
+    "product": {
+     "id": "83631642-11e5-441b-89dd-a7ac64adf063",
+     "name": "FL-31 Abonnement Tribune Est"
+    },
+    "organizer": {
+     "id": "a7a5fc00-0000-4000-8000-000000000001",
+     "slug": "atlas-fc",
+     "name": "ATLAS FC",
+     "crest_url": null
+    },
+    "series": {
+     "id": "0a949fd3-1ef9-446d-a182-a63d1a5dd031",
+     "name": "FL-31 real run",
+     "starts_on": "2026-08-01",
+     "ends_on": "2027-06-30"
+    },
+    "zone": {
+     "id": 2,
+     "code": "EST",
+     "name": "Est"
+    },
+    "timezone": "Africa/Casablanca",
+    "holder_label": "Yazid A.",
+    "created_at": "2026-11-16T19:14:29.138127Z",
+    "order_id": null,
+    "events": [
+     {
+      "id": 43,
+      "title": "ATLAS FC – FL-31 real run 1",
+      "event_type": "FOOTBALL_MATCH",
+      "starts_at": "2027-01-17T19:00:00Z",
+      "ticket_id": "ba8a4348-49d7-4cf0-a316-660d075e6ee7"
+     },
+     {
+      "id": 44,
+      "title": "ATLAS FC – FL-31 real run 2",
+      "event_type": "FOOTBALL_MATCH",
+      "starts_at": "2027-01-31T19:00:00Z",
+      "ticket_id": "f7589bbf-eedf-438b-be28-62101c20c30b"
+     }
+    ],
+    "suspended_at": null,
+    "installments": [
+     {
+      "seq": 1,
+      "amount_mad": 33334,
+      "due_at": "2026-11-16T19:14:29.138127Z",
+      "paid_at": "2026-11-16T19:14:30.971843Z"
+     },
+     {
+      "seq": 2,
+      "amount_mad": 33333,
+      "due_at": "2026-11-16T19:24:29.138127Z",
+      "paid_at": "2026-11-16T19:26:48.822391Z"
+     },
+     {
+      "seq": 3,
+      "amount_mad": 33333,
+      "due_at": "2026-11-16T19:34:29.138127Z",
+      "paid_at": null
+     }
+    ],
+    "next_due": {
+     "seq": 3,
+     "amount_mad": 33333,
+     "due_at": "2026-11-16T19:34:29.138127Z",
+     "overdue": false
+    },
+    "pay_order_id": null
+   }
+  ]
+ }
+}

@@ -1,77 +1,77 @@
 {
- "source": "source: contract (docs/04-api.md Lot 5 step 3b: GET /fan/passes, SUSPENDED: seq 2 unpaid 7 days past due_at), design content for the FL-31 screen tests and goldens; BE-57/BE-58 being built alongside, no real run captured yet",
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): GET /fan/passes, SUSPENDED: seq 2 unpaid 2 min past its due_at (the pass job's tick)",
  "status": 200,
  "body": {
   "passes": [
    {
-    "id": "c1000000-0000-4000-8000-000000000001",
+    "id": "eaca4d30-f18c-4be0-9fb1-ee056028e2dd",
     "status": "SUSPENDED",
     "product": {
-     "id": "b1000000-0000-4000-8000-000000000001",
-     "name": "Abonnement Tribune Est"
+     "id": "83631642-11e5-441b-89dd-a7ac64adf063",
+     "name": "FL-31 Abonnement Tribune Est"
     },
     "organizer": {
-     "id": "0b8e7a52-0000-4000-8000-000000000001",
+     "id": "a7a5fc00-0000-4000-8000-000000000001",
      "slug": "atlas-fc",
-     "name": "Atlas FC",
+     "name": "ATLAS FC",
      "crest_url": null
     },
     "series": {
-     "id": "e1000000-0000-4000-8000-000000000001",
-     "name": "Saison 2026-27",
+     "id": "0a949fd3-1ef9-446d-a182-a63d1a5dd031",
+     "name": "FL-31 real run",
      "starts_on": "2026-08-01",
      "ends_on": "2027-06-30"
     },
     "zone": {
-     "id": 3,
-     "code": "E",
-     "name": "Tribune Est"
+     "id": 2,
+     "code": "EST",
+     "name": "Est"
     },
     "timezone": "Africa/Casablanca",
     "holder_label": "Yazid A.",
-    "created_at": "2026-12-10T10:00:00Z",
+    "created_at": "2026-11-16T19:14:29.138127Z",
     "order_id": null,
     "events": [
      {
-      "id": 7,
-      "title": "Atlas FC vs Rapid Oued",
+      "id": 43,
+      "title": "ATLAS FC – FL-31 real run 1",
       "event_type": "FOOTBALL_MATCH",
-      "starts_at": "2027-03-13T19:00:00Z",
-      "ticket_id": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+      "starts_at": "2027-01-17T19:00:00Z",
+      "ticket_id": "ba8a4348-49d7-4cf0-a316-660d075e6ee7"
      },
      {
-      "id": 8,
-      "title": "Atlas FC vs Olympique Tensift",
+      "id": 44,
+      "title": "ATLAS FC – FL-31 real run 2",
       "event_type": "FOOTBALL_MATCH",
-      "starts_at": "2027-04-03T19:00:00Z",
-      "ticket_id": null
+      "starts_at": "2027-01-31T19:00:00Z",
+      "ticket_id": "f7589bbf-eedf-438b-be28-62101c20c30b"
      }
     ],
-    "suspended_at": "2027-01-16T10:00:30Z",
+    "suspended_at": "2026-11-16T19:26:29.407237Z",
     "installments": [
      {
       "seq": 1,
       "amount_mad": 33334,
-      "due_at": "2026-12-10T10:00:00Z",
-      "paid_at": "2026-12-10T10:03:00Z"
+      "due_at": "2026-11-16T19:14:29.138127Z",
+      "paid_at": "2026-11-16T19:14:30.971843Z"
      },
      {
       "seq": 2,
       "amount_mad": 33333,
-      "due_at": "2027-01-09T10:00:00Z",
+      "due_at": "2026-11-16T19:24:29.138127Z",
       "paid_at": null
      },
      {
       "seq": 3,
       "amount_mad": 33333,
-      "due_at": "2027-02-08T10:00:00Z",
+      "due_at": "2026-11-16T19:34:29.138127Z",
       "paid_at": null
      }
     ],
     "next_due": {
      "seq": 2,
      "amount_mad": 33333,
-     "due_at": "2027-01-09T10:00:00Z",
+     "due_at": "2026-11-16T19:24:29.138127Z",
      "overdue": true
     },
     "pay_order_id": null

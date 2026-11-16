@@ -474,7 +474,7 @@
   "duesSeeClub": "شوف واجب الانخراط ديالي",
   "passPlans": "الخلاص",
   "planOnce": "مرة وحدة · {amount}",
-  "planSplit": "{n, plural, =1{مرة وحدة} =2{على جوج دفعات} few{على {n} دفعات} other{على {n} دفعة}} · {first} ومن بعد {base} {days, plural, =1{كل نهار} =2{كل جوج أيام} few{كل {days} أيام} other{كل {days} يوم}}",
+  "planSplit": "{n, plural, =1{مرة وحدة} =2{على جوج دفعات} few{على {n} دفعات} other{على {n} دفعة}} · {first} ومن بعد {base}{days, plural, =0{} =1{ كل نهار} =2{ كل جوج أيام} few{ كل {days} أيام} other{ كل {days} يوم}}",
   "passSchedule": "جدول الأقساط",
   "installmentRow": "{seq}/{n} · {amount} · {date}",
   "installmentPaid": "مخلص",

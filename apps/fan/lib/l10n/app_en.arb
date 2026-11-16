@@ -474,7 +474,7 @@
   "duesSeeClub": "See my membership fee",
   "passPlans": "Payment",
   "planOnce": "In full · {amount}",
-  "planSplit": "{n, plural, =1{In 1 payment} other{In {n} payments}} · {first} then {base} {days, plural, =1{every day} other{every {days} days}}",
+  "planSplit": "{n, plural, =1{In 1 payment} other{In {n} payments}} · {first} then {base}{days, plural, =0{} =1{ every day} other{ every {days} days}}",
   "passSchedule": "Payment schedule",
   "installmentRow": "{seq}/{n} · {amount} · {date}",
   "installmentPaid": "Paid",

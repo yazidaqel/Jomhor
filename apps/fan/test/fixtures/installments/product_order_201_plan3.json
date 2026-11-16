@@ -1,24 +1,24 @@
 {
- "source": "source: contract (docs/04-api.md Lot 5 step 3b: POST /fan/product-orders with installments 3, total_mad = installment 1), design content for the FL-31 screen tests and goldens; BE-57/BE-58 being built alongside, no real run captured yet",
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): POST /fan/product-orders with installments 3, total_mad = installment 1",
  "status": 201,
  "body": {
-  "id": "d1000000-0000-4000-8000-000000000001",
+  "id": "f5c7bb09-8267-484f-a48d-be886699c7f3",
   "status": "RESERVED",
-  "reserved_until": "2027-02-20T12:08:00Z",
+  "reserved_until": "2026-11-16T19:22:29.138127Z",
   "total_mad": 33334,
   "product": {
-   "id": "b1000000-0000-4000-8000-000000000001",
+   "id": "83631642-11e5-441b-89dd-a7ac64adf063",
    "kind": "PASS",
-   "name": "Abonnement Tribune Est"
+   "name": "FL-31 Abonnement Tribune Est"
   },
-  "pass_id": "c1000000-0000-4000-8000-000000000001",
+  "pass_id": "eaca4d30-f18c-4be0-9fb1-ee056028e2dd",
   "items": [
    {
-    "product_id": "b1000000-0000-4000-8000-000000000001",
+    "product_id": "83631642-11e5-441b-89dd-a7ac64adf063",
     "price_category_id": null,
-    "zone_id": 3,
-    "zone_name": "Tribune Est",
-    "name": "Abonnement Tribune Est",
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "FL-31 Abonnement Tribune Est",
     "qty": 1,
     "unit_price_mad": 33334,
     "holders": [

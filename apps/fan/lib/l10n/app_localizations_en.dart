@@ -1756,8 +1756,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String planSplit(int n, String first, String base, int days) {
     String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: 'In $n payments', one: 'In 1 payment');
-    String _temp1 = intl.Intl.pluralLogic(days, locale: localeName, other: 'every $days days', one: 'every day');
-    return '$_temp0 · $first then $base $_temp1';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: ' every $days days',
+      one: ' every day',
+      zero: '',
+    );
+    return '$_temp0 · $first then $base$_temp1';
   }
 
   @override

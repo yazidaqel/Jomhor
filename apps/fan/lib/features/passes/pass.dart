@@ -276,9 +276,10 @@ class FanPass {
   bool get canPay => nextDue != null && (status == 'ACTIVE' || suspended);
 
   /// Payée once paid; the next due one En retard when the server says it is overdue; any other unpaid one À payer.
+  /// A `PENDING` pass is still being bought: its installment 1 is due at purchase and reads `overdue`, never late.
   InstallmentState stateOf(Installment i) => switch (nextDue) {
     _ when i.paidAt != null => InstallmentState.paid,
-    final next? when next.seq == i.seq && next.overdue => InstallmentState.late,
+    final next? when next.seq == i.seq && next.overdue && !pending => InstallmentState.late,
     _ => InstallmentState.due,
   };
 
