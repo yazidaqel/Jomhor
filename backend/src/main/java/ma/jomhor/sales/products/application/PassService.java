@@ -6,11 +6,14 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.catalog.domain.Event;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.web.ApiException;
+import ma.jomhor.notifications.application.FanMessageQueue;
 import ma.jomhor.sales.application.OrderService.Settlement;
 import ma.jomhor.sales.products.domain.Installment;
 import ma.jomhor.sales.products.domain.Pass;
@@ -61,17 +64,23 @@ public class PassService {
     private final EventService events;
     private final OrganizerService organizers;
     private final AuditLog audit;
+    private final FanMessageQueue queue;
     private final Duration grace;
+    private final Duration reminderBefore;
 
     PassService(Passes passes, Products products, ProductService productService, EventService events,
-                OrganizerService organizers, AuditLog audit, @Value("${passes.grace}") Duration grace) {
+                OrganizerService organizers, AuditLog audit, FanMessageQueue queue,
+                @Value("${passes.grace}") Duration grace,
+                @Value("${passes.reminder-before}") Duration reminderBefore) {
         this.passes = passes;
         this.products = products;
         this.productService = productService;
         this.events = events;
         this.organizers = organizers;
         this.audit = audit;
+        this.queue = queue;
         this.grace = grace;
+        this.reminderBefore = reminderBefore;
     }
 
     /**
@@ -179,6 +188,39 @@ public class PassService {
         suspended.forEach(s -> audit.system(s.organizerId(), "pass.suspend", s.passId().toString(),
                 "{\"seq\": " + s.seq() + "}"));
         return suspended.size();
+    }
+
+    /**
+     * 04 §Passes Reminder, the pass job's second step at {@code now}: each installment due within
+     * {@code passes.reminder-before} gets reminded_at = {@code now} and one INSTALLMENT_DUE per channel, queued at
+     * {@code now} (the subject {@link #reminder} finds again), in one transaction. Once only: see {@link Passes#remind}.
+     * ponytail: one statement for every due installment; page it if a run ever reminds more than a few 10k at once.
+     */
+    @Transactional
+    public int remind(Instant now) {
+        List<Passes.Reminded> reminded = passes.remind(now, reminderBefore);
+        reminded.stream().collect(Collectors.groupingBy(Passes.Reminded::organizerId,
+                        Collectors.mapping(Passes.Reminded::passId, Collectors.toSet())))
+                .forEach((org, ids) -> queue.installmentDue(org, ids, now));
+        return reminded.size();
+    }
+
+    /** An INSTALLMENT_DUE subject: the product's name, the installment, the zone venue's time zone. */
+    public record Reminder(String productName, Installment installment, String timezone) {}
+
+    /**
+     * The installment of the pass reminded at {@code at} (its message's created_at) and still unpaid; empty (STALE,
+     * 04 §Notifications) once it is paid or the pass is CANCELLED.
+     */
+    public Optional<Reminder> reminder(UUID org, UUID passId, Instant at) {
+        Pass pass = passes.find(org, passId).orElse(null);
+        if (pass == null || pass.status() == Pass.Status.CANCELLED) {
+            return Optional.empty();
+        }
+        return passes.remindedAt(org, passId, at).map(i -> {
+            Product product = productService.product(org, pass.productId());
+            return new Reminder(product.name(), i, productService.scope(org, product).zone().timezone());
+        });
     }
 
     /** The expiry's hook, in its batch transaction: see {@link Passes#cancelExpired}. */

@@ -74,6 +74,26 @@ class JdbcFanMessages implements FanMessages {
                 .param("users", userIds.toArray(UUID[]::new)).param("at", at.atOffset(ZoneOffset.UTC)).update();
     }
 
+    /**
+     * No unique index: the caller (the pass job) queues once per installment, under its reminded_at row guard.
+     * created_at is the job's clock, the installment's reminded_at.
+     */
+    @Override
+    public void enqueuePasses(UUID org, Collection<UUID> passIds, FanMessage.Kind kind,
+                              List<FanMessage.Channel> channels, Instant at) {
+        jdbc.sql("""
+                        insert into fan_messages (organizer_id, user_id, channel, kind, pass_id, created_at)
+                        select p.organizer_id, p.user_id, cast(c.channel as message_channel),
+                               cast(:kind as message_kind), p.id, :at
+                        from passes p cross join unnest(cast(:channels as text[])) as c(channel)
+                        where p.organizer_id = :org and p.id = any(cast(:passes as uuid[]))
+                        order by p.id, c.channel
+                        """)
+                .param("org", org).param("passes", passIds.toArray(UUID[]::new)).param("kind", kind.name())
+                .param("channels", channels.stream().map(Enum::name).toArray(String[]::new))
+                .param("at", at.atOffset(ZoneOffset.UTC)).update();
+    }
+
     /** The waitlist cooldown, once per event per job run; served by the partial index (event_id, created_at). */
     @Override
     public Optional<Instant> lastQueued(UUID org, int eventId, FanMessage.Kind kind) {
@@ -119,7 +139,7 @@ class JdbcFanMessages implements FanMessages {
     public List<FanMessage> claimDue(int limit) {
         return jdbc.sql("""
                         select id, organizer_id, user_id, channel::text, kind::text, campaign_id, order_id, ticket_id,
-                               event_id, attempts
+                               event_id, pass_id, created_at, attempts
                         from fan_messages
                         where status = 'PENDING' and next_attempt_at <= now()
                         order by (kind = 'CAMPAIGN'), next_attempt_at
@@ -132,6 +152,7 @@ class JdbcFanMessages implements FanMessages {
                         FanMessage.Kind.valueOf(rs.getString("kind")), rs.getObject("campaign_id", UUID.class),
                         rs.getObject("order_id", UUID.class),
                         rs.getObject("ticket_id", UUID.class), rs.getObject("event_id", Integer.class),
+                        rs.getObject("pass_id", UUID.class), rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                         rs.getInt("attempts")))
                 .list();
     }

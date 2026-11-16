@@ -1,6 +1,7 @@
 package ma.jomhor.notifications.application;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ import ma.jomhor.payments.domain.CashCode;
 import ma.jomhor.sales.application.CashInstructions;
 import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.domain.Order;
+import ma.jomhor.sales.products.application.PassService;
 import ma.jomhor.sales.waitlist.application.WaitlistService;
 import ma.jomhor.tenancy.application.UserService;
 import ma.jomhor.tenancy.domain.User;
@@ -55,6 +57,7 @@ public class FanMessageService {
     static final String CLUB_NEWS = "club_news";
     static final String EVENT_INFO = "event_info";
     static final String WAITLIST_OPEN = "waitlist_open";
+    static final String INSTALLMENT_DUE = "installment_due";
 
     private final FanMessages messages;
     private final PushTokens tokens;
@@ -65,6 +68,7 @@ public class FanMessageService {
     private final CashInstructions cash;
     private final CampaignService campaigns;
     private final WaitlistService waitlist;
+    private final PassService passes;
     private final TicketMessenger messenger;
     private final ObjectProvider<PushSender> pushSender;
     private final TransactionTemplate tx;
@@ -76,7 +80,8 @@ public class FanMessageService {
 
     public FanMessageService(FanMessages messages, PushTokens tokens, UserService users, OrderService orders,
                              TicketService tickets, Inventory inventory, CashInstructions cash,
-                             CampaignService campaigns, WaitlistService waitlist, TicketMessenger messenger,
+                             CampaignService campaigns, WaitlistService waitlist, PassService passes,
+                             TicketMessenger messenger,
                              ObjectProvider<PushSender> pushSender,
                              PlatformTransactionManager transactions,
                              @Value("${notifications.send-rate-per-second}") int ratePerSecond,
@@ -92,6 +97,7 @@ public class FanMessageService {
         this.cash = cash;
         this.campaigns = campaigns;
         this.waitlist = waitlist;
+        this.passes = passes;
         this.messenger = messenger;
         this.pushSender = pushSender;
         this.tx = new TransactionTemplate(transactions);
@@ -268,6 +274,7 @@ public class FanMessageService {
             case ORDER_PAID -> Content.push(MessageCopy.text(locale, "push.order_paid.title", Map.of()),
                     MessageCopy.text(locale, "push.order_paid.body", Map.of()), "/orders/" + m.orderId());
             case WAITLIST_OPEN -> waitlistOpen(org, m.eventId(), m.userId(), locale);
+            case INSTALLMENT_DUE -> installmentDue(org, m.passId(), m.createdAt(), locale);
             case CAMPAIGN -> throw new IllegalStateException("rendered by campaign()");
         };
     }
@@ -315,6 +322,23 @@ public class FanMessageService {
         return new Content(MessageCopy.text(locale, "push.waitlist_open.title", Map.of()),
                 MessageCopy.text(locale, "push.waitlist_open.body", Map.of("event", a.title())),
                 "/events/" + eventId, WAITLIST_OPEN, List.of(a.title(), shopOrigin + "/events/" + eventId));
+    }
+
+    /**
+     * Stale once the installment reminded at {@code at} is paid or the pass is CANCELLED. PUSH opens the pass;
+     * WHATSAPP installment_due with [product name, amount, due date in the zone venue's time zone,
+     * {SHOP_ORIGIN}/me/tickets]. The amount is the installment's (04 §Notifications rules); no holder name, no phone.
+     */
+    private Content installmentDue(UUID org, UUID passId, Instant at, String locale) {
+        PassService.Reminder r = passes.reminder(org, passId, at).orElse(null);
+        if (r == null) {
+            return null;
+        }
+        String amount = MessageCopy.amount(r.installment().amountMad());
+        String date = MessageCopy.date(r.installment().dueAt(), r.timezone(), locale);
+        return new Content(MessageCopy.text(locale, "push.installment_due.title", Map.of()),
+                MessageCopy.text(locale, "push.installment_due.body", Map.of("amount", amount, "date", date)),
+                "/passes/" + passId, INSTALLMENT_DUE, List.of(r.productName(), amount, date, shopOrigin + "/me/tickets"));
     }
 
     /**

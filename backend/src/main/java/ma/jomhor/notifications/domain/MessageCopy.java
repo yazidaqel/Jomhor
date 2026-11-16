@@ -43,10 +43,19 @@ public final class MessageCopy {
         return String.format(Locale.ROOT, "%d,%02d DH", centimes / 100, centimes % 100);
     }
 
+    /** "d MMM" in the venue's zone (an installment's due date): {@link #deadline} without the time. */
+    public static String date(Instant at, String timezone, String locale) {
+        return DateTimeFormatter.ofPattern("d MMM", formatLocale(locale)).withZone(ZoneId.of(timezone)).format(at);
+    }
+
     /** "d MMM HH:mm" in the venue's zone; ar uses ar-MA month names with Western digits (the formatter's default). */
     public static String deadline(Instant at, String timezone, String locale) {
+        return DateTimeFormatter.ofPattern("d MMM HH:mm", formatLocale(locale)).withZone(ZoneId.of(timezone))
+                .format(at);
+    }
+
+    private static Locale formatLocale(String locale) {
         String l = locale(locale);
-        Locale fmt = "ar".equals(l) ? Locale.forLanguageTag("ar-MA") : Locale.forLanguageTag(l);
-        return DateTimeFormatter.ofPattern("d MMM HH:mm", fmt).withZone(ZoneId.of(timezone)).format(at);
+        return "ar".equals(l) ? Locale.forLanguageTag("ar-MA") : Locale.forLanguageTag(l);
     }
 }

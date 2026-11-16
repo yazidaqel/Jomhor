@@ -239,6 +239,46 @@ class JdbcPasses implements Passes {
                 .list();
     }
 
+    // One statement: per pass, its earliest installment due for a reminder (distinct on), locked skip locked (another
+    // instance's run or a payment holds it; for update can't sit beside distinct, hence the nesting); the update
+    // re-checks reminded_at and paid_at on the latest row version, so each installment is reminded once.
+    @Override
+    public List<Reminded> remind(Instant now, Duration before) {
+        return jdbc.sql("""
+                        update pass_installments set reminded_at = :now
+                        where id in (select l.id from pass_installments l
+                                     where l.id in (select distinct on (i.pass_id) i.id from pass_installments i
+                                                    join passes p on p.organizer_id = i.organizer_id
+                                                                 and p.id = i.pass_id
+                                                    where i.paid_at is null and i.seq > 1 and i.reminded_at is null
+                                                      and i.due_at > :now
+                                                      and i.due_at <= :now + make_interval(secs => :secs)
+                                                      and p.status in ('ACTIVE', 'SUSPENDED')
+                                                    order by i.pass_id, i.seq)
+                                     for update skip locked)
+                          and reminded_at is null and paid_at is null
+                        returning organizer_id, pass_id
+                        """)
+                .param("now", now.atOffset(ZoneOffset.UTC)).param("secs", before.toSeconds())
+                .query((rs, n) -> new Reminded(rs.getObject("organizer_id", UUID.class),
+                        rs.getObject("pass_id", UUID.class)))
+                .list();
+    }
+
+    @Override
+    public Optional<Installment> remindedAt(UUID org, UUID passId, Instant at) {
+        return jdbc.sql("""
+                        select id, pass_id, seq, amount_mad, due_at, order_id, paid_at from pass_installments
+                        where organizer_id = :org and pass_id = :pass and reminded_at = :at and paid_at is null
+                        order by seq limit 1
+                        """)
+                .param("org", org).param("pass", passId).param("at", at.atOffset(ZoneOffset.UTC))
+                .query((rs, n) -> new Installment(rs.getObject("id", UUID.class), rs.getObject("pass_id", UUID.class),
+                        rs.getInt("seq"), rs.getLong("amount_mad"), instant(rs, "due_at"),
+                        rs.getObject("order_id", UUID.class), instant(rs, "paid_at")))
+                .optional();
+    }
+
     @Override
     public InstallmentFigures installmentFigures(UUID org, UUID productId) {
         return jdbc.sql("""

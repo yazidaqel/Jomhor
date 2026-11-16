@@ -87,6 +87,21 @@ public interface Passes {
      */
     List<Suspended> suspend(Instant now, Duration grace);
 
+    /** An installment of this pass just reminded. */
+    record Reminded(UUID organizerId, UUID passId) {}
+
+    /**
+     * 04 §Passes Reminder, every organizer: per ACTIVE or SUSPENDED pass, its earliest unpaid installment with seq > 1,
+     * reminded_at null and {@code now} < due_at ≤ {@code now} + {@code before} → reminded_at = {@code now}; a later one
+     * waits for a later run (its own reminded_at). A date already past is never reminded (suspension handles it). Rows
+     * locked by another transaction are skipped (the next run sees them), so each installment is reminded once across
+     * instances.
+     */
+    List<Reminded> remind(Instant now, Duration before);
+
+    /** The pass's earliest unpaid installment reminded at {@code at}; empty when none is (paid since). */
+    Optional<Installment> remindedAt(UUID org, UUID passId, Instant at);
+
     /** 04 GET /org/products/{id} {@code installments}, over the product's ACTIVE and SUSPENDED passes. */
     record InstallmentFigures(long overdue, long dueMad, long collectedMad) {}
 

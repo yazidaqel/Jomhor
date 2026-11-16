@@ -21,9 +21,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * The pass job (docs/04-api.md §Passes Tickets and Suspension, plan lot-5 Q188, Q197): the suspension of passes with
- * an installment overdue past its grace, then one ticket per ACTIVE pass for each published event of its series at its
- * zone's venue, until the event's transfer_until.
+ * The pass job (docs/04-api.md §Passes Tickets, Suspension and Reminder, plan lot-5 Q188, Q197, Q199): the suspension
+ * of passes with an installment overdue past its grace, the installment reminders, then one ticket per ACTIVE pass
+ * for each published event of its series at its zone's venue, until the event's transfer_until.
  *
  * <p>Per event, batches of {@link #BATCH} passes, each in its own transaction: the event's class-8 try-lock (another
  * instance holding it issues the event this run), then {@code for share} on the event row (so an event PATCH changing
@@ -69,15 +69,21 @@ public class PassTicketService {
     }
 
     /**
-     * First the suspension (04 §Passes Suspension), so a pass suspended now gets no ticket in this run; then every
-     * candidate event, batch after batch while a full batch issued something. A step that fails is logged (exception
-     * class and SQL state only: a constraint message can quote holder_name) and the others still run.
+     * First the suspension (04 §Passes Suspension), so a pass suspended now gets no ticket in this run, and the
+     * reminders (§Reminder); then every candidate event, batch after batch while a full batch issued something. A step
+     * that fails is logged (exception class and SQL state only: a constraint message can quote holder_name) and the
+     * others still run.
      */
     private void runEach(Supplier<Instant> clock) {
         try {
             passService.suspend(clock.get());
         } catch (RuntimeException ex) {
             log.error("Pass suspension failed: {} (SQL state {})", ex.getClass().getName(), sqlState(ex));
+        }
+        try {
+            passService.remind(clock.get());
+        } catch (RuntimeException ex) {
+            log.error("Installment reminders failed: {} (SQL state {})", ex.getClass().getName(), sqlState(ex));
         }
         for (Event.Ref e : events.withSeriesOnSale(clock.get())) {
             try {

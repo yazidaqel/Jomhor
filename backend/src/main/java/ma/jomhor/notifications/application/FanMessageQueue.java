@@ -61,6 +61,17 @@ public class FanMessageQueue {
         }
     }
 
+    /**
+     * The pass job reminded an installment of each pass (docs/04-api.md §Passes Reminder): PUSH and WHATSAPP to its
+     * holder, queued at the job's clock {@code at} (the installment's reminded_at, by which the sender finds it).
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void installmentDue(UUID org, Collection<UUID> passIds, Instant at) {
+        if (!passIds.isEmpty()) {
+            messages.enqueuePasses(org, passIds, Kind.INSTALLMENT_DUE, List.of(Channel.PUSH, Channel.WHATSAPP), at);
+        }
+    }
+
     /** When the event's last WAITLIST_OPEN was queued (the waitlist cooldown; rejoins and leaves don't reset it). */
     public Optional<Instant> lastWaitlistOpen(UUID org, int eventId) {
         return messages.lastQueued(org, eventId, Kind.WAITLIST_OPEN);
