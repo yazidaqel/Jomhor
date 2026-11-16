@@ -57,7 +57,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * A product order (04 §Products) takes no per-account order lock and no category; settling a MEMBERSHIP one takes the
  * organizer's membership lock after the order row. A PASS purchase takes the account's series lock → the product row
  * → the pass; its late success the order row → the same ({@link PassService}); the expiry its order rows → the
- * products (id order) → the passes. So none of them waits in a circle.
+ * products (id order) → the passes. Settling an installment order takes the order row → the pass row; POST
+ * /fan/passes/{id}/installments the pass row, then inserts its order. So none of them waits in a circle.
  */
 @Service
 public class OrderService {
@@ -365,7 +366,7 @@ public class OrderService {
 
     /** A product order's product as the fan sees it, else null. */
     private ProductService.FanView product(Order o) {
-        return o.eventId() == null ? products.ofOrder(o.organizerId(), o.productId()) : null;
+        return o.eventId() == null ? products.ofOrder(o.organizerId(), o.productId(), o.passId(), o.id()) : null;
     }
 
     /**
@@ -528,10 +529,19 @@ public class OrderService {
         }
     }
 
-    /** When the order's sales close: its event's refund_cutoff_at (null: never on sale), or its product's. */
+    /**
+     * When the order's sales close: its event's refund_cutoff_at (null: never on sale), or its product's. An installment
+     * order has no sales close (04 POST /pay CASH_AGENCY: now + 24 h): the database clock's now + 24 h, so the hold is
+     * the full 24 h.
+     */
     private Instant salesClose(Order o) {
-        return o.eventId() == null ? products.product(o.organizerId(), o.productId()).salesCloseAt()
-                : inventory.saleEvent(o.eventId()).orElseThrow().refundCutoffAt();
+        if (o.eventId() != null) {
+            return inventory.saleEvent(o.eventId()).orElseThrow().refundCutoffAt();
+        }
+        if (o.passId() != null && passes.isInstallment(o.organizerId(), o.passId(), o.id())) {
+            return orders.now().plus(ProductService.INSTALLMENT_CASH_HOLD);
+        }
+        return products.product(o.organizerId(), o.productId()).salesCloseAt();
     }
 
     private static ApiException tooLate(Instant close) {
@@ -632,13 +642,22 @@ public class OrderService {
 
     /**
      * What a paid product order gives (04 §Products, §Passes); null when given, else why not. A PASS: its pass
-     * ({@link PassService#paid}; a refusal leaves the order EXPIRED). A MEMBERSHIP pays the buyer's membership up to its
-     * valid_until; already paid to that date → the order CANCELLED, NOT_PAYABLE.
+     * ({@link PassService#paid}; a refusal leaves the order EXPIRED). An installment order of a pass (04 §Passes
+     * Installments) pays its earliest unpaid installment ({@link PassService#installmentPaid}); refused, a held order is
+     * CANCELLED (it can't be charged again) and an expired one stays EXPIRED. A MEMBERSHIP pays the buyer's membership
+     * up to its valid_until; already paid to that date → the order CANCELLED, NOT_PAYABLE.
      */
     private Settlement productPaid(Order o, boolean expired) {
         Product p = products.product(o.organizerId(), o.productId());
+        if (p.kind() == Product.Kind.PASS && passes.isInstallment(o.organizerId(), o.passId(), o.id())) {
+            Settlement refused = passes.installmentPaid(o.organizerId(), o.passId(), o.id(), o.totalMad());
+            if (refused != null && !expired) {
+                orders.cancel(o.organizerId(), o.id());
+            }
+            return refused;
+        }
         if (p.kind() == Product.Kind.PASS) {
-            return passes.paid(o.organizerId(), o.passId(), expired);
+            return passes.paid(o.organizerId(), o.passId(), o.id(), expired);
         }
         if (memberships.paid(o.organizerId(), o.userId(), p.id(), p.validUntil())) {
             return null;

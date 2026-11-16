@@ -12,14 +12,19 @@ import ma.jomhor.sales.domain.Order;
 import ma.jomhor.sales.products.application.ProductOrderService;
 import ma.jomhor.sales.products.domain.Product;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** docs/04-api.md §Fan POST /fan/product-orders. The buyer is the fan token's sub. */
+/**
+ * docs/04-api.md §Fan POST /fan/product-orders and POST /fan/passes/{id}/installments (the same shape). The buyer is
+ * the fan token's sub.
+ */
 @RestController
 class FanProductOrderController {
 
@@ -44,8 +49,18 @@ class FanProductOrderController {
             throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
                     Map.of("fields", Map.of("channel", "APP or WEB")));
         }
-        OrderService.View v = orders.place(UUID.fromString(jwt.getSubject()), body.productId(), body.channel(),
-                body.holderName(), body.installments());
+        return created(orders.place(UUID.fromString(jwt.getSubject()), body.productId(), body.channel(),
+                body.holderName(), body.installments()));
+    }
+
+    /** 201 a new installment order, 200 the live one again. */
+    @PostMapping("/fan/passes/{id}/installments")
+    ResponseEntity<Created> installment(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        ProductOrderService.Placed placed = orders.installment(UUID.fromString(jwt.getSubject()), id);
+        return ResponseEntity.status(placed.created() ? HttpStatus.CREATED : HttpStatus.OK).body(created(placed.view()));
+    }
+
+    private static Created created(OrderService.View v) {
         Order o = v.order();
         Product p = v.product().product();
         return new Created(o.id(), o.status(), o.reservedUntil(), o.totalMad(), new ProductRef(p.id(), p.kind(),

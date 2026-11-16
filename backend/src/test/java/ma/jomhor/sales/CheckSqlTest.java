@@ -167,6 +167,43 @@ class CheckSqlTest extends QueueFixture {
     }
 
     /**
+     * BE-57: a pass bought in 2 and its installment order, both PAID, are clean; an installment no longer credited to its
+     * PAID order, then credited to an order of another amount, is an INSTALLMENT_PAID row.
+     */
+    @Test
+    void installmentsMatchTheirPaidOrders() throws Exception {
+        Sale s = sale();
+        Caller a = s.room().admin();
+        String series = JsonPath.read(body(call(a, post("/org/series"),
+                "{\"name\": \"Saison\", \"starts_on\": \"2026-08-01\", \"ends_on\": \"2099-06-30\"}")
+                .andExpect(status().isCreated())), "$.id");
+        int zone = zone(a, venue(a, "Stade"), "EST");
+        String product = JsonPath.read(body(call(a, post("/org/products"), """
+                {"kind": "PASS", "name": "Abonnement", "price_mad": 150000, "quota": 5, "series_id": "%s",
+                 "zone_id": %d, "sales_close_at": "2099-06-30T22:00:00Z", "on_sale": true, "max_installments": 2}"""
+                .formatted(series, zone)).andExpect(status().isCreated())), "$.id");
+        String purchase = JsonPath.read(body(mvc.perform(post("/fan/product-orders")
+                .header("Authorization", "Bearer " + s.fan().token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"product_id\": \"%s\", \"channel\": \"APP\", \"holder_name\": \"Nadia Berrada\", "
+                        .formatted(product) + "\"installments\": 2}")).andExpect(status().isCreated())), "$.id");
+        callback(PaymentTest.approve(pay(s.fan(), purchase), 75_000)).andExpect(status().isSeeOther());
+        String pass = jdbc.sql("select pass_id::text from orders where id = ?::uuid").param(purchase)
+                .query(String.class).single();
+        String second = JsonPath.read(body(mvc.perform(post("/fan/passes/" + pass + "/installments")
+                .header("Authorization", "Bearer " + s.fan().token())).andExpect(status().isCreated())), "$.id");
+        callback(PaymentTest.approve(pay(s.fan(), second), 75_000)).andExpect(status().isSeeOther());
+        for (String ref : List.of(purchase, second)) {
+            assertThat(foundFor(ref)).isEmpty();
+        }
+
+        sql("update pass_installments set order_id = null, paid_at = null where order_id = ?::uuid", second);
+        assertThat(foundFor(second)).containsExactly("INSTALLMENT_PAID");
+        sql("update pass_installments set order_id = ?::uuid, paid_at = now(), amount_mad = 70000 "
+                + "where pass_id = ?::uuid and seq = 2", second, pass);
+        assertThat(foundFor(second)).containsExactly("INSTALLMENT_PAID");
+    }
+
+    /**
      * BE-55: the pass job issues without the per-account limit (04 §Passes Tickets), so a holder over it through a pass
      * ticket is no PER_ACCOUNT_LIMIT row, and the pass ticket order is clean; places bought over it still are.
      */

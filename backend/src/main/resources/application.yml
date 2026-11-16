@@ -158,6 +158,10 @@ waitlist:
 passes:
   # Season pass tickets (docs/04-api.md §Passes Tickets): the issue job runs this long after the previous run ends.
   tick: ${PASSES_TICK:30s}
+  # Installments (docs/04-api.md §Passes Installments): installment k is due this long after installment k - 1.
+  installment-interval: 30d
+  # A SUSPENDED pass goes ACTIVE when a payment leaves no installment unpaid this long past its due_at (§Suspension).
+  grace: 7d
 
 notifications:
   push:

@@ -22,8 +22,8 @@ public interface Products {
     Product insert(UUID org, Product p);
 
     /**
-     * Writes name, price, quota, on_sale, sales_close_at and valid_until of {@code p}. Empty if the quota is below sold
-     * (checked in the same statement).
+     * Writes name, price, quota, on_sale, sales_close_at, valid_until and max_installments of {@code p}. Empty if the
+     * quota is below sold (checked in the same statement).
      */
     Optional<Product> update(UUID org, Product p);
 

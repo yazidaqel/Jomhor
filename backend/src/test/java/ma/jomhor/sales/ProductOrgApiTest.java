@@ -25,9 +25,9 @@ import org.springframework.test.web.servlet.ResultActions;
 class ProductOrgApiTest extends OrgApiTest {
 
     private static final String[] PRODUCT_KEYS = {"id", "kind", "name", "price_mad", "on_sale", "sales_close_at", "quota",
-            "sold", "valid_until", "series", "zone"};
+            "sold", "valid_until", "series", "zone", "max_installments"};
     private static final String[] AUDIT_KEYS = {"kind", "name", "price_mad", "on_sale", "sales_close_at", "quota",
-            "series_id", "zone_id", "valid_until"};
+            "series_id", "zone_id", "valid_until", "max_installments"};
     private static final String CLOSE = "2099-06-30T22:00:00Z";
     private static final String VALID = "2099-07-01T00:00:00Z";
 

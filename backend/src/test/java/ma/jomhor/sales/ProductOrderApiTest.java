@@ -218,7 +218,8 @@ class ProductOrderApiTest extends PaymentTest {
                 .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.details.fields.holder_name").exists());
         buy(f, c.product(), "{\"product_id\": \"%s\", \"channel\": \"APP\", \"holder_name\": \"Yazid Aqel\", "
                 + "\"installments\": 2}").andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.details.fields.installments").exists());
+                .andExpect(jsonPath("$.details.fields.installments").exists())
+                .andExpect(jsonPath("$.details.reason").value("NOT_OFFERED"));
         buy(f, c.product(), "{\"product_id\": \"%s\", \"channel\": \"POS\", \"holder_name\": \"Yazid Aqel\"}")
                 .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.details.fields.channel").exists());
         // 2. visible as GET /fan/products/{id}

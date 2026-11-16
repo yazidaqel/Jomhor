@@ -1,6 +1,9 @@
 package ma.jomhor.sales.products.application;
 
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,10 +18,13 @@ import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.web.ApiException;
 import ma.jomhor.crm.application.MembershipService;
 import ma.jomhor.sales.application.Orders;
+import ma.jomhor.sales.products.domain.Installment;
+import ma.jomhor.sales.products.domain.Installments;
 import ma.jomhor.sales.products.domain.Pass;
 import ma.jomhor.sales.products.domain.Product;
 import ma.jomhor.tenancy.application.OrganizerService;
 import ma.jomhor.tenancy.domain.Organizer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,13 +39,15 @@ import tools.jackson.databind.json.JsonMapper;
 public class ProductService {
 
     static final int NAME_MAX = 60;
+    /** JdbcOrders.awaitCash's 24 h: an installment order's cash hold, with no sales close (04 POST /pay CASH_AGENCY). */
+    public static final Duration INSTALLMENT_CASH_HOLD = Duration.ofHours(24);
 
     /**
      * POST or PATCH body. On PATCH a null field is unchanged; kind, series_id and zone_id are fixed after create (a
      * different value → 422).
      */
     public record Input(Product.Kind kind, String name, Long priceMad, Integer quota, UUID seriesId, Integer zoneId,
-                        Instant salesCloseAt, Instant validUntil, Boolean onSale) {}
+                        Instant salesCloseAt, Instant validUntil, Boolean onSale, Integer maxInstallments) {}
 
     /** A PASS product's series and zone (with its venue). */
     public record PassScope(Event.Series series, Event.ZoneAt zone) {}
@@ -58,7 +66,8 @@ public class ProductService {
      * isn't CLOSED (by starts_at) its ticket orders, the ACTIVE passes and Σ remaining of its PASS categories in the
      * zone.
      */
-    public record PassFigures(PassCounts passes, long revenueMad, List<EventFigures> events) implements Figures {}
+    public record PassFigures(PassCounts passes, long revenueMad, List<EventFigures> events,
+                              Passes.InstallmentFigures installments) implements Figures {}
 
     public record PassCounts(long pending, long active, long suspended) {}
 
@@ -69,12 +78,23 @@ public class ProductService {
     public record MembershipFigures(long paidMembers, long revenueMad) implements Figures {}
 
     /**
+     * One way to pay (04 §Passes Installments): {@code installments} payments of {@code amountsMad}, every
+     * {@code interval} (null for the in-full plan).
+     */
+    public record Plan(int installments, List<Long> amountsMad, Duration interval) {}
+
+    /**
      * The public row: its organizer; {@code timezone} the zone venue's ({@code Africa/Casablanca} for MEMBERSHIP);
      * {@code pass} and {@code events} (the series' published, upcoming events at the zone's venue) null for
-     * MEMBERSHIP; {@code payment} as an event's, closing at the product's sales_close_at.
+     * MEMBERSHIP; {@code payment} as an event's, closing at the product's sales_close_at; {@code plans} as
+     * {@link #plans}; {@code installment} on an installment order only (04 GET /fan/orders/{id}), else null.
      */
     public record FanView(Product product, Organizer organizer, String timezone, PassScope pass,
-                          List<Event.SeriesEvent> events, PaymentMethods.Options payment) {}
+                          List<Event.SeriesEvent> events, PaymentMethods.Options payment, List<Plan> plans,
+                          InstallmentOf installment) {}
+
+    /** Which installment an installment order is: {@code seq} of {@code of}. */
+    public record InstallmentOf(int seq, int of) {}
 
     private final Products products;
     private final Passes passes;
@@ -85,9 +105,11 @@ public class ProductService {
     private final OrganizerService organizers;
     private final AuditLog audit;
     private final JsonMapper json;
+    private final Duration interval;
 
     ProductService(Products products, Passes passes, Orders orders, EventService events, Inventory inventory,
-                   MembershipService memberships, OrganizerService organizers, AuditLog audit, JsonMapper json) {
+                   MembershipService memberships, OrganizerService organizers, AuditLog audit, JsonMapper json,
+                   @Value("${passes.installment-interval}") Duration interval) {
         this.products = products;
         this.passes = passes;
         this.orders = orders;
@@ -97,6 +119,7 @@ public class ProductService {
         this.organizers = organizers;
         this.audit = audit;
         this.json = json;
+        this.interval = interval;
     }
 
     // ---------- organizer ----------
@@ -129,7 +152,8 @@ public class ProductService {
                                     .mapToLong(Inventory.SalePrice::remaining).sum()))
                     .toList();
             figures = new PassFigures(new PassCounts(byStatus.getOrDefault(Pass.Status.PENDING, 0L), active,
-                    byStatus.getOrDefault(Pass.Status.SUSPENDED, 0L)), revenue, list);
+                    byStatus.getOrDefault(Pass.Status.SUSPENDED, 0L)), revenue, list,
+                    passes.installmentFigures(org, p.id()));
         }
         return new Detail(v, figures, orders.productRefundsRequired(org, p.id()));
     }
@@ -158,12 +182,13 @@ public class ProductService {
             fields.put("zone_id", "unknown zone");
         }
         checkValidUntil(in.validUntil(), in.salesCloseAt(), fields);
+        int installments = maxInstallments(pass, in.maxInstallments(), 1, fields);
         if (!fields.isEmpty()) {
             throw invalid(fields);
         }
         Product p = products.insert(org, new Product(null, org, in.kind(), name, in.priceMad(),
                 Boolean.TRUE.equals(in.onSale()), in.salesCloseAt(), in.quota(), 0, in.seriesId(), in.zoneId(),
-                in.validUntil(), null));
+                in.validUntil(), installments, null));
         audit.staff(org, userId, "product.create", p.id().toString(), payload(p));
         return view(org, p);
     }
@@ -191,12 +216,13 @@ public class ProductService {
         }
         Instant validUntil = or(in.validUntil(), p.validUntil());
         checkValidUntil(validUntil, close, fields);
+        int installments = maxInstallments(pass, in.maxInstallments(), p.maxInstallments(), fields);
         if (!fields.isEmpty()) {
             throw invalid(fields);
         }
         Product updated = products.update(org, new Product(p.id(), org, p.kind(), name, or(in.priceMad(), p.priceMad()),
                         or(in.onSale(), p.onSale()), close, or(in.quota(), p.quota()), p.sold(), p.seriesId(),
-                        p.zoneId(), validUntil, p.createdAt()))
+                        p.zoneId(), validUntil, installments, p.createdAt()))
                 .orElseThrow(() -> new ApiException("QUOTA_BELOW_SOLD", HttpStatus.UNPROCESSABLE_CONTENT,
                         "Quota is below the passes already sold"));
         audit.staff(org, userId, "product.update", p.id().toString(), payload(updated));
@@ -208,13 +234,14 @@ public class ProductService {
     /** 04 GET /fan/products: the organizer (listed or not; unknown → 404)'s products on sale. */
     public List<FanView> onSale(UUID org, Product.Kind kind) {
         Organizer organizer = organizers.get(org);
-        return products.onSale(org, kind).stream().map(p -> fanView(p, organizer)).toList();
+        Instant now = events.now();
+        return products.onSale(org, kind).stream().map(p -> fanView(p, organizer, now)).toList();
     }
 
     /** 04 GET /fan/products/{id}: unknown or not on sale → 404. */
     public FanView onSale(UUID productId) {
         Product p = products.onSale(productId).orElseThrow(ProductService::notFound);
-        return fanView(p, organizers.get(p.organizerId()));
+        return fanView(p, organizers.get(p.organizerId()), events.now());
     }
 
     // ---------- orders (sales) ----------
@@ -226,7 +253,52 @@ public class ProductService {
 
     /** A product order's product as the fan sees it, read even once it is off sale (04 GET /fan/orders/{id}). */
     public FanView ofOrder(UUID org, UUID productId) {
-        return fanView(product(org, productId), organizers.get(org));
+        return fanView(product(org, productId), organizers.get(org), events.now());
+    }
+
+    /**
+     * {@link #ofOrder(UUID, UUID)} for the order {@code orderId} of the pass {@code passId} (null: no pass). On a pass
+     * paid in installments (a schedule of 2 or more), every order that pays one gets {@code installment}: the purchase
+     * order {@code {1, n}}; any other order {@code seq} = the installment it paid, else the earliest unpaid one, else the
+     * last. {@code of} = the schedule's length. For {@code seq > 1} (not the purchase), the payment methods ignore the
+     * product's sales close (cash is held now + 24 h, as on /pay), so {@code cash_until} is null. A pass paid in full:
+     * null, as any product order.
+     */
+    public FanView ofOrder(UUID org, UUID productId, UUID passId, UUID orderId) {
+        FanView v = ofOrder(org, productId);
+        List<Installment> schedule = passId == null ? List.of() : passes.installments(org, passId);
+        if (schedule.size() < 2) {
+            return v;
+        }
+        if (passes.purchaseOrder(org, passId).orElseThrow().equals(orderId)) {
+            return new FanView(v.product(), v.organizer(), v.timezone(), v.pass(), v.events(), v.payment(), v.plans(),
+                    new InstallmentOf(1, schedule.size()));
+        }
+        int seq = schedule.stream().filter(i -> orderId.equals(i.orderId())).findFirst()
+                .or(() -> schedule.stream().filter(i -> !i.paid()).findFirst())
+                .map(Installment::seq).orElse(schedule.size());
+        PaymentMethods.Options cash = events.paymentOptions(org, events.now().plus(INSTALLMENT_CASH_HOLD));
+        return new FanView(v.product(), v.organizer(), v.timezone(), v.pass(), v.events(),
+                new PaymentMethods.Options(cash.methods(), null), v.plans(), new InstallmentOf(seq, schedule.size()));
+    }
+
+    /**
+     * 04 §Passes Installments {@code plans}: in full, plus a PASS's {@code max_installments} payments every
+     * passes.installment-interval when that is above 1, its last due date ({@code now + (n − 1) × interval}) falls on
+     * or before the series' ends_on (to the end of that day in the zone venue's zone), and the price splits into
+     * amounts above 0 (price ≥ n).
+     */
+    List<Plan> plans(Product p, PassScope scope, Instant now) {
+        List<Plan> plans = new ArrayList<>(List.of(new Plan(1, List.of(p.priceMad()), null)));
+        int n = p.maxInstallments();
+        if (scope != null && n > 1 && p.priceMad() >= n) {
+            Instant seasonEnd = scope.series().endsOn().plusDays(1).atStartOfDay(ZoneId.of(scope.zone().timezone()))
+                    .toInstant();
+            if (now.plus(interval.multipliedBy(n - 1L)).isBefore(seasonEnd)) {
+                plans.add(new Plan(n, Installments.split(p.priceMad(), n), interval));
+            }
+        }
+        return plans;
     }
 
     // ponytail: 2 catalog reads per product (3 on the fan side); batch them by series and zone if a club sells many.
@@ -234,12 +306,12 @@ public class ProductService {
         return new View(p, scope(org, p));
     }
 
-    private FanView fanView(Product p, Organizer organizer) {
+    private FanView fanView(Product p, Organizer organizer, Instant now) {
         UUID org = p.organizerId();
         PassScope scope = scope(org, p);
         return new FanView(p, organizer, scope == null ? Venue.DEFAULT_TIMEZONE : scope.zone().timezone(), scope,
                 scope == null ? null : events.seriesEvents(org, p.seriesId(), scope.zone().venueId(), true),
-                events.paymentOptions(org, p.salesCloseAt()));
+                events.paymentOptions(org, p.salesCloseAt()), plans(p, scope, now), null);
     }
 
     /** The FKs and the create checks keep both of this organizer, so they are always found. */
@@ -273,6 +345,21 @@ public class ProductService {
         }
     }
 
+    /**
+     * {@code max_installments}: 1-10 on a PASS (absent = {@code current}); a MEMBERSHIP keeps 1 (another value → 422).
+     */
+    private static int maxInstallments(boolean pass, Integer sent, int current, Map<String, Object> fields) {
+        if (sent == null) {
+            return current;
+        }
+        if (!pass && sent != 1) {
+            fields.put("max_installments", "only for PASS");
+        } else if (sent < 1 || sent > Installments.MAX) {
+            fields.put("max_installments", "must be 1-10");
+        }
+        return sent;
+    }
+
     private static void checkValidUntil(Instant validUntil, Instant salesCloseAt, Map<String, Object> fields) {
         if (validUntil != null && !validUntil.isAfter(salesCloseAt)) {
             fields.putIfAbsent("valid_until", "must be after sales_close_at");
@@ -291,6 +378,7 @@ public class ProductService {
         m.put("series_id", Objects.toString(p.seriesId(), null));
         m.put("zone_id", p.zoneId());
         m.put("valid_until", Objects.toString(p.validUntil(), null));
+        m.put("max_installments", p.maxInstallments());
         return json.writeValueAsString(m);
     }
 

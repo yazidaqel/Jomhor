@@ -19,7 +19,7 @@ class JdbcProducts implements Products {
 
     private static final String COLUMNS = """
             id, organizer_id, kind::text as kind, name, price_mad, on_sale, sales_close_at, quota, sold, series_id,
-            zone_id, valid_until, created_at""";
+            zone_id, valid_until, max_installments, created_at""";
     // kind in its enum order (PASS, MEMBERSHIP: the column, not the text alias); names byte-wise, the same on every
     // database locale.
     private static final String ORDER = " order by products.kind, name collate \"C\", id";
@@ -54,14 +54,14 @@ class JdbcProducts implements Products {
     public Product insert(UUID org, Product p) {
         return jdbc.sql("""
                         insert into products (organizer_id, kind, name, price_mad, on_sale, sales_close_at, quota,
-                                              series_id, zone_id, valid_until)
+                                              series_id, zone_id, valid_until, max_installments)
                         values (:org, cast(:kind as product_kind), :name, :price, :onSale, :close, :quota, :series,
-                                :zone, :validUntil)
+                                :zone, :validUntil, :installments)
                         returning\s""" + COLUMNS)
                 .param("org", org).param("kind", p.kind().name()).param("name", p.name()).param("price", p.priceMad())
                 .param("onSale", p.onSale()).param("close", ts(p.salesCloseAt())).param("quota", p.quota())
                 .param("series", p.seriesId()).param("zone", p.zoneId()).param("validUntil", ts(p.validUntil()))
-                .query(JdbcProducts::product).single();
+                .param("installments", p.maxInstallments()).query(JdbcProducts::product).single();
     }
 
     // sold <= quota in the same statement: a concurrent pass purchase can't slip between the check and the write.
@@ -69,13 +69,13 @@ class JdbcProducts implements Products {
     public Optional<Product> update(UUID org, Product p) {
         return jdbc.sql("""
                         update products set name = :name, price_mad = :price, quota = :quota, on_sale = :onSale,
-                          sales_close_at = :close, valid_until = :validUntil
+                          sales_close_at = :close, valid_until = :validUntil, max_installments = :installments
                         where organizer_id = :org and id = :id
                           and (cast(:quota as integer) is null or sold <= cast(:quota as integer))
                         returning\s""" + COLUMNS)
                 .param("org", org).param("id", p.id()).param("name", p.name()).param("price", p.priceMad())
                 .param("quota", p.quota()).param("onSale", p.onSale()).param("close", ts(p.salesCloseAt()))
-                .param("validUntil", ts(p.validUntil()))
+                .param("validUntil", ts(p.validUntil())).param("installments", p.maxInstallments())
                 .query(JdbcProducts::product).optional();
     }
 
@@ -136,6 +136,6 @@ class JdbcProducts implements Products {
                 Product.Kind.valueOf(rs.getString("kind")), rs.getString("name"), rs.getLong("price_mad"),
                 rs.getBoolean("on_sale"), instant(rs, "sales_close_at"), rs.getObject("quota", Integer.class),
                 rs.getInt("sold"), rs.getObject("series_id", UUID.class), rs.getObject("zone_id", Integer.class),
-                instant(rs, "valid_until"), instant(rs, "created_at"));
+                instant(rs, "valid_until"), rs.getInt("max_installments"), instant(rs, "created_at"));
     }
 }

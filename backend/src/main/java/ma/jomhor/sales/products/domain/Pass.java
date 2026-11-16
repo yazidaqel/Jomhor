@@ -8,8 +8,11 @@ import java.util.UUID;
  * one not CANCELLED per account per series.
  */
 public record Pass(UUID id, UUID organizerId, UUID productId, UUID seriesId, UUID userId, String holderName,
-                   Status status, Instant createdAt) {
+                   Status status, Instant suspendedAt, Instant createdAt) {
 
-    /** PENDING until its purchase order is PAID; CANCELLED if that expires. SUSPENDED is plan lot-5 3b. */
+    /**
+     * PENDING until its purchase order is PAID; CANCELLED if that expires; SUSPENDED (with {@code suspendedAt}) while an
+     * installment is overdue past passes.grace.
+     */
     public enum Status { PENDING, ACTIVE, SUSPENDED, CANCELLED }
 }
