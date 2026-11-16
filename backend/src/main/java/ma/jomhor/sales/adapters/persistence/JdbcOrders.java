@@ -188,21 +188,35 @@ class JdbcOrders implements Orders {
         return insertStaffOrder(id, org, eventId, 0, "FREE", staffUserId, items);
     }
 
-    // A PAID POS order with no buyer; invited_by from the caller's staff row (null staffUserId: a till sale).
+    // A PAID POS order with no buyer; invited_by = the caller's staff row (null staffUserId: a till sale). An invitation
+    // whose caller has no staff row here is a bug: it fails rather than read as a till order.
     private Optional<Order> insertStaffOrder(UUID id, UUID org, int eventId, long totalMad, String method,
                                              UUID staffUserId, List<Order.Item> items) {
+        UUID invitedBy = staffUserId == null ? null
+                : jdbc.sql("select id from staff where organizer_id = :org and user_id = :user")
+                        .param("org", org).param("user", staffUserId).query(UUID.class).optional()
+                        .orElseThrow(() -> new IllegalStateException("no staff row for the invitation's caller"));
         Optional<Order> order = jdbc.sql("""
                         insert into orders (id, organizer_id, event_id, user_id, channel, status, total_mad, payment_method,
                                             reserved_until, paid_at, invited_by)
                         values (:id, :org, :event, null, 'POS', 'PAID', :total, cast(:method as payment_method), now(),
-                                now(), (select id from staff where organizer_id = :org and user_id = :staff))
+                                now(), :invitedBy)
                         on conflict (id) do nothing
                         returning\s""" + ORDER_COLUMNS)
                 .param("id", id).param("org", org).param("event", eventId).param("total", totalMad)
-                .param("method", method).param("staff", staffUserId)
+                .param("method", method).param("invitedBy", invitedBy)
                 .query((rs, n) -> order(rs, items)).optional();
         order.ifPresent(o -> insertItems(org, o.id(), items));
         return order;
+    }
+
+    // Single-bigint advisory key (9 << 32) | hashtext(id): common.EventLock lists the classes.
+    private static final long INVITATION_LOCK = 9;
+
+    @Override
+    public void lockInvitationId(UUID id) {
+        jdbc.sql("select 1 from pg_advisory_xact_lock((cast(:class as bigint) << 32) | (hashtext(:id) & 4294967295))")
+                .param("class", INVITATION_LOCK).param("id", id.toString()).query(Integer.class).single();
     }
 
     @Override

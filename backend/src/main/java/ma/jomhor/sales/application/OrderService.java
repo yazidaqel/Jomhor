@@ -50,10 +50,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>Lock order on one order, everywhere: the payment row (payments' callback) → the order row → its member order
  * rows (a split, 04 §Split pay) → the buyer lock → price categories in UUID order. Placing an order (online or at a
- * till, or an invitation) takes the holders' users rows (sorted phones) → the per-account locks (online: the buyer,
- * split members and every holder account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till
- * or for an invitation) → categories;
- * the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
+ * till, or an invitation, which first takes its invitation_id lock, {@link Orders#lockInvitationId}) takes the
+ * holders' users rows (sorted phones) → the per-account locks (online: the buyer, split members and every holder
+ * account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till or for an invitation) →
+ * categories; the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
  * ticket row → the recipient's users row → the recipient's per-account lock ({@link HolderLimit}) and no category.
  * A product order (04 §Products) takes no per-account order lock and no category; settling a MEMBERSHIP one takes the
  * organizer's membership lock after the order row. A PASS purchase takes the account's series lock → the product row

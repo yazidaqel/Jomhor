@@ -86,6 +86,12 @@ public interface Orders {
      */
     Optional<Order> insertInvitation(UUID id, UUID org, int eventId, UUID staffUserId, List<Order.Item> items);
 
+    /**
+     * The invitation_id lock (advisory, until the transaction ends): two requests with one id run one after the other,
+     * so a retry sees the first one's committed order (04 POST /org/events/{id}/invitations replay).
+     */
+    void lockInvitationId(UUID id);
+
     /** The event of the organizer's invitation order {@code orderId}; empty for any other order. */
     Optional<Integer> invitationEvent(UUID org, UUID orderId);
 

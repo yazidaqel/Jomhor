@@ -9,11 +9,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.common.HolderNames;
 import ma.jomhor.gate.application.ManifestService;
@@ -211,6 +216,31 @@ class InvitationApiTest extends PaymentTest {
         String delta = ManifestPayload.delta(manifests.find(s.admin().org(), s.event(), v2).orElseThrow().payload(),
                 manifests.find(s.admin().org(), s.event(), v1).orElseThrow().payload(), v1);
         assertThat(delta).contains("T\t" + karim + "\t" + s.presse() + "\tREFUNDED\t");
+    }
+
+    /** Two sends of one invitation_id at once: the second waits on the id lock and replays (no second batch). */
+    @Test
+    void aConcurrentRetryReplaysTheFirstInvitation() throws Exception {
+        Setup s = setup(true);
+        UUID id = UUID.randomUUID();
+        CountDownLatch start = new CountDownLatch(1);
+        List<Integer> codes = new ArrayList<>();
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            List<Future<Integer>> runs = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                runs.add(pool.submit(() -> {
+                    start.await();
+                    return invite(s.admin(), s.event(), id, s.invite(), names(3)).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            for (Future<Integer> f : runs) {
+                codes.add(f.get(30, TimeUnit.SECONDS));
+            }
+        }
+        assertThat(codes).containsExactlyInAnyOrder(201, 200);
+        assertThat(count("select sold from price_categories where id = ?::uuid", s.invite())).isEqualTo(3);
+        assertThat(count("select count(*) from tickets where order_id = ?", id)).isEqualTo(3);
     }
 
     @Test

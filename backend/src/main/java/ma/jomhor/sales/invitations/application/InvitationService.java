@@ -77,6 +77,7 @@ public class InvitationService {
     @Transactional
     public Issued create(UUID org, UUID user, UUID invitationId, int eventId, List<ItemRequest> items) {
         Event e = events.get(org, eventId);
+        store.lockInvitationId(invitationId); // a concurrent retry waits here, then replays the committed order
         if (orders.exists(invitationId)) {
             if (store.invitationEvent(org, invitationId).filter(id -> id == eventId).isEmpty()) {
                 throw taken();

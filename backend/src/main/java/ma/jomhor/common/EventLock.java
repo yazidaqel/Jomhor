@@ -13,7 +13,9 @@ import org.springframework.stereotype.Component;
  * 3 this lock, 4 the manifest build (JdbcManifests), 6 the fan-message claim (JdbcFanMessages, one key: the job's
  * try-lock, so one instance sends per tick), 7 the waitlist notice (JdbcWaitlist, (7 << 32) | event id: the waitlist
  * job's try-lock, so one instance notifies an event per run), 8 the pass tickets (JdbcPasses, (8 << 32) | event id:
- * the pass job's try-lock, so one instance issues an event's batch). Two-int, a key space Postgres keeps apart from
+ * the pass job's try-lock, so one instance issues an event's batch), 9 an invitation_id (JdbcOrders, (9 << 32) |
+ * hashtext(id): two POST /org/events/{id}/invitations with one id run one after the other, so the retry replays).
+ * Two-int, a key space Postgres keeps apart from
  * the bigint one:
  * (4, hashtext(organizer id)) the organizer's membership lock (JdbcMemberships, PUT/DELETE /fan/me/membership), and
  * (hashtext(user id), event id) the per-account order lock (JdbcOrders), which can meet a membership key only when
