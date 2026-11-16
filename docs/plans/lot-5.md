@@ -959,7 +959,7 @@ No new runtime component, no Kafka. Payzone stays simulated. No hosting-provider
 
 **Exit 3b, demo-complete:**
 
-1. **Fast clock for the demo:** the dev config sets `passes.installment-interval` 3m, `passes.grace` 2m, `passes.reminder-before` 1m.
+1. **Fast clock for the demo:** the demo start command sets `PASSES_INSTALLMENT_INTERVAL=10m`, `PASSES_GRACE=2m`, `PASSES_REMINDER_BEFORE=1m` (3m was too short: the 5-min manifest rebuild couldn't ship the BLOQUÉ version before the next installment's grace ended; see `backend/http/lot5-installments.http`). `interval_days` reads 0 under this clock.
 2. **Set-up:** OPS sets "Paiement en 4 fois" on the pass product.
 3. **Purchase:**
    - Salma buys in 4 installments; the first is paid by card.
