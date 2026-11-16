@@ -397,7 +397,7 @@ These override the screen specs above (see `docs/plans/lot-5.md` §11).
 | B14 Abonnements & adhésions | **List:** tabs Abonnements · Adhésions; table (nom, prix, vendus/quota, statut En vente / Hors vente, clôture); "Nouveau" sheet.<br>**PASS form:** nom, série, zone (grouped by venue), prix (DH), quota, clôture des ventes (venue zone), "En vente"; **3b** "Paiement en plusieurs fois" (1–10).<br>**MEMBERSHIP form:** nom, prix, valable jusqu'au, clôture, en vente. Before the first one, a warning card: "La carte membre devient payante: seuls les membres à jour de cotisation ont les tarifs membres et les préventes."<br>**Detail:** KPI cards (Abonnés actifs · En attente de paiement · Encaissé; **3b** Suspendus · Échéances en retard · Reste à encaisser); a per-match table (match, date, émis/attendus, places Abonnés restantes) with an amber row when `issued < expected` ("Ajoute {n} places Abonnés en {zone}" → B2 Tarifs); "Remboursements à faire". FINANCE is read-only. |
 | B9 Membres | KPI "Cotisations à jour" when `paid_required`. |
 | B11 Code cash | A product order shows the product name in place of the event; no print. |
-| B12 Billets (3b) | Status "Bloqué · abonnement suspendu" when the row is `BLOCKED` and `pass.status` is `SUSPENDED`; "Débloquer" hidden for it (`PASS_SUSPENDED`). |
+| B12 Billets (3b) | Status "Bloqué · abonnement suspendu" when the row is `BLOCKED` and `pass.status` is `SUSPENDED`; "Débloquer" only when `staff_blocked` (a staff block on top of the suspension); a pass-only block offers "Rembourser" only. |
 
 ## Theming per organizer
 
