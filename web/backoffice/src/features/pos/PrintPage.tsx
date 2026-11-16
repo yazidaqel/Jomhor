@@ -115,9 +115,14 @@ function Slip({ data, ticket }: { data: PrintData; ticket: PrintTicket }) {
       </div>
       <div className="my-[3mm] border-t border-dashed border-black" />
       <div className="flex items-baseline justify-between gap-2 text-[9pt]">
-        <span>
-          {t('pos.print.price')} <b className="text-[11pt]">{t('pos.amount', { amount: formatDh(ticket.unit_price_mad, i18n.language) })}</b>
-        </span>
+        {/* A 0 DH place (an invitation, an accreditation) shows its kind, not "Prix 0,00 DH" (04 print data). */}
+        {ticket.unit_price_mad === 0 ? (
+          <b className="text-[11pt]">{ticket.category.name}</b>
+        ) : (
+          <span>
+            {t('pos.print.price')} <b className="text-[11pt]">{t('pos.amount', { amount: formatDh(ticket.unit_price_mad, i18n.language) })}</b>
+          </span>
+        )}
         <span>{t('pos.print.order', { no: shortNo(data.order_id) })}</span>
       </div>
       <div className="mt-auto pt-[2mm] text-center text-[8pt]">{t('pos.print.footer')}</div>

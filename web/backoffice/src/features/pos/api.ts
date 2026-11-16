@@ -31,6 +31,8 @@ export type PrintTicket = {
   gate_codes: string[]
   holder_label: string | null
   unit_price_mad: number
+  /** Lot 5 step 4: the price category ("Presse"), printed in place of the price on a 0 DH slip (an invitation). */
+  category: { name: string }
   /** The static v1 token, as on the PDF; null unless VALID. Rendered as is, never decoded. */
   qr: string | null
 }

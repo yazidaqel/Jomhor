@@ -92,7 +92,7 @@ const PRINT: PrintData = {
   order_id: BATCH.id,
   event: { id: 1, title: SUMMARY.title, starts_at: STARTS, timezone: CASA, venue: { name: 'Grand Stade' } },
   tickets: [
-    { id: 't-3', ticket_no: '6F7A 8B9C', status: 'VALID', zone: { code: 'PRESSE', name: 'Tribune de presse' }, gate_codes: ['P1'], holder_label: 'Omar B.', unit_price_mad: 0, qr: 'AQAAAAHxyz-invite_one' },
+    { id: 't-3', ticket_no: '6F7A 8B9C', status: 'VALID', zone: { code: 'PRESSE', name: 'Tribune de presse' }, gate_codes: ['P1'], holder_label: 'Omar B.', unit_price_mad: 0, category: { name: 'Presse' }, qr: 'AQAAAAHxyz-invite_one' },
   ],
 }
 const ORDER: SaleOrder = { id: '0192f0aa-0000-7000-8000-00000000b7a2', status: 'PAID', channel: 'POS', total_mad: 0, ticket_ids: ['t-10', 't-11', 't-12'] }
@@ -270,6 +270,9 @@ it('"Imprimer" (a VALID paper ticket) opens the print route: GET /org/invitation
   expect(slips).toHaveLength(1)
   expect(slips[0]!.textContent).toContain('Omar B.')
   expect(slips[0]!.textContent).not.toContain('Omar Benali')
+  // A 0 DH slip shows its kind in place of the price.
+  expect(within(slips[0]!).getByText('Presse', { selector: 'b' })).toBeTruthy()
+  expect(slips[0]!.textContent).not.toContain(fr.pos.print.price)
   expect(calls.filter((c) => c.path === PRINT_PATH)).toEqual([{ path: PRINT_PATH, org: 'org-a', method: 'GET', body: undefined }])
   await user.click(screen.getByRole('link', { name: fr.invitations.print.back }))
   expect(router.state.location.pathname).toBe('/events/1/invitations')
