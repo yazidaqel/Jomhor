@@ -1460,3 +1460,4 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 | BE-55 must: read a pass ticket's zone unfiltered (`publicEvent` now drops PASS-only zones, which `TicketService` PDF/heldBy/slips use); take `for share` on the event row when issuing pass tickets so it serialises with the event PATCH's `PASS_TICKETS` check | BE-55 | BE-51 report |
 | 3b (Q198): **decided by the founder 2026-11-16**: a suspended pass blocks only the tickets still held by the pass holder; a ticket already transferred stays valid | 3b | BE-55 review |
 | B14 MEMBERSHIP `paid_members` counts the whole organizer, so a club with two membership products sees the same figure on both; per-product count if a club ever sells two | when asked | BO-22 real run |
+| Refunding a pass ticket (a FREE 0 DH order) creates a 0 DH `REQUIRED` refund that Finance must mark done; skip zero-amount refunds (release the place only) | step 4 or 5 (finance) | BO-24 real run |

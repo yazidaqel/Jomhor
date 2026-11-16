@@ -71,6 +71,8 @@ const row = (over: Partial<TicketRow>): TicketRow => ({
   staff_blocked: over.status === 'BLOCKED',
   ...over,
 })
+/** A pass ticket as the real lookup returns it (BO-24 run): a FREE order of 0 DH on the APP channel. */
+const passRow = (over: Partial<TicketRow>) => row({ unit_price_mad: 0, channel: 'APP', payment_method: 'FREE', ...over })
 const ROWS: TicketRow[] = [
   row({}),
   row({ id: 't-2', ticket_no: '1A2B 3C4D', status: 'BLOCKED', channel: 'POS', payment_method: 'POS_CASH', holder_label: null }),
@@ -240,10 +242,10 @@ it('3b: "Débloquer" exactly when staff_blocked; a suspended pass reads "abonnem
   stubApi('ADMIN', {
     lookup: () =>
       Response.json([
-        row({ id: 't-4', ticket_no: 'AAAA 1111', status: 'BLOCKED', staff_blocked: false, pass: { status: 'SUSPENDED' } }), // the pass only
-        row({ id: 't-7', ticket_no: 'DDDD 4444', status: 'BLOCKED', staff_blocked: true, pass: { status: 'SUSPENDED' } }), // staff + suspended pass
-        row({ id: 't-5', ticket_no: 'BBBB 2222', status: 'VALID', pass: { status: 'SUSPENDED' } }), // inside the freeze: stays VALID
-        row({ id: 't-6', ticket_no: 'CCCC 3333', status: 'BLOCKED', pass: { status: 'ACTIVE' } }), // a staff block
+        passRow({ id: 't-4', ticket_no: 'AAAA 1111', status: 'BLOCKED', staff_blocked: false, pass: { status: 'SUSPENDED' } }), // the pass only
+        passRow({ id: 't-7', ticket_no: 'DDDD 4444', status: 'BLOCKED', staff_blocked: true, pass: { status: 'SUSPENDED' } }), // staff + suspended pass
+        passRow({ id: 't-5', ticket_no: 'BBBB 2222', status: 'VALID', pass: { status: 'SUSPENDED' } }), // inside the freeze: stays VALID
+        passRow({ id: 't-6', ticket_no: 'CCCC 3333', status: 'BLOCKED', pass: { status: 'ACTIVE' } }), // a staff block
       ]),
   })
   renderApp()
