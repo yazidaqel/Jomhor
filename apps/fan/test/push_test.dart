@@ -21,7 +21,6 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'cash_order_test.dart' show CashSale, orderId;
 import 'club_test.dart' show ClubBackend;
 import 'helpers.dart';
-import 'passes_test.dart' show passId;
 import 'split_pay_test.dart' show SplitBackend, buyerId;
 import 'tickets_test.dart' show ticketId, ticketJson;
 
@@ -370,7 +369,9 @@ void main() {
     });
 
     testWidgets('INSTALLMENT_DUE: /passes/{id} opens screen 13, the passes read again (Lot 5 step 3b)', (tester) async {
+      // FL-31's captured pass, seq 2 payable: the backend logged this push as `/passes/{its id}`.
       final passes = realAnswer('passes_200_schedule', dir: 'installments').body;
+      final passId = ((passes['passes']! as List<Object?>).single! as Map<String, Object?>)['id']! as String;
       final reads = <String>[];
       final push = FakePushMessaging();
       final c = await open(
@@ -381,7 +382,7 @@ void main() {
         }),
         push: push,
       );
-      push.opened.add(const PushMessage(title: 't', body: 'b', data: {'path': '/passes/$passId'}));
+      push.opened.add(PushMessage(title: 't', body: 'b', data: {'path': '/passes/$passId'}));
       await tester.pumpAndSettle();
       expect(location(c), '/passes/$passId');
       expect(find.byType(PassScreen), findsOneWidget);
