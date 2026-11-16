@@ -1,0 +1,466 @@
+### Lot 5 step 3b demo, season pass installments (IntelliJ HTTP client): plan lot-5 §11.1 Exit 3b (1)-(8) on one
+### instance; Lot5InstallmentsFlowTest runs the same flow in CI on fixed clocks.
+#
+# Start the backend with the dev profile on port 8080, so @base and the card redirect (PUBLIC_BASE_URL, dev default
+# http://localhost:8080/v1) agree; the dev profile alone serves on 8090 (dev seed: ATLAS FC with a cash point,
+# Caissier Dev +212600000002, Ops Dev +212600000003, Grand Stade with Tribune Est; the pass job and the order expiry
+# job run every 30 s, the manifest job every minute, fan messages every 5 s; the simulated card gateway is on; push
+# and WhatsApp go to the log):
+#   docker compose up -d && SERVER_PORT=8080 GATE_MANIFEST_LEAD=2400h PASSES_INSTALLMENT_INTERVAL=10m PASSES_GRACE=2m PASSES_REMINDER_BEFORE=1m SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# GATE_MANIFEST_LEAD: a scanner gets an event's manifest only from starts_at minus this lead (default 3h). The demo
+# matches are in January 2027, so 2400h (100 days) lets the scanner load match 1 today and show BLOQUÉ, then admit.
+# The fast clock (Exit 3b (1)): installment k is due (k - 1) x 10 min after the purchase (30 days in production),
+# suspended 2 min past its due date (7 days), reminded 1 min before it (3 days). The plan suggests a 3 min interval,
+# but a scanner gets a new manifest version only once the previous one is 5 min old: with 3 min, installment 3's
+# grace would end before the BLOQUÉ version even ships, and paying installment 2 alone would no longer reactivate the
+# pass. With 10 min, from Salma's purchase (3.1, call it t0):
+#   t0 + 9 min   INSTALLMENT_DUE for installment 2 (push + WhatsApp in the log)       -> step 4
+#   t0 + 12 min  installment 2 unpaid past its grace: SUSPENDED (+ up to 30 s)        -> step 5
+#   t0 + 22 min  Salma's installment 3's grace ends: 6.1-6.14 done before then, or her pass suspends again
+#   t0 + 23 min  Karim's installment 3's grace ends: his installment 2 (6.9-6.10) settles before then
+# Karim buys a minute after Salma, so his times are a minute later. GET /fan/products shows interval_days 0 (the
+# interval is in whole days; 10 min rounds down).
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phones are made up.
+# Card payments: open the response's redirect_url in a browser and click "Approuver" right away (8 min hold).
+# Each run makes a new series and product, so passes start afresh with the same phones. Step 6.2's psql line
+# closes the pass sales (B14 can only move a sales close into the future). At the end, backend/loadtest/check.sql must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@opsPhone = +212600000003
+@cashierPhone = +212600000002
+@salmaPhone = +212611154001
+@karimPhone = +212611154002
+@hamzaPhone = +212611154003
+@code = 123456
+@closeAt = 2027-06-30T12:00:00Z
+
+### ---------- (0) logins first, so nothing waits on them once the clock runs ----------
+
+### 0.1 OPS (Ops Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 0.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 0.3 Cashier (Caissier Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}"}
+
+### 0.4 Cashier: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("cashierToken", response.body.token); %}
+
+### 0.5 Cashier: open the till -> 201 (200 with the one already open)
+POST {{base}}/org/pos/sessions
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Guichet stade"}
+
+### 0.6 Salma: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{salmaPhone}}"}
+
+### 0.7 Salma: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{salmaPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("salmaToken", response.body.token); %}
+
+### 0.8 Salma's phone registers for push (the log provider prints the path and the token's tail) -> 204
+PUT {{base}}/fan/me/push-token
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"token": "demo-salma-device-0001", "platform": "android"}
+
+### 0.9 Karim: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}"}
+
+### 0.10 Karim: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("karimToken", response.body.token); %}
+
+### 0.11 Hamza: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{hamzaPhone}}"}
+
+### 0.12 Hamza: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{hamzaPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("hamzaToken", response.body.token); %}
+
+### ---------- (2) set-up: a series, two matches with "Abonnés", the pass in 4 payments ----------
+
+### 2.1 OPS: the Grand Stade zones (keeps Est)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("estId", response.body.zones.find(z => z.code === "EST").id); %}
+
+### 2.2 OPS: the series -> 201
+POST {{base}}/org/series
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"name": "Saison 2026-27 (échéances)", "starts_on": "2026-08-01", "ends_on": "2027-06-30"}
+
+> {% client.global.set("seriesId", response.body.id); %}
+
+### 2.3 OPS: match 1 in the series (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo échéances 1",
+ "starts_at": "2027-01-17T19:00:00Z", "series_id": "{{seriesId}}", "metadata": {"opponent": "Démo 1"}}
+
+> {% client.global.set("m1", response.body.id); %}
+
+### 2.4 OPS: match 2 in the series (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo échéances 2",
+ "starts_at": "2027-01-31T19:00:00Z", "series_id": "{{seriesId}}", "metadata": {"opponent": "Démo 2"}}
+
+> {% client.global.set("m2", response.body.id); %}
+
+### 2.5 OPS: match 1 "Abonnés" in Tribune Est (Accès: Abonnés, 0 DH, quota 10)
+POST {{base}}/org/events/{{m1}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Abonnés", "price_mad": 0, "quota": 10, "audience": "PASS"}
+
+### 2.6 OPS: match 2 "Abonnés" (quota 10)
+POST {{base}}/org/events/{{m2}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Abonnés", "price_mad": 0, "quota": 10, "audience": "PASS"}
+
+### 2.7 OPS: publish match 1 (DRAFT -> ON_SALE). The scanner app can be assigned to it from now on.
+POST {{base}}/org/events/{{m1}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 2.8 OPS: publish match 2
+POST {{base}}/org/events/{{m2}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 2.9 OPS: the pass (PASS, 1 500 DH, quota 10), in full only for now -> 201, max_installments 1
+POST {{base}}/org/products
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"kind": "PASS", "name": "Abonnement Est – échéances", "price_mad": 150000, "quota": 10,
+ "series_id": "{{seriesId}}", "zone_id": {{estId}}, "sales_close_at": "{{closeAt}}", "on_sale": true}
+
+> {% client.global.set("passId", response.body.id); %}
+
+### 2.10 B14: OPS sets "Paiement en 4 fois" -> 200, max_installments 4
+PATCH {{base}}/org/products/{{passId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"max_installments": 4}
+
+### 2.11 Screen 13 / W9 (public) -> plans [{1, [150000]}, {4, [37500, 37500, 37500, 37500], interval_days 0}]
+GET {{base}}/fan/products/{{passId}}
+
+### ---------- (3) Salma buys in 4, the first by card; Karim too. The clock starts at 3.1 (t0) ----------
+
+### 3.1 Salma orders the pass in 4 -> 201 RESERVED, total_mad 37500 (installment 1), pass_id
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "APP", "holder_name": "Salma Tazi", "installments": 4}
+
+> {% client.global.set("salmaOrder", response.body.id);
+     client.global.set("salmaPass", response.body.pass_id); %}
+
+### 3.2 Salma pays installment 1 by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{salmaOrder}}/pay
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 3.3 Her order -> PAID, installment {seq: 1, of: 4}
+GET {{base}}/fan/orders/{{salmaOrder}}
+Authorization: Bearer {{salmaToken}}
+
+### 3.4 Karim orders the pass in 4 on the shop -> 201 RESERVED, total_mad 37500
+POST {{base}}/fan/product-orders
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"product_id": "{{passId}}", "channel": "WEB", "holder_name": "Karim Alaoui", "installments": 4}
+
+> {% client.global.set("karimOrder", response.body.id);
+     client.global.set("karimPass", response.body.pass_id); %}
+
+### 3.5 Karim pays installment 1 by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{karimOrder}}/pay
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 3.6 Screen 13: Salma's pass -> ACTIVE; installments seq 1 paid, then the 3 dates to come (t0 + 10, 20, 30 min);
+### next_due {seq 2, amount_mad 37500, overdue false}
+GET {{base}}/fan/passes
+Authorization: Bearer {{salmaToken}}
+
+### 3.7 Salma's tickets, within about 30 s -> matches 1 and 2, each with pass_id; re-run until both show
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{salmaToken}}
+
+> {% client.global.set("salmaM2Ticket",
+       response.body.tickets.find(t => t.event.id == client.global.get("m2") && t.pass_id)?.id); %}
+
+### 3.8 Before any suspension, Salma transfers her match 2 ticket to Hamza -> 201
+POST {{base}}/fan/tickets/{{salmaM2Ticket}}/transfer
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"to_phone": "{{hamzaPhone}}", "name": "Hamza Chraibi"}
+
+### 3.9 Hamza's tickets -> match 2, VALID, pass_id null
+GET {{base}}/fan/tickets
+Authorization: Bearer {{hamzaToken}}
+
+### 3.10 B12: OPS looks Karim up on match 1 (within 30 s of 3.5) -> his pass ticket, VALID
+POST {{base}}/org/events/{{m1}}/tickets/search
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{karimPhone}}"}
+
+> {% client.global.set("karimM1Ticket", response.body[0].id); %}
+
+### 3.11 B12: OPS blocks it (stadium ban) -> 200 status BLOCKED, staff_blocked true
+POST {{base}}/org/tickets/{{karimM1Ticket}}/block
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "Interdit de stade"}
+
+### 3.12 B14 -> passes {pending 0, active 2, suspended 0}; installments {overdue 0, due_mad 225000,
+### collected_mad 75000}
+GET {{base}}/org/products/{{passId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (4) reminder, at t0 + 9 min ----------
+# Nothing to send: the backend log shows the push to Salma's device with path /passes/{salmaPass} and the simulated
+# WhatsApp installment_due (product, 375,00 DH, the date); Karim's follows a minute later (no device: push NO_DEVICE).
+# The queued rows, from backend/:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor -c "select channel, status, last_error, created_at from fan_messages where kind = 'INSTALLMENT_DUE' order by created_at desc limit 4;"
+
+### ---------- (5) suspension, from t0 + 12 min (installment 2 unpaid) ----------
+
+### 5.1 Screen 13 -> SUSPENDED, suspended_at set, next_due {seq 2, overdue true} (the banner)
+GET {{base}}/fan/passes
+Authorization: Bearer {{salmaToken}}
+
+### 5.2 Screen 5 -> match 1: status BLOCKED, blocked_by PASS, no k_t ("Billet bloqué · abonnement suspendu")
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{salmaToken}}
+
+### 5.3 B12: Salma on match 1 -> status BLOCKED, staff_blocked false, pass {status SUSPENDED}
+POST {{base}}/org/events/{{m1}}/tickets/search
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{salmaPhone}}"}
+
+### 5.4 B12: Hamza on match 2 (Salma no longer sees that ticket) -> VALID, pass null: only the holder's own pass
+### tickets are blocked
+POST {{base}}/org/events/{{m2}}/tickets/search
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{hamzaPhone}}"}
+
+### 5.5 B12: Karim on match 1, once his pass is suspended too (t0 + 13 min) -> BLOCKED, staff_blocked true,
+### pass {status SUSPENDED}
+POST {{base}}/org/events/{{m1}}/tickets/search
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{karimPhone}}"}
+
+### 5.6 B14 -> passes {active 0, suspended 2}; installments {overdue 2, due_mad 225000, collected_mad 75000}.
+### The scanner on match 1: within a few minutes the next manifest version arrives; Salma's QR shows BLOQUÉ offline.
+### Wait for it before 6.7.
+GET {{base}}/org/products/{{passId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (6) reactivation at the till, after the pass sales close; 6.1-6.14 done before t0 + 22 min ----------
+
+### 6.1 B14: OPS takes the pass off sale -> 200 on_sale false. 6.2 then closes its sales (one psql line, from backend/):
+###   docker compose exec -T postgres psql -U jomhor -d jomhor -c "update products set sales_close_at = now() - interval '1 minute' where organizer_id = 'a7a5fc00-0000-4000-8000-000000000001' and kind = 'PASS' and max_installments = 4 and not on_sale and sales_close_at > now();"
+PATCH {{base}}/org/products/{{passId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"on_sale": false}
+
+### 6.3 Screen 13 "Payer l'échéance" -> 201 RESERVED, total_mad 37500, pass_id
+POST {{base}}/fan/passes/{{salmaPass}}/installments
+Authorization: Bearer {{salmaToken}}
+
+> {% client.global.set("inst2Order", response.body.id); %}
+
+### 6.4 The order -> installment {seq: 2, of: 4}; product.payment_methods still has CASH_AGENCY, cash_until null
+GET {{base}}/fan/orders/{{inst2Order}}
+Authorization: Bearer {{salmaToken}}
+
+### 6.5 Salma takes a cash code -> 200 {pay_code, reserved_until (now + 24 h), amount_mad 37500}
+POST {{base}}/fan/orders/{{inst2Order}}/pay
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"method": "CASH_AGENCY"}
+
+> {% client.global.set("inst2Code", response.body.pay_code); %}
+
+### 6.6 B11: the code -> payable, event null, product {name: "Abonnement Est – échéances"}
+GET {{base}}/org/pos/codes/{{inst2Code}}
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+
+### 6.7 B11: collect 375 DH -> 200 PAID, ticket_ids []
+POST {{base}}/org/pos/codes/{{inst2Code}}/collect
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"amount_mad": 37500}
+
+### 6.8 Screen 13 -> ACTIVE, suspended_at null, next_due {seq 3}. Screen 5: match 1 VALID with its k_t again.
+GET {{base}}/fan/passes
+Authorization: Bearer {{salmaToken}}
+
+### 6.9 Karim pays installment 2 too, before his installment 3's grace ends (t0 + 23 min) -> 201
+POST {{base}}/fan/passes/{{karimPass}}/installments
+Authorization: Bearer {{karimToken}}
+
+> {% client.global.set("karimInst2", response.body.id); %}
+
+### 6.10 Karim's installment 2 by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{karimInst2}}/pay
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 6.11 Salma pays installment 3 ahead (else its grace ends at t0 + 22 min and the pass suspends again) -> 201
+POST {{base}}/fan/passes/{{salmaPass}}/installments
+Authorization: Bearer {{salmaToken}}
+
+> {% client.global.set("inst3Order", response.body.id); %}
+
+### 6.12 Salma's installment 3 by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{inst3Order}}/pay
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 6.13 Salma's installment 4 -> 201
+POST {{base}}/fan/passes/{{salmaPass}}/installments
+Authorization: Bearer {{salmaToken}}
+
+> {% client.global.set("inst4Order", response.body.id); %}
+
+### 6.14 Salma's installment 4 by card: open redirect_url in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{inst4Order}}/pay
+Authorization: Bearer {{salmaToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 6.15 Nothing left -> 409 PASS_STATUS {reason: PAID_UP}. The scanner: the next manifest version (5 min after the
+### BLOQUÉ one) admits Salma's QR.
+POST {{base}}/fan/passes/{{salmaPass}}/installments
+Authorization: Bearer {{salmaToken}}
+
+### 6.16 Salma's tickets -> match 1 VALID with k_t, blocked_by null
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{salmaToken}}
+
+### ---------- (7) Karim's staff block survives his pass's suspension and reactivation ----------
+
+### 7.1 B12: Karim on match 1 -> still BLOCKED, staff_blocked true, pass {status ACTIVE}
+POST {{base}}/org/events/{{m1}}/tickets/search
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"q": "{{karimPhone}}"}
+
+### 7.2 Karim's tickets -> match 1 BLOCKED blocked_by STAFF, match 2 VALID. Karim leaves installment 3 unpaid, so his
+### pass suspends again after t0 + 23 min; the staff block stays either way.
+GET {{base}}/fan/tickets
+Authorization: Bearer {{karimToken}}
+
+### 7.3 B14 -> revenue_mad 225000; installments {overdue 0 (1 from t0 + 21 min, Karim's installment 3), due_mad 75000,
+### collected_mad 225000}. Then (8): run check.sql (header): no rows.
+GET {{base}}/org/products/{{passId}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
