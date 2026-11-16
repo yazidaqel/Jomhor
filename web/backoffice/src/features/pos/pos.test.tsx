@@ -627,7 +627,6 @@ it('CASHIER: lands on the Guichet, the sidebar shows only "Guichet", every other
   expect(router.state.location.pathname).toBe('/pos')
   const nav = within(screen.getByRole('navigation', { name: fr.nav.label }))
   expect(nav.getAllByRole('link').map((l) => l.textContent)).toEqual([fr.nav.pos])
-  expect(nav.queryByText(fr.nav.soon)).toBeNull()
   expect(screen.getAllByText(fr.roles.CASHIER).length).toBeGreaterThan(0)
 
   for (const path of ['/events', '/events/1/sales', '/settings/venues', '/devices', '/live', '/nowhere']) {
@@ -807,9 +806,10 @@ it('B11 close: only the gap value is a live region', async () => {
   expect(live[0]!.textContent).toBe(fr.pos.close.noGap)
 })
 
-it('B11 Vente: a PASS category (season-pass places, 0 DH) is never offered or sent at the till', async () => {
+// PASS: season-pass places (Lot 5 step 3); INVITE: invitation places (step 4, source: contract). Both 0 DH, never sold.
+it.each(['PASS', 'INVITE'] as const)('B11 Vente: a %s category is never offered or sent at the till', async (audience) => {
   const user = userEvent.setup()
-  const pass: Price = { id: 'p-pass', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Abonnés', price_mad: 0, quota: 50, sold: 0, audience: 'PASS' }
+  const pass: Price = { id: 'p-pass', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Abonnés', price_mad: 0, quota: 50, sold: 0, audience }
   const calls = stubApi({
     '/org/events/1/prices': () => Response.json([...PRICES, pass]),
     '/org/pos/orders': () => Response.json(SALE_ORDER, { status: 201 }),

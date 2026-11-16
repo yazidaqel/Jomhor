@@ -397,15 +397,13 @@ it('phone width: the menu is a sheet that closes once a destination is picked', 
   }
 })
 
-it('"Bientôt" items stay focusable but inert (aria-disabled), they are not links', async () => {
+it('Lot 5 step 4: "Accréditations" is lit up, a link to its event picker; nothing says "Bientôt" any more', async () => {
   session.start('tok-1', FUTURE)
   stubApi()
   renderApp('/settings/venues')
   const nav = within(await screen.findByRole('navigation', { name: fr.nav.label }))
-  const soon = nav.getByRole('button', { name: new RegExp(fr.nav.invitations) })
-  expect(soon.getAttribute('aria-disabled')).toBe('true')
-  expect(soon).toHaveProperty('disabled', false)
-  expect(nav.queryByRole('link', { name: new RegExp(fr.nav.invitations) })).toBeNull()
+  expect(nav.getByRole('link', { name: fr.nav.invitations }).getAttribute('href')).toBe('/invitations')
+  expect(nav.queryByText('Bientôt')).toBeNull()
 })
 
 it('Jomhor brand: large lockup and "Jomhor · Connexion" on the login page', () => {
