@@ -168,6 +168,19 @@ public class PassService {
         return null;
     }
 
+    /**
+     * 04 §Passes Suspension, the pass job's first step at {@code now}: ACTIVE passes with an installment unpaid
+     * {@code passes.grace} past its due_at → SUSPENDED (audit pass.suspend {seq}), in one transaction. Once only:
+     * another instance running at the same time skips or re-reads the rows (see {@link Passes#suspend}).
+     */
+    @Transactional
+    public int suspend(Instant now) {
+        List<Passes.Suspended> suspended = passes.suspend(now, grace);
+        suspended.forEach(s -> audit.system(s.organizerId(), "pass.suspend", s.passId().toString(),
+                "{\"seq\": " + s.seq() + "}"));
+        return suspended.size();
+    }
+
     /** The expiry's hook, in its batch transaction: see {@link Passes#cancelExpired}. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void cancelExpired(Collection<UUID> productOrderIds) {

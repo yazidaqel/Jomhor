@@ -1,6 +1,7 @@
 package ma.jomhor.sales.products.application;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +76,16 @@ public interface Passes {
      * clock); false if nothing was written.
      */
     boolean reactivate(UUID org, UUID passId, Duration grace);
+
+    /** A pass just SUSPENDED: {@code seq} is its earliest installment overdue past its grace. */
+    record Suspended(UUID organizerId, UUID passId, int seq) {}
+
+    /**
+     * 04 §Passes Suspension, every organizer: ACTIVE passes with an unpaid installment whose {@code due_at + grace} ≤
+     * {@code now} → SUSPENDED, suspended_at = {@code now}. A pass row locked by a payment is skipped (the next run sees
+     * it), and the overdue check is read again once the rows are locked, so a payment that just committed wins.
+     */
+    List<Suspended> suspend(Instant now, Duration grace);
 
     /** 04 GET /org/products/{id} {@code installments}, over the product's ACTIVE and SUSPENDED passes. */
     record InstallmentFigures(long overdue, long dueMad, long collectedMad) {}

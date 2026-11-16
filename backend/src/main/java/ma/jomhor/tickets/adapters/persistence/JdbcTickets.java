@@ -1,5 +1,7 @@
 package ma.jomhor.tickets.adapters.persistence;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Collection;
@@ -19,15 +21,33 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcTickets implements Tickets {
 
+    /**
+     * 04 §Passes Effective status (plan lot-5 Q198), over {@code t}: a VALID ticket of a pass ticket order, still held
+     * by the pass's holder, while that pass is SUSPENDED, for an event whose refund_cutoff_at is after suspended_at
+     * (02's freeze: nothing changes inside a match's last hour). It then reads BLOCKED; the row is never written.
+     */
+    static final String PASS_BLOCKED = """
+            (t.status = 'VALID' and exists (
+              select 1 from orders po
+              join passes pp on pp.id = po.pass_id and pp.organizer_id = po.organizer_id
+              join events pe on pe.id = po.event_id and pe.organizer_id = po.organizer_id
+              where po.id = t.order_id and po.organizer_id = t.organizer_id and pp.status = 'SUSPENDED'
+                and pp.user_id = t.holder_user_id and pe.refund_cutoff_at > pp.suspended_at)) as pass_blocked""";
+
+    /** The effective status of a row selecting {@code status} and {@link #PASS_BLOCKED}. */
+    private static Ticket.Status effective(ResultSet rs) throws SQLException {
+        return rs.getBoolean("pass_blocked") ? Ticket.Status.BLOCKED : Ticket.Status.valueOf(rs.getString("status"));
+    }
+
     private static final RowMapper<Ticket> TICKET = (rs, n) -> {
         OffsetDateTime transferredAt = rs.getObject("transferred_at", OffsetDateTime.class);
         return new Ticket(rs.getObject("id", UUID.class),
                 rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"), rs.getInt("zone_id"),
-                Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getString("seat_label"),
+                effective(rs), rs.getString("holder_name"), rs.getString("seat_label"),
                 rs.getObject("issued_at", OffsetDateTime.class).toInstant(),
                 transferredAt == null ? null
                         : new Ticket.Transferred(rs.getString("to_name"), transferredAt.toInstant()),
-                rs.getObject("pass_id", UUID.class));
+                rs.getObject("pass_id", UUID.class), rs.getBoolean("pass_blocked"));
     };
 
     // A holder's ticket, its order's pass while the ticket is held by that pass's holder (04 GET /fan/tickets pass_id:
@@ -36,7 +56,9 @@ class JdbcTickets implements Tickets {
     private static final String HELD = """
             select t.id, t.organizer_id, t.event_id, t.zone_id, t.status, t.holder_name, t.seat_label, t.issued_at,
                    case when tt.to_user_id <> tt.from_user_id then tt.transferred_at end as transferred_at,
-                   nt.holder_name as to_name, case when p.user_id = t.holder_user_id then p.id end as pass_id
+                   nt.holder_name as to_name, case when p.user_id = t.holder_user_id then p.id end as pass_id,
+            """ + PASS_BLOCKED + """
+
             from tickets t
             join orders o on o.id = t.order_id and o.organizer_id = t.organizer_id
             left join passes p on p.id = o.pass_id and p.organizer_id = o.organizer_id
@@ -45,14 +67,19 @@ class JdbcTickets implements Tickets {
             where t.holder_user_id = :holder
             """;
 
+    // Only the ticket row is locked: the pass and its event are read, not held (a suspension racing a transfer is as if
+    // it came just after it).
     private static final String LOCKED = """
-            select id, organizer_id, event_id, zone_id, order_id, price_category_id, status, holder_name from tickets
+            select t.id, t.organizer_id, t.event_id, t.zone_id, t.order_id, t.price_category_id, t.status, t.holder_name,
+            """ + PASS_BLOCKED + """
+
+            from tickets t
             """;
 
     private static final RowMapper<Ticket.Locked> LOCK = (rs, n) -> new Ticket.Locked(rs.getObject("id", UUID.class),
             rs.getObject("organizer_id", UUID.class), rs.getInt("event_id"), rs.getInt("zone_id"),
             rs.getObject("order_id", UUID.class), rs.getObject("price_category_id", UUID.class),
-            Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"));
+            Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"), rs.getBoolean("pass_blocked"));
 
     private final JdbcClient jdbc;
 
@@ -101,13 +128,13 @@ class JdbcTickets implements Tickets {
 
     @Override
     public Optional<Ticket.Locked> lock(UUID org, UUID ticketId) {
-        return jdbc.sql(LOCKED + " where organizer_id = :org and id = :id for no key update")
+        return jdbc.sql(LOCKED + " where t.organizer_id = :org and t.id = :id for no key update of t")
                 .param("org", org).param("id", ticketId).query(LOCK).optional();
     }
 
     @Override
     public Optional<Ticket.Locked> lockHeld(UUID holderUserId, UUID ticketId) {
-        return jdbc.sql(LOCKED + " where id = :id and holder_user_id = :holder for no key update")
+        return jdbc.sql(LOCKED + " where t.id = :id and t.holder_user_id = :holder for no key update of t")
                 .param("id", ticketId).param("holder", holderUserId).query(LOCK).optional();
     }
 
@@ -137,10 +164,14 @@ class JdbcTickets implements Tickets {
             select t.id, t.status, t.zone_id, z.code as zone_code, z.name as zone_name, t.holder_name, i.unit_price_mad,
                    t.order_id, o.channel, o.payment_method, t.issued_at,
                    r.id as refund_id, r.status as refund_status, r.amount_mad as refund_amount_mad,
-                   tt_to.new_ticket_id as transferred_to, tt_from.ticket_id as transferred_from
+                   tt_to.new_ticket_id as transferred_to, tt_from.ticket_id as transferred_from,
+                   case when p.user_id = t.holder_user_id then p.status::text end as pass_status,
+            """ + PASS_BLOCKED + """
+
             from tickets t
             join zones z on z.id = t.zone_id and z.organizer_id = t.organizer_id
             join orders o on o.id = t.order_id and o.organizer_id = t.organizer_id
+            left join passes p on p.id = o.pass_id and p.organizer_id = o.organizer_id
             join order_items i on i.order_id = t.order_id and i.price_category_id = t.price_category_id
                               and i.organizer_id = t.organizer_id
             left join refunds r on r.ticket_id = t.id and r.organizer_id = t.organizer_id
@@ -150,12 +181,13 @@ class JdbcTickets implements Tickets {
             """;
 
     private static final RowMapper<Tickets.Row> ROW = (rs, n) -> new Tickets.Row(rs.getObject("id", UUID.class),
-            Ticket.Status.valueOf(rs.getString("status")), rs.getInt("zone_id"), rs.getString("zone_code"),
+            effective(rs), rs.getInt("zone_id"), rs.getString("zone_code"),
             rs.getString("zone_name"), rs.getString("holder_name"), rs.getLong("unit_price_mad"),
             rs.getObject("order_id", UUID.class), rs.getString("channel"), rs.getString("payment_method"),
             rs.getObject("issued_at", OffsetDateTime.class).toInstant(), rs.getObject("refund_id", UUID.class),
             rs.getString("refund_status"), rs.getObject("refund_amount_mad", Long.class),
-            rs.getObject("transferred_to", UUID.class), rs.getObject("transferred_from", UUID.class));
+            rs.getObject("transferred_to", UUID.class), rs.getObject("transferred_from", UUID.class),
+            rs.getBoolean("pass_blocked"), rs.getString("pass_status"));
 
     @Override
     public List<Tickets.Row> search(UUID org, int eventId, Match match, String value, int limit) {
@@ -183,18 +215,23 @@ class JdbcTickets implements Tickets {
         return jdbc.sql("select now()").query(OffsetDateTime.class).single().toInstant();
     }
 
+    // ponytail: PASS_BLOCKED is a primary-key probe on orders per row (~45,000 per build, at most every 5 min); join
+    // the event's suspended passes once if a build gets slow.
     @Override
     public List<Ticket.ManifestRow> manifestRows(UUID org, int eventId) {
-        return jdbc.sql("""
-                        select id, zone_id, status, holder_initials from tickets
-                        where organizer_id = :org and event_id = :event order by id
+        return jdbc.sql("select t.id, t.zone_id, t.status, t.holder_initials, " + PASS_BLOCKED + """
+
+                        from tickets t
+                        where t.organizer_id = :org and t.event_id = :event order by t.id
                         """)
                 .param("org", org).param("event", eventId)
                 .query((rs, n) -> new Ticket.ManifestRow(rs.getObject("id", UUID.class), rs.getInt("zone_id"),
-                        Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_initials")))
+                        effective(rs), rs.getString("holder_initials")))
                 .list();
     }
 
+    // ponytail: the stored status, so the gate's sold counts a suspended pass's tickets (plan lot-5 Q198, §11.9); add
+    // PASS_BLOCKED here if it ever matters.
     @Override
     public Map<Integer, Long> countByZone(UUID org, int eventId, Ticket.Status status) {
         return jdbc.sql("""

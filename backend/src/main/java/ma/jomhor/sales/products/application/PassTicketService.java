@@ -21,8 +21,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * The pass tickets job (docs/04-api.md §Passes Tickets, plan lot-5 Q188): one ticket per ACTIVE pass for each
- * published event of its series at its zone's venue, until the event's transfer_until.
+ * The pass job (docs/04-api.md §Passes Tickets and Suspension, plan lot-5 Q188, Q197): the suspension of passes with
+ * an installment overdue past its grace, then one ticket per ACTIVE pass for each published event of its series at its
+ * zone's venue, until the event's transfer_until.
  *
  * <p>Per event, batches of {@link #BATCH} passes, each in its own transaction: the event's class-8 try-lock (another
  * instance holding it issues the event this run), then {@code for share} on the event row (so an event PATCH changing
@@ -44,10 +45,12 @@ public class PassTicketService {
     private final Inventory inventory;
     private final TicketService tickets;
     private final TransactionTemplate tx;
+    private final PassService passService;
 
     PassTicketService(Passes passes, Orders orders, EventService events, Inventory inventory, TicketService tickets,
-                      PlatformTransactionManager transactions) {
+                      PlatformTransactionManager transactions, PassService passService) {
         this.passes = passes;
+        this.passService = passService;
         this.orders = orders;
         this.events = events;
         this.inventory = inventory;
@@ -66,10 +69,16 @@ public class PassTicketService {
     }
 
     /**
-     * Every candidate event, batch after batch while a full batch issued something. An event that fails is logged
-     * (exception class and SQL state only: a constraint message can quote holder_name) and the others still run.
+     * First the suspension (04 §Passes Suspension), so a pass suspended now gets no ticket in this run; then every
+     * candidate event, batch after batch while a full batch issued something. A step that fails is logged (exception
+     * class and SQL state only: a constraint message can quote holder_name) and the others still run.
      */
     private void runEach(Supplier<Instant> clock) {
+        try {
+            passService.suspend(clock.get());
+        } catch (RuntimeException ex) {
+            log.error("Pass suspension failed: {} (SQL state {})", ex.getClass().getName(), sqlState(ex));
+        }
         for (Event.Ref e : events.withSeriesOnSale(clock.get())) {
             try {
                 while (Boolean.TRUE.equals(tx.execute(s -> batch(e, clock.get())))) {

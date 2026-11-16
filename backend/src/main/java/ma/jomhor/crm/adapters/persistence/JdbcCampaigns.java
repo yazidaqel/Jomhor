@@ -123,6 +123,8 @@ class JdbcCampaigns implements Campaigns {
      * live members with the channel's opt-in; EVENT_HOLDERS = holders of a VALID ticket of the event, member or not;
      * PUSH also needs a live push token of the user.
      */
+    // ponytail: EVENT_HOLDERS reads the stored status, so a suspended pass's tickets still get event info (plan lot-5
+    // Q198, §11.9); use the tickets module's effective status if it ever matters.
     private static String audienceSql(Campaign c) {
         String base = c.audience() == Campaign.Audience.MEMBERS
                 ? "select m.user_id from memberships m where m.organizer_id = :org and m.left_at is null and m."

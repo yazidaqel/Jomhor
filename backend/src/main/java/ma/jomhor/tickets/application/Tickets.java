@@ -42,7 +42,7 @@ public interface Tickets {
     /** The holder of ticket {@code ticketId} of organizer {@code org}. */
     Optional<UUID> holder(UUID org, UUID ticketId);
 
-    /** Every ticket of the event (any status), by id: id, zone, status and initials only. */
+    /** Every ticket of the event (any status), by id: id, zone, effective status and initials only. */
     List<Ticket.ManifestRow> manifestRows(UUID org, int eventId);
 
     /** The ids among {@code ticketIds} of tickets of the event (any status). */
@@ -79,12 +79,15 @@ public interface Tickets {
     /**
      * A staff lookup row: the ticket, its zone, its order (channel, payment method, the item's unit price snapshot in
      * centimes), its refund, if any ({@code refundId} null = none), and its transfer chain: the ticket it was
-     * transferred or re-issued to, and the one it replaced (null = none). {@code holderName} is the full name: staff
-     * only, never in a log.
+     * transferred or re-issued to, and the one it replaced (null = none). {@code status} is the effective status
+     * (04 §Passes Effective status), {@code passBlocked}: BLOCKED only through its suspended pass; {@code passStatus}:
+     * its pass's status while the pass's holder holds it, else null. {@code holderName} is the full name: staff only,
+     * never in a log.
      */
     record Row(UUID id, Ticket.Status status, int zoneId, String zoneCode, String zoneName, String holderName,
                long unitPriceMad, UUID orderId, String channel, String paymentMethod, Instant issuedAt,
-               UUID refundId, String refundStatus, Long refundAmountMad, UUID transferredTo, UUID transferredFrom) {
+               UUID refundId, String refundStatus, Long refundAmountMad, UUID transferredTo, UUID transferredFrom,
+               boolean passBlocked, String passStatus) {
         @Override
         public String toString() {
             return "Row[" + id + ", " + status + "]";

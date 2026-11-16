@@ -35,7 +35,7 @@ class TicketAdminApiTest extends PaymentTest {
 
     private static final String[] ROW_KEYS = {"id", "ticket_no", "status", "zone", "holder_name", "holder_label",
             "unit_price_mad", "order_id", "channel", "payment_method", "issued_at", "refund", "transferred_to",
-            "transferred_from"};
+            "transferred_from", "pass", "staff_blocked"};
     private static final String[] REFUND_KEYS = {"id", "event_id", "ticket_id", "ticket_no", "order_id", "amount_mad",
             "method", "reason", "status", "requested_by", "requested_at", "done_by", "done_at", "reference"};
 
@@ -107,6 +107,8 @@ class TicketAdminApiTest extends PaymentTest {
         assertThat(JsonPath.<String>read(json, "$.ticket_no")).isEqualTo(ticketNo(t));
         assertThat(JsonPath.<Integer>read(json, "$.unit_price_mad")).isEqualTo(5000);
         assertThat(JsonPath.<Object>read(json, "$.refund")).isNull();
+        assertThat(JsonPath.<Object>read(json, "$.pass")).isNull();
+        assertThat(JsonPath.<Boolean>read(json, "$.staff_blocked")).isTrue();
         assertThat(ticketStatus(t)).isEqualTo("BLOCKED");
         assertThat(jdbc.sql("select payload ->> 'reason' from audit_log where action = 'ticket.block' and target = ?")
                 .param(t.toString()).query(String.class).single()).isEqualTo("Fraude signalée");
@@ -117,6 +119,7 @@ class TicketAdminApiTest extends PaymentTest {
         assertThat(latestManifest(s.eventId())).contains("T\t" + t + "\t" + s.zoneId() + "\tBLOCKED\t");
         String held = body(fan(b.token(), get("/fan/tickets?with_keys=true")).andExpect(status().isOk()));
         assertThat(JsonPath.<String>read(held, "$.tickets[0].status")).isEqualTo("BLOCKED");
+        assertThat(JsonPath.<String>read(held, "$.tickets[0].blocked_by")).isEqualTo("STAFF");
         assertThat(JsonPath.<Map<String, Object>>read(held, "$.tickets[0]")).doesNotContainKey("k_t");
         conflict(fan(b.token(), get("/fan/tickets/" + t + "/pdf")), "TICKET_NOT_VALID");
 

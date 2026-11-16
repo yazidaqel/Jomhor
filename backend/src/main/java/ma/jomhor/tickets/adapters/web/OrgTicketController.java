@@ -32,9 +32,13 @@ class OrgTicketController {
 
     record RefundDto(UUID id, String status, long amountMad) {}
 
+    /** 04 Lot 5 step 3b: the ticket's pass while its holder holds it. */
+    record PassDto(String status) {}
+
     record RowDto(UUID id, String ticketNo, Ticket.Status status, ZoneDto zone, String holderName, String holderLabel,
                   long unitPriceMad, UUID orderId, String channel, String paymentMethod, Instant issuedAt,
-                  RefundDto refund, String transferredTo, String transferredFrom) {
+                  RefundDto refund, String transferredTo, String transferredFrom, PassDto pass,
+                  boolean staffBlocked) {
         static RowDto of(Tickets.Row r) {
             return new RowDto(r.id(), TicketToken.ticketNo(r.id()), r.status(),
                     new ZoneDto(r.zoneId(), r.zoneCode(), r.zoneName()), r.holderName(),
@@ -42,7 +46,9 @@ class OrgTicketController {
                     r.channel(), r.paymentMethod(), r.issuedAt(),
                     r.refundId() == null ? null : new RefundDto(r.refundId(), r.refundStatus(), r.refundAmountMad()),
                     r.transferredTo() == null ? null : TicketToken.ticketNo(r.transferredTo()),
-                    r.transferredFrom() == null ? null : TicketToken.ticketNo(r.transferredFrom()));
+                    r.transferredFrom() == null ? null : TicketToken.ticketNo(r.transferredFrom()),
+                    r.passStatus() == null ? null : new PassDto(r.passStatus()),
+                    r.status() == Ticket.Status.BLOCKED && !r.passBlocked());
         }
 
         @Override

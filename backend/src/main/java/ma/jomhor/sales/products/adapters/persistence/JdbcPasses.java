@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -202,6 +203,40 @@ class JdbcPasses implements Passes {
                                             and i.paid_at is null and i.due_at + make_interval(secs => :secs) <= now())
                         """)
                 .param("org", org).param("id", passId).param("secs", grace.toSeconds()).update() == 1;
+    }
+
+    // ACTIVE passes with an installment unpaid past its grace at :now (the partial index on due_at where unpaid).
+    private static final String OVERDUE = """
+            p.status = 'ACTIVE' and (p.organizer_id, p.id) in (
+              select i.organizer_id, i.pass_id from pass_installments i
+              where i.paid_at is null and i.due_at <= :now - make_interval(secs => :secs))
+            """;
+
+    // Two statements: lock what is overdue (skip locked: a settle paying it holds the pass row), then suspend it on a
+    // fresh snapshot, so an installment paid between the two is seen. Another instance skips or re-reads the rows.
+    @Override
+    public List<Suspended> suspend(Instant now, Duration grace) {
+        OffsetDateTime at = now.atOffset(ZoneOffset.UTC);
+        UUID[] ids = jdbc.sql("select p.id from passes p where " + OVERDUE + " for no key update skip locked")
+                .param("now", at).param("secs", grace.toSeconds()).query(UUID.class).list().toArray(UUID[]::new);
+        if (ids.length == 0) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                        with s as (
+                          update passes p set status = 'SUSPENDED', suspended_at = :now
+                          where p.id = any(:ids) and\s""" + OVERDUE + """
+                          returning p.organizer_id, p.id)
+                        select s.organizer_id, s.id,
+                               (select min(i.seq) from pass_installments i
+                                where i.organizer_id = s.organizer_id and i.pass_id = s.id and i.paid_at is null
+                                  and i.due_at <= :now - make_interval(secs => :secs)) as seq
+                        from s order by s.id
+                        """)
+                .param("ids", ids).param("now", at).param("secs", grace.toSeconds())
+                .query((rs, n) -> new Suspended(rs.getObject("organizer_id", UUID.class),
+                        rs.getObject("id", UUID.class), rs.getInt("seq")))
+                .list();
     }
 
     @Override

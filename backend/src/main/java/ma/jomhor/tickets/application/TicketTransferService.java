@@ -110,13 +110,13 @@ public class TicketTransferService {
 
     /**
      * Locks the caller's ticket (404 otherwise); not VALID → 409 TICKET_NOT_VALID (a parallel transfer that won the
-     * lock left it CANCELLED); an admitted scan on the server, read under the lock → 409 TICKET_NOT_VALID, reason
+     * lock left it CANCELLED; the effective status counts, so a ticket blocked by its suspended pass is refused too); an admitted scan on the server, read under the lock → 409 TICKET_NOT_VALID, reason
      * ADMITTED; now (database clock) at or after transfer_until, or no cutoff → 409 TRANSFER_CLOSED.
      */
     private Ticket.Locked lockOpen(UUID caller, UUID ticketId) {
         Ticket.Locked t = tickets.lockHeld(caller, ticketId)
                 .orElseThrow(() -> ApiException.notFound("Ticket not found"));
-        if (t.status() != Ticket.Status.VALID) {
+        if (t.status() != Ticket.Status.VALID || t.passBlocked()) {
             throw new ApiException("TICKET_NOT_VALID", HttpStatus.CONFLICT, "Ticket is not valid");
         }
         if (scans.admitted(t.organizerId(), t.eventId(), t.id())) {
