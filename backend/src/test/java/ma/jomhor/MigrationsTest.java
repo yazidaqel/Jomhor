@@ -34,8 +34,8 @@ class MigrationsTest extends IntegrationTest {
     /**
      * V29 + V30: the new checks were validated against every row there was (none is NOT VALID); an event order still
      * takes its event, a product order (event_id null) is APP or WEB and never a split member; an item is a place or a
-     * product, never both or neither; a PASS category costs 0 (price_categories_free since V34); products need their kind's fields; one live pass per
-     * account per series; memberships.paid_until starts null.
+     * product, never both or neither; a PASS category costs 0 (price_categories_free since V34); products need their
+     * kind's fields; one live pass per account per series; memberships.paid_until starts null.
      */
     @Test
     void productsPassesAndProductOrders() {

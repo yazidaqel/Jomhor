@@ -254,7 +254,9 @@ class JdbcTickets implements Tickets {
     @Override
     public List<Ticket.OfOrder> inOrder(UUID org, UUID orderId) {
         return jdbc.sql("""
-                        select t.id, t.event_id, t.zone_id, t.price_category_id, t.status, t.holder_name from tickets t
+                        select t.id, t.event_id, t.zone_id, t.price_category_id, t.status, t.holder_name,
+                               t.holder_user_id
+                        from tickets t
                         where t.organizer_id = :org and t.order_id = :order
                           and not exists (select 1 from ticket_transfers tt
                                           where tt.organizer_id = t.organizer_id and tt.new_ticket_id = t.id)
@@ -263,7 +265,8 @@ class JdbcTickets implements Tickets {
                 .param("org", org).param("order", orderId)
                 .query((rs, n) -> new Ticket.OfOrder(rs.getObject("id", UUID.class), rs.getInt("event_id"),
                         rs.getInt("zone_id"), rs.getObject("price_category_id", UUID.class),
-                        Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name")))
+                        Ticket.Status.valueOf(rs.getString("status")), rs.getString("holder_name"),
+                        rs.getObject("holder_user_id", UUID.class)))
                 .list();
     }
 

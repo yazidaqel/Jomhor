@@ -323,6 +323,7 @@ public class EventService {
             throw invalid("zone_id", "is fixed after create");
         }
         if (audience != null && p.sold() > 0) {
+            // PASS first: a move between PASS and INVITE breaks both rules and answers PASS_SOLD.
             for (Event.Audience free : List.of(Event.Audience.PASS, Event.Audience.INVITE)) {
                 if ((audience == free) != (p.audience() == free)) {
                     Map<String, Object> details = new LinkedHashMap<>();

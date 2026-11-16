@@ -80,6 +80,21 @@ public interface Orders {
      */
     Optional<Order> insertPos(UUID id, UUID org, int eventId, long totalMad, List<Order.Item> items);
 
+    /**
+     * An invitation (04 POST /org/events/{id}/invitations): like {@link #insertPos}, but payment_method FREE, total 0
+     * and invited_by = the staff row of {@code staffUserId} in this organizer. Empty if {@code id} is already an order.
+     */
+    Optional<Order> insertInvitation(UUID id, UUID org, int eventId, UUID staffUserId, List<Order.Item> items);
+
+    /** The event of the organizer's invitation order {@code orderId}; empty for any other order. */
+    Optional<Integer> invitationEvent(UUID org, UUID orderId);
+
+    /** An invitation order with when and by whom it was issued (04 GET /org/events/{id}/invitations). */
+    record Invitation(Order order, Instant createdAt, UUID invitedById, String invitedByName) {}
+
+    /** The event's invitation orders with their items, newest first, at most {@code limit}. */
+    List<Invitation> invitations(UUID org, int eventId, int limit);
+
     /** Whether any order (of any organizer) has this id. */
     boolean exists(UUID orderId);
 

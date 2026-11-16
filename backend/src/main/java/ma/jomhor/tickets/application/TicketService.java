@@ -114,6 +114,11 @@ public class TicketService {
         return tickets.inOrder(org, orderId).stream().map(Ticket.OfOrder::id).toList();
     }
 
+    /** The same tickets with their status and holder (staff reads: 04 GET /org/events/{id}/invitations). */
+    public List<Ticket.OfOrder> inOrder(UUID org, UUID orderId) {
+        return tickets.inOrder(org, orderId);
+    }
+
     /**
      * A till slip (04 GET /org/pos/orders/{id}/tickets): the ticket, its zone, the holder label (never the full
      * name) and, for a VALID ticket only, its QR = the static v1 token as on the PDF. Not for logs.

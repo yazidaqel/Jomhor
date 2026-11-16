@@ -120,6 +120,8 @@ class InviteCategoryTest extends QueueFixture {
         refused(call(m.admin(), patch(path + m.invite()), "{\"audience\": \"MEMBERS\", \"price_mad\": 100}"),
                 "INVITE_SOLD", "audience");
         call(m.admin(), patch(path + m.invite()), "{\"audience\": \"INVITE\", \"quota\": 4}").andExpect(status().isOk());
+        // INVITE → PASS with sold > 0 breaks both rules; PASS is checked first, so the answer is PASS_SOLD.
+        refused(call(m.admin(), patch(path + m.invite()), "{\"audience\": \"PASS\"}"), "PASS_SOLD", "audience");
         setSold(m.invite(), 0);
         call(m.admin(), patch(path + m.invite()), "{\"audience\": \"PASS\"}").andExpect(status().isOk())
                 .andExpect(jsonPath("$.audience").value("PASS"));
@@ -154,6 +156,10 @@ class InviteCategoryTest extends QueueFixture {
         waitlist.notifyAt(Instant.now());
         assertThat(jdbc.sql("select count(*) from waitlist_entries where event_id = ? and notified_at is not null")
                 .param(m.event()).query(Long.class).single()).isZero();
+        setSold(m.cat(), 9); // one place fans can buy: one notice
+        waitlist.notifyAt(Instant.now());
+        assertThat(jdbc.sql("select user_id from waitlist_entries where event_id = ? and notified_at is not null")
+                .param(m.event()).query(UUID.class).list()).containsExactly(f.id());
     }
 
     @Test
