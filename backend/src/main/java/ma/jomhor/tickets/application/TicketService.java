@@ -120,10 +120,12 @@ public class TicketService {
     }
 
     /**
-     * A till slip (04 GET /org/pos/orders/{id}/tickets): the ticket, its zone, the holder label (never the full
-     * name) and, for a VALID ticket only, its QR = the static v1 token as on the PDF. Not for logs.
+     * A till slip (04 GET /org/pos/orders/{id}/tickets): the ticket, its zone, its price category's name, the holder
+     * label (never the full name) and, for a VALID ticket only, its QR = the static v1 token as on the PDF. Not for
+     * logs.
      */
-    public record Slip(Ticket.OfOrder ticket, Event.ZoneListing zone, String holderLabel, String qr) {
+    public record Slip(Ticket.OfOrder ticket, Event.ZoneListing zone, String categoryName, String holderLabel,
+                       String qr) {
         @Override
         public String toString() {
             return "Slip[" + ticket.id() + "]";
@@ -148,8 +150,13 @@ public class TicketService {
             valid.forEach(t -> out.put(t.id(), TicketToken.encodeStatic(k, eventId, t.id(), t.zoneId())));
             return out;
         });
-        return new Slips(pe.event(), all.stream().map(t -> new Slip(t, zones.get(t.zoneId()),
-                t.holderName() == null ? null : HolderNames.label(t.holderName()), qr.get(t.id()))).toList());
+        return new Slips(pe.event(), all.stream().map(t -> {
+            Event.ZoneListing zone = zones.get(t.zoneId());
+            String category = zone.prices().stream().filter(p -> p.priceCategoryId().equals(t.priceCategoryId()))
+                    .findFirst().orElseThrow().name();
+            return new Slip(t, zone, category, t.holderName() == null ? null : HolderNames.label(t.holderName()),
+                    qr.get(t.id()));
+        }).toList());
     }
 
     /** The order's tickets this user holds (04: a friend's ticket is never listed to the buyer). */

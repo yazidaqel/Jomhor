@@ -515,8 +515,10 @@ class PosApiTest extends PaymentTest {
         assertThat(JsonPath.<String>read(json, "$.event.venue.name")).isEqualTo("Stade");
         assertThat(JsonPath.<List<?>>read(json, "$.tickets")).hasSize(2);
         assertKeys(json, "$.tickets[0]", "id", "ticket_no", "status", "zone", "gate_codes", "holder_label",
-                "unit_price_mad", "qr");
+                "unit_price_mad", "category", "qr");
         assertKeys(json, "$.tickets[0].zone", "code", "name");
+        assertKeys(json, "$.tickets[0].category", "name");
+        assertThat(JsonPath.<List<String>>read(json, "$.tickets[*].category.name")).containsOnly("Plein tarif");
         assertThat(json).doesNotContain("Aqel", "Idrissi", "+212", "k_t", "holder_name");
 
         List<String> valid = JsonPath.read(json, "$.tickets[?(@.status == 'VALID')].qr");

@@ -174,7 +174,8 @@ class InvitationApiTest extends PaymentTest {
                 .andExpect(header().string("Cache-Control", "no-store")));
         assertKeys(json, "$", "order_id", "event", "tickets");
         assertKeys(json, "$.tickets[0]", "id", "ticket_no", "status", "zone", "gate_codes", "holder_label",
-                "unit_price_mad", "qr");
+                "unit_price_mad", "category", "qr");
+        assertThat(JsonPath.<List<String>>read(json, "$.tickets[*].category.name")).containsOnly("Presse");
         assertThat(json).doesNotContain("k_t", "holder_name", nadia);
         String qr = JsonPath.<List<String>>read(json, "$.tickets[?(@.id == '%s')].qr".formatted(karim)).getFirst();
         TicketToken.Parsed parsed = TicketToken.decode(qr);

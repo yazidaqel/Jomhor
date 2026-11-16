@@ -78,8 +78,10 @@ class OrgInvitationController {
 
     record ZoneRef(String code, String name) {}
 
+    record CategoryRef(String name) {}
+
     record SlipDto(UUID id, String ticketNo, Ticket.Status status, ZoneRef zone, List<String> gateCodes,
-                   String holderLabel, long unitPriceMad, String qr) {
+                   String holderLabel, long unitPriceMad, CategoryRef category, String qr) {
         @Override
         public String toString() {
             return "SlipDto[" + id + "]";
@@ -146,7 +148,7 @@ class OrgInvitationController {
             Ticket.OfOrder t = s.ticket();
             return new SlipDto(t.id(), TicketToken.ticketNo(t.id()), t.status(), new ZoneRef(s.zone().code(),
                     s.zone().name()), s.zone().gateCodes(), s.holderLabel(), p.unitPrices().get(t.priceCategoryId()),
-                    s.qr());
+                    new CategoryRef(s.categoryName()), s.qr());
         }).toList();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new PrintDto(p.order().id(),
                 new PrintEvent(e.id(), e.title(), e.startsAt(), e.timezone(), new VenueRef(e.venueName())), slips));
