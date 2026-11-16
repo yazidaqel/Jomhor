@@ -122,8 +122,8 @@ Server (PostgreSQL):
 | gate\_zones | Which zones a gate serves | organizer\_id, gate\_id, zone\_id |
 | event\_series | Season, festival edition, tour | id, organizer\_id, name, starts\_on, ends\_on |
 | events | One ticketed occurrence | id, organizer\_id, venue\_id, series\_id (nullable), event\_type (FOOTBALL\_MATCH, CONCERT, FESTIVAL\_DAY, CONFERENCE, OTHER), title, starts\_at, doors\_open\_at, status (DRAFT, ON\_SALE, GATES\_OPEN, CLOSED), event\_key\_enc, refund\_cutoff\_at, sale\_starts\_at, reentry\_policy, metadata jsonb (opponent, competition, headliner…) |
-| price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold, audience (ALL, MEMBERS, PASS) |
-| orders | Purchase | id, organizer\_id, event\_id (nullable: product orders), pass\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status, group\_order\_id (split pay: a member order → the initiator's order) |
+| price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold, audience (ALL, MEMBERS, PASS, INVITE) |
+| orders | Purchase | id, organizer\_id, event\_id (nullable: product orders), pass\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status, group\_order\_id (split pay: a member order → the initiator's order), invited\_by (an invitation: the staff who issued it) |
 | order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, product\_id, qty, unit\_price\_mad, holders jsonb (name, user\_id per place) |
 | payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref, pay\_code (cash code), pos\_session\_id, redirected\_at |
 | pos\_sessions | Club till sessions (one cashier's shift) | id, organizer\_id, staff\_id, label, opened\_at, closed\_at, expected\_mad, declared\_mad |
@@ -171,6 +171,7 @@ A ticket opens any gate that serves its zone, once, unless the event's re-entry 
 
 - Zone binding: `gate_zones` decides acceptance. A Tribune Nord ticket at a Virage gate is `WRONG_ZONE`, with the correct gates named on screen.
 - Re-entry policy per event: `NONE` (default), or `ONE_EXIT` (one `OUT` scan then one `IN` scan allowed, within the event window). An `OUT` scan requires the scanner to be in exit mode, so a fan cannot trigger it by accident. Lot 2 implements `NONE`; the API refuses `ONE_EXIT` until it is built.
+- Accreditations are ordinary tickets in a zone: a press or hospitality area is a zone with its own gates. V1 has no multi-zone ticket and no re-entry.
 - Device mode is locked to a gate at event start; changing gate requires a supervisor PIN and works offline (gates come in the manifest).
 - Supervisor override: PIN, a reason from a fixed list (ID\_CHECKED, DEVICE\_FAULT, DAMAGED\_TICKET, OTHER), and the ticket must be found in the manifest (scanned, or a typed number that lists every match). Produces a scan row with result `OVERRIDE`; capped at 20 per device per event, with the count shown live in the back-office.
 - Manual lookup: by the printed ticket number, shows zone, status and holder initials only. No name search at the gate.
@@ -186,7 +187,7 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | PDF ticket printed twice | First scan wins, second is `DUPLICATE` once gates have synced | Same offline window as above; mitigated by naming the gate on the red screen so staff can escalate |
 | Forged QR | 128-bit HMAC tag with K\_e, which never leaves enrolled devices | None practical |
 | Lost or stolen scanner | Keystore-wrapped K\_e, staff PIN lock, key wiped at event close; the P-256 device key is non-exportable; revoke → next call 403 → wipe | Attacker with an unlocked device during the event could read the manifest (no PII in it) |
-| Insider issues free tickets | Every ticket comes from an order; manifests are signed; sold vs scanned reconciled per zone after every event | Collusion with POS cash sales: covered by till sessions (expected vs declared cash, audited) in Lot 3; bank deposit matching with the Lot 5 finance module |
+| Insider issues free tickets | Every ticket comes from an order; manifests are signed; sold vs scanned reconciled per zone after every event; free tickets only from `INVITE` categories whose quota OPS sets; each batch carries the issuing staff (`invited_by`), is audited and listed in B7 | Collusion with POS cash sales: covered by till sessions (expected vs declared cash, audited) in Lot 3; bank deposit matching with the Lot 5 finance module; an OPS can raise an INVITE quota and issue: both audited |
 | Cash confirmed without cash taken | Signed network callbacks, exact amount, unique network ref; club tills reconciled per session (expected vs declared) | A cashier's gap is found at close, not prevented |
 | Ticket cancelled after last delta | Refund/cancel freeze at T0 − 60 min | Cancellations in the last hour are not possible, by policy |
 | Ticket transferred after a scanner's last delta | Transfers and re-issues close at `refund_cutoff_at` − 30 min (T0 − 90), leaving deltas 30 min of signal | A scanner offline before T0 − 90 still admits the old QR and refuses the new one (INCONNU) |

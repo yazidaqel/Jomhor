@@ -399,6 +399,16 @@ These override the screen specs above (see `docs/plans/lot-5.md` §11).
 | B11 Code cash | A product order shows the product name in place of the event; no print. |
 | B12 Billets (3b) | Status "Bloqué · abonnement suspendu" when the row is `BLOCKED` and `pass.status` is `SUSPENDED`; "Débloquer" only when `staff_blocked` (a staff block on top of the suspension); a pass-only block offers "Rembourser" only. |
 
+## Lot 5 step 4 adjustments
+
+These override the screen specs above (see `docs/plans/lot-5.md` §12).
+
+| Where | Change |
+| --- | --- |
+| Sidebar | Fans & finance: "Accréditations" enabled → index page picking the event (as "Portes en direct"), then B7. |
+| B2 Tarifs | "Accès" + "Invitations" (helper "Places offertes depuis Accréditations · jamais vendues"); price fixed at 0. `INVITE_SOLD` → field error "Déjà des billets émis sur ce tarif". |
+| B7 Accréditations `/events/:id/invitations` | **Header:** one card per INVITE category (name, zone, "{sold}/{quota} émis"). Empty state: "Crée un tarif « Invitations » dans Tarifs & quotas" + link to B2 Tarifs.<br>**"Nouvelle invitation" sheet:**<br>• category select (INVITE only, remaining shown) and quantity;<br>• holder rows as B11: name required (§Holder names), "même nom pour toutes les places", optional WhatsApp number;<br>• summary "{n} billets · {m} sur WhatsApp · {k} à imprimer"; CTA "Émettre {n} billets";<br>• `SOLD_OUT` → "Plus de places {category}"; `CLOSED` → "Invitations fermées depuis {transfer_until, venue zone}".<br>**Batches table:** date (venue zone), émis par, category · zone, places, expandable holders (holder name, ticket no, status badge, "WhatsApp"/"Papier").<br>**Actions:** "Imprimer" (80 mm slips, the B11 slip; shown when any `PAPER` ticket is `VALID`); "Révoquer" per ticket, ADMIN only, confirm "Le billet est annulé et la place revient au quota. Irréversible.", disabled after the cutoff with "Gel des remboursements".<br>FINANCE read-only (no sheet, no print). |
+
 ## Theming per organizer
 
 None: Jomhor is not white-label (`BRAND.md`). `organizers.settings.theme` is not read by the fan app, the shop or
