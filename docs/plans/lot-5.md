@@ -1336,7 +1336,7 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 
 | # | Owner | Area | Done |
 | --- | --- | --- | --- |
-| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md` | §11.4 **3a parts** applied after the founder agrees · 3a parts **done 2026-11-15**; the 3b parts are applied when 3a merges |
+| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md` | §11.4 **3a parts** applied after the founder agrees · 3a parts **done 2026-11-15** · 3b parts **done 2026-11-16** |
 | W0-2 | orchestrator | git | `feat/lot-5-passes` from `main`; later `feat/lot-5-installments`. No new CI job |
 | W0-3 | founder | — | The calls on Q186, Q188, Q189, Q195, Q197. Club: which zones get passes, how many seats per match, season end date, how many installments; "physical card?" (default: no). Meta templates `installment_due` with BE-36 |
 
