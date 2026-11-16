@@ -48,7 +48,7 @@ public class PassService {
     /** A pass row of GET /fan/passes: an event of its series with the holder's ticket for it (null until issued). */
     public record PassEvent(Event.SeriesEvent event, UUID ticketId) {}
 
-    /** The earliest unpaid installment; {@code overdue}: its due_at has passed. */
+    /** The earliest unpaid installment; {@code overdue}: its due_at has passed (never while PENDING). */
     public record NextDue(Installment installment, boolean overdue) {}
 
     /**
@@ -245,9 +245,11 @@ public class PassService {
             List<PassEvent> list = events.seriesEvents(org, pass.seriesId(), scope.zone().venueId(), false).stream()
                     .map(e -> new PassEvent(e, tickets.get(e.id()))).toList();
             List<Installment> schedule = passes.installments(org, pass.id());
-            NextDue next = schedule.stream().filter(i -> !i.paid()).findFirst()
-                    .map(i -> new NextDue(i, i.dueAt().isBefore(now))).orElse(null);
             boolean paying = pass.status() == Pass.Status.ACTIVE || pass.status() == Pass.Status.SUSPENDED;
+            // A PENDING pass is still being bought: its seq 1 (due at purchase) is never overdue.
+            NextDue next = schedule.stream().filter(i -> !i.paid()).findFirst()
+                    .map(i -> new NextDue(i, pass.status() != Pass.Status.PENDING && i.dueAt().isBefore(now)))
+                    .orElse(null);
             return new View(pass, product, organizers.get(org), scope, o.orderId(), list, schedule, next,
                     paying ? passes.liveOrder(org, pass.id()).orElse(null) : null);
         }).toList();

@@ -324,6 +324,11 @@ class InstallmentApiTest extends PaymentTest {
         Club c = club();
         Fan f = newFan();
         String pending = passOf(bought(f, c.pass(), 4));
+        // Still being bought: seq 1 is due at purchase, but not overdue.
+        String json = body(fan(f.token(), get("/fan/passes")).andExpect(status().isOk()));
+        assertThat(JsonPath.<String>read(json, "$.passes[0].status")).isEqualTo("PENDING");
+        assertThat(JsonPath.<Integer>read(json, "$.passes[0].next_due.seq")).isEqualTo(1);
+        assertThat(JsonPath.<Boolean>read(json, "$.passes[0].next_due.overdue")).isFalse();
         next(f, pending).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PASS_STATUS"))
                 .andExpect(jsonPath("$.details.status").value("PENDING"));
         Fan g = newFan();
