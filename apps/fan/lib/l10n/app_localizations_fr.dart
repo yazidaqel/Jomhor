@@ -1747,4 +1747,71 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get duesSeeClub => 'Voir ma cotisation';
+
+  @override
+  String get passPlans => 'Paiement';
+
+  @override
+  String planOnce(String amount) {
+    return 'En une fois · $amount';
+  }
+
+  @override
+  String planSplit(int n, String first, String base, int days) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: 'En $n fois', one: 'En 1 fois');
+    String _temp1 = intl.Intl.pluralLogic(days, locale: localeName, other: 'tous les $days jours', one: 'chaque jour');
+    return '$_temp0 · $first puis $base $_temp1';
+  }
+
+  @override
+  String get passSchedule => 'Échéancier';
+
+  @override
+  String installmentRow(int seq, int n, String amount, String date) {
+    return '$seq/$n · $amount · $date';
+  }
+
+  @override
+  String get installmentPaid => 'Payée';
+
+  @override
+  String get installmentDue => 'À payer';
+
+  @override
+  String get installmentLate => 'En retard';
+
+  @override
+  String passPayInstallment(String amount) {
+    return 'Payer l\'échéance · $amount';
+  }
+
+  @override
+  String get passPayInstallmentShort => 'Payer l\'échéance';
+
+  @override
+  String passSuspendedBanner(String date) {
+    return 'Abonnement suspendu · tes billets sont bloqués jusqu\'au paiement de l\'échéance du $date';
+  }
+
+  @override
+  String get passSuspended => 'Suspendu';
+
+  @override
+  String get ticketBlockedPass => 'Billet bloqué · abonnement suspendu';
+
+  @override
+  String installmentOf(int seq, int n) {
+    return 'Échéance $seq/$n';
+  }
+
+  @override
+  String get errorPassStatus => 'Cet abonnement ne prend pas de paiement pour l\'instant.';
+
+  @override
+  String get errorPlanNotOffered => 'Ce paiement en plusieurs fois n\'est plus proposé. Choisis à nouveau.';
+
+  @override
+  String orderPaidInstallmentBody(int seq, int n) {
+    return 'Échéance $seq/$n payée. Retrouve ton abonnement et tes billets dans Billets.';
+  }
 }

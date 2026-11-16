@@ -2840,6 +2840,108 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Voir ma cotisation'**
   String get duesSeeClub;
+
+  /// Screen 13 buy (Lot 5 step 3b): section of the plan chips (plans).
+  ///
+  /// In fr, this message translates to:
+  /// **'Paiement'**
+  String get passPlans;
+
+  /// Screen 13 buy plan chip: the one-payment plan, its amount as the server sent it.
+  ///
+  /// In fr, this message translates to:
+  /// **'En une fois · {amount}'**
+  String planOnce(String amount);
+
+  /// Screen 13 buy plan chip: n payments, the first amount then the others (amounts_mad as sent), every interval_days.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n, plural, =1{En 1 fois} other{En {n} fois}} · {first} puis {base} {days, plural, =1{chaque jour} other{tous les {days} jours}}'**
+  String planSplit(int n, String first, String base, int days);
+
+  /// Screen 13 owned (3b): section of the installments.
+  ///
+  /// In fr, this message translates to:
+  /// **'Échéancier'**
+  String get passSchedule;
+
+  /// Screen 13 owned schedule row: seq of n, amount as sent, due day in the venue zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'{seq}/{n} · {amount} · {date}'**
+  String installmentRow(int seq, int n, String amount, String date);
+
+  /// Schedule chip: installment paid.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payée'**
+  String get installmentPaid;
+
+  /// Schedule chip: installment unpaid.
+  ///
+  /// In fr, this message translates to:
+  /// **'À payer'**
+  String get installmentDue;
+
+  /// Schedule chip: next_due.overdue.
+  ///
+  /// In fr, this message translates to:
+  /// **'En retard'**
+  String get installmentLate;
+
+  /// Screen 13 owned CTA: POST /fan/passes/{id}/installments → screen 4; next_due amount as sent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer l\'échéance · {amount}'**
+  String passPayInstallment(String amount);
+
+  /// Billets row and screen 5, a ticket blocked by its suspended pass: opens screen 13.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payer l\'échéance'**
+  String get passPayInstallmentShort;
+
+  /// Screen 13 owned, SUSPENDED: next_due's day in the venue zone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Abonnement suspendu · tes billets sont bloqués jusqu\'au paiement de l\'échéance du {date}'**
+  String passSuspendedBanner(String date);
+
+  /// Billets pass row: status SUSPENDED.
+  ///
+  /// In fr, this message translates to:
+  /// **'Suspendu'**
+  String get passSuspended;
+
+  /// Billets row and screen 5: BLOCKED ticket whose pass is suspended (Q198).
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet bloqué · abonnement suspendu'**
+  String get ticketBlockedPass;
+
+  /// Screen 4 product variant summary line of an installment order.
+  ///
+  /// In fr, this message translates to:
+  /// **'Échéance {seq}/{n}'**
+  String installmentOf(int seq, int n);
+
+  /// 409 PASS_STATUS (not PAID_UP).
+  ///
+  /// In fr, this message translates to:
+  /// **'Cet abonnement ne prend pas de paiement pour l\'instant.'**
+  String get errorPassStatus;
+
+  /// 422 on installments (NOT_OFFERED): the plans are read again.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce paiement en plusieurs fois n\'est plus proposé. Choisis à nouveau.'**
+  String get errorPlanNotOffered;
+
+  /// Order screen PAID, an installment order (3b): neutral, the pass may stay SUSPENDED by another installment.
+  ///
+  /// In fr, this message translates to:
+  /// **'Échéance {seq}/{n} payée. Retrouve ton abonnement et tes billets dans Billets.'**
+  String orderPaidInstallmentBody(int seq, int n);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

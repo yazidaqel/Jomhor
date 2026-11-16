@@ -267,17 +267,23 @@ class _Paid extends ConsumerWidget {
               const SizedBox(height: JomhorSpace.m),
               Text(l.orderPaidTitle, style: JomhorType.h1, textAlign: TextAlign.center),
               const SizedBox(height: JomhorSpace.s),
-              Text(switch (order.product?.kind) {
-                null => l.orderPaidBody,
-                'PASS' => l.orderPaidPassBody,
-                _ => l.orderPaidMembershipBody,
-              }, textAlign: TextAlign.center),
+              Text(
+                switch ((order.product?.kind, order.installment)) {
+                  (null, _) => l.orderPaidBody,
+                  // 3b: neutral, another installment may keep the pass SUSPENDED.
+                  (_, (:final seq, of: final n)) => l.orderPaidInstallmentBody(seq, n),
+                  ('PASS', _) => l.orderPaidPassBody,
+                  _ => l.orderPaidMembershipBody,
+                },
+                key: const Key('order.paidBody'),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: JomhorSpace.xl),
               switch ((order.product, order.passId)) {
                 (_?, final passId?) => FilledButton(
                   key: const Key('order.seePass'),
                   onPressed: () {
-                    ref.invalidate(passesProvider); // ACTIVE now.
+                    ref.invalidate(passesProvider); // ACTIVE now, or its schedule moved on.
                     context.go('/passes/$passId');
                   },
                   child: Text(l.seePass),

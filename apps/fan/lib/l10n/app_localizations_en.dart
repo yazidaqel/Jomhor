@@ -1744,4 +1744,71 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get duesSeeClub => 'See my membership fee';
+
+  @override
+  String get passPlans => 'Payment';
+
+  @override
+  String planOnce(String amount) {
+    return 'In full · $amount';
+  }
+
+  @override
+  String planSplit(int n, String first, String base, int days) {
+    String _temp0 = intl.Intl.pluralLogic(n, locale: localeName, other: 'In $n payments', one: 'In 1 payment');
+    String _temp1 = intl.Intl.pluralLogic(days, locale: localeName, other: 'every $days days', one: 'every day');
+    return '$_temp0 · $first then $base $_temp1';
+  }
+
+  @override
+  String get passSchedule => 'Payment schedule';
+
+  @override
+  String installmentRow(int seq, int n, String amount, String date) {
+    return '$seq/$n · $amount · $date';
+  }
+
+  @override
+  String get installmentPaid => 'Paid';
+
+  @override
+  String get installmentDue => 'Due';
+
+  @override
+  String get installmentLate => 'Overdue';
+
+  @override
+  String passPayInstallment(String amount) {
+    return 'Pay the installment · $amount';
+  }
+
+  @override
+  String get passPayInstallmentShort => 'Pay the installment';
+
+  @override
+  String passSuspendedBanner(String date) {
+    return 'Season pass suspended · your tickets are blocked until you pay the installment due $date';
+  }
+
+  @override
+  String get passSuspended => 'Suspended';
+
+  @override
+  String get ticketBlockedPass => 'Ticket blocked · season pass suspended';
+
+  @override
+  String installmentOf(int seq, int n) {
+    return 'Installment $seq/$n';
+  }
+
+  @override
+  String get errorPassStatus => 'This season pass takes no payment right now.';
+
+  @override
+  String get errorPlanNotOffered => 'Paying in installments is no longer offered. Choose again.';
+
+  @override
+  String orderPaidInstallmentBody(int seq, int n) {
+    return 'Installment $seq/$n paid. Find your season pass and tickets in Tickets.';
+  }
 }

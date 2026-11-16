@@ -1,0 +1,33 @@
+{
+ "source": "source: contract (docs/04-api.md Lot 5 step 3b: POST /fan/passes/{id}/installments, the live installment order), design content for the FL-31 screen tests and goldens; BE-57/BE-58 being built alongside, no real run captured yet",
+ "status": 200,
+ "body": {
+  "id": "d1000000-0000-4000-8000-000000000002",
+  "status": "RESERVED",
+  "reserved_until": "2027-02-20T12:08:00Z",
+  "total_mad": 33333,
+  "product": {
+   "id": "b1000000-0000-4000-8000-000000000001",
+   "kind": "PASS",
+   "name": "Abonnement Tribune Est"
+  },
+  "pass_id": "c1000000-0000-4000-8000-000000000001",
+  "items": [
+   {
+    "product_id": "b1000000-0000-4000-8000-000000000001",
+    "price_category_id": null,
+    "zone_id": 3,
+    "zone_name": "Tribune Est",
+    "name": "Abonnement Tribune Est",
+    "qty": 1,
+    "unit_price_mad": 33333,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "group": null
+ }
+}

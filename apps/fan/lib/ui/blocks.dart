@@ -85,18 +85,22 @@ class DateBadge extends StatelessWidget {
 }
 
 /// Status banner (DESIGN.md components): success colours, the club accent (waiting on the fan: a cash code to
-/// pay), or neutral; leading icon.
+/// pay), a danger outline, or neutral; leading icon.
 class InfoBanner extends StatelessWidget {
-  const new({required this.text, this.success = false, this.accent = false, this.icon, super.key});
+  const new({required this.text, this.success = false, this.accent = false, this.danger = false, this.icon, super.key});
 
   final String text;
   final bool success;
   final bool accent;
+
+  /// Outlined in the danger colour, no fill (screen 13's suspended pass).
+  final bool danger;
   final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     final (fg, bg, line) = switch ((success, accent)) {
+      _ when danger => (JomhorColors.danger, Colors.transparent, JomhorColors.danger),
       (true, _) => (JomhorColors.successText, JomhorColors.successBg, JomhorColors.success),
       (_, true) => (
         JomhorColors.accentHover,

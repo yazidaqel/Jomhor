@@ -12,6 +12,7 @@ import 'package:jomhor_fan/features/clubs/follows.dart';
 import 'package:jomhor_fan/features/events/event_screen.dart';
 import 'package:jomhor_fan/features/events/home_screen.dart';
 import 'package:jomhor_fan/features/inbox/inbox.dart';
+import 'package:jomhor_fan/features/passes/pass_screen.dart';
 import 'package:jomhor_fan/features/tickets/ticket_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -20,6 +21,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'cash_order_test.dart' show CashSale, orderId;
 import 'club_test.dart' show ClubBackend;
 import 'helpers.dart';
+import 'passes_test.dart' show passId;
 import 'split_pay_test.dart' show SplitBackend, buyerId;
 import 'tickets_test.dart' show ticketId, ticketJson;
 
@@ -304,7 +306,7 @@ void main() {
   group('tap routing', () {
     test('only the push wire paths open', () {
       const uuid = '0b8e7a52-0000-4000-8000-0000000000cc';
-      for (final ok in ['/tickets/$uuid', '/orders/$uuid', '/events/12', '/']) {
+      for (final ok in ['/tickets/$uuid', '/orders/$uuid', '/passes/$uuid', '/events/12', '/']) {
         expect(pushPathOf({'path': ok}), ok);
       }
       for (final bad in [
@@ -314,6 +316,9 @@ void main() {
         '/events/12/checkout',
         '/tickets/../profile',
         '/tickets/${uuid.toUpperCase()}',
+        '/passes/abc',
+        '/passes/$uuid/installments',
+        '/products/$uuid',
         '/events/abc',
         '',
         'junk',
@@ -362,6 +367,26 @@ void main() {
         await tap(bad);
         expect(location(c), '/', reason: bad);
       }
+    });
+
+    testWidgets('INSTALLMENT_DUE: /passes/{id} opens screen 13, the passes read again (Lot 5 step 3b)', (tester) async {
+      final passes = realAnswer('passes_200_schedule', dir: 'installments').body;
+      final reads = <String>[];
+      final push = FakePushMessaging();
+      final c = await open(
+        tester,
+        PushBackend((r) {
+          reads.add(r.url.path);
+          return r.url.path == '/v1/fan/passes' ? Future.value(json(passes)) : base(r);
+        }),
+        push: push,
+      );
+      push.opened.add(const PushMessage(title: 't', body: 'b', data: {'path': '/passes/$passId'}));
+      await tester.pumpAndSettle();
+      expect(location(c), '/passes/$passId');
+      expect(find.byType(PassScreen), findsOneWidget);
+      expect(find.byKey(const Key('pass.payInstallment')), findsOneWidget);
+      expect(reads.where((p) => p == '/v1/fan/passes'), isNotEmpty);
     });
 
     testWidgets('a cold start from a notification opens its path', (tester) async {

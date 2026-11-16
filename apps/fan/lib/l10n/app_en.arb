@@ -471,5 +471,22 @@
   "holderMembersOnlyPaidAny": "Members-only price: membership fee paid up",
   "queueNotMemberPaid": "Reserved for paid-up members who joined before {date}",
   "queueNotMemberPaidAny": "Reserved for paid-up members",
-  "duesSeeClub": "See my membership fee"
+  "duesSeeClub": "See my membership fee",
+  "passPlans": "Payment",
+  "planOnce": "In full · {amount}",
+  "planSplit": "{n, plural, =1{In 1 payment} other{In {n} payments}} · {first} then {base} {days, plural, =1{every day} other{every {days} days}}",
+  "passSchedule": "Payment schedule",
+  "installmentRow": "{seq}/{n} · {amount} · {date}",
+  "installmentPaid": "Paid",
+  "installmentDue": "Due",
+  "installmentLate": "Overdue",
+  "passPayInstallment": "Pay the installment · {amount}",
+  "passPayInstallmentShort": "Pay the installment",
+  "passSuspendedBanner": "Season pass suspended · your tickets are blocked until you pay the installment due {date}",
+  "passSuspended": "Suspended",
+  "ticketBlockedPass": "Ticket blocked · season pass suspended",
+  "installmentOf": "Installment {seq}/{n}",
+  "errorPassStatus": "This season pass takes no payment right now.",
+  "errorPlanNotOffered": "Paying in installments is no longer offered. Choose again.",
+  "orderPaidInstallmentBody": "Installment {seq}/{n} paid. Find your season pass and tickets in Tickets."
 }

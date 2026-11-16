@@ -19,6 +19,7 @@ String errorText(AppLocalizations l, String code) => switch (code) {
   'ORDER_NOT_PAYABLE' => l.errorOrderNotPayable,
   'PRODUCT_NOT_ON_SALE' => l.errorProductNotOnSale,
   'MEMBERSHIP_PAID' => l.errorMembershipPaid,
+  'PASS_STATUS' => l.errorPassStatus,
   ApiError.network => l.errorNetwork,
   _ => l.errorGeneric,
 };
@@ -33,6 +34,7 @@ String apiErrorText(AppLocalizations l, ApiError e) => switch ((e.code, e.detail
   ('METHOD_NOT_AVAILABLE', {'reason': 'CASH_CAP'}) => l.errorCashCap,
   ('METHOD_NOT_AVAILABLE', _) => l.errorMethodNotConfigured,
   ('MEMBERS_ONLY', {'paid_required': true}) => l.holderMembersOnlyPaidAny,
+  ('VALIDATION_FAILED', {'fields': {'installments': _}}) => l.errorPlanNotOffered,
   _ => errorText(l, e.code),
 };
 

@@ -10,6 +10,8 @@ import 'package:jomhor_fan/app/session.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
+import 'package:jomhor_fan/features/passes/pass.dart';
+import 'package:jomhor_fan/features/tickets/ticket.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 
@@ -19,6 +21,7 @@ import 'tickets_test.dart' show otherId, ticketId, ticketJson;
 const productId = 'b1000000-0000-4000-8000-000000000001';
 const passId = 'c1000000-0000-4000-8000-000000000001';
 const productOrderId = 'd1000000-0000-4000-8000-000000000001';
+const installmentOrderId = 'd1000000-0000-4000-8000-000000000002';
 const cardPage = 'http://10.0.2.2:8080/v1/payments/card/p1/redirect';
 
 /// A design answer of test/fixtures/goldens/passes (contract-first content, in the real run's shape), as
@@ -35,7 +38,11 @@ class PassSale {
   final String dir;
   final requests = <http.Request>[];
 
-  ({int status, Map<String, Object?> body}) load(String name) => realAnswer(name, dir: dir);
+  /// [name] in [dir], or `installments/{name}`: FL-31's contract-first 3b answers (test/fixtures/installments).
+  ({int status, Map<String, Object?> body}) load(String name) => switch (name.split('/')) {
+    [final d, final n] => realAnswer(n, dir: d),
+    _ => realAnswer(name, dir: dir),
+  };
 
   /// `GET /fan/products/{id}` body; null = 404 (off sale).
   late Map<String, Object?>? product = load('product_200_pass').body;
@@ -65,6 +72,9 @@ class PassSale {
 
   /// `GET /fan/orders` fixture; null = no order.
   String? orders;
+
+  /// Queued answers of `POST /fan/passes/{id}/installments` (default: the 201).
+  final installmentAnswers = <String>[];
 
   http.Response answer(Object? body, [int status = 200]) => http.Response.bytes(
     utf8.encode(jsonEncode(body)),
@@ -111,6 +121,13 @@ class PassSale {
         paymentStatus = 'PENDING';
         return answer({'payment_id': 'p1', 'method': 'CARD', 'redirect_url': cardPage});
       }(),
+      ('POST', '/v1/fan/passes/$passId/installments') => fixture(
+        installmentAnswers.isEmpty ? 'installments/installments_201' : installmentAnswers.removeAt(0),
+      ),
+      ('GET', '/v1/fan/orders/$installmentOrderId') => answer({
+        ...load('installments/order_200_installment').body,
+        'reserved_until': clock.now.add(const Duration(minutes: 8)).toIso8601String(),
+      }),
       ('GET', '/v1/fan/orders') => orders == null ? answer({'orders': <Object?>[]}) : fixture(orders!),
       ('GET', '/v1/fan/passes') => switch ((passesBody, passes)) {
         (final body?, _) => answer(body),
@@ -193,6 +210,7 @@ void main() {
       expect(find.byKey(const Key('buy.event.7')), findsOneWidget);
       expect(find.byKey(const Key('buy.event.8')), findsOneWidget);
       expect(textOf(tester, 'buy.cta'), l.passBuy(l.dh(150000)));
+      expect(find.byKey(const Key('buy.plan.1')), findsNothing, reason: 'one plan: no chips');
       expect(sale.calls('GET', '/fan/products/$productId').single.headers.containsKey('authorization'), isFalse);
     });
 
@@ -242,7 +260,7 @@ void main() {
       );
       await tester.enterText(find.byKey(const Key('buy.holder')), '  Yazid   Aqel ');
       await tap(tester, 'buy.cta');
-      expect(sent(), {'product_id': productId, 'channel': 'APP', 'holder_name': 'Yazid Aqel'});
+      expect(sent(), {'product_id': productId, 'channel': 'APP', 'holder_name': 'Yazid Aqel', 'installments': 1});
       expect(location(c), '/orders/$productOrderId');
 
       // Screen 4, product variant: the product's name, the order's total, the holder; no zone, quantity or friends.
@@ -681,6 +699,262 @@ void main() {
       await c.read(sessionProvider.notifier).signIn('jwt');
       await tester.pumpAndSettle();
       expect(sale.calls('GET', '/fan/passes'), hasLength(1));
+    });
+  });
+
+  group('FL-31 installments (contract-first, test/fixtures/installments)', () {
+    Map<String, Object?> body(String name) => realAnswer(name, dir: 'installments').body;
+    Map<String, Object?> passRow(Map<String, Object?> b) =>
+        (b['passes']! as List<Object?>).single! as Map<String, Object?>;
+    String chip(WidgetTester tester, int seq) => textOf(tester, 'pass.installment.$seq.state');
+    String day(String at) => venueDay(DateTime.parse(at), 'Africa/Casablanca', 'fr');
+    Map<String, Object?> blocked(String by) =>
+        {...passTicketJson(), 'status': 'BLOCKED', 'blocked_by': by}..remove('k_t');
+
+    testWidgets('screen 13 buy: plan chips from plans, amounts as sent; the CTA follows the plan; installments sent', (
+      tester,
+    ) async {
+      sale
+        ..product = body('product_200_plans')
+        ..productOrders.add('installments/product_order_201_plan3')
+        ..productOrderBody = body('order_200_plan3_purchase');
+      final c = await start(tester, '/products/$productId');
+      expect(textOf(tester, 'buy.plan.1'), l.planOnce(l.dh(100000)));
+      expect(textOf(tester, 'buy.plan.3'), l.planSplit(3, l.dh(33334), l.dh(33333), 30));
+      expect(textOf(tester, 'buy.plan.3'), 'En 3 fois · 333,34\u00A0DH puis 333,33\u00A0DH tous les 30 jours');
+      expect(textOf(tester, 'buy.cta'), l.passBuy(l.dh(100000)));
+
+      await tap(tester, 'buy.plan.3');
+      expect(textOf(tester, 'buy.cta'), l.passBuy(l.dh(33334)));
+      await tap(tester, 'buy.cta');
+      expect(sent(), {'product_id': productId, 'channel': 'APP', 'holder_name': 'Yazid Aqel', 'installments': 3});
+      expect(location(c), '/orders/$productOrderId');
+      expect(
+        find.descendant(of: find.byKey(const Key('product.summary')), matching: find.text(l.installmentOf(1, 3))),
+        findsOneWidget,
+      );
+      expect(textOf(tester, 'product.pay'), l.payCta(l.dh(33334)));
+    });
+
+    testWidgets("screen 4, a plan's purchase (installment 1/3): the product's cash path, capped by its sales close", (
+      tester,
+    ) async {
+      sale
+        ..product = {...body('product_200_plans'), 'sales_close_at': '2027-02-20T13:00:00Z'}
+        ..productOrderBody = body('order_200_plan3_purchase');
+      await start(tester, '/orders/$productOrderId');
+      expect(find.text(l.installmentOf(1, 3)), findsOneWidget);
+      expect(sale.calls('GET', '/fan/products/$productId'), isNotEmpty);
+      expect(
+        textOf(tester, 'method.CASH_AGENCY.hint'),
+        l.methodCashBefore(venueWhen(DateTime.utc(2027, 2, 20, 13), 'Africa/Casablanca', 'fr')),
+      );
+    });
+
+    testWidgets('no client maths: uneven amounts and another interval show exactly as sent', (tester) async {
+      sale.product = {
+        ...body('product_200_plans'),
+        'plans': [
+          {
+            'installments': 1,
+            'amounts_mad': [150000],
+            'interval_days': null,
+          },
+          {
+            'installments': 4,
+            'amounts_mad': [37503, 37499, 37499, 37499],
+            'interval_days': 28,
+          },
+        ],
+      };
+      await start(tester, '/products/$productId');
+      expect(textOf(tester, 'buy.plan.4'), l.planSplit(4, l.dh(37503), l.dh(37499), 28));
+      await tap(tester, 'buy.plan.4');
+      expect(textOf(tester, 'buy.cta'), l.passBuy(l.dh(37503)));
+    });
+
+    testWidgets('422 NOT_OFFERED on installments: its copy, the plans read again', (tester) async {
+      sale
+        ..product = body('product_200_plans')
+        ..productOrders.add('installments/product_order_422_not_offered');
+      await start(tester, '/products/$productId');
+      final reads = sale.calls('GET', '/fan/products/$productId').length;
+      await tap(tester, 'buy.plan.3');
+      await tap(tester, 'buy.cta');
+      expect(textOf(tester, 'buy.error'), l.errorPlanNotOffered);
+      expect(sale.calls('GET', '/fan/products/$productId').length, reads + 1);
+    });
+
+    testWidgets("screen 13 owned: the schedule Payée / À payer and \"Payer l'échéance · {amount}\"", (tester) async {
+      sale.passes = 'installments/passes_200_schedule';
+      await start(tester, '/passes/$passId');
+      expect(textOf(tester, 'pass.installment.1'), l.installmentRow(1, 3, l.dh(33334), day('2027-01-25T10:00:00Z')));
+      expect(textOf(tester, 'pass.installment.2'), l.installmentRow(2, 3, l.dh(33333), day('2027-02-24T10:00:00Z')));
+      expect(
+        (chip(tester, 1), chip(tester, 2), chip(tester, 3)),
+        (l.installmentPaid, l.installmentDue, l.installmentDue),
+      );
+      expect(textOf(tester, 'pass.payInstallment'), l.passPayInstallment(l.dh(33333)));
+      expect(find.byKey(const Key('pass.suspended')), findsNothing);
+    });
+
+    testWidgets('SUSPENDED: the danger banner with the due day; the overdue one "En retard"; "Suspendu" on Billets', (
+      tester,
+    ) async {
+      sale.passes = 'installments/passes_200_suspended';
+      final c = await start(tester, '/passes/$passId');
+      expect(textOf(tester, 'pass.suspended'), l.passSuspendedBanner(day('2027-01-09T10:00:00Z')));
+      expect(
+        (chip(tester, 1), chip(tester, 2), chip(tester, 3)),
+        (l.installmentPaid, l.installmentLate, l.installmentDue),
+      );
+      expect(find.byKey(const Key('pass.payInstallment')), findsOneWidget);
+
+      c.read(routerProvider).go('/tickets');
+      await tester.pumpAndSettle();
+      expect(textOf(tester, 'passes.status.$passId'), l.passSuspended);
+    });
+
+    for (final (answer, status) in [('installments_201', 201), ('installments_200', 200)]) {
+      testWidgets("\"Payer l'échéance\" → POST …/installments → $status → screen 4 \"Échéance 2/3\"", (tester) async {
+        sale
+          ..passes = 'installments/passes_200_schedule'
+          ..installmentAnswers.add('installments/$answer');
+        final c = await start(tester, '/passes/$passId');
+        await tap(tester, 'pass.payInstallment');
+        expect(sale.calls('POST', '/fan/passes/$passId/installments').single.body, isEmpty);
+        expect(location(c), '/orders/$installmentOrderId');
+        expect(
+          find.descendant(of: find.byKey(const Key('product.summary')), matching: find.text(l.installmentOf(2, 3))),
+          findsOneWidget,
+        );
+        expect(textOf(tester, 'product.pay'), l.payCta(l.dh(33333)));
+      });
+    }
+
+    testWidgets(
+      'screen 4, installment order: cash from the order alone (24 h, cash_until null), the product not read',
+      (tester) async {
+        // The pass's sales are closed: an installment is still payable in cash.
+        sale.product = {...body('product_200_plans'), 'sales_close_at': '2027-02-20T13:00:00Z'};
+        await start(tester, '/orders/$installmentOrderId');
+        expect(find.text(l.installmentOf(2, 3)), findsOneWidget);
+        expect(find.byKey(const Key('method.CASH_AGENCY')), findsOneWidget);
+        // 24 h from now on server time, not the product's sales close an hour away.
+        expect(
+          textOf(tester, 'method.CASH_AGENCY.hint'),
+          l.methodCashBefore(venueWhen(clock.now.add(const Duration(hours: 24)), 'Africa/Casablanca', 'fr')),
+        );
+        expect(sale.calls('GET', '/fan/products/$productId'), isEmpty);
+      },
+    );
+
+    testWidgets('an installment paid: the neutral line (the pass may stay suspended), "Voir mon abonnement"', (
+      tester,
+    ) async {
+      sale.productOrderBody = {
+        ...body('order_200_installment'),
+        'id': productOrderId,
+        'status': 'PAID',
+        'payment_status': 'SUCCEEDED',
+        'payment_method': 'CARD',
+        'paid_at': '2027-02-20T11:59:00Z',
+      };
+      final c = await start(tester, '/orders/$productOrderId');
+      expect(textOf(tester, 'order.paidBody'), l.orderPaidInstallmentBody(2, 3));
+      expect(find.text(l.orderPaidPassBody), findsNothing);
+      await tap(tester, 'order.seePass');
+      expect(location(c), '/passes/$passId');
+    });
+
+    test('a K_t next to a status other than VALID never shows a QR', () {
+      final t = FanTicket.fromJson({...passTicketJson(), 'status': 'BLOCKED', 'blocked_by': 'PASS'});
+      expect((t.hasQr, t.rotatingToken(DateTime.utc(2027, 2, 20, 12))), (false, null));
+      expect(FanTicket.fromJson(passTicketJson()).hasQr, isTrue);
+    });
+
+    testWidgets('PASS_STATUS PAID_UP (paid elsewhere): the passes read again, nothing to say, no CTA left', (
+      tester,
+    ) async {
+      sale
+        ..passes = 'installments/passes_200_schedule'
+        ..installmentAnswers.add('installments/installments_409_paid_up');
+      final c = await start(tester, '/passes/$passId');
+      final paid = body('passes_200_schedule');
+      final row = passRow(paid);
+      for (final i in (row['installments']! as List<Object?>).cast<Map<String, Object?>>()) {
+        i['paid_at'] ??= '2027-02-20T11:00:00Z';
+      }
+      row['next_due'] = null;
+      sale.passesBody = paid;
+      final reads = sale.calls('GET', '/fan/passes').length;
+
+      await tap(tester, 'pass.payInstallment');
+      expect(location(c), '/passes/$passId');
+      expect(sale.calls('GET', '/fan/passes').length, greaterThan(reads));
+      expect(find.byKey(const Key('pass.payError')), findsNothing);
+      expect(find.byKey(const Key('pass.payInstallment')), findsNothing);
+      expect((chip(tester, 2), chip(tester, 3)), (l.installmentPaid, l.installmentPaid));
+    });
+
+    testWidgets('PASS_STATUS (not payable): its copy under the CTA', (tester) async {
+      sale
+        ..passes = 'installments/passes_200_schedule'
+        ..installmentAnswers.add('installments/installments_409_status');
+      await start(tester, '/passes/$passId');
+      await tap(tester, 'pass.payInstallment');
+      expect(textOf(tester, 'pass.payError'), l.errorPassStatus);
+    });
+
+    testWidgets("a ticket BLOCKED by its suspended pass: the copy and \"Payer l'échéance\" → screen 13 (Billets, 5)", (
+      tester,
+    ) async {
+      sale
+        ..passes = 'installments/passes_200_suspended'
+        ..tickets = [blocked('PASS')];
+      final c = await start(tester, '/tickets');
+      expect(textOf(tester, 'ticket.status.$ticketId'), l.ticketBlockedPass);
+      await tap(tester, 'ticket.payInstallment.$ticketId');
+      expect(location(c), '/passes/$passId');
+
+      c.read(routerProvider).go('/tickets/$ticketId');
+      await tester.pumpAndSettle();
+      expect(textOf(tester, 'ticket.status'), l.ticketBlockedPass);
+      await tap(tester, 'ticket.payInstallment');
+      expect(location(c), '/passes/$passId');
+    });
+
+    testWidgets('a pass ticket blocked by the club (blocked_by STAFF): the plain blocked copy, no CTA', (tester) async {
+      sale
+        ..passes = 'installments/passes_200_suspended'
+        ..tickets = [blocked('STAFF')];
+      final c = await start(tester, '/tickets');
+      expect(textOf(tester, 'ticket.status.$ticketId'), l.ticketBlocked);
+      expect(find.byKey(const Key('ticket.payInstallment.$ticketId')), findsNothing);
+      c.read(routerProvider).go('/tickets/$ticketId');
+      await tester.pumpAndSettle();
+      expect(textOf(tester, 'ticket.status'), l.ticketBlocked);
+      expect(find.byKey(const Key('ticket.payInstallment')), findsNothing);
+    });
+
+    test('the 3b answers parse: plans, schedule, next_due, suspended_at, installment', () {
+      final pass = FanPass.fromJson(passRow(body('passes_200_suspended')));
+      expect(pass.suspended, isTrue);
+      expect(pass.suspendedAt, DateTime.utc(2027, 1, 16, 10, 0, 30));
+      expect([for (final i in pass.installments) i.seq], [1, 2, 3]);
+      expect(pass.nextDue, (seq: 2, amountMad: 33333, dueAt: DateTime.utc(2027, 1, 9, 10), overdue: true));
+      expect(pass.canPay, isTrue);
+      final order = FanOrder.fromJson(body('order_200_installment'));
+      expect((order.installment, order.passId, order.product!.cashUntil), ((seq: 2, of: 3), passId, null));
+      expect(FanOrder.fromJson(body('order_200_plan3_purchase')).installment, (seq: 1, of: 3));
+      expect(FanOrder.fromJson(passAnswer('order_200_reserved').body).installment, isNull, reason: 'paid in full');
+      final product = Product.fromJson(body('product_200_plans'), fetchedAt: DateTime.utc(2027, 2, 20));
+      List<String> plans(Product p) => [for (final x in p.plans) '${x.installments} ${x.amountsMad} ${x.intervalDays}'];
+      expect(plans(product), ['1 [100000] null', '3 [33334, 33333, 33333] 30']);
+      // A 3a answer (one plan, no interval_days) still reads.
+      expect(plans(Product.fromJson(passAnswer('product_200_pass').body, fetchedAt: DateTime.utc(2027, 2, 20))), [
+        '1 [150000] null',
+      ]);
     });
   });
 }

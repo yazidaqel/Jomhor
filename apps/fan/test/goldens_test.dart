@@ -901,5 +901,55 @@ void main() {
         await snap('$locale-$name');
       });
     }
+
+    // FL-31 (Lot 5 step 3b): plans on screen 13 buy (the 3-payment plan picked), the schedule, the suspended pass and
+    // its blocked ticket on screen 5 (contract-first fixtures, test/fixtures/installments).
+    for (final (name, location, passes) in [
+      ('13-abonnement-plans', '/products/$productId', 'passes_200_schedule'),
+      ('13-abonnement-echeancier', '/passes/$passId', 'passes_200_schedule'),
+      ('13-abonnement-suspendu', '/passes/$passId', 'passes_200_suspended'),
+      ('5-billet-bloque', '/tickets/$ticketId', 'passes_200_suspended'),
+    ]) {
+      testWidgets('$locale · screen $name', (tester) async {
+        await phone(tester);
+        final sale = PassSale(TestClock(DateTime.utc(2027, 2, 20, 12)))
+          ..product = realAnswer('product_200_plans', dir: 'installments').body
+          ..passes = 'installments/$passes'
+          ..tickets = [
+            if (name == '5-billet-bloque')
+              {...passTicketJson(), 'status': 'BLOCKED', 'blocked_by': 'PASS', 'holder_label': holder}..remove('k_t')
+            else
+              passTicketJson(),
+          ];
+        final c = await pumpJomhor(
+          tester,
+          backend: sale.handle,
+          tokens: MemoryTokenStore('jwt'),
+          clock: sale.clock,
+          locale: Locale(locale),
+          overrides: [initialLocaleProvider.overrideWithValue(locale)],
+        );
+        c.read(routerProvider).go(location);
+        await tester.pumpAndSettle();
+        if (name == '13-abonnement-plans') {
+          // Below the fold on a phone: the list builds it once scrolled to.
+          final plan = find.byKey(const Key('buy.plan.3'));
+          await tester.scrollUntilVisible(plan, 200, scrollable: find.byType(Scrollable).first);
+          await tester.tap(plan);
+          await tester.pumpAndSettle();
+        }
+        if (locale == 'ar') {
+          expectArabicRules(tester);
+          if (name != '5-billet-bloque') {
+            expect(
+              find.textContaining('\u2066333,33\u00A0DH\u2069'),
+              findsWidgets,
+              reason: 'amounts stay LTR isolates',
+            );
+          }
+        }
+        await snap('$locale-$name');
+      });
+    }
   }
 }

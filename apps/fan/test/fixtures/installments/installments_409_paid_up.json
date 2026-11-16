@@ -1,0 +1,11 @@
+{
+ "source": "source: contract (docs/04-api.md Lot 5 step 3b: POST /fan/passes/{id}/installments, nothing left to pay), design content for the FL-31 screen tests and goldens; BE-57/BE-58 being built alongside, no real run captured yet",
+ "status": 409,
+ "body": {
+  "code": "PASS_STATUS",
+  "message": "PASS_STATUS",
+  "details": {
+   "reason": "PAID_UP"
+  }
+ }
+}

@@ -28,6 +28,7 @@ class FanTicket {
     this.transferUntil,
     this.transferred,
     this.passId,
+    this.blockedBy,
     this._ticketKey,
   }) : _idBytes = _uuidBytes(id);
 
@@ -64,6 +65,7 @@ class FanTicket {
         _ => null,
       },
       passId: j['pass_id'] as String?,
+      blockedBy: j['blocked_by'] as String?,
       ticketKey: _key(j['k_t']),
     );
   }
@@ -97,15 +99,22 @@ class FanTicket {
 
   /// The season pass that issued this ticket (Lot 5 step 3): the "Abonnement" chip; null for a bought ticket.
   final String? passId;
+
+  /// 3b: why it is `BLOCKED`: `PASS` (its suspended pass only), `STAFF`; null when not blocked.
+  final String? blockedBy;
   final Uint8List _idBytes;
   final Uint8List? _ticketKey;
 
-  /// The server sends K_t only for a VALID ticket of an event that is not CLOSED.
-  bool get hasQr => _ticketKey != null;
+  /// The server sends K_t only for a VALID ticket of an event that is not CLOSED; a K_t next to another status is
+  /// never shown.
+  bool get hasQr => _ticketKey != null && status == 'VALID';
+
+  /// 3b (Q198): `blocked_by` `PASS`: blocked only by its suspended pass (a `STAFF` block keeps the club's copy).
+  bool get blockedByPass => status == 'BLOCKED' && blockedBy == 'PASS' && passId != null;
 
   /// The v2 rotating token for the slot of [serverNow] (docs/04-api.md §Token), or null without K_t.
   /// Carries version, event, ticket, zone, slot and tag only: no personal data.
-  String? rotatingToken(DateTime serverNow) => switch (_ticketKey) {
+  String? rotatingToken(DateTime serverNow) => switch (hasQr ? _ticketKey : null) {
     final key? => encodeRotating(key, event.id, _idBytes, zone.id, slotAt(serverNow)),
     null => null,
   };

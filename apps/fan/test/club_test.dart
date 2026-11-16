@@ -764,6 +764,7 @@ void main() {
         'product_id': duesProductId,
         'channel': 'APP',
         'holder_name': 'Yazid Aqel',
+        'installments': 1,
       });
       expect(path(c), '/orders/$duesOrderId');
     });

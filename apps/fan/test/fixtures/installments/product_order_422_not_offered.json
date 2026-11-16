@@ -1,0 +1,14 @@
+{
+ "source": "source: contract (docs/04-api.md Lot 5 step 3b: POST /fan/product-orders, installments not one of plans), design content for the FL-31 screen tests and goldens; BE-57/BE-58 being built alongside, no real run captured yet",
+ "status": 422,
+ "body": {
+  "code": "VALIDATION_FAILED",
+  "message": "VALIDATION_FAILED",
+  "details": {
+   "fields": {
+    "installments": "NOT_OFFERED"
+   },
+   "reason": "NOT_OFFERED"
+  }
+ }
+}

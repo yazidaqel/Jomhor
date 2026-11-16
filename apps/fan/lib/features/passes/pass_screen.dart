@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:jomhor_fan/app/error_panel.dart';
+import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart' show MembersChip;
+import 'package:jomhor_fan/features/passes/buy_controller.dart';
 import 'package:jomhor_fan/features/passes/buy_screen.dart';
 import 'package:jomhor_fan/features/passes/pass.dart';
 import 'package:jomhor_fan/features/passes/passes_repository.dart';
@@ -22,7 +24,8 @@ import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 13 · Abonnement, owned (DESIGN.md Lot 5 step 3 and wow table): the season in one card, then every event
 /// of the season (`GET /fan/passes` `events`) with its ticket as it arrives (`ticket_id`, else "Bientôt").
-/// `PENDING`: "Paiement en attente" + "Reprendre le paiement".
+/// `PENDING`: "Paiement en attente" + "Reprendre le paiement". 3b: `SUSPENDED` banner, the schedule (Payée / À payer /
+/// En retard) and "Payer l'échéance · {amount}" → `POST /fan/passes/{id}/installments` → screen 4.
 class PassScreen extends ConsumerStatefulWidget {
   const new({required this.passId, super.key});
 
@@ -76,16 +79,18 @@ class _PassScreenState extends ConsumerState<PassScreen> {
   }
 }
 
-class _Owned extends StatelessWidget {
+class _Owned extends ConsumerWidget {
   const new({required this.pass, required this.onRefresh});
 
   final FanPass pass;
   final Future<void> Function() onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     final orderId = pass.orderId;
+    final next = pass.nextDue;
+    final paying = ref.watch(installmentProvider(pass.id));
 
     return RefreshIndicator(
       color: JomhorColors.accent,
@@ -96,6 +101,15 @@ class _Owned extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(JomhorSpace.xl, JomhorSpace.l, JomhorSpace.xl, JomhorSpace.xxl),
         children: [
           Entrance(child: PassCard(pass: pass)),
+          if (pass.suspended && next != null) ...[
+            const SizedBox(height: JomhorSpace.l),
+            InfoBanner(
+              key: const Key('pass.suspended'),
+              text: l.passSuspendedBanner(venueDay(next.dueAt, pass.timezone, l.localeName)),
+              danger: true,
+              icon: Icons.lock_outline_rounded,
+            ),
+          ],
           if (pass.pending) ...[
             const SizedBox(height: JomhorSpace.l),
             InfoBanner(
@@ -112,6 +126,44 @@ class _Owned extends StatelessWidget {
                 child: Text(l.passResume),
               ),
             ],
+          ],
+          if (pass.installments.length > 1) ...[
+            const SizedBox(height: JomhorSpace.xl),
+            SectionLabel(l.passSchedule),
+            const SizedBox(height: JomhorSpace.s),
+            for (final i in pass.installments)
+              _InstallmentRow(
+                key: Key('pass.installment.${i.seq}'),
+                text: l.installmentRow(
+                  i.seq,
+                  pass.installments.length,
+                  l.dh(i.amountMad),
+                  venueDay(i.dueAt, pass.timezone, l.localeName),
+                ),
+                state: pass.stateOf(i),
+                stateKey: Key('pass.installment.${i.seq}.state'),
+              ),
+          ],
+          if (pass.canPay && next != null) ...[
+            const SizedBox(height: JomhorSpace.m),
+            if (paying.error case final e?) ...[
+              Text(
+                apiErrorText(l, e),
+                key: const Key('pass.payError'),
+                style: JomhorType.bodySmall.copyWith(color: Theme.of(context).colorScheme.error),
+              ),
+              const SizedBox(height: JomhorSpace.s),
+            ],
+            FilledButton(
+              key: const Key('pass.payInstallment'),
+              onPressed: paying.busy
+                  ? null
+                  : () async {
+                      final to = await ref.read(installmentProvider(pass.id).notifier).pay();
+                      if (to != null && context.mounted) unawaited(context.push(to));
+                    },
+              child: Text(l.passPayInstallment(l.dh(next.amountMad))),
+            ),
           ],
           const SizedBox(height: JomhorSpace.xl),
           SectionLabel(l.passProgramme),
@@ -142,6 +194,65 @@ class _Owned extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A schedule row: "{seq}/{n} · {amount} · {date}" and its chip (Payée in the success colours, À payer muted, En retard
+/// outlined in the danger colour: the word carries the meaning, not the colour).
+class _InstallmentRow extends StatelessWidget {
+  const new({required this.text, required this.state, required this.stateKey, super.key});
+
+  final String text;
+  final InstallmentState state;
+  final Key stateKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final (label, fg, bg, line) = switch (state) {
+      InstallmentState.paid => (
+        l.installmentPaid,
+        JomhorColors.successText,
+        JomhorColors.successBg,
+        JomhorColors.success,
+      ),
+      InstallmentState.due => (
+        l.installmentDue,
+        JomhorColors.textSecondary,
+        Colors.transparent,
+        JomhorColors.borderMuted,
+      ),
+      InstallmentState.late => (l.installmentLate, JomhorColors.danger, Colors.transparent, JomhorColors.danger),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: JomhorType.body.copyWith(
+                color: state == InstallmentState.paid ? JomhorColors.textMuted : JomhorColors.text,
+              ),
+            ),
+          ),
+          const SizedBox(width: JomhorSpace.s),
+          Container(
+            key: stateKey,
+            padding: const EdgeInsets.symmetric(horizontal: JomhorSpace.s, vertical: 2),
+            decoration: BoxDecoration(
+              color: bg,
+              border: Border.all(color: line),
+              borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
+            ),
+            child: Text(
+              label,
+              style: JomhorType.caption.copyWith(color: fg, fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+          ),
         ],
       ),
     );

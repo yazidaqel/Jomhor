@@ -22,6 +22,7 @@ class FanOrder {
     this.group,
     this.product,
     this.passId,
+    this.installment,
   });
 
   factory fromJson(Map<String, Object?> j) => FanOrder(
@@ -50,6 +51,10 @@ class FanOrder {
       _ => null,
     },
     passId: j['pass_id'] as String?,
+    installment: switch (j['installment']) {
+      {'seq': final int seq, 'of': final int of} => (seq: seq, of: of),
+      _ => null,
+    },
   );
 
   final String id;
@@ -62,6 +67,10 @@ class FanOrder {
 
   /// A pass purchase order: the pass it pays for (screen 13 owned once PAID).
   final String? passId;
+
+  /// 3b: set on every order that pays an installment, the purchase of a plan included (`{1, n}`); null for a pass
+  /// paid in full. Screen 4's "Échéance {seq}/{of}".
+  final ({int seq, int of})? installment;
 
   /// `RESERVED`, `PAID`, `EXPIRED`, `CANCELLED` (`AWAITING_CASH` in Lot 3).
   final String status;

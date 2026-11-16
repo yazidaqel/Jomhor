@@ -162,9 +162,20 @@ class _TicketRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       ticketStatusText(l, t),
+                      key: Key('ticket.status.${t.id}'),
                       style: JomhorType.caption.copyWith(color: JomhorColors.textSecondary, fontSize: 12),
                     ),
                   ],
+                  // 3b: blocked by its suspended pass: "Payer l'échéance" → screen 13.
+                  if (t.blockedByPass)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton(
+                        key: Key('ticket.payInstallment.${t.id}'),
+                        onPressed: () => context.push('/passes/${t.passId}'),
+                        child: Text(l.passPayInstallmentShort),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -229,7 +240,8 @@ class _PassRow extends StatelessWidget {
   }
 }
 
-/// "Actif" in the accent, "Paiement en attente" muted; nothing for a status this build does not know (3b).
+/// "Actif" in the accent, "Paiement en attente" muted, "Suspendu" in the danger colour (3b); nothing for a status this
+/// build does not know.
 class PassStatusChip extends StatelessWidget {
   const new({required this.pass, super.key});
 
@@ -241,6 +253,11 @@ class PassStatusChip extends StatelessWidget {
     final key = Key('passes.status.${pass.id}');
     return switch (pass.status) {
       'ACTIVE' => MembersChip(key: key, label: l.passActive),
+      'SUSPENDED' => Text(
+        l.passSuspended,
+        key: key,
+        style: JomhorType.caption.copyWith(color: JomhorColors.danger, fontWeight: FontWeight.w600),
+      ),
       'PENDING' => Text(
         l.passPending,
         key: key,

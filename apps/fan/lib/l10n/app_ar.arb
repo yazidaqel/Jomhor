@@ -471,5 +471,22 @@
   "holderMembersOnlyPaidAny": "هاد السعر غير للأعضاء اللي خالصين واجب الانخراط",
   "queueNotMemberPaid": "خاص بالأعضاء اللي خالصين واجب الانخراط وتسجلو قبل {date}",
   "queueNotMemberPaidAny": "خاص بالأعضاء اللي خالصين واجب الانخراط",
-  "duesSeeClub": "شوف واجب الانخراط ديالي"
+  "duesSeeClub": "شوف واجب الانخراط ديالي",
+  "passPlans": "الخلاص",
+  "planOnce": "مرة وحدة · {amount}",
+  "planSplit": "{n, plural, =1{مرة وحدة} =2{على جوج دفعات} few{على {n} دفعات} other{على {n} دفعة}} · {first} ومن بعد {base} {days, plural, =1{كل نهار} =2{كل جوج أيام} few{كل {days} أيام} other{كل {days} يوم}}",
+  "passSchedule": "جدول الأقساط",
+  "installmentRow": "{seq}/{n} · {amount} · {date}",
+  "installmentPaid": "مخلص",
+  "installmentDue": "خاصو يتخلص",
+  "installmentLate": "متأخر",
+  "passPayInstallment": "خلص القسط · {amount}",
+  "passPayInstallmentShort": "خلص القسط",
+  "passSuspendedBanner": "الاشتراك موقوف · التذاكر ديالك مبلوكيين حتى تخلص القسط ديال {date}",
+  "passSuspended": "موقوف",
+  "ticketBlockedPass": "التذكرة مبلوكية · الاشتراك موقوف",
+  "installmentOf": "القسط {seq}/{n}",
+  "errorPassStatus": "هاد الاشتراك ما كيقبلش الخلاص دابا.",
+  "errorPlanNotOffered": "الخلاص على دفعات ما بقاش متوفر. ختار من جديد.",
+  "orderPaidInstallmentBody": "القسط {seq}/{n} تخلص. لقا الاشتراك والتذاكر ديالك ف«تذاكري»."
 }

@@ -42,7 +42,8 @@ class BuyController extends Notifier<BuyState> {
 
   /// Where to go next: the order to pay (`/orders/{id}`, screen 4 product variant), or the pass already held
   /// (`PASS_HELD` → `/passes/{id}`, screen 13 owned); null when the state says what is wrong.
-  Future<String?> buy(String rawName) async {
+  /// [installments]: the plan picked on screen 13 (3b).
+  Future<String?> buy(String rawName, {int installments = 1}) async {
     if (state.busy || state.soldOut || state.closed) return null;
     final name = normalizeHolderName(rawName);
     if (name == null) {
@@ -51,7 +52,7 @@ class BuyController extends Notifier<BuyState> {
     }
     state = const BuyState(busy: true);
     try {
-      final order = await ref.read(passesRepositoryProvider).order(productId, name);
+      final order = await ref.read(passesRepositoryProvider).order(productId, name, installments: installments);
       if (!ref.mounted) return null;
       ref.invalidate(passesProvider); // A PENDING pass now: Billets lists it.
       state = const BuyState();
@@ -74,6 +75,10 @@ class BuyController extends Notifier<BuyState> {
           state = BuyState(closed: true, error: e);
         case ('VALIDATION_FAILED', {'fields': {'holder_name': _}}):
           state = const BuyState(badName: true);
+        case ('VALIDATION_FAILED', {'fields': {'installments': _}}):
+          // The plan is no longer offered (3b `NOT_OFFERED`): the plans are read again, the fan picks again.
+          ref.invalidate(productProvider(productId));
+          state = BuyState(error: e);
         default:
           state = BuyState(error: e);
       }
@@ -87,3 +92,47 @@ class BuyController extends Notifier<BuyState> {
 
 final NotifierProviderFamily<BuyController, BuyState, String> buyProvider = NotifierProvider.autoDispose
     .family<BuyController, BuyState, String>(BuyController.new);
+
+/// Screen 13 owned, "Payer l'échéance" (3b): `POST /fan/passes/{id}/installments`, then screen 4 on that order.
+/// [BuyState.busy] while it runs, [BuyState.error] to say under the CTA.
+class InstallmentController extends Notifier<BuyState> {
+  new(this.passId);
+
+  final String passId;
+
+  @override
+  BuyState build() => const BuyState();
+
+  /// The order to pay (`/orders/{id}`), new (201) or the live one (200); null when the state says what is wrong. A
+  /// pass paid up meanwhile (`PASS_STATUS` `PAID_UP`, another phone or the shop) is read again, with nothing to say.
+  Future<String?> pay() async {
+    if (state.busy) return null;
+    state = const BuyState(busy: true);
+    try {
+      final order = await ref.read(passesRepositoryProvider).installmentOrder(passId);
+      if (!ref.mounted) return null;
+      ref.invalidate(passesProvider); // `pay_order_id` is set now.
+      state = const BuyState();
+      return '/orders/${order.id}';
+    } on ApiError catch (e) {
+      if (!ref.mounted) return null;
+      switch ((e.code, e.details)) {
+        case ('PASS_STATUS', {'reason': 'PAID_UP'}):
+          ref.invalidate(passesProvider);
+          state = const BuyState();
+        case ('PASS_STATUS', _):
+          ref.invalidate(passesProvider);
+          state = BuyState(error: e);
+        default:
+          state = BuyState(error: e);
+      }
+      return null;
+    } on Object {
+      if (ref.mounted) state = const BuyState(error: unexpectedAnswer);
+      return null;
+    }
+  }
+}
+
+final NotifierProviderFamily<InstallmentController, BuyState, String> installmentProvider = NotifierProvider.autoDispose
+    .family<InstallmentController, BuyState, String>(InstallmentController.new);

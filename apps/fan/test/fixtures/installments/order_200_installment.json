@@ -1,0 +1,56 @@
+{
+ "source": "source: contract (docs/04-api.md Lot 5 step 3b: GET /fan/orders/{id} of an installment order: installment {seq, of}, cash_until null (held now + 24 h), pass_id set, event_id null), design content for the FL-31 screen tests and goldens; BE-57/BE-58 being built alongside, no real run captured yet",
+ "status": 200,
+ "body": {
+  "id": "d1000000-0000-4000-8000-000000000002",
+  "event_id": null,
+  "channel": "APP",
+  "status": "RESERVED",
+  "payment_status": null,
+  "total_mad": 33333,
+  "reserved_until": "2027-02-20T12:08:00Z",
+  "paid_at": null,
+  "items": [
+   {
+    "product_id": "b1000000-0000-4000-8000-000000000001",
+    "price_category_id": null,
+    "zone_id": 3,
+    "zone_name": "Tribune Est",
+    "name": "Abonnement Tribune Est",
+    "qty": 1,
+    "unit_price_mad": 33333,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "ticket_ids": [],
+  "payment_method": null,
+  "cash": null,
+  "group": null,
+  "product": {
+   "id": "b1000000-0000-4000-8000-000000000001",
+   "kind": "PASS",
+   "name": "Abonnement Tribune Est",
+   "organizer": {
+    "slug": "atlas-fc",
+    "name": "Atlas FC",
+    "crest_url": null
+   },
+   "timezone": "Africa/Casablanca",
+   "payment_methods": [
+    "CARD",
+    "WALLET",
+    "CASH_AGENCY"
+   ],
+   "cash_until": null
+  },
+  "installment": {
+   "seq": 2,
+   "of": 3
+  },
+  "pass_id": "c1000000-0000-4000-8000-000000000001"
+ }
+}
