@@ -67,6 +67,8 @@ const row = (over: Partial<TicketRow>): TicketRow => ({
   refund: null,
   transferred_to: null,
   transferred_from: null,
+  pass: null,
+  staff_blocked: over.status === 'BLOCKED',
   ...over,
 })
 const ROWS: TicketRow[] = [
@@ -231,6 +233,58 @@ it('OPS unblocks a blocked ticket end to end', async () => {
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(writes(calls)).toEqual([{ method: 'POST', path: '/org/tickets/t-2/unblock', org: 'org-a', body: { reason: 'Erreur de saisie' } }])
   expect(await screen.findByText(i18n.t('tickets.actions.unblock.done', { ticket: '1A2B 3C4D' }))).toBeTruthy()
+  await waitFor(() => expect(lookups(calls)).toHaveLength(2))
+})
+
+it('3b: "Débloquer" exactly when staff_blocked; a suspended pass reads "abonnement suspendu"; a held, active pass changes nothing', async () => {
+  stubApi('ADMIN', {
+    lookup: () =>
+      Response.json([
+        row({ id: 't-4', ticket_no: 'AAAA 1111', status: 'BLOCKED', staff_blocked: false, pass: { status: 'SUSPENDED' } }), // the pass only
+        row({ id: 't-7', ticket_no: 'DDDD 4444', status: 'BLOCKED', staff_blocked: true, pass: { status: 'SUSPENDED' } }), // staff + suspended pass
+        row({ id: 't-5', ticket_no: 'BBBB 2222', status: 'VALID', pass: { status: 'SUSPENDED' } }), // inside the freeze: stays VALID
+        row({ id: 't-6', ticket_no: 'CCCC 3333', status: 'BLOCKED', pass: { status: 'ACTIVE' } }), // a staff block
+      ]),
+  })
+  renderApp()
+  await search('06 12 34 56 78')
+  await screen.findByText('AAAA 1111')
+  const suspended = rowOf('AAAA 1111')
+  expect(within(suspended).getByText(fr.tickets.passSuspended)).toBeTruthy()
+  expect(buttons(suspended)).toEqual([fr.tickets.actions.refund.action])
+  const both = rowOf('DDDD 4444')
+  expect(within(both).getByText(fr.tickets.passSuspended)).toBeTruthy()
+  expect(buttons(both)).toEqual([fr.tickets.actions.unblock.action, fr.tickets.actions.refund.action]) // the staff block lifts; the pass keeps it blocked
+  // Its unblock never claims the ticket turns valid: it stays blocked while the pass is suspended.
+  const user = userEvent.setup()
+  await user.click(within(both).getByRole('button', { name: i18n.t('tickets.actions.unblock.label', { ticket: 'DDDD 4444' }) }))
+  const dialog = await screen.findByRole('dialog')
+  expect(within(dialog).getByText(fr.tickets.actions.unblock.bodyStillBlocked)).toBeTruthy()
+  expect(within(dialog).queryByText(fr.tickets.actions.unblock.body)).toBeNull()
+  await user.type(within(dialog).getByRole('textbox', { name: fr.tickets.reason }), 'Interdiction levée')
+  await user.click(within(dialog).getByRole('button', { name: fr.tickets.actions.unblock.confirm }))
+  expect(await screen.findByText(i18n.t('tickets.actions.unblock.doneStillBlocked', { ticket: 'DDDD 4444' }))).toBeTruthy()
+  expect(screen.queryByText(i18n.t('tickets.actions.unblock.done', { ticket: 'DDDD 4444' }))).toBeNull()
+  const frozen = rowOf('BBBB 2222')
+  expect(within(frozen).getByText(fr.tickets.statuses.VALID)).toBeTruthy()
+  expect(buttons(frozen)).toEqual([fr.tickets.actions.block.action, fr.tickets.actions.refund.action])
+  const staff = rowOf('CCCC 3333')
+  expect(within(staff).getByText(fr.tickets.statuses.BLOCKED)).toBeTruthy()
+  expect(buttons(staff)).toEqual([fr.tickets.actions.unblock.action, fr.tickets.actions.refund.action])
+})
+
+it('3b: unblock answered 409 TICKET_STATUS PASS_SUSPENDED → a toast, the dialog closes and the list refetches', async () => {
+  const calls = stubApi('OPS', {
+    write: () => Response.json({ code: 'TICKET_STATUS', message: 'x', details: { status: 'BLOCKED', reason: 'PASS_SUSPENDED' } }, { status: 409 }),
+  })
+  renderApp()
+  const user = await search('1A2B 3C4D')
+  await user.click(await screen.findByRole('button', { name: i18n.t('tickets.actions.unblock.label', { ticket: '1A2B 3C4D' }) }))
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByRole('textbox', { name: fr.tickets.reason }), 'Paiement reçu')
+  await user.click(within(dialog).getByRole('button', { name: fr.tickets.actions.unblock.confirm }))
+  expect(await screen.findByText(i18n.t('tickets.actions.unblock.passSuspended', { ticket: '1A2B 3C4D' }))).toBeTruthy()
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   await waitFor(() => expect(lookups(calls)).toHaveLength(2))
 })
 

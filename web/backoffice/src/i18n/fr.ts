@@ -546,6 +546,7 @@ export const fr = {
     },
     searchTicket: 'Rechercher le billet {{ticket}}',
     statuses: { VALID: 'Valide', BLOCKED: 'Bloqué', REFUNDED: 'Remboursé', CANCELLED: 'Annulé' },
+    passSuspended: 'Bloqué · abonnement suspendu',
     refund: {
       REQUIRED: '{{amount}} DH à rendre',
       DONE: '{{amount}} DH rendus',
@@ -570,6 +571,9 @@ export const fr = {
         body: 'Le billet redevient valide aux portes dès la prochaine mise à jour des scanners.',
         confirm: 'Débloquer le billet',
         done: 'Billet {{ticket}} débloqué.',
+        bodyStillBlocked: "Cela lève le blocage du staff. Le billet reste bloqué aux portes tant que l'abonnement est suspendu.",
+        doneStillBlocked: "Blocage du staff levé sur le billet {{ticket}} : il reste bloqué tant que l'abonnement est suspendu.",
+        passSuspended: "Billet {{ticket}} bloqué par son abonnement suspendu : il se débloque dès que l'abonné a réglé ses échéances en retard.",
       },
       refund: {
         action: 'Rembourser',
@@ -1203,6 +1207,10 @@ export const fr = {
       quotaHint: 'Abonnements en vente. Les places de chaque match se créent dans Tarifs & quotas (accès Abonnés).',
       quotaInvalid: 'Saisissez un nombre entier (0 ou plus), sans virgule.',
       quotaBelowSold: 'Le quota ne peut pas être inférieur aux abonnements déjà vendus ({{sold, number}}).',
+      installments: 'Paiement en plusieurs fois',
+      installmentsHint:
+        "Nombre d'échéances au plus, tous les 30 jours (1 = en une fois). Proposé seulement si la dernière échéance tombe au plus tard le dernier jour de la série. Les abonnements déjà vendus gardent leur échéancier.",
+      installmentsInvalid: 'Saisissez un nombre entier de 1 à 10.',
       validUntil: "Valable jusqu'au",
       validUntilHint: "Membres à jour jusqu'à la fin de ce jour · heure locale {{zone}}",
       validUntilRequired: 'Saisissez une date.',
@@ -1221,6 +1229,9 @@ export const fr = {
       pending: 'En attente de paiement',
       revenue: 'Encaissé',
       paidMembers: 'Membres à jour',
+      suspended: 'Suspendus',
+      overdue: 'Échéances en retard',
+      due: 'Reste à encaisser',
     },
     events: {
       title: 'Billets par match',

@@ -215,7 +215,19 @@ function ProductFormBody({
         )}
         <TextField id="product-price" label={t('products.form.price')} inputMode="decimal" hint={t('products.form.priceHint')} error={errors.price_mad?.message} registration={form.register('price_mad')} />
         {kind === 'PASS' ? (
-          <TextField id="product-quota" label={t('products.form.quota')} inputMode="numeric" hint={t('products.form.quotaHint')} error={errors.quota?.message} registration={form.register('quota')} />
+          <>
+            <TextField id="product-quota" label={t('products.form.quota')} inputMode="numeric" hint={t('products.form.quotaHint')} error={errors.quota?.message} registration={form.register('quota')} />
+            <div className="sm:col-span-2">
+              <TextField
+                id="product-installments"
+                label={t('products.form.installments')}
+                inputMode="numeric"
+                hint={t('products.form.installmentsHint')}
+                error={errors.max_installments?.message}
+                registration={form.register('max_installments')}
+              />
+            </div>
+          </>
         ) : (
           <TextField
             id="product-valid-until"

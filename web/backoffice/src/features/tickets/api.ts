@@ -25,14 +25,24 @@ export type TicketRow = {
   transferred_to: string | null
   /** Lot 4: `ticket_no` of the ticket this one replaced. */
   transferred_from: string | null
+  /** Lot 5 3b: the ticket's pass while its holder still holds it (a transferred ticket: null). `status` above is then the effective one. */
+  pass: { status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' } | null
+  /** Lot 5 3b: the stored status is BLOCKED (a staff block), so unblock applies; false for a ticket blocked only by its suspended pass. */
+  staff_blocked: boolean
 }
 export type TicketAction = 'block' | 'unblock' | 'refund'
 
 /** Who may do what (04-api role sentence): block/unblock ADMIN, OPS; refund ADMIN. FINANCE reads only. */
 export const ACTION_ROLES: Record<TicketAction, readonly Role[]> = { block: ['ADMIN', 'OPS'], unblock: ['ADMIN', 'OPS'], refund: ['ADMIN'] }
-/** The actions a ticket in `status` allows (else 409 TICKET_STATUS). */
-export const actionsFor = (status: TicketStatus): TicketAction[] =>
-  status === 'VALID' ? ['block', 'refund'] : status === 'BLOCKED' ? ['unblock', 'refund'] : []
+/** 3b: BLOCKED while its pass is SUSPENDED (04 §Passes Effective status), whether staff blocked it too or not: the copy says so. */
+export const passBlocked = (r: Pick<TicketRow, 'status' | 'pass'>) => r.status === 'BLOCKED' && r.pass?.status === 'SUSPENDED'
+
+/**
+ * The actions a ticket allows (else 409 TICKET_STATUS). Unblock acts on the stored status: only a staff block lifts
+ * (a ticket blocked only by its suspended pass → PASS_SUSPENDED).
+ */
+export const actionsFor = (r: Pick<TicketRow, 'status' | 'staff_blocked'>): TicketAction[] =>
+  r.status === 'VALID' ? ['block', 'refund'] : r.status === 'BLOCKED' ? (r.staff_blocked ? ['unblock', 'refund'] : ['refund']) : []
 
 /**
  * Search text → `q`: a Moroccan phone in any usual form goes as E.164 (the API matches it exactly), and so does any
