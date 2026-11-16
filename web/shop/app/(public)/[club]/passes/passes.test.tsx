@@ -2,6 +2,7 @@ import { renderToString } from 'react-dom/server'
 import { getAccessFallbackHTTPStatus } from 'next/dist/client/components/http-access-fallback/http-access-fallback'
 import { getURLFromRedirectError } from 'next/dist/client/components/redirect'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { POST as payInstallment } from '@/app/api/passes/[id]/installments/route'
 import { POST as createProductOrder } from '@/app/api/product-orders/route'
 import { json, NOW, ORG, rawClub, rawOrganizer, SECRETS } from '@/lib/events.fixture'
 import { fmt, getDictionary } from '@/lib/i18n'
@@ -98,6 +99,7 @@ const productOrder = (over: Record<string, unknown> = {}) => ({
   items: [{ product_id: PASS_ID, price_category_id: null, zone_id: 3, zone_name: 'Tribune Nord', name: 'Abonnement Virage Nord', qty: 1, unit_price_mad: 150000, holders: [{ label: 'Yazid A.' }] }],
   ticket_ids: [],
   group: null,
+  installment: null,
   ...over,
 })
 
@@ -242,7 +244,7 @@ it('POST /api/product-orders: cross-origin → 403, nothing sent', async () => {
   expect(fetchMock).not.toHaveBeenCalled()
 })
 
-it('POST /api/product-orders: the cookie token → Bearer, the body rebuilt (channel WEB, no installments), only id/status/hold/total back', async () => {
+it('POST /api/product-orders: the cookie token → Bearer, the body rebuilt (channel WEB, 3b installments), only id/status/hold/total back', async () => {
   routes['/fan/product-orders'] = () => json(201, { ...productOrder(), token: 'SECRET' })
   const res = await createProductOrder(req({ product_id: PASS_ID, holder_name: 'Yazid Aqel', channel: 'POS', installments: 3, price_mad: 1 }))
   expect(res.status).toBe(201)
@@ -252,7 +254,15 @@ it('POST /api/product-orders: the cookie token → Bearer, the body rebuilt (cha
   expect(url).toBe('http://backend.test/v1/fan/product-orders')
   expect(init!.method).toBe('POST')
   expect(new Headers(init!.headers).get('authorization')).toBe(`Bearer ${TOKEN}`)
-  expect(JSON.parse(init!.body as string)).toEqual({ product_id: PASS_ID, channel: 'WEB', holder_name: 'Yazid Aqel' })
+  expect(JSON.parse(init!.body as string)).toEqual({ product_id: PASS_ID, channel: 'WEB', holder_name: 'Yazid Aqel', installments: 3 })
+  // No installments sent → none forwarded (a pre-3b client).
+  await createProductOrder(req({ product_id: PASS_ID, holder_name: 'Yazid Aqel' }))
+  expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)).toEqual({ product_id: PASS_ID, channel: 'WEB', holder_name: 'Yazid Aqel' })
+})
+
+it('POST /api/product-orders: installments not an integer 1–10 → 422, nothing sent', async () => {
+  for (const installments of [0, 11, 2.5, '4', null]) expect((await createProductOrder(req({ product_id: PASS_ID, holder_name: 'Yazid Aqel', installments }))).status).toBe(422)
+  expect(fetchMock).not.toHaveBeenCalled()
 })
 
 it('POST /api/product-orders: no session → 401; a malformed body → 422; a backend 409 passes through', async () => {
@@ -438,4 +448,255 @@ it('W5 pending cash list: a product order (event null) shows its product name, n
   expect(await getPendingCash(TOKEN, NOW)).toEqual([
     { id: ORDER_ID, event: { title: 'Abonnement Virage Nord', starts_at: null, timezone: 'Europe/Paris' }, code: 'JMH 4F7K 29', amount_mad: 150000, reserved_until: '2026-02-02T12:00:00Z' },
   ])
+})
+
+// ---------- 3b · WS-16: installments ----------
+// Contract-first: docs/04-api.md §Fan `plans`, `installments` on POST /fan/product-orders, the `/fan/passes` 3b
+// fields, POST /fan/passes/{id}/installments, `/fan/tickets` effective status; §Passes Installments / Suspension.
+
+const PLANS = [
+  { installments: 1, amounts_mad: [150000], interval_days: null },
+  { installments: 4, amounts_mad: [37503, 37499, 37499, 37499], interval_days: 30 },
+]
+
+it('W9 3b: plan chips from `plans` (in full, then N payments every 30 days); a single plan shows none', async () => {
+  routes[`/fan/products?organizer=${ORG}`] = () => json(200, [rawPass({ plans: PLANS }), rawSold()])
+  const h = await w9()
+  expect(h).toContain(`En une fois · ${formatDh(150000)}`)
+  expect(h).toContain(`En 4 fois · ${formatDh(37503)} puis ${formatDh(37499)} tous les 30 jours`)
+  expect(h.match(/data-plan="/g)).toHaveLength(2) // the sold-out product has one plan: no chips
+})
+
+it('W9 3b: a malformed plan is dropped (amounts, interval_days missing or bad), never shown', async () => {
+  const bad = [
+    PLANS[0],
+    { installments: 3, amounts_mad: [50000, 50000], interval_days: 30 },
+    { installments: 2, amounts_mad: [75000.5, 75000], interval_days: 30 },
+    { installments: 4, amounts_mad: [37500, 37500, 37500, 37500] }, // no interval_days: never assumed 30
+    { installments: 5, amounts_mad: [30000, 30000, 30000, 30000, 30000], interval_days: 0 },
+  ]
+  routes[`/fan/products?organizer=${ORG}`] = () => json(200, [rawPass({ plans: bad })])
+  const h = await w9()
+  expect(h).not.toContain('data-plan=')
+  for (const n of [3, 2, 4, 5]) expect(h).not.toContain(`En ${n} fois`)
+})
+
+it('W9 3b: in full always first, from price_mad; one plan per N', async () => {
+  const plans = [PLANS[1], { installments: 1, amounts_mad: [1], interval_days: null }, { ...PLANS[1], amounts_mad: [37500, 37500, 37500, 37500] }]
+  routes[`/fan/products?organizer=${ORG}`] = () => json(200, [rawPass({ plans })])
+  const h = await w9()
+  expect([...h.matchAll(/data-plan="(\d+)"/g)].map((m) => m[1])).toEqual(['1', '4'])
+  expect(h).toContain(`En une fois · ${formatDh(150000)}`)
+  expect(h).toContain(`En 4 fois · ${formatDh(37503)} puis ${formatDh(37499)}`) // the first N=4 plan
+  expect(h).not.toContain(formatDh(1))
+})
+
+it('W3 3b: the product variant offers the plans (in full checked first)', async () => {
+  session = TOKEN
+  routes[`/fan/products/${PASS_ID}`] = () => json(200, rawPass({ plans: PLANS }))
+  const h = renderToString(await checkout({ product: PASS_ID }))
+  expect(h).toContain(fr.passes.planTitle)
+  expect(h).toMatch(/name="plan" checked="" value="1"/)
+  expect(h).toMatch(/name="plan" value="4"/)
+  expect(h).toContain(`En 4 fois · ${formatDh(37503)} puis ${formatDh(37499)} tous les 30 jours`)
+  noSecrets(h)
+})
+
+// ---------- POST /api/passes/{id}/installments ----------
+
+const PASS_UUID = '0190f3a2-0000-7000-8000-0000000bb001'
+const instReq = (id = PASS_UUID, headers: Record<string, string> = {}) =>
+  new Request(`http://shop.test/api/passes/${id}/installments`, {
+    method: 'POST',
+    headers: { origin: 'http://shop.test', cookie: `__Host-jomhor_session=${TOKEN}`, ...headers },
+  })
+const instParams = (id = PASS_UUID) => ({ params: Promise.resolve({ id }) })
+const installmentOrder = () => productOrder({ pass_id: PASS_UUID, total_mad: 37499, items: [{ ...productOrder().items[0], unit_price_mad: 37499 }], token: 'SECRET' })
+
+it('POST /api/passes/{id}/installments: cross-origin or no Origin → 403, nothing sent; no session → 401; malformed id → 404', async () => {
+  expect((await payInstallment(instReq(PASS_UUID, { origin: 'https://evil.test' }), instParams())).status).toBe(403)
+  const noOrigin = new Request(`http://shop.test/api/passes/${PASS_UUID}/installments`, { method: 'POST', headers: { cookie: `__Host-jomhor_session=${TOKEN}` } })
+  expect((await payInstallment(noOrigin, instParams())).status).toBe(403)
+  expect((await payInstallment(instReq(PASS_UUID, { cookie: '' }), instParams())).status).toBe(401)
+  expect((await payInstallment(instReq('x'), instParams('../fan/me'))).status).toBe(404)
+  expect(fetchMock).not.toHaveBeenCalled()
+})
+
+it('POST /api/passes/{id}/installments: Bearer forwarded, no body; 201 new / 200 live order, only id/status/hold/total back', async () => {
+  routes[`/fan/passes/${PASS_UUID}/installments`] = () => json(201, installmentOrder())
+  let res = await payInstallment(instReq(), instParams())
+  expect(res.status).toBe(201)
+  expect(res.headers.get('cache-control')).toBe('no-store')
+  expect(await res.json()).toEqual({ id: ORDER_ID, status: 'RESERVED', reserved_until: '2026-02-01T12:08:00Z', total_mad: 37499 })
+  const [url, init] = fetchMock.mock.calls[0]!
+  expect(url).toBe(`http://backend.test/v1/fan/passes/${PASS_UUID}/installments`)
+  expect(init!.method).toBe('POST')
+  expect(init!.body).toBeUndefined()
+  expect(new Headers(init!.headers).get('authorization')).toBe(`Bearer ${TOKEN}`)
+
+  routes[`/fan/passes/${PASS_UUID}/installments`] = () => json(200, installmentOrder())
+  res = await payInstallment(instReq(), instParams())
+  expect(res.status).toBe(200)
+})
+
+it('POST /api/passes/{id}/installments: 409 PASS_STATUS (PAID_UP) and 404 pass through', async () => {
+  routes[`/fan/passes/${PASS_UUID}/installments`] = () => json(409, { code: 'PASS_STATUS', message: '', details: { reason: 'PAID_UP' } })
+  const res = await payInstallment(instReq(), instParams())
+  expect(res.status).toBe(409)
+  expect(await res.json()).toEqual({ code: 'PASS_STATUS', message: '', details: { reason: 'PAID_UP' } })
+  routes[`/fan/passes/${PASS_UUID}/installments`] = () => json(404, { code: 'NOT_FOUND', message: '', details: {} })
+  expect((await payInstallment(instReq(), instParams())).status).toBe(404)
+})
+
+// ---------- W5 3b ----------
+
+const rawOwned = (over: Record<string, unknown> = {}) => ({
+  id: PASS_UUID,
+  status: 'ACTIVE',
+  product: { id: PASS_ID, name: 'Abonnement Virage Nord' },
+  organizer: { id: ORG, slug: 'atlas-fc', name: 'ATLAS FC', crest_url: null },
+  series: { id: 's1', name: 'Saison 2025-26', starts_on: '2025-08-15', ends_on: '2026-06-30' },
+  zone: { id: 3, code: 'NORD', name: 'Tribune Nord' },
+  timezone: 'Africa/Casablanca',
+  holder_label: 'Yazid A.',
+  created_at: '2025-12-03T10:00:00Z',
+  order_id: null,
+  events: [],
+  suspended_at: null,
+  // NOW is 2026-02-01T12:00Z: seq 1 paid, seq 2 and 3 overdue, seq 4 to come.
+  installments: [
+    { seq: 1, amount_mad: 37503, due_at: '2025-12-03T10:00:00Z', paid_at: '2025-12-03T10:02:00Z' },
+    { seq: 2, amount_mad: 37499, due_at: '2026-01-02T10:00:00Z', paid_at: null },
+    { seq: 3, amount_mad: 37499, due_at: '2026-02-01T10:00:00Z', paid_at: null },
+    { seq: 4, amount_mad: 37499, due_at: '2026-03-03T10:00:00Z', paid_at: null },
+  ],
+  next_due: { seq: 2, amount_mad: 37499, due_at: '2026-01-02T10:00:00Z', overdue: true },
+  pay_order_id: null,
+  ...over,
+})
+const w5 = async () => renderToString(await TicketsPage())
+
+it('W5 3b: the schedule "{seq}/{n} · {amount} · {date}" with Payée / En retard / À payer, and "Payer l’échéance · {amount}"', async () => {
+  session = TOKEN
+  routes['/fan/passes'] = () => json(200, { passes: [rawOwned()] })
+  const h = await w5()
+  expect(h).toContain(fr.passes.schedule)
+  expect(h).toContain(`1/4 · ${formatDh(37503)} · 3 déc.`)
+  expect(h).toContain(`2/4 · ${formatDh(37499)} · 2 janv.`)
+  expect(h).toContain(`4/4 · ${formatDh(37499)} · 3 mars`)
+  expect([...h.matchAll(/data-installment="(\w+)"/g)].map((m) => m[1])).toEqual(['paid', 'late', 'late', 'due'])
+  expect(h).toContain(fr.passes.instPaid)
+  expect(h).toContain(fr.passes.instLate)
+  expect(h).toContain(fr.passes.instDue)
+  expect(h).toContain(fmt(fr.passes.payInstallment, { amount: formatDh(37499) }))
+  expect(h).toContain(`id="pass-${PASS_UUID}"`) // the blocked tickets' "Payer l'échéance" target
+  expect(h).not.toContain('data-suspended') // ACTIVE (inside the grace period): no banner
+  noSecrets(h)
+})
+
+it('W5 3b SUSPENDED: the danger banner with the overdue installment date, the status chip, and the pay CTA', async () => {
+  session = TOKEN
+  routes['/fan/passes'] = () => json(200, { passes: [rawOwned({ status: 'SUSPENDED', suspended_at: '2026-01-09T10:00:30Z' })] })
+  const h = await w5()
+  expect(h).toContain(fmt(fr.passes.suspendedBanner, { date: '2 janv.' }))
+  expect(h).toContain(fr.passes.SUSPENDED)
+  expect(h).toContain(fmt(fr.passes.payInstallment, { amount: formatDh(37499) }))
+})
+
+it('W5 3b: paid in full → no schedule, no CTA; paid up in installments → schedule, no CTA; PENDING → resume, no CTA', async () => {
+  session = TOKEN
+  const paid = rawOwned().installments.map((i) => ({ ...i, paid_at: '2026-01-01T00:00:00Z' }))
+  routes['/fan/passes'] = () =>
+    json(200, {
+      passes: [
+        rawOwned({ id: 'a', installments: [{ seq: 1, amount_mad: 150000, due_at: '2025-12-03T10:00:00Z', paid_at: '2025-12-03T10:02:00Z' }], next_due: null }),
+        rawOwned({ id: 'b', installments: paid, next_due: null }),
+        rawOwned({ id: 'c', status: 'PENDING', order_id: ORDER_ID }),
+      ],
+    })
+  const h = await w5()
+  expect(h.match(new RegExp(fr.passes.schedule, 'g'))).toHaveLength(2) // b and c, not a
+  expect(h).not.toContain('Payer l’échéance')
+  expect(h.match(new RegExp(fr.passes.resume, 'g'))).toHaveLength(1)
+})
+
+it('W5 3b renders in ar (schedule, banner, CTA)', async () => {
+  session = TOKEN
+  locale = 'ar'
+  const ar = getDictionary('ar')
+  routes['/fan/passes'] = () => json(200, { passes: [rawOwned({ status: 'SUSPENDED', suspended_at: '2026-01-09T10:00:30Z' })] })
+  const h = await w5()
+  expect(h).toContain(ar.passes.schedule)
+  expect(h).toContain(ar.passes.instLate)
+  expect(h).toContain(fmt(ar.passes.payInstallment, { amount: formatDh(37499) }))
+  expect(h).toContain(ar.passes.suspendedBanner.split(' · ')[0])
+  expect(h).not.toContain(fr.passes.schedule)
+})
+
+// ---------- W4 3b: an installment order ----------
+
+it('W4 installment order: "Échéance 2/4" in the header and the summary; cash from the order (24 h hold), no product read', async () => {
+  session = TOKEN
+  routes[`/fan/products/${PASS_ID}`] = () => json(404, { code: 'NOT_FOUND', message: '', details: {} }) // off sale mid-season
+  routes[`/fan/orders/${ORDER_ID}`] = () =>
+    json(200, { ...installmentOrder(), installment: { seq: 2, of: 4 }, product: orderProduct({ cash_until: null }) })
+  const h = await w4()
+  expect(h).toMatch(/<h1[^>]*>Abonnement Virage Nord<\/h1>/)
+  expect(h.match(/Échéance 2\/4/g)).toHaveLength(2) // the header and the summary line
+  expect(h).toContain('value="CASH_AGENCY"')
+  expect(h).toContain('Avant Lun. 2 févr. 2026 · 13:00') // now + 24 h in Africa/Casablanca, no sales close
+  expect(h).toContain(formatDh(37499))
+  expect(paths()).not.toContain(`/fan/products/${PASS_ID}`)
+  noSecrets(h)
+})
+
+it('W4 installment order: cash only when the order offers it; a set cash_until still bounds it; once paid the summary reads "Échéance 2/4"', async () => {
+  session = TOKEN
+  routes[`/fan/orders/${ORDER_ID}`] = () =>
+    json(200, { ...installmentOrder(), installment: { seq: 2, of: 4 }, product: orderProduct({ payment_methods: ['CARD'], cash_until: null }) })
+  let h = await w4()
+  expect(h).toContain('value="CARD"')
+  expect(h).not.toContain('value="CASH_AGENCY"')
+
+  routes[`/fan/orders/${ORDER_ID}`] = () =>
+    json(200, { ...installmentOrder(), installment: { seq: 2, of: 4 }, product: orderProduct({ cash_until: '2026-02-01T11:00:00Z' }) })
+  h = await w4()
+  expect(h).toContain(fr.checkout.cashTooLate)
+
+  routes[`/fan/orders/${ORDER_ID}`] = () =>
+    json(200, { ...installmentOrder(), status: 'PAID', payment_status: 'SUCCEEDED', paid_at: '2026-02-01T12:03:00Z', installment: { seq: 2, of: 4 } })
+  h = await w4()
+  expect(h.match(/Échéance 2\/4/g)).toHaveLength(3) // the aside header, its summary line, "Échéance 2/4 payée"
+  expect(h).not.toContain(fmt(fr.orderPage.line, { qty: 1, name: 'Abonnement Virage Nord' }))
+  expect(paths()).not.toContain(`/fan/products/${PASS_ID}`)
+})
+
+it('W4 installment order renders in ar', async () => {
+  session = TOKEN
+  locale = 'ar'
+  routes[`/fan/orders/${ORDER_ID}`] = () => json(200, { ...installmentOrder(), installment: { seq: 2, of: 4 } })
+  expect(await w4()).toContain(fmt(getDictionary('ar').passes.installmentOf, { k: 2, n: 4 }))
+})
+
+it('W4 installment order EXPIRED: its own copy, and back to its pass on Mes billets (not W9, where a rebuy is PASS_HELD)', async () => {
+  session = TOKEN
+  routes[`/fan/orders/${ORDER_ID}`] = () =>
+    json(200, { ...installmentOrder(), status: 'EXPIRED', reserved_until: '2026-02-01T11:50:00Z', installment: { seq: 2, of: 4 } })
+  const h = await w4()
+  expect(h).toContain(fr.passes.installmentExpired)
+  expect(h).not.toContain(fr.passes.holdExpired)
+  expect(h).toMatch(new RegExp(`href="/me/tickets#pass-${PASS_UUID}"[^>]*>${fr.passes.installmentBack}<`))
+  expect(h).not.toContain('href="/atlas-fc/passes"')
+})
+
+it('W4 installment order PAID: "Échéance 2/4 payée" (never "abonnement actif": another installment may still be overdue) + Mes billets', async () => {
+  session = TOKEN
+  routes[`/fan/orders/${ORDER_ID}`] = () =>
+    json(200, { ...installmentOrder(), status: 'PAID', payment_status: 'SUCCEEDED', paid_at: '2026-02-01T12:03:00Z', installment: { seq: 2, of: 4 } })
+  const h = await w4()
+  expect(h).toContain(fmt(fr.passes.installmentPaid, { k: 2, n: 4 }))
+  expect(h).not.toContain(fr.passes.paidPASS)
+  expect(h).toContain('href="/me/tickets"')
+  expect(getDictionary('ar').passes.installmentPaid).not.toBe(fr.passes.installmentPaid)
+  expect(getDictionary('en').passes.installmentExpired).not.toBe(fr.passes.installmentExpired)
 })

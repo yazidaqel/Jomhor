@@ -2,8 +2,18 @@
 // save ticket 1's name, which field to focus.
 
 import { normalizeHolderName } from './holder-name'
+import { fmt, type Dict } from './i18n'
+import { formatDh } from './money'
 import type { PayMethod, Result } from './order-client'
 import { normalizePhone } from './phone'
+import type { Plan } from './products'
+
+/** 3b plan chip (W9, W3): "En une fois Â· {price}" / "En {n} fois Â· {first} puis {base} tous les {days} jours". */
+export function planText(p: Pick<Dict['passes'], 'planFull' | 'planSplit'>, plan: Plan) {
+  const [first = 0, base = first] = plan.amounts_mad
+  if (plan.installments === 1) return fmt(p.planFull, { price: formatDh(first) })
+  return fmt(p.planSplit, { n: plan.installments, first: formatDh(first), base: formatDh(base), days: plan.interval_days ?? '' })
+}
 
 /** `pays`: the friend pays their own place (04 §Split pay); only read from ticket 2 on, once a phone is typed. */
 export type Row = { name: string; phone: string; pays?: boolean }
@@ -86,6 +96,9 @@ export function rowErrorsFrom422(r: Result): RowError[] {
 /** "Relancer sur WhatsApp" (DESIGN 9 Groupe): wa.me with the copy and the member's `pay_url`, no phone number. */
 export const whatsappUrl = (text: string, payUrl: string) => `https://wa.me/?text=${encodeURIComponent(`${text} ${payUrl}`)}`
 
+/** A cash code's hold (04 `/pay` CASH_AGENCY: `now + 24 h`, capped by the sales close when there is one). */
+export const CASH_HOLD_MS = 24 * 3_600_000
+
 /**
  * Payment method rows for an order paid now (W3, and the W4 split-pay member), from the event (04 GET
  * /fan/events/{id}): cash hidden when not set up (`cash_until` null), `cashLate` from `cash_until` on (also when a
@@ -94,7 +107,7 @@ export const whatsappUrl = (text: string, payUrl: string) => `https://wa.me/?tex
 export function cashOptions(e: { payment_methods: PayMethod[]; cash_until: string | null; sales_close_at: string | null }, now: number) {
   const cashLate = !!e.cash_until && (now >= Date.parse(e.cash_until) || !e.payment_methods.includes('CASH_AGENCY'))
   const methods = e.payment_methods.filter((m) => m !== 'CASH_AGENCY' || (e.cash_until && !cashLate))
-  const cashUntil = Math.min(now + 24 * 3_600_000, e.sales_close_at ? Date.parse(e.sales_close_at) : Infinity)
+  const cashUntil = Math.min(now + CASH_HOLD_MS, e.sales_close_at ? Date.parse(e.sales_close_at) : Infinity)
   return { methods, cashLate, cashUntil: new Date(cashUntil).toISOString() }
 }
 

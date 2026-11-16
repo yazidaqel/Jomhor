@@ -11,6 +11,10 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
+// PayInstallment (3b) opens W4 through the router.
+const { push } = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: () => {}, refresh: () => {} }) }))
+
 const d = getDictionary(defaultLocale)
 const copyOf = (x: Dict) => ({
   ticketsPage: x.ticketsPage,
@@ -42,6 +46,7 @@ const ticket = (id: string, over: Partial<TicketView> = {}): TicketView => ({
   transfer_open: true,
   transferred: null,
   pass_id: null,
+  blocked_by: null,
   ...over,
 })
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -334,4 +339,46 @@ it('Lot 5 step 3: a season-pass ticket (pass_id) carries the "Abonnement" chip; 
   const chips = [...el.querySelectorAll('article')].map((a) => a.querySelector('[data-pass-chip]')?.textContent ?? null)
   expect(chips).toEqual([d.ticketsPage.passChip, null])
   expect(d.ticketsPage.passChip).toBe('Abonnement')
+})
+
+it('3b: blocked_by PASS reads "Billet bloqué · abonnement suspendu", no PDF or transfer, "Payer l’échéance" → its pass; a staff block keeps "Bloqué"', async () => {
+  fetchMock.mockResolvedValue(
+    json(200, {
+      tickets: [
+        ticket('t-pass-blocked', { status: 'BLOCKED', pass_id: 'p-1', blocked_by: 'PASS' }),
+        ticket('t-staff-blocked', { status: 'BLOCKED', pass_id: 'p-2', blocked_by: 'STAFF' }), // a pass ticket blocked by staff
+        ticket('t-pass-valid', { pass_id: 'p-1' }),
+      ],
+    }),
+  )
+  await show()
+  const [blocked, staff, valid] = [...el.querySelectorAll('article')]
+  expect(blocked!.textContent).toContain(d.ticketsPage.passBlocked)
+  expect(blocked!.querySelector('a[download]')).toBeNull()
+  expect(blocked!.querySelector('button')).toBeNull()
+  const pay = blocked!.querySelector<HTMLAnchorElement>('a[href="#pass-p-1"]')!
+  expect(pay.textContent).toBe(d.ticketsPage.passPay)
+  expect(staff!.textContent).toContain(d.ticketsPage.BLOCKED)
+  expect(staff!.textContent).not.toContain(d.ticketsPage.passBlocked)
+  expect(staff!.querySelector('a[href^="#pass-"]')).toBeNull()
+  expect(valid!.querySelector('a[download]')).not.toBeNull()
+  expect(pdfLinks()).toEqual(['/api/tickets/t-pass-valid/pdf'])
+})
+
+it('3b PayInstallment: posts to /api/passes/{id}/installments (no body) and opens W4; a refusal shows its copy', async () => {
+  const { PayInstallment } = await import('./PayInstallment')
+  await act(async () => root.render(<PayInstallment passId="p-1" label="Payer l’échéance · 375 DH" errors={d.errors} />))
+  fetchMock.mockResolvedValueOnce(json(201, { id: 'o-9', status: 'RESERVED', reserved_until: '2026-02-01T12:08:00Z', total_mad: 37499 }))
+  await act(async () => el.querySelector('button')!.click())
+  expect(fetchMock).toHaveBeenCalledWith('/api/passes/p-1/installments', expect.objectContaining({ method: 'POST', body: undefined }))
+  expect(push).toHaveBeenCalledWith('/orders/o-9')
+
+  // The button stays busy while W4 loads; a fresh one for the refusal.
+  expect(el.querySelector('button')!.disabled).toBe(true)
+  push.mockReset()
+  await act(async () => root.render(<PayInstallment key="again" passId="p-1" label="Payer l’échéance · 375 DH" errors={d.errors} />))
+  fetchMock.mockResolvedValueOnce(json(409, { code: 'PASS_STATUS', message: '', details: { reason: 'PAID_UP' } }))
+  await act(async () => el.querySelector('button')!.click())
+  expect(push).not.toHaveBeenCalled()
+  expect(el.querySelector('[role="alert"]')!.textContent).toBe(d.errors.PAID_UP)
 })

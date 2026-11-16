@@ -36,6 +36,8 @@ export default async function TicketsPage() {
   }
   const { d } = await getI18n()
   const c = d.ticketsPage
+  // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
+  const now = Date.now()
   return (
     <main>
       <section className="relative isolate overflow-hidden border-b border-border bg-surface">
@@ -63,7 +65,7 @@ export default async function TicketsPage() {
         </div>
       </section>
       <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-12 px-6 pt-10 pb-16">
-        <MyPasses passes={passes} d={d} />
+        <MyPasses passes={passes} now={now} d={d} />
         <PendingOrders copy={{ ticketsPage: d.ticketsPage, meta: d.meta }} />
         <TicketList
           copy={{

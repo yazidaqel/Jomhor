@@ -233,6 +233,8 @@ export function errorText(errors: Dict['errors'], r: Result): string {
     return errors[`METHOD_${details.reason}`]
   }
   if (code === 'VALIDATION_FAILED' && details.reason === 'NO_BUYER_PLACE') return errors.NO_BUYER_PLACE
+  if (code === 'VALIDATION_FAILED' && details.reason === 'NOT_OFFERED') return errors.PLAN_NOT_OFFERED
+  if (code === 'PASS_STATUS' && details.reason === 'PAID_UP') return errors.PAID_UP
   if (code === 'SOLD_OUT' && details.product_id) return errors.PASS_SOLD_OUT
   if (code === 'MEMBERS_ONLY' && details.paid_required === true) return errors.MEMBERS_ONLY_PAID
   if (code === 'PER_ACCOUNT_LIMIT' && details.reason === 'HOLDER') return holderLimitText(errors, details.limit)

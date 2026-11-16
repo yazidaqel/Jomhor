@@ -33,9 +33,14 @@ export type Product = {
   /** MEMBERSHIP: the `paid_until` it grants. */
   valid_until: string | null
   pass: PassInfo | null
+  /** How it can be paid: in full first, then (3b, PASS) the installment plan when offered. */
+  plans: Plan[]
   payment_methods: PayMethod[]
   cash_until: string | null
 }
+
+/** 04 `plans[]`: `amounts_mad` (integer centimes, Σ = price) in due order; `interval_days` null for the in-full plan. */
+export type Plan = { installments: number; amounts_mad: number[]; interval_days: number | null }
 
 type Raw = Record<string, unknown>
 const obj = (v: unknown): Raw => (v && typeof v === 'object' ? (v as Raw) : {})
@@ -61,6 +66,22 @@ function toPass(v: unknown): PassInfo | null {
   }
 }
 
+/**
+ * 04 plans: always in full first (built from `price_mad`), then each N-payment plan (2–10) the backend offers, once per
+ * N. One with amounts that aren't N positive integers, or without a positive integer `interval_days`, is dropped.
+ */
+function toPlans(v: unknown, price: number): Plan[] {
+  const plans: Plan[] = [{ installments: 1, amounts_mad: [price], interval_days: null }]
+  for (const p of Array.isArray(v) ? v.map(obj) : []) {
+    const n = int(p.installments)
+    const days = int(p.interval_days)
+    const amounts = Array.isArray(p.amounts_mad) ? p.amounts_mad.map(int) : []
+    if (!n || n < 2 || n > 10 || !days || days < 1 || amounts.length !== n || amounts.some((a) => a === null || a <= 0)) continue
+    if (!plans.some((q) => q.installments === n)) plans.push({ installments: n, amounts_mad: amounts as number[], interval_days: days })
+  }
+  return plans
+}
+
 /** A `/fan/products*` row, or null when it isn't one the shop can sell (unknown kind, no id, a non-integer price). */
 export function toProduct(v: unknown): Product | null {
   const r = obj(v)
@@ -81,6 +102,7 @@ export function toProduct(v: unknown): Product | null {
     sold_out: r.sold_out === true,
     valid_until: str(r.valid_until),
     pass,
+    plans: toPlans(r.plans, price),
     payment_methods: methodsOf(r.payment_methods),
     cash_until: str(r.cash_until),
   }
@@ -106,14 +128,19 @@ export async function getProduct(id: string): Promise<Product | null> {
 }
 
 /**
- * The `POST /fan/product-orders` body rebuilt from what the browser sent: `product_id` (UUID) and `holder_name`
- * (string; the backend applies §Holder names, 422 on `holder_name`), channel WEB. `installments` is 3b: never sent.
- * Null for any other shape (a tampered request).
+ * The `POST /fan/product-orders` body rebuilt from what the browser sent: `product_id` (UUID), `holder_name` (string;
+ * the backend applies §Holder names, 422 on `holder_name`) and, 3b, `installments` when sent (an integer 1–10; the
+ * backend checks it is one of the product's plans, 422 `NOT_OFFERED`), channel WEB. Null for any other shape.
  */
 export function productOrderPayload(body: Raw) {
   if (typeof body.product_id !== 'string' || !UUID.test(body.product_id) || typeof body.holder_name !== 'string') return null
-  return { product_id: body.product_id, channel: 'WEB' as const, holder_name: body.holder_name }
+  const n = body.installments
+  if (n !== undefined && !(Number.isSafeInteger(n) && (n as number) >= 1 && (n as number) <= 10)) return null
+  return { product_id: body.product_id, channel: 'WEB' as const, holder_name: body.holder_name, ...(n !== undefined && { installments: n as number }) }
 }
+
+/** 3b: one row of a pass's schedule (integer centimes; `paid_at` null while unpaid). */
+export type Installment = { seq: number; amount_mad: number; due_at: string; paid_at: string | null }
 
 /** W5 "Mes abonnements" row (`GET /fan/passes`). `order_id`: the purchase order to resume while PENDING, else null. */
 export type PassView = {
@@ -123,8 +150,16 @@ export type PassView = {
   organizer: { slug: string | null; name: string; crest_url: string | null }
   series: { name: string; starts_on: string; ends_on: string }
   zone: { name: string }
+  /** The zone venue's time zone: due dates are shown in it. */
+  timezone: string
   holder_label: string | null
   order_id: string | null
+  /** 3b: set while SUSPENDED. */
+  suspended_at: string | null
+  /** 3b: the schedule by `seq` (one row for a pass paid in full; empty from a pre-3b backend). */
+  installments: Installment[]
+  /** 3b: the earliest unpaid installment, null when paid up; `overdue` = its `due_at` has passed. */
+  next_due: { seq: number; amount_mad: number; due_at: string; overdue: boolean } | null
 }
 
 export function toPasses(raw: unknown): PassView[] {
@@ -139,11 +174,29 @@ export function toPasses(raw: unknown): PassView[] {
       organizer: toOrganizer(p.organizer),
       series: { name: String(s.name ?? ''), starts_on: String(s.starts_on), ends_on: String(s.ends_on) },
       zone: { name: String(obj(p.zone).name ?? '') },
+      timezone: str(p.timezone) ?? 'Africa/Casablanca',
       holder_label: str(p.holder_label),
       order_id: p.status === 'PENDING' && order && UUID.test(order) ? order : null,
+      suspended_at: str(p.suspended_at),
+      installments: (Array.isArray(p.installments) ? p.installments.map(obj) : []).flatMap((i) => {
+        const seq = int(i.seq)
+        const amount = int(i.amount_mad)
+        return seq !== null && amount !== null && typeof i.due_at === 'string' ? [{ seq, amount_mad: amount, due_at: i.due_at, paid_at: str(i.paid_at) }] : []
+      }),
+      next_due: toNextDue(p.next_due),
     }
   })
 }
+
+function toNextDue(v: unknown): PassView['next_due'] {
+  const n = obj(v)
+  const seq = int(n.seq)
+  const amount = int(n.amount_mad)
+  return seq !== null && amount !== null && typeof n.due_at === 'string' ? { seq, amount_mad: amount, due_at: n.due_at, overdue: n.overdue === true } : null
+}
+
+/** 3b: "Payer l'échéance" is offered on an ACTIVE or SUSPENDED pass with an unpaid installment (paying ahead is allowed). */
+export const payable = (p: Pick<PassView, 'status' | 'next_due'>) => p.next_due !== null && (p.status === 'ACTIVE' || p.status === 'SUSPENDED')
 
 /** The caller's passes that aren't CANCELLED, newest first. */
 export const getPasses = async (token: string) => toPasses(await api('/fan/passes', { token }))

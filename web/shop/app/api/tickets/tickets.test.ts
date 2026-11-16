@@ -83,7 +83,17 @@ it('/api/tickets: Bearer from the cookie, no with_keys; the answer has no k_t ev
     transfer_open: false,
     transferred: null,
     pass_id: null,
+    blocked_by: null,
   })
+  // 3b: `blocked_by` mapped as sent (PASS / STAFF), anything else null.
+  fetchMock.mockResolvedValue(
+    json(200, {
+      server_time: '2026-02-07T20:00:00Z',
+      tickets: [ticket({ status: 'BLOCKED', pass_id: 'p-1', blocked_by: 'PASS' }), ticket({ status: 'BLOCKED', blocked_by: 'STAFF' }), ticket({ blocked_by: 'GATE' })],
+    }),
+  )
+  const again = await (await getTickets(req('/api/tickets'))).json()
+  expect(again.tickets.map((t: { blocked_by: unknown }) => t.blocked_by)).toEqual(['PASS', 'STAFF', null])
 })
 
 it.each<[string, string, unknown, boolean]>([
