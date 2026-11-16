@@ -1464,7 +1464,7 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 
 ## 12. Step 4 · Accreditations, invitations, promo codes
 
-As of 2026-11-16 · owner: tech-lead · status: **proposed** (not yet agreed). V32 is the latest migration (step 3b, PR #24), so step 4 starts at V33. It ships in two sub-steps:
+As of 2026-11-16 · owner: tech-lead · status: **agreed 2026-11-16** by the founder: one zone, one entry for accreditations (Q203); one code per order, never free, percent rounded down (Q213); proportional refunds (Q218); phone optional on invitations, print the slip without one (Q206); the other defaults stand (not yet agreed). V32 is the latest migration (step 3b, PR #24), so step 4 starts at V33. It ships in two sub-steps:
 - **4a** uses V33–V34, on branch `feat/lot-5-invitations` from `main` once 3b is merged.
 - **4b** uses V35, on branch `feat/lot-5-promo` from `main` once 4a is merged.
 - Ids used: Q202–Q221, P142–P154, BE-61–BE-66, FL-32, WS-17, BO-25–BO-26.
