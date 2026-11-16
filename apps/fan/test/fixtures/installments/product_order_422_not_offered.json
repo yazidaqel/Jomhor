@@ -1,0 +1,14 @@
+{
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): POST /fan/product-orders with installments 2 (not one of plans)",
+ "status": 422,
+ "body": {
+  "code": "VALIDATION_FAILED",
+  "message": "Invalid request body",
+  "details": {
+   "fields": {
+    "installments": "not one of the product's plans"
+   },
+   "reason": "NOT_OFFERED"
+  }
+ }
+}

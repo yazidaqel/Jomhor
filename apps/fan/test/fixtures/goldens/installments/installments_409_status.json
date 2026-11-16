@@ -1,0 +1,11 @@
+{
+ "source": "design content for the goldens and the screen tests (contract-first, docs/04-api.md Lot 5 step 3b), in the shape of the FL-31 real run's test/fixtures/installments/installments_409_status.json (passes_test checks the shapes match)",
+ "status": 409,
+ "body": {
+  "code": "PASS_STATUS",
+  "message": "PASS_STATUS",
+  "details": {
+   "status": "CANCELLED"
+  }
+ }
+}

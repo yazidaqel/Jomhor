@@ -29,7 +29,7 @@ class FanTicketApiTest extends PaymentTest {
 
     private static final String[] TICKET_KEYS =
             {"id", "ticket_no", "status", "holder_label", "seat_label", "event", "zone", "gate_codes", "gates", "transfer_until",
-            "transferred", "pass_id"};
+            "transferred", "pass_id", "blocked_by"};
     private static final String[] EVENT_KEYS =
             {"id", "title", "event_type", "status", "starts_at", "doors_open_at", "timezone", "venue", "metadata",
             "organizer"};

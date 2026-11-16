@@ -10,6 +10,8 @@
 | gate | porte | البوابة | Physical entrance; serves one or more zones |
 | pass | abonnement | اشتراك الموسم | Season pass: every match of the season in one zone, materialised as one ticket per event |
 | pass seats | places abonnés | مقاعد المشتركين | A zone's places for pass holders (price category audience `PASS`) |
+| installment | échéance | قسط | One payment of a pass bought in several (`pass_installments`); every 30 days |
+| suspended | suspendu | موقوف | A pass with an installment overdue past the grace period: its tickets read BLOCKED until it is paid |
 | manifest | manifeste | — | Signed list of an event's tickets downloaded by scanners |
 | K_e | clé d'événement | — | Per-event HMAC key, delivered to enrolled scanners only |
 | K_t | clé de billet | — | Per-ticket key = HMAC(K_e, ticket_id), on the holder's phone |

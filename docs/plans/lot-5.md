@@ -959,7 +959,7 @@ No new runtime component, no Kafka. Payzone stays simulated. No hosting-provider
 
 **Exit 3b, demo-complete:**
 
-1. **Fast clock for the demo:** the dev config sets `passes.installment-interval` 3m, `passes.grace` 2m, `passes.reminder-before` 1m.
+1. **Fast clock for the demo:** the demo start command sets `PASSES_INSTALLMENT_INTERVAL=10m`, `PASSES_GRACE=2m`, `PASSES_REMINDER_BEFORE=1m` (3m was too short: the 5-min manifest rebuild couldn't ship the BLOQUÉ version before the next installment's grace ended; see `backend/http/lot5-installments.http`). `interval_days` reads 0 under this clock.
 2. **Set-up:** OPS sets "Paiement en 4 fois" on the pass product.
 3. **Purchase:**
    - Salma buys in 4 installments; the first is paid by card.
@@ -1336,7 +1336,7 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 
 | # | Owner | Area | Done |
 | --- | --- | --- | --- |
-| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md` | §11.4 **3a parts** applied after the founder agrees · 3a parts **done 2026-11-15**; the 3b parts are applied when 3a merges |
+| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md` | §11.4 **3a parts** applied after the founder agrees · 3a parts **done 2026-11-15** · 3b parts **done 2026-11-16** |
 | W0-2 | orchestrator | git | `feat/lot-5-passes` from `main`; later `feat/lot-5-installments`. No new CI job |
 | W0-3 | founder | — | The calls on Q186, Q188, Q189, Q195, Q197. Club: which zones get passes, how many seats per match, season end date, how many installments; "physical card?" (default: no). Meta templates `installment_due` with BE-36 |
 
@@ -1458,5 +1458,438 @@ The dev profile may shorten the 3b values for the demo. No new secret.
 | Late fee, auto-cancel of long-suspended passes, staff pass cancel/refund | when the club asks | Q197, Q201 |
 | B14 "Émission en cours" stays on screen past an event's `transfer_until`, when the pass job will never issue again; show "Non émis" then | when polishing B14 | BO-22 review |
 | BE-55 must: read a pass ticket's zone unfiltered (`publicEvent` now drops PASS-only zones, which `TicketService` PDF/heldBy/slips use); take `for share` on the event row when issuing pass tickets so it serialises with the event PATCH's `PASS_TICKETS` check | BE-55 | BE-51 report |
-| 3b (Q198): decide whether a suspended pass blocks a pass ticket already transferred to someone else (BE-55 shows `pass_id` only to the pass holder) | 3b plan | BE-55 review |
+| 3b (Q198): **decided by the founder 2026-11-16**: a suspended pass blocks only the tickets still held by the pass holder; a ticket already transferred stays valid | 3b | BE-55 review |
 | B14 MEMBERSHIP `paid_members` counts the whole organizer, so a club with two membership products sees the same figure on both; per-product count if a club ever sells two | when asked | BO-22 real run |
+| Refunding a pass ticket (a FREE 0 DH order) creates a 0 DH `REQUIRED` refund that Finance must mark done; skip zero-amount refunds (release the place only) | step 4 or 5 (finance) | BO-24 real run |
+
+## 12. Step 4 · Accreditations, invitations, promo codes
+
+As of 2026-11-16 · owner: tech-lead · status: **agreed 2026-11-16** by the founder: one zone, one entry for accreditations (Q203); one code per order, never free, percent rounded down (Q213); proportional refunds (Q218); phone optional on invitations, print the slip without one (Q206); the other defaults stand (not yet agreed). V32 is the latest migration (step 3b, PR #24), so step 4 starts at V33. It ships in two sub-steps:
+- **4a** uses V33–V34, on branch `feat/lot-5-invitations` from `main` once 3b is merged.
+- **4b** uses V35, on branch `feat/lot-5-promo` from `main` once 4a is merged.
+- Ids used: Q202–Q221, P142–P154, BE-61–BE-66, FL-32, WS-17, BO-25–BO-26.
+- Next free ids: BE-67, FL-33, WS-18, BO-27, Q222, P155. Next migration: V36.
+
+### 12.1 Scope and exit
+
+Scope (§9 row 4, §11.9):
+
+- **Accreditations and invitations (B7):** `POST /org/events/{id}/invitations` issues named FREE tickets in bulk.
+  - The places come from organizer-made price categories with the new audience `INVITE`. Each category is in one zone, and its name is the kind ("Presse", "Invités", "Staff").
+  - A holder with a phone gets the ticket in the app, on W5 and by WhatsApp; a holder without one gets a printed slip.
+  - An accreditation *is* an invitation: one ticket in one zone, and gate access comes from that zone's gates.
+- **Promo codes:**
+  - a percentage (integer rounding) or an amount in centimes;
+  - a per-code cap and a per-account cap;
+  - valid for one event, or for one category of it.
+- **Zero-amount refunds** (§11.9): refunding a FREE place (pass ticket, invitation) writes no `refunds` row.
+
+**Two sub-steps, each one PR.** The seam is clean:
+- 4a touches backend + back-office only.
+- 4b touches the order path and every client.
+
+| Sub-step | Scope | Exit |
+| --- | --- | --- |
+| **4a · Accreditations and invitations** | `INVITE` audience, invitations API + print, B7, zero-amount refunds | Demo 4a below; CI green on `Lot5InvitationsFlowTest` and the 4a tests |
+| **4b · Promo codes** | `promo_codes`, the code on `POST /fan/orders`, discount in orders, refunds and `/sales`, B2 "Codes promo", app and shop code field | Demo 4b below; CI green on `Lot5PromoFlowTest` and the 4b tests |
+
+**What step 4 reuses:**
+
+- **Invitations:**
+  - `OrderService.placePos` and its checks: holders validated as for `/fan/orders`, phones resolved in sorted order, `Inventory` take, `issue()` with WhatsApp deliveries for holders that have an account;
+  - the POS idempotent client id (`sale_id`), here `invitation_id`;
+  - `TicketService.issue`, the manifest (invitation tickets are ordinary `T` rows);
+  - the pass-ticket pattern: a PAID, FREE, total-0 order per place set;
+  - the till's static-QR print data and slip view;
+  - `Event.Audience.sellable()`, the single filter that already keeps `PASS` out of every fan and till read.
+- **Promo codes:**
+  - the per-account lock set in `OrderService.place` (exact per-account cap);
+  - a row lock like the category hot row (exact per-code cap);
+  - expiry, which flips status, so an expired order frees its use with no expiry change;
+  - `/pay`, cash codes and payments, untouched: they already charge `total_mad`.
+- **No invitation batch table.** The order *is* the batch (`orders.invited_by`).
+
+No new runtime component, no Kafka, no new config key or secret. Payzone stays simulated. No hosting-provider dependency.
+
+**Exit 4a, demo-complete** (locally, against the dev backend):
+
+1. **Set-up:**
+   - B10: the stadium has a zone "PRESSE" (capacity 60) served by gate P1.
+   - B2 Tarifs: "Presse" (Accès: Invitations, 0 DH, quota 40) in PRESSE, and "Invités" (Invitations, quota 50) in Tribune d'honneur.
+2. **Issue (B7):**
+   - OPS issues 3 press accreditations, named, two with a WhatsApp number and one without.
+   - Then 10 "Invités" for a partner, with "même nom pour toutes les places" and no phones.
+   - The batch rows show "WhatsApp" / "Papier"; "Imprimer" prints the slips that have no phone.
+3. **Delivery:**
+   - A journalist logs into the app with her phone: the ticket is in Billets.
+   - The other journalist downloads the PDF on W5.
+   - Both WhatsApp deliveries appear in the simulated provider's log.
+4. **Gate (offline scanner):**
+   - The press ticket at P1 → VALIDÉ; at a gate that doesn't serve PRESSE → MAUVAISE ZONE.
+   - A printed slip is admitted once; the second scan → DÉJÀ ENTRÉ.
+5. **Quota:** a 41st press place → "Plus de places Presse" (409 `SOLD_OUT`). W2 and screen 2 never show the INVITE categories, and `from_price_mad` / `sold_out` ignore them.
+6. **Revoke:**
+   - An ADMIN revokes one invitation in B7: the ticket is REFUNDED and its place goes back to the quota.
+   - **No line** appears in "Remboursements à faire", and the next delta makes it ANNULÉ.
+   - Refunding a pass ticket also writes no 0 DH line.
+7. **Correctness:** `check.sql` is clean.
+
+**Exit 4b, demo-complete:**
+
+1. **Set-up (B2 "Codes promo"):**
+   - "ABONNES20": 20 %, category "Plein tarif" in Tribune Est, 100 uses, 1 per account.
+   - "DERBY50": 50 DH off the whole event, 2 uses.
+2. **App:**
+   - Yazid, on screen 4, types "abonnes20" for 2 places at 150 DH and taps "Réserver avec le code".
+   - The hold shows "Code ABONNES20 · −60 DH" and total 240 DH. He pays by card (simulated).
+   - A second order with the code → "Tu as déjà utilisé ce code".
+3. **Shop:** Karim, on W3, uses DERBY50 on 300 DH → 250 DH. He takes a cash code of 250 DH and pays it at the B11 till.
+4. **Caps:**
+   - A third fan holds an order with DERBY50; a fourth gets "Ce code a atteint sa limite".
+   - The third's hold expires, and the fourth then succeeds.
+5. **Refusals:** a typo → "Code inconnu ou expiré". ABONNES20 on a Virage place → "Ce code ne s'applique pas à ces places". Neither refusal leaves an order.
+6. **Refund:** an ADMIN refunds one of Yazid's tickets → a refund of 120 DH (⌊15 000 × 24 000 ÷ 30 000⌋ centimes), listed in "Remboursements à faire".
+7. **Figures:** B3 shows "Remises accordées −110 DH". The B2 list shows the uses and discount per code.
+8. **Correctness:** `check.sql` is clean.
+
+### 12.2 What it builds on, spec refs
+
+| Area | State (3b branch) | Step 4 use |
+| --- | --- | --- |
+| Till sale | `OrderService.placePos`: event of the org (404), window, `check` (holders, buyer phone null), phones (sorted) → `inventory.reserve` → `insertPos` → `issue()` (deliveries only for holders with an account). `PosService.sale` adds the till payment | `placeInvitation`: same skeleton, `INVITE` categories only, no limit, window = ON_SALE/GATES_OPEN until `transfer_until`, no payment row, `invited_by` |
+| Pass tickets | `PassTicketService`: PAID FREE orders, total 0, channel APP, no delivery, no limit check, `Inventory.takePass` conditional on audience | Same order shape (channel POS, `user_id` null); the take is conditional on `audience = 'INVITE'` |
+| Sellable filter | `Event.Audience.sellable()` (EventService fan detail, `Inventory.salePrices`, RoomTicks, WaitingRoomService); SQL `audience <> 'PASS'` in `JdbcEvents` (public `sold_out`, `take`); `price_categories_pass`; PATCH `PASS_SOLD` rule | `sellable()` = ALL or MEMBERS; SQL `audience in ('ALL','MEMBERS')`; check generalized |
+| Refunds | `TicketAdminService.refund`: amount = the item's `unit_price_mad`, always a `refunds` row | Amount 0 → no row (4a); amount proportional to the discount (4b) |
+| Print | `GET /org/pos/orders/{id}/tickets` (till session only), BO `features/pos/PrintPage.tsx` (80 mm slips) | `GET /org/invitations/{id}/tickets`, same shape; B7 reuses the slip view |
+| Orders | `total_mad = Σ qty × unit_price_mad` (`OrderService.total`); per-account locks taken before limits; `/pay` charges `total_mad` | `discount_mad`, `promo_code_id`; the promo row lock after the per-account locks |
+| Sales report | `revenue_mad` = Σ qty × unit price of PAID orders (gross); `methods` includes FREE | + `discount_mad` |
+| Gate | Manifest from `TicketService.manifestRows`; zone binding through `gate_zones` | Untouched |
+| BO | `features/live` has an index page picking the event (sidebar → `live`), `features/events/PricesTab.tsx` "Accès" select, sidebar "Accréditations" shows "Bientôt" | Same pattern for B7 |
+
+Spec refs:
+
+- `CLAUDE.md`: non-negotiables (tickets immutable, no PII in QR, gate never calls the server, centimes, `organizer_id`, no football names); conventions.
+- `docs/00-product.md`: §V1 in lots, Lot 5 row ("accreditations and invitations, promo codes").
+- `docs/02`:
+  - §Offline validation steps 5–7;
+  - §Gate, zone & re-entry rules;
+  - §Match manifest;
+  - §Data model;
+  - threat model ("Insider issues free tickets", cancel freeze).
+- `docs/03`: `zones`, `gate_zones`, `price_categories` (`audience`, `price_categories_pass`), `orders`, `order_items`, `tickets`, `refunds`, `staff`, `payment_method` (`FREE`).
+- `docs/04`:
+  - Errors: `EVENT_NOT_ON_SALE`, `SOLD_OUT`, `VALIDATION_FAILED` (`TAKEN`), `TICKET_STATUS`, `REFUND_FROZEN`;
+  - §Fan: `POST /fan/orders`, `GET /fan/orders/{id}`, `/pay`;
+  - §Holder names; §Passes Pass places; §Cash codes;
+  - §Organizer: role line, prices, refund, `/org/refunds`, `/sales`, tickets search, line 321 (invitations draft);
+  - §Point of sale (sale, print);
+  - §Manifest payload.
+- `docs/06`: payment methods (`FREE Gratuit`).
+- `design/DESIGN.md`: Back-office table (B7, sidebar "Accréditations"), B2, B3, B11 POS slip, B12, screen 4, W3, W4, Lot 5 adjustments.
+- Plans: lot-5 Q172 (no members check at POS), Q188, Q192 (no promo on products), Q194, §11.9 (0 DH refund).
+
+### 12.3 Open questions (each has a default, none blocks)
+
+| # | Question | Default for step 4 |
+| --- | --- | --- |
+| Q202 | What is an accreditation? | **An invitation.** It is a named FREE ticket from an `INVITE` category. The category's name is the kind shown everywhere ("Presse", "Staff", "Partenaires", "Invités"), so there is no separate accreditation entity, type column or badge. |
+| Q203 | Gate access for accreditations *(founder)* | **One zone, one entry, like any ticket.** Access = the zone's gates (`gate_zones`). A press box or hospitality area is a zone of the venue (B10) with its own capacity and gates. All-access or multi-zone tickets and re-entry are left out: each changes the manifest row or the scanner (02 is normative, Lot 2 implements `NONE`). Exceptions go through the supervisor override (capped at 20 per device). |
+| Q204 | Where do invitation places come from? | **A price category with audience `INVITE`, price 0, created by the organizer in B2 Tarifs, inside the zone's capacity**, like `PASS` (Q187). It is never sold to fans or at a till. It is excluded wherever fans and tills read or buy, through the same single filter (`sellable()`). Its quota is the invitation cap per kind and zone. Nothing is created automatically. |
+| Q205 | How does a request name its places? (04 draft: `zone_id` + `count`) | **`price_category_id` + `qty` + one holder per place.** This is the till's item shape. The category carries both the zone and the kind, and a zone may hold several INVITE categories. "Même nom pour toutes les places" (B11's switch) covers the "one name, N places" case of the draft. |
+| Q206 | Phone required? *(founder)* | **Optional.** With a phone: that account holds the ticket (app, W5 after OTP) and gets the WhatsApp PDF (simulated until BE-36). Without one: `holder_user_id` null, paper only, printed from B7 (80 mm slip, static v1 QR), as at a till. |
+| Q207 | When can invitations be issued? | **While the event is `ON_SALE` or `GATES_OPEN`, from publish (before `sale_starts_at` too) until `transfer_until`** (`refund_cutoff_at − 30 min`, as transfers and pass tickets). Later, no scanner would get the row. `DRAFT`: refused (no ticket for an unpublished event). |
+| Q208 | Limits and size | **No per-account, holder, room, admission or `SALE_BUSY` check at issue** (staff action, as at a till). The tickets then count toward each holder account's **holder** limit; there is no buyer, so they count against no buyer's limit. At most **500 places per request**. The real cap is the INVITE quotas. Transfer, re-issue, PDF and re-send work as for any ticket. |
+| Q209 | Revoking an invitation | **The existing `POST /org/tickets/{id}/refund` (ADMIN), until `refund_cutoff_at`.** The ticket goes `REFUNDED`, the place returns to the quota, and no `refunds` row is written (Q210). OPS can block from B12. There is no "revoke batch" and no OPS refund. |
+| Q210 | Zero-amount refunds (§11.9) | **Skipped in step 4.** A refund whose amount is 0 (pass ticket, invitation, any FREE place) writes no `refunds` row. The ticket is `REFUNDED`, the place released, audit `ticket.refund` with `amount_mad: 0`, and the lookup's `refund` stays null. V34 deletes existing `REQUIRED` rows of 0. `DONE` rows of 0 are kept as history. |
+| Q211 | How invitation orders are reported | **PAID, channel `POS`, `user_id` null, `payment_method` `FREE`, total 0, `invited_by` = the issuing staff.** `POS` is the existing "staff-made, no buyer" shape. A till session never counts them (no payment row), and `/org/pos/orders/{id}/tickets` answers 404. `/sales`: they count in `paid` and `methods.FREE` (revenue 0), as pass tickets do (Q194). B7 shows issued vs quota per kind. The `/sales` channel split is step 5 (§12.9). |
+| Q212 | What is a promo "use", and who gets the discount? | **A use = one order of the buyer carrying the code** (`RESERVED`, `AWAITING_CASH` or `PAID`; an expired order frees it). The discount applies to **the buyer's own places** in scope. Split `pays` places (member orders) pay full price and never carry a code. |
+| Q213 | Discount maths *(founder)* | **Integer centimes only.** Eligible = Σ `unit_price_mad` of the buyer's own places in scope. `PERCENT` (1–99): ⌊eligible × percent ÷ 100⌋. `AMOUNT`: min(`amount_mad`, eligible), once per order. Then **at least 1 DH stays to pay**: discount = min(that, gross − 100), where gross = the buyer's order before discount. A discount ≤ 0 → refused `NOT_APPLICABLE`. One code per order, no stacking. Free places by code are rejected (a 0-DH order would need a no-payment settle path; comps are invitations). |
+| Q214 | Caps | **`max_uses`** (null = none): counted under `select … for update` on the code's row, taken after the per-account locks and before the categories, so it is exact. **`per_account_max`** (default 1): the caller's uses, counted under the per-account lock `(user, event)` already held by `place`. Both are counted from `orders (promo_code_id, status)`: no counter column, no expiry change. `ponytail:` a late success re-takes places but doesn't re-check either cap (rare, the fan already paid the discounted amount), so a cap can be passed by late successes. No check constraint on uses. |
+| Q215 | Scope and code format | **One event, or one of its `ALL`/`MEMBERS` categories** (never `PASS`/`INVITE`). `code` `^[A-Z0-9]{4,20}$`, stored uppercase, unique per event. Fans type any case (trimmed, uppercased). Organizer-wide, series or multi-event codes are left out. A code can't be deleted; it can be deactivated (`active`), and the `active` switch is the time window. |
+| Q216 | Where the fan types it; preview? | **On screen 4 / W3, the step that sends `POST /fan/orders`.** With a code, the client holds first (no automatic `/pay`), shows the server's `discount_mad` and `total_mad`, then the CTA pays. Without a code the flow is unchanged. A refused code leaves no order (refused before insert), so the field shows the reason and the fan retries. **No preview endpoint**, and no client-side money maths. |
+| Q217 | Promo elsewhere | **Not at a till, not on product orders** (Q192). It can target a `MEMBERS` category and stacks on the member price (the code applies to the snapshot price). The waiting room is unchanged: admission comes first. The code's shape is checked with the body (no SQL), so a missing admission token still runs zero SQL. |
+| Q218 | Refunding a discounted ticket *(founder)* | **Proportional, rounded down:** `⌊unit_price_mad × total_mad ÷ (total_mad + discount_mad)⌋` (= the unit price with no discount). The refunds of one order never exceed `total_mad`. A ticket refund doesn't give the code's use back. |
+| Q219 | Reporting | `/sales` + `discount_mad` (Σ of PAID orders). `revenue_mad` stays at list prices; net = `revenue_mad − discount_mad − refunded_mad`. Per-zone revenue stays at list price (allocating the discount per zone is step 5 if finance needs it). Each code shows `uses {held, paid}` and its Σ discount. |
+| Q220 | Code guessing | **No extra limiter.** An unknown code and an inactive one read the same (`UNKNOWN`). Every attempt is a full `POST /fan/orders`: logged in, admission when a room is live, `SALE_BUSY`, per-account lock. Caps limit what a leaked code is worth. A refusal carries no count or cap. |
+| Q221 | Mockups before building? | **No blocking round.** §12.4.6 + FR/AR goldens of screen 4 with a code. B7 follows B11's form patterns. |
+
+### 12.4 Contract changes
+
+#### 12.4.1 Problems found
+
+| # | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| P142 | 03 `price_audience`, `price_categories_pass` | No non-sellable category for comps | `INVITE`; check → `price_categories_free` (4a) |
+| P143 | 03 `orders` | Nothing marks an invitation or who issued it | `orders.invited_by` + `orders_invited` (4a) |
+| P144 | 04 line 321 | Draft row: no idempotency, `zone_id` + `count` instead of named places, no window, no list, no print | POST reshaped, `GET …/invitations`, `GET /org/invitations/{id}/tickets` (4a) |
+| P145 | 04 prices, §Passes Pass places | `INVITE` not covered by the fan/till exclusion | New §Invitations; prices rules `INVITE_PRICE` / `INVITE_SOLD` (4a) |
+| P146 | 04 refund, `/org/refunds` | A FREE place's refund creates a 0 DH `REQUIRED` row (§11.9) | Amount 0 → no row (4a) |
+| P147 | 04 §Organizer role line | No roles for the new paths | Added (4a, 4b) |
+| P148 | 03 | No promo codes; `total_mad` can't carry a discount | `promo_codes`, `orders.promo_code_id`, `orders.discount_mad` (4b) |
+| P149 | 04 `POST /fan/orders`, `GET /fan/orders/{id}`, errors | No code field, no refusal code, no discount in reads | `promo_code`, `PROMO_REFUSED`, `promo_code` / `discount_mad` (4b) |
+| P150 | 04 refund | Refund = unit price, so a discounted order would refund more than was paid | §Promo codes Refunds (4b) |
+| P151 | 04 §Organizer | No code management | `/org/events/{id}/promo-codes*` (4b) |
+| P152 | 04 `/sales` | Discounts invisible | `discount_mad` (4b) |
+| P153 | `design/DESIGN.md` | B7 unspecified; nothing for INVITE tariffs, codes, discount lines | §12.4.6 |
+| P154 | 02, 01, 06, `check.sql`, plan header | New columns, table, threats, terms; header says "next migration V29" | §12.4.5 |
+| — | Football names / floats / PII in QR / server on the gate path | All OK:<br>• **Names:** `INVITE`, `invited_by`, `promo_codes`, `discount_mad` (no football names).<br>• **Money:** bigint centimes, integer division only.<br>• **QR:** layout and vectors unchanged; a code never reaches a QR, manifest or payload.<br>• **Gate:** invitation tickets are ordinary manifest rows; zero diff under `…/gate`, `apps/scanner`, `packages/core`. | OK |
+
+#### 12.4.2 `docs/03-schema.sql`
+
+**4a**
+
+```sql
+-- ---------- catalog: price_categories (change) ----------
+create type price_audience as enum ('ALL','MEMBERS','PASS','INVITE');
+  -- INVITE: places for invitations and accreditations (docs/04-api.md §Invitations); issued from the back-office only,
+  -- never sold to fans or at a till; price_mad = 0. The category name is the kind ('Presse', 'Invités').
+  constraint price_categories_free check (audience not in ('PASS','INVITE') or price_mad = 0)   -- replaces price_categories_pass
+
+-- ---------- sales: orders (add) ----------
+  invited_by      uuid references staff(id),   -- an invitation (docs/04-api.md §Invitations): the staff who issued it;
+                                               -- PAID, channel POS, user_id null, payment_method FREE, total 0
+  constraint orders_invited check (invited_by is null
+                                   or (event_id is not null and channel = 'POS' and user_id is null and pass_id is null))
+create index on orders (event_id, created_at desc) where invited_by is not null;
+
+-- ---------- refunds (comment) ----------
+  amount_mad    bigint not null check (amount_mad >= 0),  -- see docs/04-api.md refund; never 0 since Lot 5 step 4
+                                                          -- (a FREE place's refund writes no row)
+```
+
+**4b**
+
+```sql
+-- ---------- sales: promo codes (new) ----------
+create type promo_kind as enum ('PERCENT','AMOUNT');
+
+create table promo_codes (                            -- docs/04-api.md §Promo codes
+  id                uuid primary key default gen_random_uuid(),
+  organizer_id      uuid not null references organizers(id),
+  event_id          integer not null references events(id),
+  price_category_id uuid references price_categories(id),   -- null = every ALL/MEMBERS category of the event
+  code              text not null check (code ~ '^[A-Z0-9]{4,20}$'),   -- uppercase; fans type any case
+  kind              promo_kind not null,
+  percent           smallint check (percent between 1 and 99),   -- PERCENT: floor(eligible × percent / 100)
+  amount_mad        bigint check (amount_mad > 0),               -- AMOUNT: centimes off, once per order
+  max_uses          integer check (max_uses > 0),                -- orders RESERVED/AWAITING_CASH/PAID with it; null = no cap
+  per_account_max   smallint not null default 1 check (per_account_max between 1 and 100),
+  active            boolean not null default true,
+  created_at        timestamptz not null default now(),
+  unique (event_id, code),
+  constraint promo_codes_kind check ((kind = 'PERCENT') = (percent is not null)
+                                     and (kind = 'AMOUNT') = (amount_mad is not null))
+);
+
+-- ---------- sales: orders (add) ----------
+  promo_code_id   uuid references promo_codes(id),   -- the code this (buyer's) order used
+  discount_mad    bigint not null default 0 check (discount_mad >= 0),
+                  -- centimes; total_mad = Σ qty × unit_price_mad − discount_mad (unit_price_mad stays the list price)
+  constraint orders_promo check (promo_code_id is not null or discount_mad = 0)
+create index on orders (promo_code_id, status) where promo_code_id is not null;   -- caps (docs/04-api.md §Promo codes)
+```
+
+Flyway, one task per migration group:
+
+| File | Task | Content |
+| --- | --- | --- |
+| `V33__price_audience_invite.sql` | BE-61 | `alter type price_audience add value 'INVITE'`, **alone** (V27 rule) |
+| `V34__invitations.sql` | BE-61 | Drop `price_categories_pass`, add `price_categories_free`<br>`orders.invited_by` + `orders_invited` + partial index<br>`delete from refunds where amount_mad = 0 and status = 'REQUIRED'` (Q210) |
+| `V35__promo_codes.sql` | BE-64 | `promo_kind`, `promo_codes`<br>`orders.promo_code_id`, `orders.discount_mad` (existing rows 0), `orders_promo`, index |
+
+The tenant allowlist stays at 5 (`promo_codes` carries `organizer_id`).
+
+#### 12.4.3 `docs/04-api.md`
+
+**Errors, add or append** (header stays "Lot 0 to Lot 5")
+
+| Code | HTTP | When |
+| --- | --- | --- |
+| `EVENT_NOT_ON_SALE` | 409 | Append: "**Lot 5 step 4:** invitations: `NOT_ON_SALE` when the event isn't `ON_SALE`/`GATES_OPEN`; `CLOSED` at or after its `transfer_until` (+ `details.transfer_until`)." |
+| `PROMO_REFUSED` | 409 | `POST /fan/orders` with a `promo_code` that can't apply (§Promo codes). `details.field` `promo_code`, `details.reason`:<br>• `UNKNOWN`: no active code with that text for this event (an inactive code reads the same);<br>• `NOT_APPLICABLE`: none of the buyer's own places is in the code's scope, or the discount would be 0;<br>• `USED_UP`: the code's `max_uses` is reached;<br>• `ACCOUNT_LIMIT`: the caller's uses reached `per_account_max`.<br>No count, cap or other detail. |
+
+**§Fan, append**
+
+| Method | Path | Append |
+| --- | --- | --- |
+| POST | `/fan/orders` | "**Lot 5 step 4:** + `promo_code?` (string; absent, null or empty after trimming = none). It is trimmed and uppercased, then must match `^[A-Z0-9]{4,20}$`, else 422 on `promo_code`; this is checked with the body's shape, before admission, with no SQL. After members-only: **promo code** (409 `PROMO_REFUSED`, §Promo codes), then quota. The response + `promo_code` (the normalized text, or null) and `discount_mad` (0 without a code). `total_mad` is after the discount. Split member orders never carry the code. Till sales (`/org/pos/orders`) have no promo field." |
+| GET | `/fan/orders/{id}` | "**Lot 5 step 4:** + `promo_code`, `discount_mad`." |
+
+**§Fan order rules, append:** "Lot 5 step 4: invitation tickets count toward their holder's holder limit like any `VALID` ticket. They have no buyer, so they count toward no one's buyer limit. `INVITE` categories are never sold (§Invitations)."
+
+**New §Invitations**
+
+| Rule | Value |
+| --- | --- |
+| Places | From price categories with `audience` `INVITE` (organizer-made, price 0, inside zone capacity). Wherever fans and tills read or buy, they are treated exactly as `PASS` categories (§Passes Pass places): omitted from `GET /fan/events/{id}`; ignored by `from_price_mad`, `sold_out`, a room's `sold_out` and the waitlist's R; in a fan or till order → 422 on `items[i].price_category_id`. The category's `name` is the kind shown in B7. |
+| Accreditations | An accreditation is an invitation: one ticket, one zone, one entry. Gate access = the zone's gates (`gate_zones`). No multi-zone or re-entry ticket in V1. |
+| Issue | `POST /org/events/{id}/invitations` (below). No room, admission, `SALE_BUSY`, per-account or holder check. The tickets count toward their holders' holder limit afterwards. No push. A holder with an account gets the WhatsApp ticket delivery, as on payment. |
+| Revoke | `POST /org/tickets/{id}/refund` (ADMIN, until `refund_cutoff_at`). The amount is 0, so no `refunds` row is written. |
+
+**New §Promo codes** (4b)
+
+| Rule | Value |
+| --- | --- |
+| Code | Per event: `code` `^[A-Z0-9]{4,20}$`, stored uppercase, unique per event. Fans type any case. One code per order, no stacking. Never at a till or on a product order. |
+| Scope | The event (each `ALL`/`MEMBERS` category), or one of its `ALL`/`MEMBERS` categories (`price_category_id`). |
+| Discount | Eligible = Σ `unit_price_mad` of the **buyer's own places** in scope (split `pays` places pay full price).<br>• `PERCENT`: ⌊eligible × `percent` ÷ 100⌋ (integer division).<br>• `AMOUNT`: min(`amount_mad`, eligible), once per order.<br>Then discount = min(that, gross − 100), where gross = Σ qty × `unit_price_mad` of the buyer's order: at least 1 DH stays to pay. A discount ≤ 0 → `NOT_APPLICABLE`.<br>`total_mad` = gross − `discount_mad`; `unit_price_mad` stays the list price. |
+| Caps | A **use** = an order with the code in `RESERVED`, `AWAITING_CASH` or `PAID` (an expired order frees its use).<br>• `max_uses` (null = none): counted under the code's row lock (`for update`, after the per-account locks, before the categories).<br>• `per_account_max`: the caller's uses, under the per-account lock.<br>Both are exact. A late success re-takes places without re-checking either cap. |
+| Refunds | A ticket refund pays back ⌊`unit_price_mad` × `total_mad` ÷ (`total_mad` + `discount_mad`)⌋, which is the unit price when there is no discount, so the refunds of one order never exceed what was paid. A refund doesn't give the use back. |
+| Privacy | Fans learn only the reason, never counts, caps or another account's use. |
+
+**§Organizer: role line, append.** "Lot 5 step 4: `/org/events/{id}/invitations` POST and `/org/invitations/{id}/tickets` ADMIN, OPS; `GET /org/events/{id}/invitations` also FINANCE. `/org/events/{id}/promo-codes*` ADMIN, OPS (write), FINANCE (read). CASHIER, GATE, SUPERVISOR get 403."
+
+**§Organizer: add, replace or append rows**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET, POST, PATCH | `/org/events/{id}/prices*` | Append: "**Lot 5 step 4:** `audience` + `INVITE` (§Invitations). With `INVITE`, `price_mad` must be 0 (422 on `price_mad`, `details.reason` `INVITE_PRICE`). PATCH: a change to or from `INVITE` only while `sold = 0` (422 on `audience`, `INVITE_SOLD`)." |
+| POST | `/org/events/{id}/invitations` | **Replaces line 321.** `{invitation_id, items:[{price_category_id, qty, holders:[{name, phone?}]}]}`.<br>`invitation_id` = a client-generated UUID that becomes `orders.id`. The same id again, an invitation of this event → `200` with it. Any other existing order id → 422 on `invitation_id`, `details.reason` `TAKEN`.<br>**Checks in order:**<br>1. Event of this organizer (404).<br>2. Status `ON_SALE`/`GATES_OPEN`, else 409 `EVENT_NOT_ON_SALE` `NOT_ON_SALE`; `now < transfer_until`, else `CLOSED` + `details.transfer_until`.<br>3. Items: each an `INVITE` category of the event, at most once (422 on `items[i].price_category_id`); `qty` ≥ 1; Σ `qty` ≤ 500 (422 on `items`).<br>4. Holders as `POST /fan/orders`: one per place, `name` per §Holder names, `phone` absent or E.164; `pays` → 422.<br>5. Quota (409 `SOLD_OUT`).<br>**In one transaction**, holder accounts (sorted phones) → categories (take conditional on `audience = 'INVITE'`):<br>• order `PAID` (channel `POS`, `user_id` null, `payment_method` `FREE`, total 0, `paid_at` now, `invited_by` = the caller's staff id);<br>• items at unit price 0;<br>• one `VALID` ticket per place. A holder with `phone` → that account (created if new) + one WhatsApp delivery. Without → `holder_user_id` null, paper only.<br>Audit `invitation.create` (`{order_id, places, items:[{price_category_id, qty}]}`; no name or phone). → `201` the §Point of sale sale answer shape. |
+| GET | `/org/events/{id}/invitations` | `{invitations:[{id, created_at, invited_by:{id, name}, places, items:[{price_category_id, name, zone:{id, code, name}, qty}], tickets:[{id, ticket_no, status, holder_name, holder_label, delivery: WHATSAPP\|PAPER}]}]}`. Newest first, at most 200; tickets by `ticket_no`. `delivery` = `WHATSAPP` when the ticket has a holder account. No phone. Unknown or another organizer's event → 404. |
+| GET | `/org/invitations/{id}/tickets` | Print data, the shape of `GET /org/pos/orders/{id}/tickets`, for an invitation order of this organizer (else 404). No till session needed. `qr` = the static v1 token for `VALID` tickets (else null), built inside `withEventKey`. `Cache-Control: no-store`. Audit `invitation.print` (order, ticket count). |
+| POST | `/org/tickets/{id}/refund` | Append: "**Lot 5 step 4:** an amount of 0 (an invitation, a pass ticket, any FREE place) writes **no** `refunds` row: the ticket is `REFUNDED` and its place released all the same, audit `ticket.refund` with `amount_mad` 0, and the lookup's `refund` stays null. **4b:** `amount_mad` per §Promo codes Refunds." |
+| GET | `/org/events/{id}/sales` | Append (4b): "+ `discount_mad` (Σ `discount_mad` of `PAID` orders). `revenue_mad` stays at list prices; net = `revenue_mad − discount_mad − refunded_mad`." |
+| GET, POST | `/org/events/{id}/promo-codes` | **4b.** GET → `[{id, code, kind, percent, amount_mad, price_category:{id, name, zone:{code, name}} \| null, max_uses, per_account_max, active, created_at, uses:{held, paid}, discount_mad}]` by `code`. `uses.held` = its `RESERVED`/`AWAITING_CASH` orders still held; `uses.paid` = its `PAID` orders; `discount_mad` = Σ over those `PAID` orders.<br>POST `{code, kind: PERCENT\|AMOUNT, percent?, amount_mad?, price_category_id?, max_uses?, per_account_max?, active?}`:<br>• `code` trimmed, uppercased, `^[A-Z0-9]{4,20}$` (422 on `code`); already used in this event → 422 on `code`, `TAKEN`;<br>• `percent` (1–99) with `PERCENT` only, `amount_mad` (> 0) with `AMOUNT` only (422 on the missing or extra field);<br>• `price_category_id`: an `ALL`/`MEMBERS` category of this event (422);<br>• `max_uses` > 0 or absent; `per_account_max` 1–100 (default 1);<br>• event `DRAFT` or `ON_SALE` (409 `EVENT_NOT_EDITABLE`).<br>→ `201` (a list row). Audit `promo.create` (the fields). Unknown or another organizer's event → 404. |
+| PATCH | `/org/events/{id}/promo-codes/{promo_id}` | **4b.** `{active?, max_uses?, per_account_max?}`, partial (`max_uses` can change but not be cleared). `code`, `kind`, `percent`, `amount_mad`, `price_category_id` are fixed (a different value → 422). Applies to new orders; a lower cap never cancels an order. Audit `promo.update`. → list row. Unknown → 404. |
+
+Gate API, manifest format, token and vectors: unchanged.
+
+#### 12.4.4 Config
+
+None. The 500-place limit is a 04 rule, not a knob.
+
+#### 12.4.5 `docs/02`, `docs/01`, `docs/06`, `check.sql`, plan header
+
+| Where | Change |
+| --- | --- |
+| 02 §Data model | • `price_categories` audience + `INVITE`<br>• `orders` + `invited_by`, `promo_code_id`, `discount_mad`<br>• new row `promo_codes` (id, organizer_id, event_id, price_category_id, code, kind PERCENT/AMOUNT, percent, amount_mad, max_uses, per_account_max, active) |
+| 02 §Gate rules | + "Accreditations are ordinary tickets in a zone: a press or hospitality area is a zone with its own gates. V1 has no multi-zone ticket and no re-entry." |
+| 02 threat model | **"Insider issues free tickets"**, mitigation + "free tickets only from `INVITE` categories whose quota OPS sets; each batch carries the issuing staff (`invited_by`), is audited and listed in B7". Residual + "an OPS can raise an INVITE quota and issue: both audited".<br>**New row:** "Promo code shared publicly \| per-code and per-account caps, exact; deactivate live \| a code without a cap is a lower price for anyone who finds it" |
+| 01 §Components, API | + "invitations and accreditations, promo codes" |
+| 06 | accreditation · `accréditation` · اعتماد · "a free named ticket for press, staff or partners"<br>invitation · `invitation` · دعوة<br>promo code · `code promo` · رمز التخفيض<br>discount · `remise` · تخفيض |
+| `backend/loadtest/check.sql` (BE-65) | Rows when `total_mad ≠ Σ qty × unit_price_mad − discount_mad`, when Σ `refunds.amount_mad` of an order > its `total_mad`, or when a `refunds` row has amount 0 created after V34 |
+| `docs/plans/lot-5.md` line 3 | "Next ids (after step 4, §12): BE-67, FL-33, WS-18, BO-27, Q222, P155; next migration V36." |
+
+#### 12.4.6 `design/DESIGN.md`
+
+**New "Lot 5 step 4 adjustments":**
+
+| Where | Change |
+| --- | --- |
+| Sidebar | Fans & finance: "Accréditations" enabled → index page picking the event (as "Portes en direct"), then B7. |
+| B2 Tarifs | "Accès" + "Invitations" (helper "Places offertes depuis Accréditations · jamais vendues"); price fixed at 0. `INVITE_SOLD` → field error "Déjà des billets émis sur ce tarif". |
+| B7 Accréditations `/events/:id/invitations` | **Header:** one card per INVITE category (name, zone, "{sold}/{quota} émis"). Empty state: "Crée un tarif « Invitations » dans Tarifs & quotas" + link to B2 Tarifs.<br>**"Nouvelle invitation" sheet:**<br>• category select (INVITE only, remaining shown) and quantity;<br>• holder rows as B11: name required (§Holder names), "même nom pour toutes les places", optional WhatsApp number;<br>• summary "{n} billets · {m} sur WhatsApp · {k} à imprimer"; CTA "Émettre {n} billets";<br>• `SOLD_OUT` → "Plus de places {category}"; `CLOSED` → "Invitations fermées depuis {transfer_until, venue zone}".<br>**Batches table:** date (venue zone), émis par, category · zone, places, expandable holders (holder name, ticket no, status badge, "WhatsApp"/"Papier").<br>**Actions:** "Imprimer" (80 mm slips, the B11 slip; shown when any `PAPER` ticket is `VALID`); "Révoquer" per ticket, ADMIN only, confirm "Le billet est annulé et la place revient au quota. Irréversible.", disabled after the cutoff with "Gel des remboursements".<br>FINANCE read-only (no sheet, no print). |
+| B2 Codes promo (new tab) | **Table:** code (monospace), remise ("−20 %" / "−50 DH"), portée ("Tout l'événement" / category · zone), utilisations "{paid} payées · {held} en cours / {max_uses or ∞}", par compte, remises accordées (DH), Actif switch.<br>**"Nouveau code" sheet:** code (uppercased as typed, 4–20, A–Z 0–9), type Pourcentage / Montant, value (% 1–99, or DH → centimes as integers), portée select (ALL/MEMBERS categories), max uses (optional), par compte (default 1). Fixed fields read-only after create. `TAKEN` → "Code déjà utilisé pour cet événement". FINANCE read-only. |
+| B3 Ventes | KPI "Remises accordées · −{discount_mad}"; net line = revenue − remises − remboursés. |
+| Screen 4 / W3 | Under the summary: text button "J'ai un code promo" → input + "Retirer". With a code, the CTA reads "Réserver avec le code" → the hold → summary line "Code {CODE} · −{discount}" (accent), total from the server, countdown, then "Payer {total}" as today.<br>`PROMO_REFUSED` under the field: `UNKNOWN` "Code inconnu ou expiré", `NOT_APPLICABLE` "Ce code ne s'applique pas à ces places", `USED_UP` "Ce code a atteint sa limite", `ACCOUNT_LIMIT` "Tu as déjà utilisé ce code".<br>Split rows: caption "Le code s'applique à tes places". |
+| Order screen (app), W4 | Summary line "Code {CODE} · −{discount}" when `discount_mad` > 0. The cash code amount is `total_mad` (unchanged). |
+
+### 12.5 Tasks
+
+#### Wave 0: orchestrator and founder (before any builder)
+
+| # | Owner | Area | Done |
+| --- | --- | --- | --- |
+| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md`, plan header | §12.4 applied (4a and 4b parts together) after the founder agrees |
+| W0-2 | orchestrator | git | `feat/lot-5-invitations` from `main` once 3b (#24) merges; `feat/lot-5-promo` once 4a merges. No new CI job |
+| W0-3 | founder | — | The calls on Q203, Q206, Q213, Q218. Club: which zones host press and guests, and how many seats per match; whether accredited staff need re-entry (default: no) |
+
+#### Tasks
+
+`backend` runs serially and is on the critical path. ∥ rows run alongside, in disjoint folders. *(contract-first)* means the task starts on the §12.4 shapes with fixtures and is done only after one run against the real endpoint. Every client task ships fr/ar/en strings (no hard-coded strings or colours). The fan app ships FR + AR goldens of the screens it touches.
+
+**4a · Accreditations and invitations**
+
+| Wave | # | Owner | Files / area | Task | Done = test | Blocked on |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | BE-61 | backend | • V33, V34<br>• `backend/…/catalog`: `Event.Audience` + `INVITE`, `sellable()` = ALL/MEMBERS; `JdbcEvents` SQL `audience in ('ALL','MEMBERS')` (public `sold_out`, `take`); `EventService` price rules `INVITE_PRICE`, `INVITE_SOLD`; `Inventory.takeInvite` (conditional on `audience = 'INVITE'`)<br>• `…/tickets/application/TicketAdminService` (amount 0 → no refunds row; audit `amount_mad` 0)<br>• `…/payments/application/RefundService` if the request call moves | `INVITE` audience, zero-amount refunds | • **`InviteCategoryTest`:** INVITE with price ≠ 0 → 422 `INVITE_PRICE`; PATCH to/from INVITE with `sold` > 0 → 422 `INVITE_SOLD`; fan detail omits it; `from_price_mad` and `sold_out` ignore it (an event whose only places left are INVITE is `sold_out`); room tick `sold_out` and waitlist R ignore it; a fan order or till sale naming it → 422 on `items[0].price_category_id`; every `PassCategoryTest` case green.<br>• **`ZeroRefundTest`:** refunding a pass ticket → 200, `REFUNDED`, `sold − 1`, no `refunds` row, audit `amount_mad: 0`, lookup `refund` null, absent from `/org/refunds`, `/sales` `refunded` counts it, `refunded_mad` unchanged; a paid ticket still writes `REQUIRED` at its unit price.<br>• **`MigrationsTest` V33/V34:** `REQUIRED` 0-amount rows deleted, `DONE` 0-amount and non-zero rows kept; `price_categories_free` refuses an INVITE price ≠ 0; `orders_invited` refuses `invited_by` on an APP order; allowlist still 5 | W0-1 |
+| 1 ∥ | BO-25 | backoffice | • `web/backoffice/src/features/invitations` (new: index picker, B7 page, sheet, batches table, print route reusing the slip)<br>• `src/features/pos/PrintPage.tsx` (slip view takes its data hook as a prop)<br>• `src/features/events/PricesTab.tsx` ("Accès: Invitations", price locked at 0, `INVITE_SOLD`/`INVITE_PRICE`)<br>• `src/app` (routes, sidebar "Accréditations" enabled)<br>• `src/i18n/fr.ts` | B7 | **`invitations.test.tsx`:**<br>• zod: name per the shared §Holder names cases, phone optional E.164, Σ qty ≤ 500, at least one row;<br>• "même nom" fills every row;<br>• POST carries one `invitation_id` (`crypto.randomUUID`), the same one on a retry after a network error, and a 200 replay renders as created;<br>• `SOLD_OUT` / `CLOSED` copy (time in the venue zone);<br>• batches with WhatsApp/Papier badges; "Imprimer" opens the print route on `/org/invitations/{id}/tickets`;<br>• "Révoquer" only for ADMIN → `/org/tickets/{id}/refund` → row `REFUNDED`; disabled after the cutoff;<br>• FINANCE: no sheet, no print; empty state links B2 Tarifs; query keys include the organizer.<br>**`events.test.tsx`:** "Invitations" sends `audience: INVITE`, `price_mad: 0`. `pos.test.tsx` still green | BE-61, BE-62 *(contract-first)* |
+| 2 | BE-62 | backend | • `backend/…/sales/application/OrderService` (`placeInvitation`: the `placePos` skeleton with INVITE only, no limit, window to `transfer_until`, `invited_by`; lock-order javadoc)<br>• `…/sales/adapters/persistence/JdbcOrders` (`insertInvitation`, invitation list)<br>• `…/sales/invitations` (new: `InvitationService`, `OrgInvitationController`: POST, GET list, print)<br>• `…/tickets/application/TicketService` (print slips for an invitation order, if not reusable as is) | Invitations API | • **`InvitationApiTest`:** 3 press places (2 phones, 1 none) → 201: PAID, POS, FREE, total 0, `user_id` null, `invited_by` = the caller's staff id; 3 `VALID` tickets, 2 with holder accounts and 2 `ticket_deliveries`, 1 with `holder_user_id` null.<br>• Idempotency: the same `invitation_id` → 200, same order, nothing new; a till sale's id → 422 `TAKEN`.<br>• Refusals: an ALL category → 422 on `items[0].price_category_id`; Σ 501 → 422 on `items`; `pays` → 422; a bad name → 422 on its path; over quota → 409 `SOLD_OUT` with nothing written; DRAFT → 409 `NOT_ON_SALE`; at `transfer_until` → 409 `CLOSED` + `transfer_until`.<br>• Before `sale_starts_at` → 201. A recipient already at `per_account_limit` → 201, and that phone's next fan order → `PER_ACCOUNT_LIMIT` `HOLDER`.<br>• GET list: newest first, `holder_name`, `delivery`, no phone anywhere in the JSON.<br>• Print: `qr` decodes and verifies with K_e (`TicketToken`) for `VALID`, null after a refund; audit `invitation.print`.<br>• Org B → 404. Roles: OPS 201; FINANCE GET 200 / POST 403 / print 403; CASHIER 403. Audit `invitation.create` key set with no name or phone.<br>• Manifest: the next version carries the rows `VALID` with initials; a revoke → the next delta `REFUNDED`.<br>• `/sales`: `paid` and `methods.FREE` count them with revenue 0. `GET /org/pos/orders/{id}/tickets` on an invitation → 404.<br>• `git diff` under `…/gate`, `apps/scanner`, `packages/core` is empty | BE-61 |
+| 3 | BE-63 | backend | `backend/src/test/…/Lot5InvitationsFlowTest`, `backend/http/lot5-invitations.http` | 4a exit flow | **`Lot5InvitationsFlowTest`:**<br>• a venue zone PRESSE with gate P1; INVITE categories "Presse" and "Invités";<br>• a press batch with phones → the journalist's `/fan/tickets?with_keys=true` has the ticket with `k_t`; a partner batch without phones → print data;<br>• the manifest carries both; a device's `OK` scan of a press ticket counts in reconciliation `entered` for PRESSE;<br>• the 41st press place → `SOLD_OUT`;<br>• ADMIN revokes one → delta `REFUNDED`, no refunds row; a pass ticket refund → no row;<br>• `check.sql` returns no rows | BE-62 |
+| exit 4a | — | orchestrator + founder | — | Demo per §12.1 4a, locally | All rows above green; manual demo | all |
+
+**4b · Promo codes**
+
+| Wave | # | Owner | Files / area | Task | Done = test | Blocked on |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | BE-64 | backend | • V35<br>• `backend/…/sales/promos` (new: `PromoCode` domain, `PromoCodes` port, `JdbcPromoCodes`, `PromoCodeService`, `OrgPromoCodeController`; uses and discount figures read from `orders`) | Promo codes CRUD | • **`PromoCodeOrgApiTest`:** create PERCENT and AMOUNT; `code` normalized uppercase; `ab1` or `ab-12` → 422; the same code twice in one event → 422 `TAKEN` (allowed in another event); percent 0 or 100 → 422; both or neither of `percent`/`amount_mad` → 422; a category of another event, or PASS/INVITE → 422; CLOSED event → 409 `EVENT_NOT_EDITABLE`.<br>• PATCH `active` / `max_uses` / `per_account_max`; PATCH of a fixed field → 422.<br>• List by code with `uses` and `discount_mad` (from seeded orders).<br>• FINANCE GET 200 / POST 403; CASHIER 403; org B → 404; audits key set.<br>• **`MigrationsTest` V35:** existing orders `discount_mad` 0; `orders_promo` holds; allowlist still 5 | 4a merged |
+| 1 ∥ | BO-26 | backoffice | • `web/backoffice/src/features/promos` (new: B2 "Codes promo" tab)<br>• `src/features/events/EventPage.tsx` (tab)<br>• `src/features/sales` (KPI "Remises accordées", net line)<br>• `src/i18n/fr.ts` | B2 codes, B3 discount | **`promos.test.tsx`:** zod (code `^[A-Z0-9]{4,20}$` after uppercasing; percent int 1–99; DH → centimes as integers with no float, e.g. "12,50" → 1250; `per_account_max` default 1); scope select lists ALL/MEMBERS categories only; `TAKEN` → field error; PATCH sends only changed fields; fixed fields read-only; the Actif switch PATCHes `active`; uses "{paid} payées · {held} en cours / ∞"; FINANCE read-only; query keys include organizer and event.<br>**`sales.test.tsx`:** "Remises accordées" from `discount_mad`; net = revenue − discount − refunded | BE-64, BE-65 *(contract-first)* |
+| 1 ∥ | FL-32 | flutter | • `apps/fan/lib/features/checkout` (`checkout_screen.dart` code field; `checkout_controller.dart` hold-first when a code is set, then pay; `PROMO_REFUSED` mapping; `order.dart` + `promo_code`/`discount_mad`; `order_screen.dart` summary line)<br>• `l10n/*.arb`<br>• `test/promo_test.dart`, `test/goldens_test.dart` | Code on screen 4 | Fake API:<br>• no code → today's flow (place + pay in one tap);<br>• with a code → `POST /fan/orders` with `promo_code` and **no** `/pay` call, then summary "Code X · −Y" and total from the response, then "Payer {total}" → `/pay`;<br>• each `PROMO_REFUSED` reason shows its copy under the field, with no order screen and no hold countdown;<br>• "Retirer" clears the code before the hold;<br>• the order screen shows the line when `discount_mad` > 0;<br>• no money maths on the client (amounts as sent).<br>Goldens fr + ar: screen 4 with a code applied, the order screen with a discount | BE-65 *(contract-first)* |
+| 1 ∥ | WS-17 | web-shop | • `web/shop/app/(public)/orders/new/CheckoutForm.tsx` (code field, hold-first with a code)<br>• `lib/order-client.ts`<br>• `app/(public)/orders/[id]/` (summary line)<br>• `lib/i18n/{fr,ar,en}.ts` | Code on W3 | **`promo.test.tsx`:**<br>• no code → unchanged `placeOrder`;<br>• with a code → the `/api/orders` body carries `promo_code`, then a stop before `/pay`, the server's discount and total shown, then pay;<br>• each refusal copy on the field;<br>• W4 renders the discount line; the cash code card shows `total_mad`;<br>• renders in ar; `rtl.test` green; no JWT or K_t in HTML/RSC | BE-65 *(contract-first)* |
+| 2 | BE-65 | backend | • `backend/…/sales/application/OrderService` (`promo_code` normalize in the body shape; promo step after members-only: row lock, caps, discount; `total_mad` net; lock-order javadoc)<br>• `…/sales/domain/Order` (+ `promoCodeId`, `discountMad`)<br>• `…/sales/adapters/persistence/JdbcOrders` (insert and read the two columns; count uses)<br>• `…/sales/adapters/web/OrderController` (body + views)<br>• `…/sales/promos` (`Discount.of`, a pure function)<br>• `…/tickets/application/TicketAdminService` (proportional refund amount)<br>• `…/sales/application/SalesReport` (`discount_mad`)<br>• `backend/loadtest/check.sql` | Codes on orders, refunds, `/sales` | • **`DiscountTest`** (pure, property-style): for prices 0–100 000 centimes, qty 1–10, percent 1–99 and amounts: integers only, 0 < discount ≤ gross − 100 or `NOT_APPLICABLE`, PERCENT = ⌊e × p ÷ 100⌋. Over random orders, Σ ⌊u × t ÷ g⌋ over the tickets ≤ t.<br>• **`PromoOrderApiTest`:**<br>(a) 20 % on "Plein tarif" × 2 at 15 000 → `total_mad` 24 000, `discount_mad` 6 000; GET shows both; `/pay` charges 24 000; a cash code's `amount_mad` 24 000.<br>(b) AMOUNT 5 000 on one place at 3 000 → discount 2 900.<br>(c) lowercase input accepted; bad format → 422 `promo_code`; with a live room and no token → 409 `ADMISSION_REQUIRED` and **zero SQL** (statement counter).<br>(d) inactive, another event's code or a typo → identical `UNKNOWN` bodies; no in-scope buyer place → `NOT_APPLICABLE`; a split → discount on the buyer's places only, member order full price with `promo_code_id` null.<br>(e) `max_uses` 2 → the third 409 `USED_UP`; one expires → the third 201; two parallel orders at `max_uses` 1 → exactly one 201; `per_account_max` 1 → second order 409 `ACCOUNT_LIMIT`, 201 after expiry; parallel orders of one account → one 201.<br>(f) a late success after expiry with the cap taken → PAID.<br>(g) refunding 1 of 2 at 20 % → 12 000; both → Σ 24 000; an order without a code refunds the unit price.<br>(h) `/sales` `discount_mad` = Σ of PAID orders, `revenue_mad` unchanged.<br>(i) a till sale never carries a code.<br>• **`CheckSqlTest`:** a total ≠ Σ − discount is a row; refunds over the total is a row; the flow end state is clean.<br>• Every existing order, split, room, waitlist, POS and pass test green | BE-64 |
+| 3 | BE-66 | backend | `backend/src/test/…/Lot5PromoFlowTest`, `backend/http/lot5-promo.http` | 4b exit flow | **`Lot5PromoFlowTest`** per §12.1 4b: two codes; a card order at 20 %; a cash order with AMOUNT collected at a till; the cap reached and freed by expiry; the refusal reasons; a proportional refund; `/sales` `discount_mad` 11 000; `check.sql` returns no rows | BE-65 |
+| exit 4b | — | orchestrator + founder | — | Demo per §12.1 4b, locally | All rows above green; manual demo | all |
+
+`reviewer` runs after every builder task.
+- **4a:** BE-61 → BE-62 → BE-63, with BO-25 alongside and its real run after BE-62.
+- **4b:** BE-64 → BE-65 → BE-66, with BO-26, FL-32 and WS-17 alongside and their real run after BE-65.
+
+**Cut order (if needed):**
+
+1. B7 printing. The phone then becomes required: 422 on `items[i].holders[j].phone`, and Q206 flips.
+2. The `AMOUNT` kind (PERCENT only).
+3. Category scope (event-wide codes only).
+4. B3 "Remises accordées" (the B2 code list keeps the totals).
+
+**Never cut:**
+
+- `INVITE` places never sellable, through the one `sellable()` filter;
+- invitations only within INVITE quotas, each audited with the issuing staff;
+- invitation tickets through `TicketService.issue` and the normal manifest;
+- zero-amount refunds write no row but still release the place;
+- integer-only discounts with at least 1 DH left;
+- exact caps under locks;
+- refunds never above what was paid;
+- admission still first, with zero SQL;
+- tenant scoping of `promo_codes` and invitation reads;
+- no PII in QR, manifest or payloads;
+- zero diff in the gate, the scanner and `packages/core`.
+
+### 12.6 Review focus
+
+| Area | What the reviewer checks hardest |
+| --- | --- |
+| Sellable | `INVITE` added only through `Event.Audience.sellable()` and the two SQL filters (`in ('ALL','MEMBERS')`, never `<> 'PASS'` left anywhere). No fan, till, room or waitlist path counts or sells an INVITE place. The `price_categories_free` check matches 03 |
+| Invitations | • Tenancy: org B → 404 on all three paths.<br>• `invitation_id` replay only for an invitation of this event.<br>• INVITE categories only; window to `transfer_until`; Σ ≤ 500.<br>• Lock order: users rows (sorted phones) → categories, with no per-account lock; the take conditional on `audience = 'INVITE'`.<br>• `invited_by` = the caller's staff row of this organizer.<br>• Deliveries only for holders with an account. Audit payloads without names or phones. The list returns no phone.<br>• Print: static QR inside `withEventKey`, ADMIN/OPS only, `no-store`, audited; K_t never leaves the server |
+| Refunds | 0 → no `refunds` row, place still released, audit present. V34 deletes only `REQUIRED` 0-amount rows. 4b: the proportional formula with integer division in one place, Σ per order ≤ `total_mad` (property test). The `/org/refunds` amount = what was charged, not the list price |
+| Money | `discount_mad`/`total_mad` bigint; PERCENT floor by integer division; ≥ 100 centimes left; `unit_price_mad` untouched; `/pay`, cash codes and payments unchanged (they read `total_mad`). No float in BO or clients (DH ↔ centimes as integer maths); clients show server amounts only |
+| Locks | Promo: holders' users rows → per-account locks → promo row `for update` → categories. Neither expiry, late success, refund nor transfer touches a promo row, so there is no cycle. The `OrderService` lock-order javadoc is updated. Parallel-order tests prove both caps exact |
+| Privacy | `PROMO_REFUSED` carries `field` + `reason` only. `UNKNOWN` is identical for a typo and an inactive code. No count or cap reaches a fan. The code text appears only in the buyer's own order |
+| Admission first | The `promo_code` shape is checked before admission, with no SQL; the statement counter is still zero on the missing-token path |
+| Contract | Every new or changed 04 row has a contract test; error codes and reasons exactly as 04; V33 holds only `ADD VALUE`; 03 and 02 match the migrations; `check.sql` updated |
+| Names / gate | No football names in tables or columns. Zero diff under `…/gate`, `apps/scanner`, `packages/core`; token vectors unchanged |
+
+### 12.7 Risks
+
+| Risk | Mitigation |
+| --- | --- |
+| An insider issues free tickets (02 threat) | Only within INVITE quotas set in B2; `invited_by` + audit on every batch; B7 lists them; reconciliation per zone; revocable until the cutoff |
+| The organizer forgets the INVITE tariff | B7 empty state links to B2 Tarifs; the B2 helper copy |
+| Accredited staff need to go in and out | Q203 founder call; supervisor override; a staff door that isn't scanned; re-entry is a scanner change, carried |
+| Printed invitations copied | First scan wins (`DUPLICATE` after sync), as for any PDF; named slips; revoke |
+| WhatsApp not live (BE-36) | Holders log into the app or W5 with their phone; paper slips for the rest |
+| A promo code leaks on social media | `max_uses`, `per_account_max`, the live `active` switch; uses counted exactly |
+| A popular code is a hot row on a derby on-sale | One row lock per order using it, after the per-account locks, like the category hot row; admission keeps the order rate low; measured in the deferred §5.4 run; `ponytail:` counter column if it shows |
+| A fan already holding places wants to add a code | The per-account limit blocks a second order until expiry; the field sits on the step before the hold; copy |
+| Finance confused by proportional refunds | B12 and `/org/refunds` show the amount to pay back; Q218 rule in 04 |
+| Late successes pass a code's cap | Rare, the fan paid the discounted price; `ponytail:` in `reReserve` |
+
+### 12.8 Deliberately left out
+
+- **Accreditation shapes:** multi-zone or all-access tickets, re-entry, season-long accreditations (per series), photo badges, non-transferable accreditations (invitation tickets transfer like any ticket), approval or RSVP workflows, per-requester quotas.
+- **Invitation extras:** CSV import or paste (no API change needed later: client-side parsing into holders), a push for invitations, a staff re-send button (the holder re-sends), OPS revocation.
+- **Promo extras:** organizer-wide, series or product codes; codes at the till; stacking; generated single-use code batches; start/end dates (use `active`); a preview endpoint; buy-X-get-Y; minimum quantity; free orders by code.
+- **Reporting:** per-zone discount allocation, the `/sales` channel split of invitation and pass ticket orders (step 5).
+
+### 12.9 Carried forward (update §7)
+
+| Item | Lot | Note |
+| --- | --- | --- |
+| Zero-amount refunds (§11.9) | done in step 4 | Q210; strike from §11.9 when 4a merges |
+| `/sales` channel `POS` counts invitation orders; `methods.FREE` mixes pass tickets and invitations | 5 step 5 | Q211, with Q194 |
+| Discounts in settlements and VAT invoices (VAT on the net); per-zone discount allocation | 5 step 5 | Q219 |
+| Promo caps not re-checked on a late success | if it ever matters | `ponytail:` in `OrderService.reReserve` |
+| Promo row as a hot spot | the deferred §5.4 run | Q214, §12.7 |
+| Multi-zone / re-entry accreditations | post-V1 (scanner and manifest change) | Q203 |
+| CSV paste for bulk invitations, generated single-use codes, codes at the till | when the club asks | §12.8 |
+| Plan header line 3 says "next migration V29" | W0-1 | P154 |

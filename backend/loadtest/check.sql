@@ -49,6 +49,24 @@ where pr.sold <> coalesce(n.n, 0)
 
 union all
 
+-- Installments (docs/04-api.md §Passes Installments): a paid installment's order is a PAID product order of its pass
+-- for exactly its amount, and a PAID product order of a pass paid exactly one installment. ref = the order id.
+select 'INSTALLMENT_PAID', null::integer, o.id::text,
+       format('order %s %s of %s for installment %s of %s', o.status, o.total_mad, o.pass_id, i.seq, i.amount_mad)
+from pass_installments i
+join orders o on o.id = i.order_id and o.organizer_id = i.organizer_id
+where o.status <> 'PAID' or o.pass_id is distinct from i.pass_id or o.event_id is not null
+   or o.total_mad <> i.amount_mad
+
+union all
+
+select 'INSTALLMENT_PAID', null::integer, o.id::text, format('PAID order of %s paid no installment', o.pass_id)
+from orders o
+where o.status = 'PAID' and o.pass_id is not null and o.event_id is null
+  and not exists (select 1 from pass_installments i where i.organizer_id = o.organizer_id and i.order_id = o.id)
+
+union all
+
 -- Double charge: two SUCCEEDED payments on one order, neither marked payment.refund_required (audit target = the
 -- payment id).
 select 'DOUBLE_CHARGE', o.event_id, o.id::text,

@@ -53,7 +53,7 @@ export async function ProductCheckout({ id }: { id: unknown }) {
           productId={product.id}
           kind={product.kind}
           displayName={typeof me?.display_name === 'string' ? me.display_name : null}
-          priceMad={product.price_mad}
+          plans={product.plans}
           methods={methods}
           cashLate={cashLate}
           cashDeadline={formatDateTime(cashUntil, tz, d.meta.intl)}

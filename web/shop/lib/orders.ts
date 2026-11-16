@@ -1,5 +1,6 @@
 import 'server-only'
 import { api } from './api'
+import { UUID } from './clubs'
 import { methodsOf, toOrganizer, type Organizer } from './events'
 import type { PayMethod } from './order-client'
 
@@ -17,7 +18,11 @@ export type OrderView = {
    * Lot 5 step 3: what a product order sells, read from the product even once it is off sale: its club (crest + name,
    * `slug` null when unlisted), the time zone of its dates and its methods. Null on event orders.
    */
-  product: { id: string; kind: 'PASS' | 'MEMBERSHIP'; name: string; organizer: Organizer; timezone: string; payment_methods: PayMethod[] } | null
+  product: { id: string; kind: 'PASS' | 'MEMBERSHIP'; name: string; organizer: Organizer; timezone: string; payment_methods: PayMethod[]; cash_until: string | null } | null
+  /** 3b: set on a pass installment order (`seq` of `of`); its methods and `cash_until` ignore the sales close. */
+  installment: { seq: number; of: number } | null
+  /** Lot 5 step 3: the pass a product order is for (UUID), else null. W4 sends an installment order back to it. */
+  pass_id: string | null
   status: string
   /** Absent until the backend sends it (04: PENDING / SUCCEEDED / FAILED, null before any /pay). */
   payment_status?: string | null
@@ -70,6 +75,8 @@ export function toOrderView(raw: unknown): OrderView {
     id: String(r.id),
     event_id: Number.isSafeInteger(r.event_id) ? (r.event_id as number) : null,
     product: toProduct(r.product),
+    installment: toInstallment(r.installment),
+    pass_id: typeof r.pass_id === 'string' && UUID.test(r.pass_id) ? r.pass_id : null,
     status: String(r.status),
     ...('payment_status' in r && { payment_status: strOrNull(r.payment_status) }),
     ...('payment_method' in r && { payment_method: strOrNull(r.payment_method) }),
@@ -100,7 +107,13 @@ function toProduct(v: unknown): OrderView['product'] {
     organizer: toOrganizer(p.organizer),
     timezone: strOrNull(p.timezone) ?? 'Africa/Casablanca',
     payment_methods: methodsOf(p.payment_methods),
+    cash_until: strOrNull(p.cash_until),
   }
+}
+
+function toInstallment(v: unknown): OrderView['installment'] {
+  const i = obj(v)
+  return Number.isSafeInteger(i.seq) && Number.isSafeInteger(i.of) ? { seq: i.seq as number, of: i.of as number } : null
 }
 
 const httpUrl = (v: unknown) => (typeof v === 'string' && URL.canParse(v) && /^https?:$/.test(new URL(v).protocol) ? v : null)
@@ -219,7 +232,7 @@ export function parseCheckout(q: Record<string, string | string[] | undefined>):
 export const checkoutPath = (c: CheckoutQuery) =>
   `/orders/new?${new URLSearchParams({ event: String(c.event), price: c.price, qty: String(c.qty) })}`
 
-export const loginUrl = (next: string) => `/login?next=${encodeURIComponent(next)}`
+export { loginUrl } from './next-path'
 
 /** W5 "Commandes en attente de paiement": an AWAITING_CASH order still payable, with its code. Nothing else. */
 export type PendingCashOrder = {

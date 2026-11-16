@@ -25,7 +25,7 @@ import { formatDh } from '@/lib/money'
 import { formatDateTime } from '@/lib/time'
 import { useNow } from '@/lib/useNow'
 import { cn } from '@/lib/utils'
-import { ACTION_ROLES, actionsFor, lookupQuery, useTicketAction, useTicketLookup, type TicketAction, type TicketRow, type TicketStatus } from './api'
+import { ACTION_ROLES, actionsFor, lookupQuery, passBlocked, useTicketAction, useTicketLookup, type TicketAction, type TicketRow, type TicketStatus } from './api'
 
 const STATUS_STYLE: Record<TicketStatus, { badge: string; dot: string }> = {
   VALID: { badge: 'border-success-border bg-success-muted text-success-foreground', dot: 'bg-success' },
@@ -34,12 +34,13 @@ const STATUS_STYLE: Record<TicketStatus, { badge: string; dot: string }> = {
   CANCELLED: { badge: 'border-border bg-background text-muted-foreground', dot: 'bg-destructive' },
 }
 
-function TicketStatusBadge({ status }: { status: TicketStatus }) {
+function TicketStatusBadge({ row }: { row: TicketRow }) {
   const { t } = useTranslation()
+  const { status } = row
   return (
     <Badge variant="outline" className={cn('gap-1.5 rounded-full px-2.5 font-medium', STATUS_STYLE[status].badge)}>
       <span className={cn('size-1.5 rounded-full', STATUS_STYLE[status].dot)} aria-hidden="true" />
-      {t(`tickets.statuses.${status}`)}
+      {passBlocked(row) ? t('tickets.passSuspended') : t(`tickets.statuses.${status}`)}
     </Badge>
   )
 }
@@ -160,7 +161,7 @@ function EventTicketsPage({ id }: { id: string }) {
                         <bdi>{r.holder_label ?? r.holder_name}</bdi>
                       </TableCell>
                       <TableCell>
-                        <TicketStatusBadge status={r.status} />
+                        <TicketStatusBadge row={r} />
                         {r.refund && (
                           <div className="mt-1 text-xs text-muted-foreground tabular-nums">
                             {t(`tickets.refund.${r.refund.status}`, { amount: formatDh(r.refund.amount_mad, i18n.language) })}
@@ -178,7 +179,7 @@ function EventTicketsPage({ id }: { id: string }) {
                       {canAct && (
                         <TableCell>
                           <div className="flex justify-end gap-2">
-                            {actionsFor(r.status)
+                            {actionsFor(r)
                               .filter((k) => ACTION_ROLES[k].includes(role))
                               .map((kind) => (
                                 <Button
@@ -265,14 +266,23 @@ function TicketActionDialog({ kind, ticket, eventId, open, onOpenChange }: Actio
   })
   const error = form.formState.errors.reason?.message
   const vars = { ticket: ticket.ticket_no }
+  // 3b: a staff block on a ticket whose pass is suspended: unblocking lifts the staff block only, the ticket stays BLOCKED.
+  const stillBlocked = kind === 'unblock' && passBlocked(ticket)
   // A TICKET_STATUS or REFUND_FROZEN answer stays in the dialog (its copy says why); the list refetches behind it.
   const onSubmit = form.handleSubmit(({ reason }) =>
     run.mutateAsync({ kind, id: ticket.id, reason }).then(
       () => {
-        toast.success(t(`tickets.actions.${kind}.done`, vars), { id: `ticket-${kind}-${ticket.id}` })
+        toast.success(stillBlocked ? t('tickets.actions.unblock.doneStillBlocked', vars) : t(`tickets.actions.${kind}.done`, vars), { id: `ticket-${kind}-${ticket.id}` })
         onOpenChange(false)
       },
-      (e: unknown) => showFormError(e, form, t),
+      (e: unknown) => {
+        // 3b: the staff block was lifted meanwhile and the suspended pass still blocks it; the refetched row has no "Débloquer".
+        if (kind === 'unblock' && e instanceof ApiError && e.code === 'TICKET_STATUS' && e.details.reason === 'PASS_SUSPENDED') {
+          toast.error(t('tickets.actions.unblock.passSuspended', vars), { id: `ticket-${kind}-${ticket.id}` })
+          return onOpenChange(false)
+        }
+        showFormError(e, form, t)
+      },
     ),
   )
   return (
@@ -280,7 +290,7 @@ function TicketActionDialog({ kind, ticket, eventId, open, onOpenChange }: Actio
       <DialogContent closeLabel={t('common.close')}>
         <DialogHeader>
           <DialogTitle>{t(`tickets.actions.${kind}.title`, vars)}</DialogTitle>
-          <DialogDescription>{t(`tickets.actions.${kind}.body`)}</DialogDescription>
+          <DialogDescription>{stillBlocked ? t('tickets.actions.unblock.bodyStillBlocked') : t(`tickets.actions.${kind}.body`)}</DialogDescription>
         </DialogHeader>
         {kind === 'refund' && (
           <p className="rounded-lg border bg-muted/50 px-4 py-3 text-sm font-medium tabular-nums">

@@ -32,20 +32,31 @@ class FanPassController {
 
     record EventDto(int id, String title, Event.Type eventType, Instant startsAt, UUID ticketId) {}
 
+    record InstallmentDto(int seq, long amountMad, Instant dueAt, Instant paidAt) {}
+
+    record NextDueDto(int seq, long amountMad, Instant dueAt, boolean overdue) {}
+
     record PassDto(UUID id, Pass.Status status, ProductDto product, OrganizerDto organizer, SeriesDto series,
                    ZoneDto zone, String timezone, String holderLabel, Instant createdAt, UUID orderId,
-                   List<EventDto> events) {
+                   List<EventDto> events, Instant suspendedAt, List<InstallmentDto> installments, NextDueDto nextDue,
+                   UUID payOrderId) {
 
         static PassDto of(PassService.View v) {
             var o = v.organizer();
             var s = v.scope().series();
             var z = v.scope().zone();
+            var next = v.next();
             return new PassDto(v.pass().id(), v.pass().status(), new ProductDto(v.product().id(), v.product().name()),
                     new OrganizerDto(o.id(), o.slug(), o.name(), o.crestUrl()),
                     new SeriesDto(s.id(), s.name(), s.startsOn(), s.endsOn()), new ZoneDto(z.id(), z.code(), z.name()),
                     z.timezone(), HolderNames.label(v.pass().holderName()), v.pass().createdAt(), v.orderId(),
                     v.events().stream().map(e -> new EventDto(e.event().id(), e.event().title(),
-                            e.event().eventType(), e.event().startsAt(), e.ticketId())).toList());
+                            e.event().eventType(), e.event().startsAt(), e.ticketId())).toList(),
+                    v.pass().suspendedAt(), v.installments().stream().map(i -> new InstallmentDto(i.seq(), i.amountMad(),
+                            i.dueAt(), i.paidAt())).toList(),
+                    next == null ? null : new NextDueDto(next.installment().seq(), next.installment().amountMad(),
+                            next.installment().dueAt(), next.overdue()),
+                    v.payOrderId());
         }
     }
 

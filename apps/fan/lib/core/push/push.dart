@@ -180,7 +180,7 @@ final pushRegistrarProvider = Provider<void>((ref) {
 
 /// The app paths a push may open (docs/04-api.md §Notifications, push wire); anything else is ignored.
 final _pushPath = RegExp(
-  r'^/(tickets|orders)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^/events/\d+$|^/$',
+  r'^/(tickets|orders|passes)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^/events/\d+$|^/$',
 );
 
 String? pushPathOf(Map<String, Object?> data) => switch (data['path']) {

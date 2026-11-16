@@ -1803,4 +1803,86 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get duesSeeClub => 'شوف واجب الانخراط ديالي';
+
+  @override
+  String get passPlans => 'الخلاص';
+
+  @override
+  String planOnce(String amount) {
+    return 'مرة وحدة · $amount';
+  }
+
+  @override
+  String planSplit(int n, String first, String base, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      n,
+      locale: localeName,
+      other: 'على $n دفعة',
+      few: 'على $n دفعات',
+      two: 'على جوج دفعات',
+      one: 'مرة وحدة',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: ' كل $days يوم',
+      few: ' كل $days أيام',
+      two: ' كل جوج أيام',
+      one: ' كل نهار',
+      zero: '',
+    );
+    return '$_temp0 · $first ومن بعد $base$_temp1';
+  }
+
+  @override
+  String get passSchedule => 'جدول الأقساط';
+
+  @override
+  String installmentRow(int seq, int n, String amount, String date) {
+    return '$seq/$n · $amount · $date';
+  }
+
+  @override
+  String get installmentPaid => 'مخلص';
+
+  @override
+  String get installmentDue => 'خاصو يتخلص';
+
+  @override
+  String get installmentLate => 'متأخر';
+
+  @override
+  String passPayInstallment(String amount) {
+    return 'خلص القسط · $amount';
+  }
+
+  @override
+  String get passPayInstallmentShort => 'خلص القسط';
+
+  @override
+  String passSuspendedBanner(String date) {
+    return 'الاشتراك موقوف · التذاكر ديالك مبلوكيين حتى تخلص القسط ديال $date';
+  }
+
+  @override
+  String get passSuspended => 'موقوف';
+
+  @override
+  String get ticketBlockedPass => 'التذكرة مبلوكية · الاشتراك موقوف';
+
+  @override
+  String installmentOf(int seq, int n) {
+    return 'القسط $seq/$n';
+  }
+
+  @override
+  String get errorPassStatus => 'هاد الاشتراك ما كيقبلش الخلاص دابا.';
+
+  @override
+  String get errorPlanNotOffered => 'الخلاص على دفعات ما بقاش متوفر. ختار من جديد.';
+
+  @override
+  String orderPaidInstallmentBody(int seq, int n) {
+    return 'القسط $seq/$n تخلص. لقا الاشتراك والتذاكر ديالك ف«تذاكري».';
+  }
 }

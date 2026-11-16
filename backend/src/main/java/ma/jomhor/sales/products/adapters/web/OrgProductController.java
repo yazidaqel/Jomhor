@@ -33,18 +33,19 @@ class OrgProductController {
 
     record ProductCreate(@NotNull Product.Kind kind, @NotNull String name, @NotNull @Positive Long priceMad,
                          @PositiveOrZero Integer quota, UUID seriesId, Integer zoneId, @NotNull Instant salesCloseAt,
-                         Instant validUntil, Boolean onSale) {
+                         Instant validUntil, Boolean onSale, Integer maxInstallments) {
         ProductService.Input input() {
             return new ProductService.Input(kind, name, priceMad, quota, seriesId, zoneId, salesCloseAt, validUntil,
-                    onSale);
+                    onSale, maxInstallments);
         }
     }
 
     record ProductPatch(Product.Kind kind, String name, @Positive Long priceMad, @PositiveOrZero Integer quota,
-                        UUID seriesId, Integer zoneId, Instant salesCloseAt, Instant validUntil, Boolean onSale) {
+                        UUID seriesId, Integer zoneId, Instant salesCloseAt, Instant validUntil, Boolean onSale,
+                        Integer maxInstallments) {
         ProductService.Input input() {
             return new ProductService.Input(kind, name, priceMad, quota, seriesId, zoneId, salesCloseAt, validUntil,
-                    onSale);
+                    onSale, maxInstallments);
         }
     }
 
@@ -55,7 +56,8 @@ class OrgProductController {
     record ZoneRef(int id, String code, String name, VenueRef venue) {}
 
     record ProductDto(UUID id, Product.Kind kind, String name, long priceMad, boolean onSale, Instant salesCloseAt,
-                      Integer quota, int sold, Instant validUntil, SeriesRef series, ZoneRef zone) {
+                      Integer quota, int sold, Instant validUntil, SeriesRef series, ZoneRef zone,
+                      int maxInstallments) {
         static ProductDto of(ProductService.View v) {
             Product p = v.product();
             var pass = v.pass();
@@ -63,7 +65,8 @@ class OrgProductController {
                     p.sold(), p.validUntil(),
                     pass == null ? null : new SeriesRef(pass.series().id(), pass.series().name()),
                     pass == null ? null : new ZoneRef(pass.zone().id(), pass.zone().code(), pass.zone().name(),
-                            new VenueRef(pass.zone().venueId(), pass.zone().venueName(), pass.zone().timezone())));
+                            new VenueRef(pass.zone().venueId(), pass.zone().venueName(), pass.zone().timezone())),
+                    p.maxInstallments());
         }
     }
 
@@ -72,7 +75,10 @@ class OrgProductController {
     record EventFiguresDto(int eventId, String title, Instant startsAt, Event.Status status, long issued, long expected,
                            long passRemaining) {}
 
-    record PassFiguresDto(PassCountsDto passes, long revenueMad, List<EventFiguresDto> events) {}
+    record InstallmentFiguresDto(long overdue, long dueMad, long collectedMad) {}
+
+    record PassFiguresDto(PassCountsDto passes, long revenueMad, List<EventFiguresDto> events,
+                          InstallmentFiguresDto installments) {}
 
     record MembershipFiguresDto(long paidMembers, long revenueMad) {}
 
@@ -85,7 +91,9 @@ class OrgProductController {
                 case ProductService.PassFigures f -> new PassFiguresDto(
                         new PassCountsDto(f.passes().pending(), f.passes().active(), f.passes().suspended()),
                         f.revenueMad(), f.events().stream().map(e -> new EventFiguresDto(e.eventId(), e.title(),
-                                e.startsAt(), e.status(), e.issued(), e.expected(), e.passRemaining())).toList());
+                                e.startsAt(), e.status(), e.issued(), e.expected(), e.passRemaining())).toList(),
+                        new InstallmentFiguresDto(f.installments().overdue(), f.installments().dueMad(),
+                                f.installments().collectedMad()));
                 case ProductService.MembershipFigures f -> new MembershipFiguresDto(f.paidMembers(), f.revenueMad());
             };
             return new ProductDetailDto(ProductDto.of(d.view()), figures, d.refundsRequired().stream()

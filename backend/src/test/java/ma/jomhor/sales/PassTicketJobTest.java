@@ -192,8 +192,8 @@ class PassTicketJobTest extends PaymentTest {
         // The figures: the third pass waits for room.
         String json = body(call(c.admin(), get("/org/products/" + c.product())).andExpect(status().isOk()));
         assertKeys(json, "$", "id", "kind", "name", "price_mad", "on_sale", "sales_close_at", "quota", "sold",
-                "valid_until", "series", "zone", "figures", "refunds_required");
-        assertKeys(json, "$.figures", "passes", "revenue_mad", "events");
+                "valid_until", "series", "zone", "max_installments", "figures", "refunds_required");
+        assertKeys(json, "$.figures", "passes", "revenue_mad", "events", "installments");
         assertKeys(json, "$.figures.passes", "pending", "active", "suspended");
         assertThat(JsonPath.<Map<String, Object>>read(json, "$.figures.passes"))
                 .containsEntry("pending", 1).containsEntry("active", 3).containsEntry("suspended", 0);

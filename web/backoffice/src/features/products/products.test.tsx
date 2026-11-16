@@ -77,6 +77,7 @@ const PASS: Product = {
   valid_until: null,
   series: { id: 's-1', name: 'Saison 2026-27' },
   zone: { id: 1, code: 'EST', name: 'Tribune Est', venue: { id: 'v-1', name: 'Grand Stade', timezone: CASA } },
+  max_installments: 4,
 }
 const MEMBERSHIP: Product = {
   id: 'm-1',
@@ -90,6 +91,7 @@ const MEMBERSHIP: Product = {
   valid_until: '2027-06-30T22:59:59Z', // as the real API stores the end of 30 June (no milliseconds)
   series: null,
   zone: null,
+  max_installments: 1,
 }
 // A pass at a venue outside Morocco: its times read in Europe/Paris.
 const PARIS = 'Europe/Paris'
@@ -106,8 +108,9 @@ const display = (iso: string, zone: string) => new Intl.DateTimeFormat('fr', { t
 const PASS_DETAIL: ProductDetail = {
   ...PASS,
   figures: {
-    passes: { pending: 1, active: 3, suspended: 0 },
+    passes: { pending: 1, active: 3, suspended: 2 },
     revenue_mad: 450000,
+    installments: { overdue: 3, due_mad: 337500, collected_mad: 450000 },
     events: [
       { event_id: 1, title: 'Atlas FC vs Rapid Oued', starts_at: '2026-11-14T19:00:00Z', status: 'ON_SALE', issued: 2, expected: 3, pass_remaining: 0 },
       { event_id: 2, title: 'Atlas FC vs Wydad', starts_at: '2026-11-28T19:00:00Z', status: 'ON_SALE', issued: 3, expected: 3, pass_remaining: 1 },
@@ -265,6 +268,7 @@ it('PASS create: zod requires name, series, zone, a DH price, an integer quota a
         zone_id: 1,
         sales_close_at: wallToUtc('2027-05-31T22:00', CASA), // the zone's venue's time zone
         on_sale: true,
+        max_installments: 1, // default: in one payment
       },
     },
   ])
@@ -281,6 +285,7 @@ it('MEMBERSHIP create: the paid-membership warning before the first one; valid_u
   expect(within(sheet).getByRole('note').textContent).toBe(fr.products.membershipWarning.title + fr.products.membershipWarning.body)
   expect(within(sheet).queryByLabelText(fr.products.form.quota)).toBeNull()
   expect(within(sheet).queryByLabelText(fr.events.series.label)).toBeNull()
+  expect(within(sheet).queryByLabelText(fr.products.form.installments)).toBeNull() // PASS only
 
   await user.type(within(sheet).getByLabelText(fr.products.form.name), 'Carte membre 2026-27')
   await user.type(within(sheet).getByLabelText(fr.products.form.price), '200')
@@ -342,6 +347,28 @@ it('edit: series and zone fixed (disabled); PATCH sends only the changed fields'
   expect(writes(calls)).toEqual([{ method: 'PATCH', path: '/org/products/p-1', org: 'org-a', body: { quota: 5, on_sale: false } }])
 })
 
+it('edit: "Paiement en plusieurs fois" is a whole number 1–10; PATCH sends only it', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi()
+  renderApp('/products/p-1')
+  await screen.findByRole('heading', { name: 'Abonnement Tribune Est' })
+  await user.click(screen.getByRole('button', { name: fr.common.edit }))
+  const sheet = await screen.findByRole('dialog')
+  const field = (await within(sheet).findByLabelText(fr.products.form.installments)) as HTMLInputElement
+  expect(field.value).toBe('4')
+  for (const bad of ['0', '11', '2.5', '']) {
+    await user.clear(field)
+    if (bad) await user.type(field, bad)
+    await user.click(within(sheet).getByRole('button', { name: fr.common.save }))
+    expect(await within(sheet).findByText(fr.products.form.installmentsInvalid)).toBeTruthy()
+  }
+  expect(writes(calls)).toEqual([])
+  await user.clear(field)
+  await user.type(field, '10')
+  await user.click(within(sheet).getByRole('button', { name: fr.common.save }))
+  await waitFor(() => expect(writes(calls)).toEqual([{ method: 'PATCH', path: '/org/products/p-1', org: 'org-a', body: { max_installments: 10 } }]))
+})
+
 it('edit: a quota below the passes sold (422 on quota) says so on the field', async () => {
   const user = userEvent.setup()
   stubApi('ADMIN', [PASS], (c) =>
@@ -370,6 +397,10 @@ it('detail: KPIs, the per-match table with the amber row and its B2 Tarifs link,
   expect(kpi(fr.products.kpi.active)).toContain(i18n.t('products.soldOfQuotaLong', { sold: 4, quota: 4 }))
   expect(kpi(fr.products.kpi.pending)).toContain('1')
   expect(kpi(fr.products.kpi.revenue)).toContain(dh(450000))
+  // 3b installments.
+  expect(kpi(fr.products.kpi.suspended)).toContain('2')
+  expect(kpi(fr.products.kpi.overdue)).toContain('3')
+  expect(kpi(fr.products.kpi.due)).toContain(dh(337500))
 
   const short = screen.getByRole('link', { name: 'Atlas FC vs Rapid Oued' }).closest('tr')!
   expect(short.className).toContain('bg-warning-muted')

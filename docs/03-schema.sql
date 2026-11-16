@@ -206,10 +206,13 @@ create table products (                               -- what an order sells bes
   series_id       uuid references event_series(id),     -- PASS: the events it covers
   zone_id         smallint references zones(id),        -- PASS: the zone its tickets admit to; events at that zone's venue only
   valid_until     timestamptz,                          -- MEMBERSHIP: the memberships.paid_until it grants
+  max_installments smallint not null default 1 check (max_installments between 1 and 10),
+                  -- PASS: the most payments a fan may choose (1 = in full only); docs/04-api.md §Passes Installments
   created_at      timestamptz not null default now(),
   constraint products_kind check (
     (kind = 'PASS') = (series_id is not null and zone_id is not null and quota is not null)
-    and (kind = 'MEMBERSHIP') = (valid_until is not null))
+    and (kind = 'MEMBERSHIP') = (valid_until is not null)),
+  constraint products_installments check (kind = 'PASS' or max_installments = 1)
 );
 create index on products (organizer_id, kind);
 
@@ -224,17 +227,20 @@ create table passes (                                 -- a season pass (docs/04-
   user_id       uuid not null references users(id),        -- buyer and holder
   holder_name   text not null,                              -- §Holder names; copied to its tickets; never in a QR or manifest
   status        pass_status not null default 'PENDING',     -- PENDING until its purchase order is PAID; CANCELLED if that expires
-  created_at    timestamptz not null default now()
+  suspended_at  timestamptz,                                -- an installment overdue past passes.grace; null unless SUSPENDED
+  created_at    timestamptz not null default now(),
+  constraint passes_suspended check ((status = 'SUSPENDED') = (suspended_at is not null))
 );
 create unique index on passes (series_id, user_id) where status <> 'CANCELLED';
 -- a pass's ticket for an event comes from an order with pass_id and event_id set (channel APP, method FREE,
--- one PASS-category place); see docs/04-api.md §Passes
+-- one PASS-category place); see docs/04-api.md §Passes. A SUSPENDED pass's tickets read BLOCKED without
+-- any write to tickets rows (docs/04-api.md §Passes Effective status)
 
 create table orders (
   id              uuid primary key default gen_random_uuid(),
   organizer_id    uuid not null references organizers(id),
-  event_id        integer references events(id),   -- null = a product order (pass purchase, membership)
-  pass_id         uuid references passes(id),      -- event_id null: the pass's purchase order;
+  event_id        integer references events(id),   -- null = a product order (pass purchase or installment, membership)
+  pass_id         uuid references passes(id),      -- event_id null: the pass's purchase or installment order;
                                                    -- event_id set: the pass's ticket order for that event (PAID, FREE, total 0)
   user_id         uuid references users(id),
   channel         sales_channel not null,
@@ -271,6 +277,22 @@ create table order_items (
   unique (order_id, price_category_id)
 );
 create index on order_items using gin (holders jsonb_path_ops);  -- holder limit: places one account holds (docs/04-api.md POST /fan/orders)
+
+-- ---------- sales: pass installments (Lot 5 step 3) ----------
+create table pass_installments (                      -- a pass's payment schedule (docs/04-api.md §Passes Installments)
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  pass_id       uuid not null references passes(id),
+  seq           smallint not null check (seq between 1 and 10),
+  amount_mad    bigint not null check (amount_mad > 0),   -- centimes; Σ over the pass = the product price at purchase
+  due_at        timestamptz not null,                     -- seq 1: the purchase; seq k: created_at + (k − 1) × passes.installment-interval
+  order_id      uuid unique references orders(id),        -- the PAID order that paid it
+  paid_at       timestamptz,
+  reminded_at   timestamptz,                              -- INSTALLMENT_DUE queued (once)
+  unique (pass_id, seq),
+  constraint pass_installments_paid check ((order_id is null) = (paid_at is null))
+);
+create index on pass_installments (due_at) where paid_at is null;
 
 create type ticket_status as enum ('VALID','CANCELLED','REFUNDED','BLOCKED');
 
@@ -466,7 +488,8 @@ create index on ticket_deliveries (next_attempt_at) where status = 'PENDING';
 create index on ticket_deliveries (ticket_id, created_at desc);   -- re-send limit
 
 create type message_channel as enum ('PUSH','WHATSAPP');
-create type message_kind    as enum ('TICKET_RECEIVED','SPLIT_INVITE','PAY_CODE','ORDER_PAID','CAMPAIGN','WAITLIST_OPEN');
+create type message_kind    as enum ('TICKET_RECEIVED','SPLIT_INVITE','PAY_CODE','ORDER_PAID','CAMPAIGN','WAITLIST_OPEN',
+                                  'INSTALLMENT_DUE');
 
 create table push_tokens (                            -- FCM registration tokens of the Jomhor fan app (one app, every club)
   id            uuid primary key default gen_random_uuid(),   -- platform identity like fan_sessions: no organizer_id;
@@ -511,6 +534,7 @@ create table fan_messages (                           -- outbox: push and WhatsA
   order_id         uuid references orders(id),             -- SPLIT_INVITE, PAY_CODE, ORDER_PAID
   ticket_id        uuid references tickets(id),            -- TICKET_RECEIVED
   event_id         integer references events(id),          -- WAITLIST_OPEN
+  pass_id          uuid references passes(id),             -- INSTALLMENT_DUE
   status          delivery_status not null default 'PENDING',
   attempts         smallint not null default 0,
   next_attempt_at  timestamptz not null default now(),
@@ -521,7 +545,8 @@ create table fan_messages (                           -- outbox: push and WhatsA
   constraint fan_messages_subject check (
     (ticket_id is not null) = (kind = 'TICKET_RECEIVED')
     and (order_id is not null) = (kind in ('SPLIT_INVITE','PAY_CODE','ORDER_PAID'))
-    and (event_id is not null) = (kind = 'WAITLIST_OPEN'))
+    and (event_id is not null) = (kind = 'WAITLIST_OPEN')
+    and (pass_id is not null) = (kind = 'INSTALLMENT_DUE'))
 );
 create index on fan_messages (next_attempt_at) where status = 'PENDING';
 create unique index on fan_messages (campaign_id, user_id) where campaign_id is not null;          -- one per recipient
@@ -529,6 +554,7 @@ create unique index on fan_messages (order_id, kind, channel) where kind in ('SP
 create index on fan_messages (user_id, created_at desc) where kind = 'CAMPAIGN' and channel = 'PUSH';  -- inbox
 create index on fan_messages (event_id, created_at) where kind = 'WAITLIST_OPEN';  -- waitlist cooldown
 -- No unique index for WAITLIST_OPEN: waitlist_entries.notified_at, set in the same transaction, makes it once per wait.
+-- No unique index for INSTALLMENT_DUE: pass_installments.reminded_at, set in the same transaction, makes it once.
 
 -- ---------- gate ----------
 create type device_status as enum ('PENDING','ACTIVE','REVOKED');

@@ -117,7 +117,7 @@ class FanProductApiTest extends OrgApiTest {
         assertThat(JsonPath.<Boolean>read(json, "$[0].sold_out")).isFalse();
         assertThat(JsonPath.<Object>read(json, "$[0].valid_until")).isNull();
         assertThat(JsonPath.<List<Map<String, Object>>>read(json, "$[0].plans"))
-                .containsExactly(Map.of("installments", 1, "amounts_mad", List.of(150000)));
+                .containsExactly(inFull(150000));
         assertKeys(json, "$[0].pass", "series", "zone", "venue", "events");
         assertKeys(json, "$[0].pass.series", "id", "name", "starts_on", "ends_on");
         assertThat(JsonPath.<Map<String, Object>>read(json, "$[0].pass.series")).containsEntry("id", c.series())
@@ -140,7 +140,7 @@ class FanProductApiTest extends OrgApiTest {
         assertThat(JsonPath.<String>read(json, "$[1].valid_until")).isEqualTo("2099-07-01T00:00:00Z");
         assertThat(JsonPath.<Object>read(json, "$[1].pass")).isNull();
         assertThat(JsonPath.<List<Map<String, Object>>>read(json, "$[1].plans"))
-                .containsExactly(Map.of("installments", 1, "amounts_mad", List.of(20000)));
+                .containsExactly(inFull(20000));
 
         // No cash set up: card only, no cash_until.
         assertThat(JsonPath.<List<String>>read(json, "$[0].payment_methods")).containsExactly("CARD");
@@ -215,5 +215,14 @@ class FanProductApiTest extends OrgApiTest {
         json = body(mvc.perform(get("/fan/products/" + c.membership())).andExpect(status().isOk()));
         assertThat(JsonPath.<List<String>>read(json, "$.payment_methods")).doesNotContain("CASH_AGENCY");
         assertThat(JsonPath.<String>read(json, "$.cash_until")).isNotNull();
+    }
+
+    /** The in-full plan: no interval. */
+    private static Map<String, Object> inFull(int price) {
+        Map<String, Object> plan = new java.util.HashMap<>();
+        plan.put("installments", 1);
+        plan.put("amounts_mad", List.of(price));
+        plan.put("interval_days", null);
+        return plan;
     }
 }

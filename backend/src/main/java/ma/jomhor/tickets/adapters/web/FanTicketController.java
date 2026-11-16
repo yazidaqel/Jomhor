@@ -63,7 +63,7 @@ class FanTicketController {
 
     record TicketDto(UUID id, String ticketNo, Ticket.Status status, String holderLabel, String seatLabel,
                      EventDto event, ZoneDto zone, List<String> gateCodes, List<GateDto> gates, Instant transferUntil,
-                     TransferredDto transferred, UUID passId,
+                     TransferredDto transferred, UUID passId, String blockedBy,
                      @JsonProperty("k_t") @JsonInclude(JsonInclude.Include.NON_NULL) String ticketKey) {
 
         static TicketDto of(TicketService.Held h) {
@@ -83,7 +83,12 @@ class FanTicketController {
                     t.transferred() == null ? null : new TransferredDto(
                             t.transferred().toName() == null ? null : HolderNames.label(t.transferred().toName()),
                             t.transferred().at()),
-                    t.passId(), h.ticketKey());
+                    t.passId(), blockedBy(t), h.ticketKey());
+        }
+
+        /** 04 Lot 5 step 3b: PASS (blocked only by its suspended pass), STAFF (stored BLOCKED), null when not BLOCKED. */
+        private static String blockedBy(Ticket t) {
+            return t.status() != Ticket.Status.BLOCKED ? null : t.passBlocked() ? "PASS" : "STAFF";
         }
 
         @Override

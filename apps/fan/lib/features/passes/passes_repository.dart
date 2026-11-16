@@ -39,12 +39,19 @@ class PassesRepository {
   ];
 
   /// `POST /fan/product-orders`: a `RESERVED` order held 8 min, paid like any order (`/fan/orders/{id}/pay`).
-  Future<FanOrder> order(String productId, String holderName) async => FanOrder.fromJson(
+  /// [installments]: one of the product's `plans` (3b); its total is that plan's first amount.
+  Future<FanOrder> order(String productId, String holderName, {int installments = 1}) async => FanOrder.fromJson(
     (await _api.post(
           '/fan/product-orders',
-          body: {'product_id': productId, 'channel': 'APP', 'holder_name': holderName},
+          body: {'product_id': productId, 'channel': 'APP', 'holder_name': holderName, 'installments': installments},
         ))!
         as Map<String, Object?>,
+  );
+
+  /// `POST /fan/passes/{id}/installments` (3b): the order of the earliest unpaid installment, new (201) or the live
+  /// one (200); paid like any order.
+  Future<FanOrder> installmentOrder(String passId) async => FanOrder.fromJson(
+    (await _api.post('/fan/passes/${Uri.encodeComponent(passId)}/installments'))! as Map<String, Object?>,
   );
 }
 

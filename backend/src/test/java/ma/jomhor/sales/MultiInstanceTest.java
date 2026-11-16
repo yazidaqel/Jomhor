@@ -322,6 +322,90 @@ class MultiInstanceTest extends QueueFixture {
         assertThat(sold(pass)).isEqualTo(600);
     }
 
+    /**
+     * BE-58: both instances run the pass job at once over 50 ACTIVE passes with an installment overdue past its grace:
+     * each goes SUSPENDED once, with one pass.suspend audit.
+     */
+    @Test
+    void eachOverduePassIsSuspendedOnce() throws Exception {
+        Caller a = admin();
+        int zone = zone(a, venue(a, "Stade"), "EST");
+        String series = JsonPath.read(body(call(a, post("/org/series"),
+                "{\"name\": \"Saison\", \"starts_on\": \"2026-08-01\", \"ends_on\": \"2099-06-30\"}")
+                .andExpect(status().isCreated())), "$.id");
+        UUID product = jdbc.sql("""
+                        insert into products (organizer_id, kind, name, price_mad, sales_close_at, quota, sold, series_id,
+                                              zone_id, max_installments)
+                        values (?, 'PASS', 'Abonnement', 150000, '2099-06-30T22:00:00Z', 50, 50, ?::uuid, ?, 2)
+                        returning id""").params(a.org(), series, zone).query(UUID.class).single();
+        for (int i = 0; i < 50; i++) {
+            UUID pass = jdbc.sql("insert into passes (organizer_id, product_id, series_id, user_id, holder_name, status)"
+                    + " values (?, ?, ?::uuid, ?, 'Fan Test', 'ACTIVE') returning id")
+                    .params(a.org(), product, series, user()).query(UUID.class).single();
+            jdbc.sql("insert into pass_installments (organizer_id, pass_id, seq, amount_mad, due_at)"
+                    + " values (?, ?, 2, 75000, '2099-01-01T00:00:00Z')").params(a.org(), pass).update();
+        }
+
+        PassTicketService onB = b.getBean(PassTicketService.class);
+        Instant now = Instant.parse("2099-01-08T00:00:00Z"); // due + 7 d
+        both(() -> {
+            passTickets.runAt(now);
+            return 0;
+        }, () -> {
+            onB.runAt(now);
+            return 0;
+        });
+        assertThat(jdbc.sql("""
+                        select count(*) filter (where p.status = 'SUSPENDED') || '/'
+                               || (select count(*) from audit_log l where l.organizer_id = p.organizer_id
+                                     and l.action = 'pass.suspend')
+                        from passes p where p.product_id = ? group by p.organizer_id""")
+                .param(product).query(String.class).single()).isEqualTo("50/50");
+    }
+
+    /**
+     * BE-59: both instances run the pass job at once, twice, over 50 ACTIVE passes whose seq 2 is due in 3 days: each
+     * installment is reminded once, with one PUSH and one WHATSAPP row.
+     */
+    @Test
+    void eachInstallmentIsRemindedOnce() throws Exception {
+        Caller a = admin();
+        int zone = zone(a, venue(a, "Stade"), "EST");
+        String series = JsonPath.read(body(call(a, post("/org/series"),
+                "{\"name\": \"Saison\", \"starts_on\": \"2026-08-01\", \"ends_on\": \"2099-06-30\"}")
+                .andExpect(status().isCreated())), "$.id");
+        UUID product = jdbc.sql("""
+                        insert into products (organizer_id, kind, name, price_mad, sales_close_at, quota, sold, series_id,
+                                              zone_id, max_installments)
+                        values (?, 'PASS', 'Abonnement', 150000, '2099-06-30T22:00:00Z', 50, 50, ?::uuid, ?, 2)
+                        returning id""").params(a.org(), series, zone).query(UUID.class).single();
+        for (int i = 0; i < 50; i++) {
+            UUID pass = jdbc.sql("insert into passes (organizer_id, product_id, series_id, user_id, holder_name, status)"
+                    + " values (?, ?, ?::uuid, ?, 'Fan Test', 'ACTIVE') returning id")
+                    .params(a.org(), product, series, user()).query(UUID.class).single();
+            jdbc.sql("insert into pass_installments (organizer_id, pass_id, seq, amount_mad, due_at)"
+                    + " values (?, ?, 2, 75000, '2099-01-04T00:00:00Z')").params(a.org(), pass).update();
+        }
+
+        PassTicketService onB = b.getBean(PassTicketService.class);
+        Instant now = Instant.parse("2099-01-01T00:00:00Z"); // due − 3 d
+        for (Instant at : List.of(now, now.plusSeconds(60))) {
+            both(() -> {
+                passTickets.runAt(at);
+                return 0;
+            }, () -> {
+                onB.runAt(at);
+                return 0;
+            });
+        }
+        assertThat(jdbc.sql("""
+                        select count(*) filter (where i.reminded_at = '2099-01-01T00:00:00Z') || '/'
+                               || (select count(*) from fan_messages m join passes q on q.id = m.pass_id
+                                   where q.product_id = ? and m.kind = 'INSTALLMENT_DUE')
+                        from pass_installments i join passes p on p.id = i.pass_id where p.product_id = ?""")
+                .params(product, product).query(String.class).single()).isEqualTo("50/100");
+    }
+
     private int sold(String priceId) {
         return jdbc.sql("select sold from price_categories where id = ?::uuid").param(priceId).query(Integer.class)
                 .single();

@@ -1,0 +1,77 @@
+{
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): GET /fan/products/{id}, max_installments 3, 1 000 DH; interval_days reads 0 under the fast clock (whole days, 10 min rounds down; 30 in production)",
+ "status": 200,
+ "body": {
+  "id": "83631642-11e5-441b-89dd-a7ac64adf063",
+  "organizer_id": "a7a5fc00-0000-4000-8000-000000000001",
+  "organizer": {
+   "slug": "atlas-fc",
+   "name": "ATLAS FC",
+   "crest_url": null
+  },
+  "timezone": "Africa/Casablanca",
+  "kind": "PASS",
+  "name": "FL-31 Abonnement Tribune Est",
+  "price_mad": 100000,
+  "sales_close_at": "2027-06-30T12:00:00Z",
+  "remaining": 10,
+  "sold_out": false,
+  "valid_until": null,
+  "pass": {
+   "series": {
+    "id": "0a949fd3-1ef9-446d-a182-a63d1a5dd031",
+    "name": "FL-31 real run",
+    "starts_on": "2026-08-01",
+    "ends_on": "2027-06-30"
+   },
+   "zone": {
+    "id": 2,
+    "code": "EST",
+    "name": "Est"
+   },
+   "venue": {
+    "name": "Grand Stade",
+    "city": "Casablanca",
+    "timezone": "Africa/Casablanca"
+   },
+   "events": [
+    {
+     "id": 43,
+     "title": "ATLAS FC – FL-31 real run 1",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2027-01-17T19:00:00Z"
+    },
+    {
+     "id": 44,
+     "title": "ATLAS FC – FL-31 real run 2",
+     "event_type": "FOOTBALL_MATCH",
+     "starts_at": "2027-01-31T19:00:00Z"
+    }
+   ]
+  },
+  "plans": [
+   {
+    "installments": 1,
+    "amounts_mad": [
+     100000
+    ],
+    "interval_days": null
+   },
+   {
+    "installments": 3,
+    "amounts_mad": [
+     33334,
+     33333,
+     33333
+    ],
+    "interval_days": 0
+   }
+  ],
+  "payment_methods": [
+   "CARD",
+   "WALLET",
+   "CASH_AGENCY"
+  ],
+  "cash_until": "2027-06-30T10:00:00Z"
+ }
+}

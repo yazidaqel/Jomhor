@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowRight, BadgeCheck, Banknote, Hourglass, Pencil, Users } from 'lucide-react'
+import { ArrowRight, BadgeCheck, Banknote, CalendarClock, CirclePause, Hourglass, Pencil, Users, Wallet } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useParams } from 'react-router'
 import { Kpi } from '@/components/kpi'
@@ -137,6 +137,10 @@ function PassFiguresView({ product: p, figures: f, zone }: { product: ProductDet
         </Kpi>
         <Kpi index={1} icon={Hourglass} label={t('products.kpi.pending')} value={n(f.passes.pending)} />
         <Kpi index={2} icon={Banknote} label={t('products.kpi.revenue')} value={t('products.amount', { amount: formatDh(f.revenue_mad, i18n.language) })} />
+        {/* 3b: installments (Q195, Q197). */}
+        <Kpi index={3} icon={CirclePause} label={t('products.kpi.suspended')} value={n(f.passes.suspended)} valueClassName={f.passes.suspended > 0 ? 'text-warning-foreground' : undefined} />
+        <Kpi index={4} icon={CalendarClock} label={t('products.kpi.overdue')} value={n(f.installments.overdue)} valueClassName={f.installments.overdue > 0 ? 'text-warning-foreground' : undefined} />
+        <Kpi index={5} icon={Wallet} label={t('products.kpi.due')} value={t('products.amount', { amount: formatDh(f.installments.due_mad, i18n.language) })} />
       </div>
       <Card className={cn('gap-0 overflow-hidden pb-0', STICKY_TABLE)}>
         <CardHeader className="border-b pb-5">

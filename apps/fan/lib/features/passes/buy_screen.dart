@@ -21,8 +21,9 @@ import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 13 · Abonnement, buy (DESIGN.md Lot 5 step 3): the club and the product, the season in one card (zone,
-/// venue, the events announced), the holder's name, and "Acheter · {amount}" → `POST /fan/product-orders` → screen 4
-/// product variant (`/orders/{id}`). Public to read; buying asks for the login first.
+/// venue, the events announced), the holder's name, the plans when there are several (3b), and
+/// "Acheter · {first amount}" → `POST /fan/product-orders` → screen 4 product variant (`/orders/{id}`). Public to
+/// read; buying asks for the login first.
 class BuyScreen extends ConsumerWidget {
   const new({required this.productId, super.key});
 
@@ -62,6 +63,9 @@ class _Buy extends ConsumerStatefulWidget {
 class _BuyState extends ConsumerState<_Buy> {
   final _name = TextEditingController();
 
+  /// The plan picked (`installments`); null = the first one ("en une fois").
+  int? _installments;
+
   /// `/fan/me`, listened to once a session exists (the login pops back to this screen).
   ProviderSubscription<AsyncValue<FanUser>>? _me;
 
@@ -84,6 +88,12 @@ class _BuyState extends ConsumerState<_Buy> {
     super.dispose();
   }
 
+  /// The picked plan if the product still offers it, else the first; null when the product sends none.
+  Plan? get _plan {
+    final plans = widget.product.plans;
+    return plans.where((p) => p.installments == _installments).firstOrNull ?? plans.firstOrNull;
+  }
+
   Future<void> _buy() async {
     final id = widget.product.id;
     if (!ref.read(sessionProvider)) {
@@ -91,7 +101,7 @@ class _BuyState extends ConsumerState<_Buy> {
       unawaited(context.push('/login'));
       return;
     }
-    final next = await ref.read(buyProvider(id).notifier).buy(_name.text);
+    final next = await ref.read(buyProvider(id).notifier).buy(_name.text, installments: _plan?.installments ?? 1);
     if (next != null && mounted) unawaited(context.push(next));
   }
 
@@ -104,6 +114,7 @@ class _BuyState extends ConsumerState<_Buy> {
     final off = soldOut || state.closed || p.closed;
     final club = p.club;
     final pass = p.pass;
+    final plan = _plan;
     final error = switch (state.error) {
       final e? => apiErrorText(l, e),
       null when p.closed => l.errorProductNotOnSale,
@@ -169,6 +180,18 @@ class _BuyState extends ConsumerState<_Buy> {
                   prefixIcon: const Icon(Icons.badge_outlined),
                 ),
               ),
+              if (p.plans.length > 1) ...[
+                const SizedBox(height: JomhorSpace.xl),
+                SectionLabel(l.passPlans),
+                const SizedBox(height: JomhorSpace.s),
+                for (final option in p.plans)
+                  _PlanOption(
+                    key: Key('buy.plan.${option.installments}'),
+                    label: planText(l, option),
+                    selected: option == plan,
+                    onTap: state.busy || off ? null : () => setState(() => _installments = option.installments),
+                  ),
+              ],
             ],
           ),
         ),
@@ -196,7 +219,7 @@ class _BuyState extends ConsumerState<_Buy> {
                   FilledButton(
                     key: const Key('buy.cta'),
                     onPressed: state.busy || off ? null : _buy,
-                    child: Text(soldOut ? l.soldOut : l.passBuy(l.dh(p.chargeMad))),
+                    child: Text(soldOut ? l.soldOut : l.passBuy(l.dh(plan?.amountsMad.first ?? p.chargeMad))),
                   ),
                 ],
               ),
@@ -290,6 +313,68 @@ class _SeasonCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A plan chip's words (3b): "En une fois · {price}" or "En {n} fois · {first} puis {base} tous les 30 jours", the
+/// amounts as the server sent them.
+String planText(AppLocalizations l, Plan p) => switch (p) {
+  (installments: 1, amountsMad: [final all], intervalDays: _) => l.planOnce(l.dh(all)),
+  (:final installments, amountsMad: [final first, final base, ...], intervalDays: final int days) => l.planSplit(
+    installments,
+    l.dh(first),
+    l.dh(base),
+    days,
+  ),
+  // Never sent (Product.fromJson drops such a plan): the first amount alone.
+  _ => l.planOnce(l.dh(p.amountsMad.first)),
+};
+
+/// One plan, full width so its words wrap: a radio mark and the plan's words; the picked one in the accent.
+class _PlanOption extends StatelessWidget {
+  const new({required this.label, required this.selected, required this.onTap, super.key});
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: JomhorSpace.s),
+    child: Semantics(
+      button: true,
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.control)),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: JomhorSize.touchMin),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: JomhorSpace.m),
+          decoration: BoxDecoration(
+            color: selected ? JomhorColors.accent.withValues(alpha: 0.12) : JomhorColors.surface,
+            border: Border.all(color: selected ? JomhorColors.accent : JomhorColors.border, width: selected ? 2 : 1),
+            borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.control)),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected ? Icons.radio_button_checked_rounded : Icons.radio_button_unchecked_rounded,
+                size: 20,
+                color: selected ? JomhorColors.accent : JomhorColors.textMuted,
+              ),
+              const SizedBox(width: JomhorSpace.m),
+              Expanded(
+                child: Text(
+                  label,
+                  style: JomhorType.body.copyWith(fontWeight: selected ? FontWeight.w600 : FontWeight.w400),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 /// A muted pill: "Complet" here, "Bientôt" on screen 13 owned.

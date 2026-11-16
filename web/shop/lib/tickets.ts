@@ -33,6 +33,8 @@ export type TicketView = {
   transferred: { to_label: string; at: string } | null
   /** Lot 5 step 3: the season pass this ticket comes from (W5 "Abonnement" chip), else null. */
   pass_id: string | null
+  /** 3b: why a BLOCKED ticket is blocked: its suspended pass, or staff; null when not BLOCKED (or an unknown value). */
+  blocked_by: 'PASS' | 'STAFF' | null
 }
 
 /** Path-safe ticket id: tickets are UUIDs. */
@@ -79,6 +81,7 @@ export function toTickets(raw: unknown): TicketView[] {
       transfer_open: transfer_until !== null && now < Date.parse(transfer_until),
       transferred: typeof x.to_label === 'string' && typeof x.at === 'string' ? { to_label: x.to_label, at: x.at } : null,
       pass_id: strOrNull(t.pass_id),
+      blocked_by: t.blocked_by === 'PASS' || t.blocked_by === 'STAFF' ? t.blocked_by : null,
     }
   })
 }

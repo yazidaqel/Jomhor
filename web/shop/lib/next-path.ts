@@ -12,3 +12,6 @@ export function safeNext(raw: unknown): string {
   if (url.origin !== base || url.pathname.startsWith('//')) return '/'
   return url.pathname + url.search + url.hash
 }
+
+/** The login page, coming back to `next` (a path the shop built from validated values) after. Client-safe. */
+export const loginUrl = (next: string) => `/login?next=${encodeURIComponent(next)}`

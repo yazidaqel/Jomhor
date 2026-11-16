@@ -29,6 +29,8 @@ export type Product = {
   series: { id: string; name: string } | null
   /** PASS: its zone, with the venue whose time zone its dates are in. */
   zone: { id: number; code: string; name: string; venue: { id: string; name: string; timezone: string } } | null
+  /** 3b: the most installments a fan may choose (1–10, every 30 days, Q195); always 1 for MEMBERSHIP. */
+  max_installments: number
 }
 export type PassEventFigures = {
   event_id: number
@@ -42,7 +44,14 @@ export type PassEventFigures = {
   /** Σ remaining of the event's PASS categories in the product's zone. */
   pass_remaining: number
 }
-export type PassFigures = { passes: { pending: number; active: number; suspended: number }; revenue_mad: number; events: PassEventFigures[] }
+/** 3b, over the product's passes not CANCELLED: unpaid installments past `due_at`, Σ unpaid, Σ paid (centimes). */
+export type InstallmentFigures = { overdue: number; due_mad: number; collected_mad: number }
+export type PassFigures = {
+  passes: { pending: number; active: number; suspended: number }
+  revenue_mad: number
+  events: PassEventFigures[]
+  installments: InstallmentFigures
+}
 export type MembershipFigures = { paid_members: number; revenue_mad: number }
 export type ProductDetail = Product & { figures: PassFigures | MembershipFigures; refunds_required: RefundRequired[] }
 
@@ -110,6 +119,7 @@ export type ProductForm = {
   sales_close_at: string
   valid_until: string
   on_sale: boolean
+  max_installments: string
 }
 
 export const toForm = (p: Product | undefined): ProductForm => ({
@@ -121,6 +131,7 @@ export const toForm = (p: Product | undefined): ProductForm => ({
   sales_close_at: p ? utcToWall(p.sales_close_at, productZone(p)) : '',
   valid_until: p?.valid_until ? utcToWall(p.valid_until, DEFAULT_ZONE).slice(0, 10) : '',
   on_sale: p?.on_sale ?? false,
+  max_installments: String(p?.max_installments ?? 1),
 })
 
 /**
@@ -148,6 +159,7 @@ export function productSchema(t: TFunction, kind: ProductKind, zone: string | un
         .refine((s) => s === storedClose || !zone || !WALL.test(s) || at(s) > now, t('products.form.closeInPast')), // zod 4 runs it after a failed regex too
       valid_until: pass ? z.string() : z.string().regex(DAY, t('products.form.validUntilRequired')),
       on_sale: z.boolean(),
+      max_installments: pass ? integerInput(t('products.form.installmentsInvalid'), 1, 10) : z.string(),
     })
     .refine((v) => pass || Date.parse(endOfDay(v.valid_until)) > at(v.sales_close_at), {
       message: t('products.form.validBeforeClose'),
@@ -171,13 +183,14 @@ function apiValues(v: ProductValues, zone: string) {
     sales_close_at: wallToUtc(v.sales_close_at, zone),
     valid_until: v.valid_until ? endOfDay(v.valid_until) : undefined,
     on_sale: v.on_sale,
+    max_installments: typeof v.max_installments === 'number' ? v.max_installments : undefined,
   }
 }
 
 /** POST /org/products body: the kind's fields only (04). */
 export function createBody(kind: ProductKind, v: ProductValues, zone: string) {
-  const { quota, series_id, zone_id, valid_until, ...common } = apiValues(v, zone)
-  return kind === 'PASS' ? { kind, ...common, quota, series_id, zone_id } : { kind, ...common, valid_until }
+  const { quota, series_id, zone_id, valid_until, max_installments, ...common } = apiValues(v, zone)
+  return kind === 'PASS' ? { kind, ...common, quota, series_id, zone_id, max_installments } : { kind, ...common, valid_until }
 }
 
 /**
@@ -186,7 +199,8 @@ export function createBody(kind: ProductKind, v: ProductValues, zone: string) {
  */
 export function patchBody(kind: ProductKind, initial: ProductForm, v: ProductValues, form: ProductForm, zone: string) {
   const values = apiValues(v, zone)
-  const editable: readonly (keyof ProductForm)[] = ['name', 'price_mad', 'on_sale', 'sales_close_at', kind === 'PASS' ? 'quota' : 'valid_until']
+  // max_installments: PASS only (a MEMBERSHIP → 422).
+  const editable: readonly (keyof ProductForm)[] = ['name', 'price_mad', 'on_sale', 'sales_close_at', ...(kind === 'PASS' ? (['quota', 'max_installments'] as const) : (['valid_until'] as const))]
   // `form` holds the raw text: "50" and "50,00" are the same price, so the price compares in centimes.
   const changed = (k: keyof ProductForm) => (k === 'price_mad' ? parseDh(initial.price_mad) !== v.price_mad : String(initial[k]).trim() !== String(form[k]).trim())
   return Object.fromEntries(editable.filter(changed).map((k) => [k, values[k]]))

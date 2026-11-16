@@ -33,8 +33,12 @@ class FanProductController {
 
     record PassDto(SeriesDto series, ZoneDto zone, VenueDto venue, List<EventDto> events) {}
 
-    /** One way to pay: {@code installments} payments of {@code amounts_mad} (in full only until plan lot-5 BE-57). */
-    record PlanDto(int installments, List<Long> amountsMad) {}
+    /** One way to pay: {@code installments} payments of {@code amounts_mad}, every {@code interval_days} (null in full). */
+    record PlanDto(int installments, List<Long> amountsMad, Long intervalDays) {
+        static PlanDto of(ProductService.Plan p) {
+            return new PlanDto(p.installments(), p.amountsMad(), p.interval() == null ? null : p.interval().toDays());
+        }
+    }
 
     record ProductDto(UUID id, UUID organizerId, OrganizerDto organizer, String timezone, Product.Kind kind,
                       String name, long priceMad, Instant salesCloseAt,
@@ -53,7 +57,7 @@ class FanProductController {
                     v.organizer().name(), v.organizer().crestUrl()), v.timezone(), p.kind(), p.name(), p.priceMad(),
                     p.salesCloseAt(),
                     remaining, remaining != null && remaining == 0, p.validUntil(), pass,
-                    List.of(new PlanDto(1, List.of(p.priceMad()))), v.payment().methods(), v.payment().cashUntil());
+                    v.plans().stream().map(PlanDto::of).toList(), v.payment().methods(), v.payment().cashUntil());
         }
     }
 

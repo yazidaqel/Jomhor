@@ -92,4 +92,15 @@ class MessageCopyTest {
         assertThat(MessageCopy.deadline(at, "Europe/Paris", "ar")).startsWith("1 ").endsWith(" 21:30")
                 .doesNotContainPattern("[\\x{0660}-\\x{0669}]");
     }
+
+    @Test
+    void anInstallmentDateIsTheDayInTheVenueZone() {
+        Instant at = Instant.parse("2027-04-30T22:30:00Z"); // already 1 May in Paris (UTC+2 in May)
+        assertThat(MessageCopy.date(at, "Europe/Paris", "fr")).isEqualTo("1 mai");
+        assertThat(MessageCopy.date(at, "Europe/Paris", "en")).isEqualTo("1 May");
+        assertThat(MessageCopy.date(at, "Europe/Paris", "ar")).startsWith("1 ")
+                .doesNotContainPattern("[\\x{0660}-\\x{0669}]");
+        assertThat(MessageCopy.text("fr", "push.installment_due.body", Map.of("amount", "300,00 DH", "date", "1 mai")))
+                .isEqualTo("300,00 DH avant le 1 mai");
+    }
 }

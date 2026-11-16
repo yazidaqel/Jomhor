@@ -86,7 +86,10 @@ public class TicketService {
                 .toList();
     }
 
-    /** Gate manifest build: every ticket of the event with id, zone, status and initials only (no name, no phone). */
+    /**
+     * Gate manifest build: every ticket of the event with id, zone, effective status (04 §Passes Effective status) and
+     * initials only (no name, no phone).
+     */
     public List<Ticket.ManifestRow> manifestRows(UUID org, int eventId) {
         return tickets.manifestRows(org, eventId);
     }
@@ -220,7 +223,10 @@ public class TicketService {
                 t.holderName() == null ? null : HolderNames.label(t.holderName()))));
     }
 
-    /** The ticket if {@code holderUserId} holds it (404 otherwise) and it is VALID (409 TICKET_NOT_VALID). */
+    /**
+     * The ticket if {@code holderUserId} holds it (404 otherwise) and its effective status is VALID (409
+     * TICKET_NOT_VALID; a ticket blocked by its suspended pass included): PDF and WhatsApp re-send.
+     */
     public Ticket heldValid(UUID holderUserId, UUID ticketId) {
         Ticket t = tickets.heldBy(holderUserId, ticketId).orElseThrow(() -> ApiException.notFound("Ticket not found"));
         if (t.status() != Ticket.Status.VALID) {

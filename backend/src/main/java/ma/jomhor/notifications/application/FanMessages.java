@@ -24,6 +24,10 @@ public interface FanMessages {
     void enqueueEvent(UUID org, int eventId, FanMessage.Kind kind, List<FanMessage.Channel> channels,
                       Collection<UUID> userIds, Instant at);
 
+    /** One {@code kind} row per pass and channel to the pass's holder (INSTALLMENT_DUE), created_at = {@code at}. */
+    void enqueuePasses(UUID org, Collection<UUID> passIds, FanMessage.Kind kind, List<FanMessage.Channel> channels,
+                       Instant at);
+
     /** The latest created_at of the event's {@code kind} rows; empty when none. */
     Optional<Instant> lastQueued(UUID org, int eventId, FanMessage.Kind kind);
 

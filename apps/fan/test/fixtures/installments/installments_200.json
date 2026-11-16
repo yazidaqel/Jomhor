@@ -1,0 +1,33 @@
+{
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): POST /fan/passes/{id}/installments again: the same live order",
+ "status": 200,
+ "body": {
+  "id": "a3ee57f9-f855-4032-be3f-675eca3f9ec5",
+  "status": "RESERVED",
+  "reserved_until": "2026-11-16T19:34:45.365244Z",
+  "total_mad": 33333,
+  "product": {
+   "id": "83631642-11e5-441b-89dd-a7ac64adf063",
+   "kind": "PASS",
+   "name": "FL-31 Abonnement Tribune Est"
+  },
+  "pass_id": "eaca4d30-f18c-4be0-9fb1-ee056028e2dd",
+  "items": [
+   {
+    "product_id": "83631642-11e5-441b-89dd-a7ac64adf063",
+    "price_category_id": null,
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "FL-31 Abonnement Tribune Est",
+    "qty": 1,
+    "unit_price_mad": 33333,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "group": null
+ }
+}

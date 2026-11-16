@@ -375,7 +375,8 @@ class PassPurchaseApiTest extends PaymentTest {
         assertKeys(json, "$", "passes");
         assertThat(JsonPath.<List<Object>>read(json, "$.passes")).hasSize(2);
         assertKeys(json, "$.passes[0]", "id", "status", "product", "organizer", "series", "zone", "timezone",
-                "holder_label", "created_at", "order_id", "events");
+                "holder_label", "created_at", "order_id", "events", "suspended_at", "installments", "next_due",
+                "pay_order_id");
         // Newest first: the PENDING one, with its purchase order to resume.
         assertThat(JsonPath.<String>read(json, "$.passes[0].id")).isEqualTo(passOf(pending));
         assertThat(JsonPath.<String>read(json, "$.passes[0].status")).isEqualTo("PENDING");

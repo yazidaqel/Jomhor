@@ -181,7 +181,9 @@ function until(c: C, iso: string, now: number) {
 function TicketCard({ t, copy, now, i, leaving, onTransfer, onLeft }: { t: TicketView; i: number } & CardProps) {
   const c = copy.ticketsPage
   const valid = t.status === 'VALID'
-  const status = Object.hasOwn(c, t.status) ? (c as Record<string, string>)[t.status] : t.status
+  // 3b: blocked only by its suspended pass (04 §Passes Effective status, `blocked_by`); a staff block keeps "Bloqué".
+  const passBlocked = t.status === 'BLOCKED' && t.blocked_by === 'PASS'
+  const status = passBlocked ? c.passBlocked : Object.hasOwn(c, t.status) ? (c as Record<string, string>)[t.status] : t.status
   const venue = t.event.venue.city ? `${t.event.venue.name} · ${t.event.venue.city}` : t.event.venue.name
   const live = valid && !t.past
   const label = 'text-[11px] font-semibold uppercase tracking-[1px] text-ticket-muted'
@@ -260,6 +262,12 @@ function TicketCard({ t, copy, now, i, leaving, onTransfer, onLeft }: { t: Ticke
             </span>
             {valid && <span className="text-sm font-medium text-ticket-muted">{t.past ? c.pastChip : until(c, t.event.starts_at, now)}</span>}
           </div>
+          {passBlocked && t.pass_id && !t.past && (
+            <a href={`#pass-${t.pass_id}`} className={`${cta} h-12 bg-ticket-ink text-ticket-paper hover:bg-surface2`}>
+              {c.passPay}
+              <ArrowIcon className="size-5" />
+            </a>
+          )}
           {/* ponytail: a plain download link, so a 404/409 (ticket blocked or gone since the list loaded) saves the JSON
               error as a file. Fix: fetch the PDF, save the blob, and show the error copy on a non-2xx. */}
           {valid && (

@@ -23,11 +23,11 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV30Apply() {
+    void v1ToV32Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30");
+                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32");
     }
 
     /**
@@ -116,6 +116,80 @@ class MigrationsTest extends IntegrationTest {
         jdbcTemplate.update("insert into memberships (organizer_id, user_id, number) values (?, ?, 1)", org, user);
         assertThat(jdbcTemplate.queryForObject("select paid_until from memberships where organizer_id = ?",
                 Object.class, org)).isNull();
+    }
+
+    /**
+     * V31 + V32: the backfill (the statement of the migration file, re-run on this test's passes only) gives each step-3a
+     * pass, CANCELLED ones included (a late success can revive them), a seq 1 from its purchase order, paid when that
+     * order is PAID; INSTALLMENT_DUE needs its
+     * pass and only it has one; max_installments 1-10 and 1 for a MEMBERSHIP; suspended_at exactly when SUSPENDED.
+     */
+    @Test
+    void passInstallmentsBackfillAndChecks() throws Exception {
+        String sql;
+        try (var in = getClass().getResourceAsStream("/db/migration/V32__pass_installments.sql")) {
+            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        int start = sql.indexOf("insert into pass_installments");
+        String backfill = sql.substring(start, sql.indexOf(';', start));
+
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        var zone = jdbcTemplate.queryForObject("insert into zones (organizer_id, venue_id, code, name, capacity) "
+                + "values (?, ?, 'EST', 'Est', 100) returning id", Short.class, org, venue);
+        var series = jdbcTemplate.queryForObject("""
+                insert into event_series (organizer_id, name, starts_on, ends_on)
+                values (?, 'Saison', '2026-08-01', '2027-06-30') returning id""", UUID.class, org);
+        String product = "insert into products (organizer_id, kind, name, price_mad, sales_close_at, quota, series_id, "
+                + "zone_id, valid_until, max_installments) values (?, ?::product_kind, 'P', 150000, "
+                + "now() + interval '1 day', ?, ?, ?, ?, ?) returning id";
+        var passProduct = jdbcTemplate.queryForObject(product, UUID.class, org, "PASS", 3, series, zone, null, 1);
+        for (int bad : new int[] {0, 11}) {
+            assertThatThrownBy(() -> jdbcTemplate.queryForObject(product, UUID.class, org, "PASS", 3, series, zone,
+                    null, bad)).isInstanceOf(DataIntegrityViolationException.class);
+        }
+        var validUntil = Timestamp.from(Instant.now().plus(Duration.ofDays(30)));
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(product, UUID.class, org, "MEMBERSHIP", null, null, null,
+                validUntil, 2)).isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("products_installments");
+
+        // Three step-3a passes, each with its purchase order: PAID, RESERVED, and CANCELLED (EXPIRED).
+        UUID[] passes = new UUID[3];
+        UUID[] orders = new UUID[3];
+        String[][] states = {{"ACTIVE", "PAID"}, {"PENDING", "RESERVED"}, {"CANCELLED", "EXPIRED"}};
+        for (int n = 0; n < 3; n++) {
+            var user = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                    randomPhone());
+            passes[n] = jdbcTemplate.queryForObject("insert into passes (organizer_id, product_id, series_id, user_id, "
+                    + "holder_name, status) values (?, ?, ?, ?, 'Yazid Aqel', ?::pass_status) returning id", UUID.class,
+                    org, passProduct, series, user, states[n][0]);
+            // reserved_until in the future: the expiry job of other classes must leave the RESERVED one alone.
+            orders[n] = jdbcTemplate.queryForObject("insert into orders (organizer_id, pass_id, user_id, channel, "
+                    + "status, total_mad, reserved_until, paid_at) values (?, ?, ?, 'APP', ?::order_status, 150000, "
+                    + "now() + interval '1 day', case when ? = 'PAID' then now() end) returning id", UUID.class,
+                    org, passes[n], user, states[n][1], states[n][1]);
+        }
+        jdbcTemplate.update(backfill + " where p.id = any(?)", (Object) passes);
+        assertThat(jdbcTemplate.queryForList("""
+                select p.status || ':' || i.seq || ':' || i.amount_mad || ':' || (i.due_at = p.created_at) || ':'
+                       || coalesce(i.order_id::text, '-') || ':' || (i.paid_at is not null)
+                from pass_installments i join passes p on p.id = i.pass_id
+                where i.pass_id = any(?) order by p.status""", String.class, (Object) passes))
+                .containsExactly("PENDING:1:150000:true:-:false", "ACTIVE:1:150000:true:" + orders[0] + ":true",
+                        "CANCELLED:1:150000:true:-:false");
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "update passes set status = 'SUSPENDED' where id = ?", passes[0]))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("passes_suspended");
+        jdbcTemplate.update("update passes set status = 'SUSPENDED', suspended_at = now() where id = ?", passes[0]);
+
+        String message = "insert into fan_messages (organizer_id, user_id, channel, kind, pass_id) "
+                + "values (?, gen_random_uuid(), 'PUSH', ?::message_kind, ?)";
+        assertThatThrownBy(() -> jdbcTemplate.update(message, org, "INSTALLMENT_DUE", null))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_subject");
+        assertThatThrownBy(() -> jdbcTemplate.update(message, org, "WAITLIST_OPEN", passes[0]))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("fan_messages_subject");
     }
 
     /**

@@ -74,7 +74,10 @@ public class TicketAdminService {
         return move(org, user, ticketId, reason, Set.of(Ticket.Status.VALID), Ticket.Status.BLOCKED, "ticket.block");
     }
 
-    /** 04 POST /org/tickets/{id}/unblock: BLOCKED → VALID. */
+    /**
+     * 04 POST /org/tickets/{id}/unblock: BLOCKED → VALID, on the stored status. A ticket BLOCKED only through its
+     * suspended pass → 409 TICKET_STATUS, reason PASS_SUSPENDED (the pass's payment unblocks it).
+     */
     @Transactional
     public Tickets.Row unblock(UUID org, UUID user, UUID ticketId, String reason) {
         return move(org, user, ticketId, reason, Set.of(Ticket.Status.BLOCKED), Ticket.Status.VALID, "ticket.unblock");
@@ -109,7 +112,8 @@ public class TicketAdminService {
 
     /**
      * Locks the ticket (another organizer's or unknown → 404); at or after the event's refund_cutoff_at (database
-     * clock) → 409 REFUND_FROZEN; a status outside {@code from} → 409 TICKET_STATUS.
+     * clock) → 409 REFUND_FROZEN; a stored status outside {@code from} → 409 TICKET_STATUS (an unblock of a ticket
+     * BLOCKED only through its suspended pass: status BLOCKED, reason PASS_SUSPENDED).
      */
     private Ticket.Locked lockMovable(UUID org, UUID ticketId, Set<Ticket.Status> from) {
         Ticket.Locked t = tickets.lock(org, ticketId).orElseThrow(() -> ApiException.notFound("Ticket not found"));
@@ -118,6 +122,10 @@ public class TicketAdminService {
             throw new ApiException("REFUND_FROZEN", HttpStatus.CONFLICT, "Tickets can no longer change for this event");
         }
         if (!from.contains(t.status())) {
+            if (t.passBlocked() && from.contains(Ticket.Status.BLOCKED)) {
+                throw new ApiException("TICKET_STATUS", HttpStatus.CONFLICT, "Blocked by its suspended pass",
+                        Map.of("status", Ticket.Status.BLOCKED.name(), "reason", "PASS_SUSPENDED"));
+            }
             throw new ApiException("TICKET_STATUS", HttpStatus.CONFLICT, "Not allowed for this ticket's status",
                     Map.of("status", t.status().name()));
         }

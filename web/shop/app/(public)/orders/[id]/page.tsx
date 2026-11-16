@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { ApiError } from '@/lib/api'
-import { cashOptions } from '@/lib/checkout'
+import { CASH_HOLD_MS, cashOptions } from '@/lib/checkout'
 import { eventPath } from '@/lib/clubs'
 import { getEvent, type Organizer, type ShopEventDetail } from '@/lib/events'
 import { currentSession } from '@/lib/http'
@@ -58,14 +58,29 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   // eslint-disable-next-line react-hooks/purity -- server component: rendered once per request, never re-rendered
   const now = Date.now()
   const p = d.passes
-  const productHead = product && { name: product.name, club: product.organizer, detail: p[product.kind] }
+  // 3b: an installment order reads "Échéance {k}/{n}" where the kind goes, and as its summary line.
+  const step = order.installment && fmt(p.installmentOf, { k: order.installment.seq, n: order.installment.of })
+  const productHead = product && { name: product.name, club: product.organizer, detail: step || p[product.kind] }
+  // An installment order goes back to its pass on W5 (W9 can't help: the pass is held, and often off sale by then).
+  const passHref = order.installment ? (order.pass_id ? `/me/tickets#pass-${order.pass_id}` : '/me/tickets') : null
+  const productCopy =
+    kind &&
+    (order.installment
+      ? { paid: fmt(p.installmentPaid, { k: order.installment.seq, n: order.installment.of }), expired: p.installmentExpired, back: p.installmentBack, tickets: true }
+      : { paid: kind === 'PASS' ? p.paidPASS : p.paidMEMBERSHIP, expired: p.holdExpired, back: p.back, tickets: kind === 'PASS' })
   const productPays =
     productHead &&
     order.status === 'RESERVED' &&
     order.reserved_until &&
     Date.parse(order.reserved_until) > now &&
     order.payment_status == null
-      ? { head: productHead, product, cash: await cashOf(product.id), until: order.reserved_until }
+      ? {
+          head: productHead,
+          product,
+          // An installment order's cash comes from the order alone (no sales close, the product may be off sale).
+          pay: order.installment ? installmentCash(product, now) : cashOptions({ payment_methods: product.payment_methods, ...(await cashOf(product.id)) }, now),
+          until: order.reserved_until,
+        }
       : null
   const group = order.group
   const memberPays =
@@ -98,10 +113,10 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             now={now}
             places={places}
             timezone={product ? product.timezone : (e?.timezone ?? null)}
-            eventHref={product ? passesPath(product.organizer) : e && eventPath(e)}
+            eventHref={product ? (passHref ?? passesPath(product.organizer)) : e && eventPath(e)}
             methods={online}
             member={group?.role === 'MEMBER'}
-            product={kind && { paid: kind === 'PASS' ? p.paidPASS : p.paidMEMBERSHIP, expired: p.holdExpired, back: p.back, tickets: kind === 'PASS' }}
+            product={productCopy}
             copy={{ orderPage: d.orderPage, errors: d.errors, meta: d.meta, steps: d.steps }}
           >
             {order.cash && <CashDetails cash={order.cash} copy={d.orderPage} intl={d.meta.intl} />}
@@ -136,7 +151,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <hr className="border-border" />
         {order.items.map((i) => (
           <p key={i.price_category_id} className="flex justify-between gap-3 text-sm">
-            <span>{fmt(d.orderPage.line, { qty: i.qty, name: i.name })}</span>
+            <span>{step || fmt(d.orderPage.line, { qty: i.qty, name: i.name })}</span>
             <span>{formatDh(i.unit_price_mad * i.qty)}</span>
           </p>
         ))}
@@ -218,6 +233,15 @@ async function cashOf(id: string): Promise<Cash> {
   }
 }
 
+/**
+ * 3b installment order (04 GET /fan/orders/{id} `installment`): the order's own methods; `cash_until` null means only
+ * the `/pay` hold applies (a code valid `now + 24 h`), else it bounds cash as for any order.
+ */
+function installmentCash(product: OrderProduct, now: number) {
+  if (product.cash_until) return cashOptions({ payment_methods: product.payment_methods, cash_until: product.cash_until, sales_close_at: null }, now)
+  return { methods: product.payment_methods, cashLate: false, cashUntil: new Date(now + CASH_HOLD_MS).toISOString() }
+}
+
 /** A product order's header (DESIGN Lot 5 step 3 W4): crest + club name, the product name and its kind. */
 function ProductHead({ name, club, detail, size, title = false }: Head & { size: number; title?: boolean }) {
   const Name = title ? 'h1' : 'p'
@@ -236,12 +260,12 @@ function ProductHead({ name, club, detail, size, title = false }: Head & { size:
 /**
  * W4 product order still RESERVED with no payment attempt (DESIGN Lot 5 step 3, as the split-pay member variant): the
  * product header, the amount, then MemberPay with the order's product methods, time zone and hold copy. Cash only while
- * the live product read gives its `cash_until` (none once off sale).
+ * the live product read gives its `cash_until` (none once off sale); 3b, an installment order's from the order itself.
  */
-function ProductVariant({ head, product, cash, until, order, now, d }: { head: Head; product: OrderProduct; cash: Cash; until: string; order: OrderView; now: number; d: Dictionary }) {
+function ProductVariant({ head, product, pay, until, order, now, d }: { head: Head; product: OrderProduct; pay: ReturnType<typeof cashOptions>; until: string; order: OrderView; now: number; d: Dictionary }) {
   const p = d.passes
   const tz = product.timezone
-  const { methods, cashLate, cashUntil } = cashOptions({ payment_methods: product.payment_methods, ...cash }, now)
+  const { methods, cashLate, cashUntil } = pay
   return (
     <>
       <ProductHead {...head} size={64} title />
@@ -262,7 +286,7 @@ function ProductVariant({ head, product, cash, until, order, now, d }: { head: H
         cashDeadline={formatDateTime(cashUntil, tz, d.meta.intl)}
         copy={{
           checkout: d.checkout,
-          orderPage: { ...d.orderPage, memberBanner: p.holdBanner, memberExpiredTitle: p.holdExpiredTitle, memberExpired: p.holdExpired },
+          orderPage: { ...d.orderPage, memberBanner: p.holdBanner, memberExpiredTitle: p.holdExpiredTitle, memberExpired: order.installment ? p.installmentExpired : p.holdExpired },
           errors: d.errors,
           meta: d.meta,
         }}

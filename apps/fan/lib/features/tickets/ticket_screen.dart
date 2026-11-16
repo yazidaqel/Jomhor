@@ -34,6 +34,7 @@ String ticketStatusText(AppLocalizations l, FanTicket t) => switch (t.status) {
   'VALID' => l.ticketClosed,
   'CANCELLED' => l.ticketCancelled,
   'REFUNDED' => l.ticketRefunded,
+  'BLOCKED' when t.blockedByPass => l.ticketBlockedPass,
   'BLOCKED' => l.ticketBlocked,
   _ => l.ticketNotValid,
 };
@@ -710,23 +711,46 @@ class _TicketCard extends StatelessWidget {
             child: switch ((entry, t.hasQr)) {
               (final entry?, _) => _Entered(ticket: t, entry: entry),
               (null, true) => RotatingQr(ticket: t, now: now),
-              (null, false) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xxl),
-                child: Column(
-                  children: [
-                    const Icon(Icons.qr_code_2_rounded, size: 56, color: JomhorColors.ticketRule),
-                    const SizedBox(height: JomhorSpace.m),
-                    Text(
-                      ticketStatusText(l, t),
-                      key: const Key('ticket.status'),
-                      textAlign: TextAlign.center,
-                      style: JomhorType.h2.copyWith(color: JomhorColors.ticketInk),
-                    ),
-                  ],
-                ),
-              ),
+              (null, false) => _NoQr(ticket: t),
             },
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where the QR would be: the status copy. 3b: a ticket blocked by its suspended pass (`blocked_by` `PASS`) says so,
+/// with "Payer l'échéance" → screen 13.
+class _NoQr extends StatelessWidget {
+  const new({required this.ticket});
+
+  final FanTicket ticket;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final t = ticket;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: JomhorSpace.xxl),
+      child: Column(
+        children: [
+          const Icon(Icons.qr_code_2_rounded, size: 56, color: JomhorColors.ticketRule),
+          const SizedBox(height: JomhorSpace.m),
+          Text(
+            ticketStatusText(l, t),
+            key: const Key('ticket.status'),
+            textAlign: TextAlign.center,
+            style: JomhorType.h2.copyWith(color: JomhorColors.ticketInk),
+          ),
+          if (t.blockedByPass) ...[
+            const SizedBox(height: JomhorSpace.l),
+            FilledButton(
+              key: const Key('ticket.payInstallment'),
+              onPressed: () => context.push('/passes/${t.passId}'),
+              child: Text(l.passPayInstallmentShort),
+            ),
+          ],
         ],
       ),
     );

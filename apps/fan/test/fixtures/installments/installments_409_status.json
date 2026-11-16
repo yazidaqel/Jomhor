@@ -1,0 +1,11 @@
+{
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): POST /fan/passes/{id}/installments on another fan's PENDING pass (installment 1 unpaid)",
+ "status": 409,
+ "body": {
+  "code": "PASS_STATUS",
+  "message": "This pass takes no installment",
+  "details": {
+   "status": "PENDING"
+  }
+ }
+}

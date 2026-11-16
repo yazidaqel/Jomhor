@@ -6,17 +6,19 @@ import 'package:go_router/go_router.dart';
 import 'package:jomhor_fan/app/router.dart';
 import 'package:jomhor_fan/core/push/push.dart';
 import 'package:jomhor_fan/features/inbox/inbox.dart';
+import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
-/// Opens a push's app path ([pushPathOf] already checked it): a ticket is read again first (it may have just been
-/// received), `/` is the Accueil tab, anything else opens over the current screen. Signed out, the router sends the
-/// fan to the login with `from`.
+/// Opens a push's app path ([pushPathOf] already checked it): a ticket or a pass is read again first (it may have
+/// just changed), `/` is the Accueil tab, anything else opens over the current screen. Signed out, the router sends
+/// the fan to the login with `from`.
 void openPushPath(WidgetRef ref, String path) {
   final router = ref.read(routerProvider);
   if (path == '/') return router.go('/');
   if (path.startsWith('/tickets/')) ref.invalidate(ticketsProvider);
+  if (path.startsWith('/passes/')) ref.invalidate(passesProvider); // INSTALLMENT_DUE: the schedule as it is now.
   unawaited(router.push(path));
 }
 

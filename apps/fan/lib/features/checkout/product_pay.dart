@@ -12,10 +12,10 @@ import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
 
 /// Screen 4, product variant (DESIGN.md Lot 5 step 3): a pass or membership order, RESERVED with no attempt or a
-/// FAILED one. The hold, one summary line (the product's name; no zone, quantity or friend rows), the holder, the
-/// screen 4 method rows from the order's `product` (`payment_methods`, `cash_until`), and the CTA. Card and wallet
-/// open the hosted page, cash gets a code ([RePay]); the order screen then shows the code, "paiement en cours" or the paid view. Amounts are the
-/// order's, as the server sent them.
+/// FAILED one. The hold, one summary line (the product's name, or 3b "Échéance {k}/{n}"; no zone, quantity or friend
+/// rows), the holder, the screen 4 method rows from the order's `product` (`payment_methods`, `cash_until`), and the
+/// CTA. Card and wallet open the hosted page, cash gets a code ([RePay]); the order screen then shows the code,
+/// "paiement en cours" or the paid view. Amounts are the order's, as the server sent them.
 class ProductPay extends ConsumerStatefulWidget {
   const new({required this.view, super.key});
 
@@ -36,8 +36,11 @@ class _ProductPayState extends ConsumerState<ProductPay> {
     final view = widget.view;
     final order = view.order;
     final item = order.product!;
-    // Only the cash row's date reads the product (its sales close); off sale (404), 24 h from now on server time.
-    final product = ref.watch(productProvider(item.id)).value;
+    // Only the cash row's date reads the product (its sales close); off sale (404), 24 h from now on server time. A
+    // later installment (3b, seq > 1) is held 24 h whatever the product's sales close: the product is not read.
+    final installment = order.installment;
+    final later = installment != null && installment.seq > 1;
+    final product = later ? null : ref.watch(productProvider(item.id)).value;
     final rePay = ref.watch(rePayProvider(order.id));
     final refused = ref.read(rePayProvider(order.id).notifier).refused;
     final rows = methodRowsOf(
@@ -51,6 +54,11 @@ class _ProductPayState extends ConsumerState<ProductPay> {
     ];
     final selected = enabled.contains(_picked) ? _picked : enabled.firstOrNull;
     final holder = order.items.firstOrNull?.holderLabels.firstOrNull;
+    // 3b: an order that pays an installment says which one ("Échéance 1/3" for the purchase of a plan, then 2/3…).
+    final summary = switch (installment) {
+      (:final seq, of: final n) => l.installmentOf(seq, n),
+      null => item.name,
+    };
     final left = view.left;
 
     return Column(
@@ -81,7 +89,7 @@ class _ProductPayState extends ConsumerState<ProductPay> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _Line(item.name, l.dh(order.totalMad), key: const Key('product.summary')),
+                      _Line(summary, l.dh(order.totalMad), key: const Key('product.summary')),
                       _Line(l.serviceFee, l.dh(0)),
                       const Divider(color: JomhorColors.border),
                       _Line(l.total, l.dh(order.totalMad), strong: true),

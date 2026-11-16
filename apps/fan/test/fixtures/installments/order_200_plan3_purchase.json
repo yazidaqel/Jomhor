@@ -1,0 +1,56 @@
+{
+ "source": "captured from the dev API (FL-31 real run, 2026-11-16, fast clock: 10 min interval, 2 min grace): GET /fan/orders/{id} of the plan's purchase order, RESERVED: installment {1, 3}, cash_until as on /fan/products",
+ "status": 200,
+ "body": {
+  "id": "f5c7bb09-8267-484f-a48d-be886699c7f3",
+  "event_id": null,
+  "channel": "APP",
+  "status": "RESERVED",
+  "payment_status": null,
+  "total_mad": 33334,
+  "reserved_until": "2026-11-16T19:22:29.138127Z",
+  "paid_at": null,
+  "items": [
+   {
+    "product_id": "83631642-11e5-441b-89dd-a7ac64adf063",
+    "price_category_id": null,
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "FL-31 Abonnement Tribune Est",
+    "qty": 1,
+    "unit_price_mad": 33334,
+    "holders": [
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "ticket_ids": [],
+  "payment_method": null,
+  "cash": null,
+  "group": null,
+  "product": {
+   "id": "83631642-11e5-441b-89dd-a7ac64adf063",
+   "kind": "PASS",
+   "name": "FL-31 Abonnement Tribune Est",
+   "organizer": {
+    "slug": "atlas-fc",
+    "name": "ATLAS FC",
+    "crest_url": null
+   },
+   "timezone": "Africa/Casablanca",
+   "payment_methods": [
+    "CARD",
+    "WALLET",
+    "CASH_AGENCY"
+   ],
+   "cash_until": "2027-06-30T10:00:00Z"
+  },
+  "installment": {
+   "seq": 1,
+   "of": 3
+  },
+  "pass_id": "eaca4d30-f18c-4be0-9fb1-ee056028e2dd"
+ }
+}

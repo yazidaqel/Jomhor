@@ -72,7 +72,11 @@ class OrderController {
     /** {@code items}: {@link ItemDto}s, or {@link ProductItemDto}s on a product order (event_id null). */
     record OrderDto(UUID id, Integer eventId, Order.Channel channel, Order.Status status, AttemptStatus paymentStatus,
                     long totalMad, Instant reservedUntil, Instant paidAt, List<?> items, List<UUID> ticketIds,
-                    Order.PaymentMethod paymentMethod, CashDto cash, Object group, ProductDto product, UUID passId) {}
+                    Order.PaymentMethod paymentMethod, CashDto cash, Object group, ProductDto product,
+                    InstallmentDto installment, UUID passId) {}
+
+    /** An installment order's place in its pass's schedule (04 GET /fan/orders/{id}, plan lot-5 3b). */
+    record InstallmentDto(int seq, int of) {}
 
     /** 04 §Club directory organizer, no id. */
     record OrganizerDto(String slug, String name, String crestUrl) {}
@@ -139,7 +143,10 @@ class OrderController {
                 c == null ? null : new CashDto(c.payCode(), c.amountMad(),
                         c.points().stream().map(p -> new CashPointDto(p.name(), p.address(), p.hours())).toList(),
                         c.networks()),
-                group(v.group()), product(v.product()), o.passId());
+                group(v.group()), product(v.product()),
+                v.product() == null || v.product().installment() == null ? null
+                        : new InstallmentDto(v.product().installment().seq(), v.product().installment().of()),
+                o.passId());
     }
 
     private static ProductDto product(ProductService.FanView f) {

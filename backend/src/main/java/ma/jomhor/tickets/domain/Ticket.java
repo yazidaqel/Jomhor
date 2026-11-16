@@ -4,12 +4,14 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * An issued ticket as its holder sees it. Immutable after issue; only {@code status} moves. {@code transferred} is
- * set when this holder transferred it away (it is then CANCELLED), else null. {@code passId}: its order's season pass
- * while the pass's holder holds it (a pass ticket, docs/04-api.md §Passes), else null (a transferred one included).
+ * An issued ticket as its holder sees it. Immutable after issue; only {@code status} moves. {@code status} is the
+ * effective status (docs/04-api.md §Passes Effective status): {@code passBlocked} = BLOCKED only through its suspended
+ * pass (stored VALID). {@code transferred} is set when this holder transferred it away (it is then CANCELLED), else
+ * null. {@code passId}: its order's season pass while the pass's holder holds it (a pass ticket, docs/04-api.md
+ * §Passes), else null (a transferred one included).
  */
 public record Ticket(UUID id, UUID organizerId, int eventId, int zoneId, Status status, String holderName,
-                     String seatLabel, Instant issuedAt, Transferred transferred, UUID passId) {
+                     String seatLabel, Instant issuedAt, Transferred transferred, UUID passId, boolean passBlocked) {
 
     public enum Status { VALID, CANCELLED, REFUNDED, BLOCKED }
 
@@ -31,17 +33,21 @@ public record Ticket(UUID id, UUID organizerId, int eventId, int zoneId, Status 
     }
 
     /**
-     * A ticket locked for a status change: what block, unblock, refund, transfer and re-issue need. {@code holderName}
-     * stays out of logs.
+     * A ticket locked for a status change: what block, unblock, refund, transfer and re-issue need. {@code status} is
+     * the stored one (staff actions); {@code passBlocked}: it reads BLOCKED only through its suspended pass (a
+     * transfer or re-issue needs the effective status VALID). {@code holderName} stays out of logs.
      */
     public record Locked(UUID id, UUID organizerId, int eventId, int zoneId, UUID orderId, UUID priceCategoryId,
-                         Status status, String holderName) {
+                         Status status, String holderName, boolean passBlocked) {
         @Override
         public String toString() {
             return "Locked[" + id + ", " + status + "]";
         }
     }
 
-    /** What a gate manifest carries of a ticket: never the holder's name, phone or id number. */
+    /**
+     * What a gate manifest carries of a ticket: never the holder's name, phone or id number. {@code status} is the
+     * effective status (docs/04-api.md §Passes Effective status).
+     */
     public record ManifestRow(UUID id, int zoneId, Status status, String holderInitials) {}
 }

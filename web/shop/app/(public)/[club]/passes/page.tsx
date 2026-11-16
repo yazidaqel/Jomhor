@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { planText } from '@/lib/checkout'
 import { getClub } from '@/lib/clubs'
 import { currentSession } from '@/lib/http'
 import { fmt, type Dict } from '@/lib/i18n'
@@ -124,6 +125,16 @@ function ProductCard({ product, now, href, d }: { product: Product; now: number;
             </details>
           ) : (
             <p className="text-sm text-text-muted">{matches}</p>
+          )}
+          {/* 3b: how it can be paid, when there is more than one way (the choice is made on W3). */}
+          {product.plans.length > 1 && (
+            <ul aria-label={p.planTitle} className="flex flex-wrap gap-2">
+              {product.plans.map((plan) => (
+                <li key={plan.installments} data-plan={plan.installments} className="rounded-chip border border-border px-3 py-1.5 text-sm font-semibold">
+                  {planText(p, plan)}
+                </li>
+              ))}
+            </ul>
           )}
         </>
       ) : (
