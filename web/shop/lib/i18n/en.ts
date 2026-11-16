@@ -478,6 +478,7 @@ export const en: Dict = {
     planTitle: 'Payment plan',
     planFull: 'In one go · {price}',
     planSplit: 'In {n} payments · {first} then {base} every {days} days',
+    planSplitShort: 'In {n} payments · {first} then {base}',
     schedule: 'Payment schedule',
     installmentOf: 'Instalment {k}/{n}',
     installmentPaid: 'Instalment {k}/{n} paid. Find your season pass and tickets in My tickets.',

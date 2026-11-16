@@ -59,7 +59,7 @@ const rawPass = (over: Record<string, unknown> = {}) => ({
       { id: 13, title: 'ATLAS FC vs Union Rif', event_type: 'FOOTBALL_MATCH', starts_at: '2026-02-21T19:00:00Z' },
     ],
   },
-  plans: [{ installments: 1, amounts_mad: [150000] }],
+  plans: [{ installments: 1, amounts_mad: [150000], interval_days: null }],
   payment_methods: ['CARD', 'CASH_AGENCY'],
   cash_until: '2026-02-28T22:00:00Z',
   // Not in the contract: a backend bug must not leak them.
@@ -81,6 +81,7 @@ const orderProduct = (over: Record<string, unknown> = {}) => ({
   organizer: rawOrganizer(),
   timezone: 'Africa/Casablanca',
   payment_methods: ['CARD', 'WALLET', 'CASH_AGENCY'],
+  cash_until: '2026-02-28T22:00:00Z',
   ...over,
 })
 const productOrder = (over: Record<string, unknown> = {}) => ({
@@ -473,12 +474,22 @@ it('W9 3b: a malformed plan is dropped (amounts, interval_days missing or bad), 
     { installments: 3, amounts_mad: [50000, 50000], interval_days: 30 },
     { installments: 2, amounts_mad: [75000.5, 75000], interval_days: 30 },
     { installments: 4, amounts_mad: [37500, 37500, 37500, 37500] }, // no interval_days: never assumed 30
-    { installments: 5, amounts_mad: [30000, 30000, 30000, 30000, 30000], interval_days: 0 },
+    { installments: 5, amounts_mad: [30000, 30000, 30000, 30000, 30000], interval_days: -1 },
   ]
   routes[`/fan/products?organizer=${ORG}`] = () => json(200, [rawPass({ plans: bad })])
   const h = await w9()
   expect(h).not.toContain('data-plan=')
   for (const n of [3, 2, 4, 5]) expect(h).not.toContain(`En ${n} fois`)
+})
+
+// WS-16 real run: the dev fast clock (PASSES_INSTALLMENT_INTERVAL=10m) answers `interval_days` 0, whole days rounding
+// down. The plan is real: shown, without "tous les 0 jours".
+it('W9 3b: interval_days 0 (under a day) keeps the plan, without the interval', async () => {
+  const plans = [PLANS[0], { installments: 3, amounts_mad: [50002, 49999, 49999], interval_days: 0 }]
+  routes[`/fan/products?organizer=${ORG}`] = () => json(200, [rawPass({ plans })])
+  const h = await w9()
+  expect(h).toContain(`En 3 fois · ${formatDh(50002)} puis ${formatDh(49999)}<`)
+  expect(h).not.toContain('tous les')
 })
 
 it('W9 3b: in full always first, from price_mad; one plan per N', async () => {
@@ -511,7 +522,15 @@ const instReq = (id = PASS_UUID, headers: Record<string, string> = {}) =>
     headers: { origin: 'http://shop.test', cookie: `__Host-jomhor_session=${TOKEN}`, ...headers },
   })
 const instParams = (id = PASS_UUID) => ({ params: Promise.resolve({ id }) })
-const installmentOrder = () => productOrder({ pass_id: PASS_UUID, total_mad: 37499, items: [{ ...productOrder().items[0], unit_price_mad: 37499 }], token: 'SECRET' })
+const installmentOrder = () =>
+  productOrder({
+    pass_id: PASS_UUID,
+    total_mad: 37499,
+    items: [{ ...productOrder().items[0], unit_price_mad: 37499 }],
+    installment: { seq: 2, of: 4 },
+    product: orderProduct({ cash_until: null }),
+    token: 'SECRET',
+  })
 
 it('POST /api/passes/{id}/installments: cross-origin or no Origin → 403, nothing sent; no session → 401; malformed id → 404', async () => {
   expect((await payInstallment(instReq(PASS_UUID, { origin: 'https://evil.test' }), instParams())).status).toBe(403)
@@ -618,6 +637,16 @@ it('W5 3b: paid in full → no schedule, no CTA; paid up in installments → sch
   expect(h.match(new RegExp(fr.passes.schedule, 'g'))).toHaveLength(2) // b and c, not a
   expect(h).not.toContain('Payer l’échéance')
   expect(h.match(new RegExp(fr.passes.resume, 'g'))).toHaveLength(1)
+})
+
+// WS-16 real run: right after the purchase, installment 1 is due at `created_at`, so it had passed by the first W5 read.
+it('W5 3b PENDING: the purchase in progress reads À payer, never En retard', async () => {
+  session = TOKEN
+  const fresh = rawOwned().installments.map((i) => ({ ...i, paid_at: null }))
+  routes['/fan/passes'] = () => json(200, { passes: [rawOwned({ status: 'PENDING', order_id: ORDER_ID, installments: fresh })] })
+  const h = await w5()
+  expect([...h.matchAll(/data-installment="(\w+)"/g)].map((m) => m[1])).toEqual(['due', 'due', 'due', 'due'])
+  expect(h).not.toContain(fr.passes.instLate)
 })
 
 it('W5 3b renders in ar (schedule, banner, CTA)', async () => {

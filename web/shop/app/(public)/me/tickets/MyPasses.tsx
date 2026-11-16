@@ -79,8 +79,12 @@ export function MyPasses({ passes, now, d }: { passes: PassView[]; now: number; 
   )
 }
 
-/** Payée, En retard (its due date has passed) or À payer. */
-const installmentState = (i: Installment, now: number) => (i.paid_at ? 'paid' : Date.parse(i.due_at) <= now ? 'late' : 'due')
+/**
+ * Payée, En retard (its due date has passed) or À payer. A PENDING pass is a purchase being paid: installment 1 is due
+ * at purchase, so nothing reads late until the pass is ACTIVE.
+ */
+const installmentState = (i: Installment, now: number, pending: boolean) =>
+  i.paid_at ? 'paid' : !pending && Date.parse(i.due_at) <= now ? 'late' : 'due'
 
 /** 3b, under a pass's header: the suspension banner, the schedule (in installments only) and "Payer l'échéance". */
 function Schedule({ pass, now, d }: { pass: PassView; now: number; d: Dict }) {
@@ -104,7 +108,7 @@ function Schedule({ pass, now, d }: { pass: PassView; now: number; d: Dict }) {
           </h4>
           <ol className="flex flex-col divide-y divide-border rounded-control border border-border bg-ground">
             {pass.installments.map((i) => {
-              const state = installmentState(i, now)
+              const state = installmentState(i, now, pass.status === 'PENDING')
               return (
                 <li key={i.seq} data-installment={state} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                   <span>{fmt(p.installment, { seq: i.seq, n, amount: formatDh(i.amount_mad), date: formatShortDate(i.due_at, pass.timezone, intl) })}</span>

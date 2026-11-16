@@ -482,6 +482,7 @@ export const fr = {
     planTitle: 'Formule de paiement',
     planFull: 'En une fois · {price}',
     planSplit: 'En {n} fois · {first} puis {base} tous les {days} jours',
+    planSplitShort: 'En {n} fois · {first} puis {base}',
     schedule: 'Échéancier',
     installmentOf: 'Échéance {k}/{n}',
     installmentPaid: 'Échéance {k}/{n} payée. Retrouve ton abonnement et tes billets dans Mes billets.',

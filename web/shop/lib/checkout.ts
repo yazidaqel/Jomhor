@@ -8,11 +8,15 @@ import type { PayMethod, Result } from './order-client'
 import { normalizePhone } from './phone'
 import type { Plan } from './products'
 
-/** 3b plan chip (W9, W3): "En une fois Â· {price}" / "En {n} fois Â· {first} puis {base} tous les {days} jours". */
-export function planText(p: Pick<Dict['passes'], 'planFull' | 'planSplit'>, plan: Plan) {
+/**
+ * 3b plan chip (W9, W3): "En une fois · {price}" / "En {n} fois · {first} puis {base} tous les {days} jours"; an
+ * interval under a day (`interval_days` 0) drops the "tous les" part.
+ */
+export function planText(p: Pick<Dict['passes'], 'planFull' | 'planSplit' | 'planSplitShort'>, plan: Plan) {
   const [first = 0, base = first] = plan.amounts_mad
   if (plan.installments === 1) return fmt(p.planFull, { price: formatDh(first) })
-  return fmt(p.planSplit, { n: plan.installments, first: formatDh(first), base: formatDh(base), days: plan.interval_days ?? '' })
+  const vars = { n: plan.installments, first: formatDh(first), base: formatDh(base), days: plan.interval_days ?? '' }
+  return fmt(plan.interval_days ? p.planSplit : p.planSplitShort, vars)
 }
 
 /** `pays`: the friend pays their own place (04 §Split pay); only read from ticket 2 on, once a phone is typed. */

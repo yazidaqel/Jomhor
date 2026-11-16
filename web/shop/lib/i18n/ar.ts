@@ -480,6 +480,7 @@ export const ar: Dict = {
     planTitle: 'طريقة الخلاص',
     planFull: 'دقة وحدة · {price}',
     planSplit: 'على {n} دفعات · {first} ومن بعد {base} كل {days} يوم',
+    planSplitShort: 'على {n} دفعات · {first} ومن بعد {base}',
     schedule: 'جدول الدفعات',
     installmentOf: 'الدفعة {k}/{n}',
     installmentPaid: 'الدفعة {k}/{n} تخلصات. لقا الاشتراك والتذاكر ديالك فالتذاكر ديالي.',

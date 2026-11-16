@@ -68,7 +68,8 @@ function toPass(v: unknown): PassInfo | null {
 
 /**
  * 04 plans: always in full first (built from `price_mad`), then each N-payment plan (2–10) the backend offers, once per
- * N. One with amounts that aren't N positive integers, or without a positive integer `interval_days`, is dropped.
+ * N. One with amounts that aren't N positive integers, or without a non-negative integer `interval_days`, is dropped (0:
+ * an interval under a day, whole days rounding down, as a demo clock gives).
  */
 function toPlans(v: unknown, price: number): Plan[] {
   const plans: Plan[] = [{ installments: 1, amounts_mad: [price], interval_days: null }]
@@ -76,7 +77,7 @@ function toPlans(v: unknown, price: number): Plan[] {
     const n = int(p.installments)
     const days = int(p.interval_days)
     const amounts = Array.isArray(p.amounts_mad) ? p.amounts_mad.map(int) : []
-    if (!n || n < 2 || n > 10 || !days || days < 1 || amounts.length !== n || amounts.some((a) => a === null || a <= 0)) continue
+    if (!n || n < 2 || n > 10 || days === null || days < 0 || amounts.length !== n || amounts.some((a) => a === null || a <= 0)) continue
     if (!plans.some((q) => q.installments === n)) plans.push({ installments: n, amounts_mad: amounts as number[], interval_days: days })
   }
   return plans
