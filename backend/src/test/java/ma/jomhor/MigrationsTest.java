@@ -23,26 +23,27 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV32Apply() {
+    void v1ToV34Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32");
+                        "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32",
+                        "33", "34");
     }
 
     /**
      * V29 + V30: the new checks were validated against every row there was (none is NOT VALID); an event order still
      * takes its event, a product order (event_id null) is APP or WEB and never a split member; an item is a place or a
-     * product, never both or neither; a PASS category costs 0; products need their kind's fields; one live pass per
+     * product, never both or neither; a PASS category costs 0 (price_categories_free since V34); products need their kind's fields; one live pass per
      * account per series; memberships.paid_until starts null.
      */
     @Test
     void productsPassesAndProductOrders() {
         assertThat(jdbcTemplate.queryForList("""
                 select conname from pg_constraint
-                where conname in ('orders_product', 'order_items_subject', 'price_categories_pass', 'products_kind')
+                where conname in ('orders_product', 'order_items_subject', 'price_categories_free', 'products_kind')
                   and convalidated""", String.class))
-                .containsExactlyInAnyOrder("orders_product", "order_items_subject", "price_categories_pass",
+                .containsExactlyInAnyOrder("orders_product", "order_items_subject", "price_categories_free",
                         "products_kind");
         var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
         var venue = jdbcTemplate.queryForObject(
@@ -62,7 +63,7 @@ class MigrationsTest extends IntegrationTest {
         String category = "insert into price_categories (organizer_id, event_id, zone_id, name, price_mad, quota, "
                 + "audience) values (?, ?, ?, ?, ?, 5, ?::price_audience) returning id";
         assertThatThrownBy(() -> jdbcTemplate.queryForObject(category, UUID.class, org, event, zone, "P", 100, "PASS"))
-                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("price_categories_pass");
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("price_categories_free");
         var pass = jdbcTemplate.queryForObject(category, UUID.class, org, event, zone, "Abonnés", 0, "PASS");
 
         String product = "insert into products (organizer_id, kind, name, price_mad, sales_close_at, quota, series_id, "
@@ -116,6 +117,74 @@ class MigrationsTest extends IntegrationTest {
         jdbcTemplate.update("insert into memberships (organizer_id, user_id, number) values (?, ?, 1)", org, user);
         assertThat(jdbcTemplate.queryForObject("select paid_until from memberships where organizer_id = ?",
                 Object.class, org)).isNull();
+    }
+
+    /**
+     * V33 + V34: price_categories_free replaces price_categories_pass (PASS and INVITE cost 0); orders_invited keeps
+     * invited_by to POS orders of an event with no buyer and no pass; the V34 delete (the statement of the migration
+     * file, re-run on this test's rows only) drops REQUIRED refunds of 0 and keeps DONE ones and every non-zero one.
+     */
+    @Test
+    void invitationsAndZeroAmountRefunds() throws Exception {
+        String sql;
+        try (var in = getClass().getResourceAsStream("/db/migration/V34__invitations.sql")) {
+            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        int start = sql.indexOf("delete from refunds");
+        String delete = sql.substring(start, sql.indexOf(';', start));
+        assertThat(jdbcTemplate.queryForList("""
+                select conname from pg_constraint
+                where conname in ('price_categories_free', 'price_categories_pass', 'orders_invited') and convalidated
+                """, String.class)).containsExactlyInAnyOrder("price_categories_free", "orders_invited");
+
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var venue = jdbcTemplate.queryForObject(
+                "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 100) returning id", UUID.class, org);
+        var zone = jdbcTemplate.queryForObject("insert into zones (organizer_id, venue_id, code, name, capacity) "
+                + "values (?, ?, 'PRESSE', 'Presse', 100) returning id", Short.class, org, venue);
+        Integer event = jdbcTemplate.queryForObject("""
+                insert into events (organizer_id, venue_id, title, starts_at, event_key_enc)
+                values (?, ?, 'Match', now() + interval '1 day', ?) returning id""",
+                Integer.class, org, venue, new byte[32]);
+        var staff = jdbcTemplate.queryForObject(
+                "insert into staff (organizer_id, name, role) values (?, 'Agent', 'OPS') returning id", UUID.class, org);
+        var user = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+
+        String category = "insert into price_categories (organizer_id, event_id, zone_id, name, price_mad, quota, "
+                + "audience) values (?, ?, ?, ?, ?, 5, ?::price_audience) returning id";
+        for (String audience : new String[] {"INVITE", "PASS"}) {
+            assertThatThrownBy(() -> jdbcTemplate.queryForObject(category, UUID.class, org, event, zone, audience, 100,
+                    audience)).as(audience).isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessageContaining("price_categories_free");
+        }
+        var invite = jdbcTemplate.queryForObject(category, UUID.class, org, event, zone, "Presse", 0, "INVITE");
+
+        String order = "insert into orders (organizer_id, event_id, user_id, channel, status, payment_method, "
+                + "total_mad, reserved_until, paid_at, invited_by) values (?, ?, ?, ?::sales_channel, 'PAID', 'FREE', 0, "
+                + "now(), now(), ?) returning id";
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(order, UUID.class, org, event, user, "APP", staff))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("orders_invited");
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(order, UUID.class, org, event, user, "POS", staff))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("orders_invited");
+        var invitation = jdbcTemplate.queryForObject(order, UUID.class, org, event, null, "POS", staff);
+
+        // One ticket per refund (amount, status).
+        Object[][] refunds = {{0, "REQUIRED"}, {0, "DONE"}, {5000, "REQUIRED"}, {5000, "DONE"}};
+        for (Object[] r : refunds) {
+            var ticket = jdbcTemplate.queryForObject("insert into tickets (organizer_id, order_id, event_id, zone_id, "
+                    + "price_category_id, holder_name, holder_initials) values (?, ?, ?, ?, ?, 'Yazid Aqel', 'Y. A.') "
+                    + "returning id", UUID.class, org, invitation, event, zone, invite);
+            boolean done = r[1].equals("DONE");
+            jdbcTemplate.update("insert into refunds (organizer_id, event_id, ticket_id, order_id, amount_mad, reason, "
+                    + "status, requested_by, done_by, done_at, reference) values (?, ?, ?, ?, ?, 'x', "
+                    + "?::refund_status, ?, ?, ?, ?)", org, event, ticket, invitation, r[0], r[1], staff,
+                    done ? staff : null, done ? Timestamp.from(Instant.now()) : null, done ? "ref" : null);
+        }
+        jdbcTemplate.update(delete + " and organizer_id = ?", org);
+        assertThat(jdbcTemplate.queryForList("select amount_mad || ':' || status from refunds where organizer_id = ? "
+                + "order by amount_mad, status", String.class, org))
+                .containsExactly("0:DONE", "5000:REQUIRED", "5000:DONE");
     }
 
     /**

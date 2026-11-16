@@ -91,14 +91,14 @@ public class Inventory {
         return events.listing(eventId).map(e -> new Availability(e.organizerId(), e.title(), e.onSale(), e.soldOut()));
     }
 
-    /** Every category of the event, PASS ones included (an order's view, settle). */
+    /** Every category of the event, PASS and INVITE ones included (an order's view, settle). */
     public List<SalePrice> prices(UUID org, int eventId) {
         return events.prices(org, eventId).stream().map(Inventory::sale).toList();
     }
 
     /**
-     * The categories a fan or a till may buy: PASS ones left out (04 §Passes), so naming one in an order is a 422 on
-     * its price_category_id, and the waitlist's R doesn't count them.
+     * The categories a fan or a till may buy: PASS and INVITE ones left out (04 §Passes, §Invitations), so naming one
+     * in an order is a 422 on its price_category_id, and the waitlist's R doesn't count them.
      */
     public List<SalePrice> salePrices(UUID org, int eventId) {
         return prices(org, eventId).stream().filter(p -> p.audience().sellable()).toList();
@@ -110,13 +110,32 @@ public class Inventory {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public Map<UUID, SalePrice> reserve(UUID org, int eventId, Map<UUID, Integer> qtyByCategory) {
+        return takeAll(org, eventId, qtyByCategory, events::takeSellable);
+    }
+
+    /**
+     * Invitations (04 §Invitations): like reserve, but only INVITE categories (checked in each take's statement, so a
+     * concurrent audience change can't hand out a sellable place for free). A category that doesn't fit, or isn't
+     * INVITE any more, throws SOLD_OUT.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Map<UUID, SalePrice> takeInvite(UUID org, int eventId, Map<UUID, Integer> qtyByCategory) {
+        return takeAll(org, eventId, qtyByCategory, events::takeInvite);
+    }
+
+    private Map<UUID, SalePrice> takeAll(UUID org, int eventId, Map<UUID, Integer> qtyByCategory, Taker taker) {
         Map<UUID, SalePrice> taken = new TreeMap<>();
-        UUID full = take(org, eventId, qtyByCategory, taken);
+        UUID full = take(org, eventId, qtyByCategory, taken, taker);
         if (full != null) {
             throw new ApiException("SOLD_OUT", HttpStatus.CONFLICT, "Not enough places left",
                     Map.of("price_category_id", full.toString()));
         }
         return taken;
+    }
+
+    /** One category's take: Events.takeSellable or Events.takeInvite. */
+    private interface Taker {
+        Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty);
     }
 
     /**
@@ -126,7 +145,7 @@ public class Inventory {
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<Map<UUID, SalePrice>> tryReserve(UUID org, int eventId, Map<UUID, Integer> qtyByCategory) {
         Map<UUID, SalePrice> taken = new TreeMap<>();
-        if (take(org, eventId, qtyByCategory, taken) == null) {
+        if (take(org, eventId, qtyByCategory, taken, events::takeSellable) == null) {
             return Optional.of(taken);
         }
         release(taken.keySet().stream().map(id -> new Hold(org, eventId, id, qtyByCategory.get(id))).toList());
@@ -134,9 +153,10 @@ public class Inventory {
     }
 
     /** Takes in UUID order into {@code taken}; returns the first category that doesn't fit, or null. */
-    private UUID take(UUID org, int eventId, Map<UUID, Integer> qtyByCategory, Map<UUID, SalePrice> taken) {
+    private UUID take(UUID org, int eventId, Map<UUID, Integer> qtyByCategory, Map<UUID, SalePrice> taken,
+                      Taker taker) {
         for (var e : new TreeMap<>(qtyByCategory).entrySet()) {
-            Optional<PriceCategory> row = events.takeSellable(org, eventId, e.getKey(), e.getValue()); // never PASS
+            Optional<PriceCategory> row = taker.take(org, eventId, e.getKey(), e.getValue());
             if (row.isEmpty()) {
                 return e.getKey();
             }

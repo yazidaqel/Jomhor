@@ -97,10 +97,13 @@ public interface Events {
     Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty);
 
     /**
-     * Like take, but never a PASS category (checked in the same statement): fan orders, till sales and late successes,
-     * so a concurrent audience change can't hand a fan a PASS place.
+     * Like take, but only an ALL or MEMBERS category (checked in the same statement): fan orders, till sales and late
+     * successes, so a concurrent audience change can't hand a fan a PASS or INVITE place.
      */
     Optional<PriceCategory> takeSellable(UUID org, int eventId, UUID priceId, int qty);
+
+    /** Like take, but only an INVITE category (checked in the same statement): invitations (04 §Invitations). */
+    Optional<PriceCategory> takeInvite(UUID org, int eventId, UUID priceId, int qty);
 
     /** sold -= qty; false if sold < qty (never happens unless holds and sold disagree). */
     boolean giveBack(UUID org, int eventId, UUID priceId, int qty);

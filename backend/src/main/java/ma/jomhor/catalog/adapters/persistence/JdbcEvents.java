@@ -265,7 +265,7 @@ class JdbcEvents implements Events {
     }
 
     // Public reads. on_sale mirrors forSale's OPEN; remaining = quota - sold, never sold or quota themselves. sold_out
-    // and from_price_mad leave PASS places out (Event.Audience.sellable; the "des" price is ALL only).
+    // and from_price_mad leave PASS and INVITE places out (Event.Audience.sellable; the "des" price is ALL only).
     // Of organizers only slug, name and the crest (04 §Club directory); o.id is its key, so grouping by it is enough.
     private static final String LISTING = """
             select e.id, e.organizer_id, o.slug as organizer_slug, o.name as organizer_name,
@@ -274,7 +274,7 @@ class JdbcEvents implements Events {
                    e.refund_cutoff_at, e.per_account_limit,
                    coalesce(e.status = 'ON_SALE' and now() >= coalesce(e.sale_starts_at, '-infinity')
                             and now() < e.refund_cutoff_at, false) as on_sale,
-                   coalesce(bool_and(pc.sold >= pc.quota) filter (where pc.audience <> 'PASS'), true) as sold_out,
+                   coalesce(bool_and(pc.sold >= pc.quota) filter (where pc.audience in ('ALL','MEMBERS')), true) as sold_out,
                    min(pc.price_mad) filter (where pc.sold < pc.quota and pc.audience = 'ALL') as from_price_mad
             from events e
             join organizers o on o.id = e.organizer_id
@@ -350,7 +350,12 @@ class JdbcEvents implements Events {
 
     @Override
     public Optional<PriceCategory> takeSellable(UUID org, int eventId, UUID priceId, int qty) {
-        return take(org, eventId, priceId, qty, " and audience <> 'PASS'");
+        return take(org, eventId, priceId, qty, " and audience in ('ALL','MEMBERS')");
+    }
+
+    @Override
+    public Optional<PriceCategory> takeInvite(UUID org, int eventId, UUID priceId, int qty) {
+        return take(org, eventId, priceId, qty, " and audience = 'INVITE'");
     }
 
     private Optional<PriceCategory> take(UUID org, int eventId, UUID priceId, int qty, String audience) {

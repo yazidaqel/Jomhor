@@ -129,7 +129,7 @@ public class RoomTicks {
         if (ranking) {
             ranked += entries.rankArrivals(org, r.id(), ranked, RANK_BATCH);
         }
-        boolean soldOut = events.prices(org, r.eventId()).stream().filter(p -> p.audience().sellable()) // no PASS
+        boolean soldOut = events.prices(org, r.eventId()).stream().filter(p -> p.audience().sellable()) // no PASS, INVITE
                 .allMatch(p -> p.sold() >= p.quota());
         int admitted = r.admittedThrough();
         if (status == Status.OPEN && last != null && !soldOut
