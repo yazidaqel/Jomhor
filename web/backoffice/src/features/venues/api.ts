@@ -124,10 +124,10 @@ export function toMapForm(venue: VenueDetail): MapForm {
 export const mapBody = ({ layout, zones }: MapForm): MapBody =>
   layout === NO_LAYOUT ? { layout: null, zones: [] } : { layout, zones: zones.filter((z): z is Placement => z.map_slot !== OFF_MAP) }
 
-/** Keeps the slots that exist in the new layout, takes the others off the map. */
-export function switchLayout(form: MapForm, layout: MapForm['layout']): MapForm {
+/** The saved map in a new layout: keeps the slots that exist there, takes the others off the map. */
+export function switchLayout(saved: MapForm, layout: MapForm['layout']): MapForm {
   const slots = slotIds(layout)
-  return { layout, zones: form.zones.map((z) => ({ ...z, map_slot: slots.includes(z.map_slot) ? z.map_slot : OFF_MAP })) }
+  return { layout, zones: saved.zones.map((z) => ({ ...z, map_slot: slots.includes(z.map_slot) ? z.map_slot : OFF_MAP })) }
 }
 
 export const mapSchema = (t: TFunction) =>

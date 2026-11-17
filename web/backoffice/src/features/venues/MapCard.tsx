@@ -98,7 +98,8 @@ function MapEditor({ venue, initial }: { venue: VenueDetail; initial: MapForm })
               value={field.value}
               onValueChange={(layout: MapForm['layout']) => {
                 form.clearErrors()
-                form.reset(switchLayout(form.getValues(), layout), { keepDefaultValues: true })
+                // From the saved map, so Stade → Théâtre → Stade restores it; manual edits are dropped on a switch.
+                form.reset(switchLayout(initial, layout), { keepDefaultValues: true })
               }}
             >
               <SelectTrigger

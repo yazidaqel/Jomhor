@@ -176,9 +176,9 @@ it('offers a zone the free slots, its own and "Pas sur le plan", never a slot an
 
 it('switching template keeps the shared slot ids, lists the zones that drop off, and "Aucun plan" clears the map', async () => {
   const user = userEvent.setup()
-  const calls = stubApi()
+  // EST saved on Sud-Est, not a CENTER_STAGE slot.
+  const calls = stubApi('ADMIN', { ...venue(), zones: venue().zones.map((z) => (z.code === 'EST' ? { ...z, map_slot: 'SOUTH_EAST' } : z)) })
   await renderVenue()
-  await pick(user, slotOf('EST'), 'Sud-Est') // not a CENTER_STAGE slot
 
   await pick(user, template(), fr.venues.map.layouts.CENTER_STAGE)
   expect(screen.getByText(i18n.t('venues.map.dropped', { codes: 'EST' })).getAttribute('role')).toBe('status')
@@ -206,6 +206,25 @@ it('switching template keeps the shared slot ids, lists the zones that drop off,
   expect(screen.getByText(fr.venues.map.noLayout)).toBeTruthy()
   await user.click(saveButton())
   await waitFor(() => expect(puts(calls).at(-1)!.body).toEqual({ layout: null, zones: [] }))
+})
+
+it('Stade → Théâtre → Stade without saving restores the saved placements; manual edits drop on a switch', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi()
+  await renderVenue()
+  const slots = () => ['EST', 'HONNEUR', 'NORD', 'SUD'].map((c) => slotOf(c).textContent)
+  await pick(user, slotOf('EST'), 'Sud-Est') // a manual edit, lost on the switch
+
+  await pick(user, template(), fr.venues.map.layouts.THEATRE)
+  expect(slots()).toEqual(Array(4).fill(fr.venues.map.off))
+  expect(screen.getByText(i18n.t('venues.map.dropped', { codes: 'EST, HONNEUR, NORD, SUD' }))).toBeTruthy()
+
+  await pick(user, template(), fr.venues.map.layouts.STADIUM)
+  expect(slots()).toEqual(['Est', 'Ouest', 'Nord', 'Sud'])
+  expect(preview().querySelector<HTMLElement>('[data-slot=EAST]')!.textContent).toBe('EST')
+  expect(screen.queryByText(/Quittent le plan/)).toBeNull()
+  expect(saveButton()).toHaveProperty('disabled', true) // back to the saved map
+  expect(puts(calls)).toEqual([])
 })
 
 // 04: the first failing check answers 422 with that one field. `zones[i]` indexes the body: EST, HONNEUR, NORD, SUD.
