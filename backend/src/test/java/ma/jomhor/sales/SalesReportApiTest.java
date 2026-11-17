@@ -79,7 +79,7 @@ class SalesReportApiTest extends PaymentTest {
         String json = body(sales(a, eventId).andExpect(status().isOk()));
         assertThat(statusOf(lapsed)).isEqualTo("RESERVED");
         assertKeys(json, "$", "event_id", "quota", "paid", "held", "awaiting_cash", "refunded", "revenue_mad",
-                "refunded_mad", "zones", "channels", "methods", "refunds_required");
+                "discount_mad", "refunded_mad", "zones", "channels", "methods", "refunds_required");
         assertKeys(json, "$.zones[0]", "zone_id", "code", "name", "quota", "paid", "held", "awaiting_cash", "refunded",
                 "revenue_mad");
         assertKeys(json, "$.methods[0]", "method", "paid", "revenue_mad");

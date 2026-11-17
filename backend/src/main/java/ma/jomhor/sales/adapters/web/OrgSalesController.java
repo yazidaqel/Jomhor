@@ -28,11 +28,11 @@ class OrgSalesController {
     record RefundDto(UUID paymentId, UUID orderId, long amountMad, String reason, Instant at) {}
 
     record SalesDto(int eventId, long quota, long paid, long held, long awaitingCash, long refunded, long revenueMad,
-                    long refundedMad, List<ZoneDto> zones, List<ChannelDto> channels, List<MethodDto> methods,
-                    List<RefundDto> refundsRequired) {
+                    long discountMad, long refundedMad, List<ZoneDto> zones, List<ChannelDto> channels,
+                    List<MethodDto> methods, List<RefundDto> refundsRequired) {
         static SalesDto of(EventSales s) {
             return new SalesDto(s.eventId(), s.quota(), s.paid(), s.held(), s.awaitingCash(), s.refunded(),
-                    s.revenueMad(), s.refundedMad(),
+                    s.revenueMad(), s.discountMad(), s.refundedMad(),
                     s.zones().stream().map(z -> new ZoneDto(z.zoneId(), z.code(), z.name(), z.quota(), z.paid(),
                             z.held(), z.awaitingCash(), z.refunded(), z.revenueMad())).toList(),
                     s.channels().stream().map(c -> new ChannelDto(c.channel(), c.paid(), c.revenueMad())).toList(),

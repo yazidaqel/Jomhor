@@ -22,6 +22,12 @@ public interface PromoCodes {
     /** Inserts {@code p} (id and created_at ignored). Empty: the code is already used in this event, nothing written. */
     Optional<PromoCode> insert(UUID org, PromoCode p);
 
-    /** Writes active, max_uses and per_account_max of {@code p}. */
-    void update(UUID org, PromoCode p);
+    /** Writes active, max_uses and per_account_max; a null argument keeps that column as it is. */
+    void update(UUID org, int eventId, UUID promoId, Boolean active, Integer maxUses, Integer perAccountMax);
+
+    /** The event's active code with this text, its row locked until the end of the transaction. */
+    Optional<PromoCode> lockActive(UUID org, int eventId, String code);
+
+    /** Its uses: orders RESERVED, AWAITING_CASH or PAID with it; {@code buyer} not null = that buyer's orders only. */
+    long uses(UUID org, UUID promoId, UUID buyer);
 }

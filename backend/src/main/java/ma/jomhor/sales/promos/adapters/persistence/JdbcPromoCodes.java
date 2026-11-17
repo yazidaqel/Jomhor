@@ -64,12 +64,34 @@ class JdbcPromoCodes implements PromoCodes {
     }
 
     @Override
-    public void update(UUID org, PromoCode p) {
+    public void update(UUID org, int eventId, UUID promoId, Boolean active, Integer maxUses, Integer perAccountMax) {
         jdbc.sql("""
-                        update promo_codes set active = :active, max_uses = :maxUses, per_account_max = :perAccount
+                        update promo_codes set active = coalesce(cast(:active as boolean), active),
+                          max_uses = coalesce(cast(:maxUses as integer), max_uses),
+                          per_account_max = coalesce(cast(:perAccount as smallint), per_account_max)
                         where organizer_id = :org and event_id = :event and id = :id""")
-                .param("org", org).param("event", p.eventId()).param("id", p.id()).param("active", p.active())
-                .param("maxUses", p.maxUses()).param("perAccount", p.perAccountMax()).update();
+                .param("org", org).param("event", eventId).param("id", promoId).param("active", active)
+                .param("maxUses", maxUses).param("perAccount", perAccountMax).update();
+    }
+
+    // No key update: an order's FK check (key share) on this row doesn't wait for it; the orders with this code do.
+    @Override
+    public Optional<PromoCode> lockActive(UUID org, int eventId, String code) {
+        return jdbc.sql("select " + COLUMNS + " from promo_codes p where p.organizer_id = :org and p.event_id = :event"
+                        + " and p.code = :code and p.active for no key update")
+                .param("org", org).param("event", eventId).param("code", code).query(JdbcPromoCodes::promo).optional();
+    }
+
+    // Index orders (promo_code_id, status).
+    @Override
+    public long uses(UUID org, UUID promoId, UUID buyer) {
+        return jdbc.sql("""
+                        select count(*) from orders
+                        where organizer_id = :org and promo_code_id = :promo
+                          and status in ('RESERVED', 'AWAITING_CASH', 'PAID')
+                          and (cast(:buyer as uuid) is null or user_id = cast(:buyer as uuid))
+                        """)
+                .param("org", org).param("promo", promoId).param("buyer", buyer).query(Long.class).single();
     }
 
     private static Listed listed(ResultSet rs, int n) throws SQLException {

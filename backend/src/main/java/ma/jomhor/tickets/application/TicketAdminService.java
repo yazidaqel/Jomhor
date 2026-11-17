@@ -14,6 +14,7 @@ import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.web.ApiException;
 import ma.jomhor.payments.application.RefundService;
 import ma.jomhor.payments.domain.CashCode;
+import ma.jomhor.sales.promos.domain.Discount;
 import ma.jomhor.tickets.domain.Ticket;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -86,7 +87,8 @@ public class TicketAdminService {
 
     /**
      * 04 POST /org/tickets/{id}/refund: VALID or BLOCKED → REFUNDED, its place released (sold − 1) and a REQUIRED
-     * refund of the item's unit price (none when that is 0), in one transaction. The order stays PAID, and the place
+     * refund of what the place cost (04 §Promo codes Refunds: the unit price, less its share of the order's discount;
+     * none when that is 0), in one transaction. The order stays PAID, and the place
      * no longer counts in its buyer's per_account_limit (plan lot-5 Q175, sales' Orders.held).
      */
     @Transactional
@@ -95,7 +97,8 @@ public class TicketAdminService {
         Ticket.Locked t = lockMovable(org, ticketId, Set.of(Ticket.Status.VALID, Ticket.Status.BLOCKED));
         tickets.setStatus(org, ticketId, Ticket.Status.REFUNDED);
         inventory.release(List.of(new Inventory.Hold(org, t.eventId(), t.priceCategoryId(), 1)));
-        long amountMad = tickets.row(org, ticketId).orElseThrow().unitPriceMad();
+        Tickets.Row row = tickets.row(org, ticketId).orElseThrow();
+        long amountMad = Discount.refund(row.unitPriceMad(), row.orderTotalMad(), row.orderDiscountMad());
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("reason", r);
         if (amountMad > 0) { // 04 Lot 5 step 4: a FREE place (pass ticket, invitation) owes nothing, so no refunds row

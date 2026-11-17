@@ -87,7 +87,7 @@ public interface Tickets {
     record Row(UUID id, Ticket.Status status, int zoneId, String zoneCode, String zoneName, String holderName,
                long unitPriceMad, UUID orderId, String channel, String paymentMethod, Instant issuedAt,
                UUID refundId, String refundStatus, Long refundAmountMad, UUID transferredTo, UUID transferredFrom,
-               boolean passBlocked, String passStatus) {
+               boolean passBlocked, String passStatus, long orderTotalMad, long orderDiscountMad) {
         @Override
         public String toString() {
             return "Row[" + id + ", " + status + "]";

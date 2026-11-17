@@ -1,6 +1,7 @@
 package ma.jomhor.sales;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,8 +9,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import ma.jomhor.catalog.OrgApiTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.ResultActions;
@@ -185,10 +190,11 @@ class PromoCodeOrgApiTest extends OrgApiTest {
         json = body(update(a, e, id, "{\"max_uses\": null, \"active\": true}").andExpect(status().isOk()));
         assertThat(JsonPath.<Integer>read(json, "$.max_uses")).isEqualTo(5);
         assertThat(JsonPath.<Boolean>read(json, "$.active")).isTrue();
-        // The fixed fields sent unchanged are accepted.
+        // The fixed fields and a value sent unchanged are accepted, with no write and no audit.
         update(a, e, id, """
                 {"code": "abonnes20", "kind": "PERCENT", "percent": 20, "price_category_id": "%s"}"""
                 .formatted(s.plein())).andExpect(status().isOk());
+        update(a, e, id, "{\"active\": true, \"max_uses\": 5}").andExpect(status().isOk());
 
         refused(update(a, e, id, "{\"code\": \"OTHER20\"}"), "code");
         refused(update(a, e, id, "{\"kind\": \"AMOUNT\"}"), "kind");
@@ -206,8 +212,54 @@ class PromoCodeOrgApiTest extends OrgApiTest {
 
         List<String> audits = jdbc.sql("select payload::text from audit_log where action = 'promo.update' and target = ?"
                 + " order by id").param(id).query(String.class).list();
-        assertThat(audits).hasSize(4);
+        assertThat(audits).hasSize(3);
         assertKeys(audits.get(0), "$", "max_uses", "per_account_max", "active");
+    }
+
+    /** Each PATCH writes only its own field: two at once on different fields both survive. */
+    @Test
+    void concurrentPatchesOfDifferentFieldsBothSurvive() throws Exception {
+        Setup s = setup();
+        Caller a = s.admin();
+        Caller ops = caller(a.org(), "OPS");
+        int e = s.event();
+        String id = JsonPath.read(body(create(a, e, "{\"code\": \"RACE1\", \"kind\": \"PERCENT\", \"percent\": 5}")
+                .andExpect(status().isCreated())), "$.id");
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            for (int round = 1; round <= 10; round++) {
+                boolean active = round % 2 == 0;
+                int maxUses = 10 + round;
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<Integer>> done = new ArrayList<>();
+                done.add(pool.submit(() -> {
+                    start.await();
+                    return update(a, e, id, "{\"active\": %s}".formatted(active)).andReturn().getResponse().getStatus();
+                }));
+                done.add(pool.submit(() -> {
+                    start.await();
+                    return update(ops, e, id, "{\"max_uses\": %d}".formatted(maxUses)).andReturn().getResponse()
+                            .getStatus();
+                }));
+                start.countDown();
+                for (Future<Integer> f : done) {
+                    assertThat(f.get()).isEqualTo(200);
+                }
+                assertThat(jdbc.sql("select active || ':' || max_uses from promo_codes where id = ?::uuid").param(id)
+                        .query(String.class).single()).as("round " + round).isEqualTo(active + ":" + maxUses);
+            }
+        }
+    }
+
+    /** 04 prices DELETE: a category a promo code targets is in use, even unsold. */
+    @Test
+    void aCategoryWithACodeCantBeDeleted() throws Exception {
+        Setup s = setup();
+        create(s.admin(), s.event(), """
+                {"code": "TARGET1", "kind": "PERCENT", "percent": 5, "price_category_id": "%s"}"""
+                .formatted(s.plein())).andExpect(status().isCreated());
+        call(s.admin(), delete("/org/events/" + s.event() + "/prices/" + s.plein()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PRICE_IN_USE"));
+        call(s.admin(), delete("/org/events/" + s.event() + "/prices/" + s.pass())).andExpect(status().isNoContent());
     }
 
     @Test

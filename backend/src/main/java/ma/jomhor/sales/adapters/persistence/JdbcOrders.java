@@ -22,8 +22,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcOrders implements Orders {
 
-    private static final String ORDER_COLUMNS =
-            "id, organizer_id, event_id, user_id, channel, status, total_mad, reserved_until, paid_at, group_order_id, pass_id";
+    // promo_code: the code's text (promo_codes.id is the key; the order's organizer wrote it from its own codes).
+    private static final String ORDER_COLUMNS = """
+            id, organizer_id, event_id, user_id, channel, status, total_mad, reserved_until, paid_at, group_order_id,
+            pass_id, discount_mad, (select p.code from promo_codes p where p.id = promo_code_id) as promo_code""";
 
     private final JdbcClient jdbc;
 
@@ -111,13 +113,15 @@ class JdbcOrders implements Orders {
 
     @Override
     public Order insert(UUID org, int eventId, UUID userId, Order.Channel channel, long totalMad,
-                        List<Order.Item> items) {
+                        List<Order.Item> items, UUID promoCodeId, long discountMad) {
         Order order = jdbc.sql("""
-                        insert into orders (organizer_id, event_id, user_id, channel, total_mad, reserved_until)
-                        values (:org, :event, :user, cast(:channel as sales_channel), :total, now() + interval '8 minutes')
+                        insert into orders (organizer_id, event_id, user_id, channel, total_mad, reserved_until,
+                                            promo_code_id, discount_mad)
+                        values (:org, :event, :user, cast(:channel as sales_channel), :total, now() + interval '8 minutes',
+                                :promo, :discount)
                         returning\s""" + ORDER_COLUMNS)
                 .param("org", org).param("event", eventId).param("user", userId).param("channel", channel.name())
-                .param("total", totalMad)
+                .param("total", totalMad).param("promo", promoCodeId).param("discount", discountMad)
                 .query((rs, n) -> order(rs, items)).single();
         insertItems(org, order.id(), items);
         return order;
@@ -231,6 +235,7 @@ class JdbcOrders implements Orders {
         return jdbc.sql("""
                         select o.id, o.organizer_id, o.event_id, o.user_id, o.channel, o.status, o.total_mad,
                                o.reserved_until, o.paid_at, o.group_order_id, o.pass_id, o.created_at,
+                               o.discount_mad, null as promo_code,
                                s.id as staff_id, s.name as staff_name
                         from orders o join staff s on s.id = o.invited_by and s.organizer_id = o.organizer_id
                         where o.organizer_id = :org and o.event_id = :event and o.invited_by is not null
@@ -508,7 +513,8 @@ class JdbcOrders implements Orders {
                 rs.getObject("event_id", Integer.class), rs.getObject("user_id", UUID.class),
                 Order.Channel.valueOf(rs.getString("channel")), Order.Status.valueOf(rs.getString("status")),
                 rs.getLong("total_mad"), instant(rs, "reserved_until"), instant(rs, "paid_at"),
-                rs.getObject("group_order_id", UUID.class), rs.getObject("pass_id", UUID.class), items);
+                rs.getObject("group_order_id", UUID.class), rs.getObject("pass_id", UUID.class),
+                rs.getString("promo_code"), rs.getLong("discount_mad"), items);
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -535,6 +541,15 @@ class JdbcOrders implements Orders {
                         rs.getString("payment_method"), rs.getLong("paid"), rs.getLong("held"),
                         rs.getLong("awaiting_cash"), rs.getLong("revenue_mad")))
                 .list();
+    }
+
+    @Override
+    public long discountMad(UUID org, int eventId) {
+        return jdbc.sql("""
+                        select coalesce(sum(discount_mad), 0) from orders
+                        where organizer_id = :org and event_id = :event and status = 'PAID'
+                        """)
+                .param("org", org).param("event", eventId).query(Long.class).single();
     }
 
     // audit_log (common) written by PaymentService.refundRequired, whose payload keys this reads; the event comes

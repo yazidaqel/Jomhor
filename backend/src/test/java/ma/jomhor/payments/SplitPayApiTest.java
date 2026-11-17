@@ -130,7 +130,8 @@ class SplitPayApiTest extends PaymentTest {
         Sale s = onSale(10);
         Fans f = fans();
         String json = split(f, s);
-        assertKeys(json, "$", "id", "status", "reserved_until", "total_mad", "items", "group");
+        assertKeys(json, "$", "id", "status", "reserved_until", "total_mad", "items", "group", "promo_code",
+                "discount_mad");
         String buyer = JsonPath.read(json, "$.id");
         assertThat(JsonPath.<Integer>read(json, "$.total_mad")).isEqualTo(5000);
         assertThat(JsonPath.<Integer>read(json, "$.items[0].qty")).isEqualTo(1);

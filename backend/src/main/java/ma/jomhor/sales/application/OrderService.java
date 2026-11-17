@@ -30,6 +30,8 @@ import ma.jomhor.sales.domain.Order;
 import ma.jomhor.sales.products.application.PassService;
 import ma.jomhor.sales.products.application.ProductService;
 import ma.jomhor.sales.products.domain.Product;
+import ma.jomhor.sales.promos.application.PromoCodeService;
+import ma.jomhor.sales.promos.domain.PromoCode;
 import ma.jomhor.sales.rooms.application.QueueService;
 import ma.jomhor.sales.rooms.domain.WaitingRoom;
 import ma.jomhor.tenancy.application.UserService;
@@ -52,14 +54,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  * rows (a split, 04 §Split pay) → the buyer lock → price categories in UUID order. Placing an order (online or at a
  * till, or an invitation, which first takes its invitation_id lock, {@link Orders#lockInvitationId}) takes the
  * holders' users rows (sorted phones) → the per-account locks (online: the buyer, split members and every holder
- * account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till or for an invitation) →
- * categories; the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
+ * account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till or for an invitation) → the
+ * promo code's row (online, with a code: {@link PromoCodeService#claim}) → categories; the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
  * ticket row → the recipient's users row → the recipient's per-account lock ({@link HolderLimit}) and no category.
  * A product order (04 §Products) takes no per-account order lock and no category; settling a MEMBERSHIP one takes the
  * organizer's membership lock after the order row. A PASS purchase takes the account's series lock → the product row
  * → the pass; its late success the order row → the same ({@link PassService}); the expiry its order rows → the
  * products (id order) → the passes. Settling an installment order takes the order row → the pass row; POST
- * /fan/passes/{id}/installments the pass row, then inserts its order. So none of them waits in a circle.
+ * /fan/passes/{id}/installments the pass row, then inserts its order. Nothing else locks a promo code row (expiry,
+ * late success, refund and transfer never touch it). So none of them waits in a circle.
  */
 @Service
 public class OrderService {
@@ -135,6 +138,7 @@ public class OrderService {
     private final MembershipService memberships;
     private final ProductService products;
     private final PassService passes;
+    private final PromoCodeService promos;
     private final TransactionTemplate tx;
     private final long maxActiveHolds;
     private final Duration splitHold;
@@ -147,7 +151,8 @@ public class OrderService {
     public OrderService(Orders orders, Inventory inventory, TicketService tickets, PendingPayments pendingPayments,
                         CashInstructions cashInstructions, UserService users, TicketDeliveryService deliveries,
                         FanMessageQueue queue, QueueService rooms, MembershipService memberships,
-                        ProductService products, PassService passes, PlatformTransactionManager transactions,
+                        ProductService products, PassService passes, PromoCodeService promos,
+                        PlatformTransactionManager transactions,
                         @Value("${sales.max-active-holds-per-event}") long maxActiveHolds,
                         @Value("${sales.split.hold}") Duration splitHold,
                         @Value("${payments.return-url.web}") String payUrl) {
@@ -163,6 +168,7 @@ public class OrderService {
         this.memberships = memberships;
         this.products = products;
         this.passes = passes;
+        this.promos = promos;
         this.tx = new TransactionTemplate(transactions);
         this.maxActiveHolds = maxActiveHolds;
         this.splitHold = splitHold;
@@ -177,7 +183,8 @@ public class OrderService {
      * queue (429 SALE_BUSY), per-account limit (409: the buyer, then each split member), holder limit (409
      * PER_ACCOUNT_LIMIT HOLDER, {@link #checkHolders}), the live room's eligibility rule for each split {@code pays}
      * member (409 NOT_ELIGIBLE whose details are {@code field} alone: no reason or rule figure about another phone's
-     * account), members-only places (409 MEMBERS_ONLY, {@link #checkMembers}), quota (409 SOLD_OUT). Holder phones'
+     * account), members-only places (409 MEMBERS_ONLY, {@link #checkMembers}), the promo code (409 PROMO_REFUSED,
+     * {@link PromoCodeService#claim}), quota (409 SOLD_OUT). Holder phones'
      * accounts are found or created before any lock (they roll back with the order). A member's refusal carries only
      * {@code field}, never why, but pass or fail is still a yes/no signal: whether that phone has an account meeting
      * the room's rule (a phone with no account gets a fresh one, which an account-age rule refuses). The per-account
@@ -187,16 +194,25 @@ public class OrderService {
      * <p>Split pay (04 §Split pay Orders): one reservation for every place; the buyer's order holds the places
      * without {@code pays}, and each distinct {@code pays} phone gets a member order of its places, RESERVED until
      * the buyer's reserved_until.
+     *
+     * <p>{@code promoCode} (normalized by the controller with the body's shape, null: none) applies to the buyer's
+     * order only (04 §Promo codes): {@code total_mad} is after its discount, split member orders pay full price.
      */
     public View place(UUID userId, int eventId, Order.Channel channel, String admissionToken,
-                      List<ItemRequest> items) {
+                      List<ItemRequest> items, String promoCode) {
         WaitingRoom room = rooms.requireAdmission(userId, eventId, admissionToken).orElse(null);
-        return tx.execute(s -> placeAdmitted(userId, eventId, channel, items, room));
+        return tx.execute(s -> placeAdmitted(userId, eventId, channel, items, room, promoCode));
+    }
+
+    /** {@link #place} without a promo code. */
+    public View place(UUID userId, int eventId, Order.Channel channel, String admissionToken,
+                      List<ItemRequest> items) {
+        return place(userId, eventId, channel, admissionToken, items, null);
     }
 
     /** {@link #place} after admission; {@code room}: the live waiting room, or null. */
     private View placeAdmitted(UUID userId, int eventId, Order.Channel channel, List<ItemRequest> items,
-                               WaitingRoom room) {
+                               WaitingRoom room, String promoCode) {
         Inventory.SaleEvent event = inventory.saleEvent(eventId)
                 .orElseThrow(() -> ApiException.notFound("Event not found"));
         if (event.window() != Inventory.SaleWindow.OPEN) {
@@ -252,10 +268,16 @@ public class OrderService {
             }
         }
         checkMembers(org, event.saleStartsAt(), prices, items, checked.holders(), byPhone, userId);
+        // The code's row lock, after the per-account locks and before the categories; refused before any write.
+        PromoCode promo = promoCode == null ? null : promos.claim(org, eventId, userId, promoCode,
+                lines(items, checked.holders(), prices, byPhone, userId, h -> !h.pays()));
 
         Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, checked.qty());
         List<Order.Item> own = lines(items, checked.holders(), taken, byPhone, userId, h -> !h.pays());
-        Order buyer = orders.insert(org, eventId, userId, channel, total(own), own);
+        // At the reserved prices (a price changed since the claim is refused with the order rolled back).
+        long discount = promo == null ? 0 : promos.discount(promo, own);
+        Order buyer = orders.insert(org, eventId, userId, channel, total(own) - discount, own,
+                promo == null ? null : promo.id(), discount);
         for (String phone : payers.keySet()) {
             List<Order.Item> theirs = lines(items, checked.holders(), taken, byPhone, userId,
                     h -> h.pays() && h.phone().equals(phone));
@@ -707,6 +729,8 @@ public class OrderService {
     /** Takes the expired order's places again; null if done, else why not. A product order holds no place. */
     // ponytail: re-checks the buyer limit only, not the holder limit (plan lot-5 Q173); a holder over it after a late
     // success is rare (a manual refund otherwise). Check holders here too, under their locks, if it ever shows.
+    // ponytail: nor a promo code's max_uses or per_account_max (04 §Promo codes Caps): a late success keeps its
+    // discount and can pass a cap (rare; the fan paid the discounted total). Claim the code row here if it matters.
     private Settlement reReserve(Order o) {
         if (o.eventId() == null) {
             return null;
