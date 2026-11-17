@@ -35,7 +35,8 @@ const me = (role: Role): Me => ({
 })
 const venue = (timezone: string): Venue => ({ id: 'v-1', name: 'Grand Stade', city: 'Casablanca', capacity: 45000, timezone })
 
-// source: contract (04 /org/finance/cash; Lot 5 step 5 `deposit` per session and `totals.undeposited_mad`).
+// Lot 3 figures; the Lot 5 step 5 fields in the shape the real API sent (BO-27 real run, event 59): `deposit`
+// {id, reference, deposited_on} on a deposited session, null otherwise, and `totals.undeposited_mad`.
 const REPORT: CashReport = {
   from: '2026-11-01T00:00:00Z',
   to: '2026-11-08T00:00:00Z',
@@ -58,7 +59,7 @@ const REPORT: CashReport = {
       expected_mad: 100_050,
       declared_mad: 99_050,
       variance_mad: -1000,
-      deposit: { id: 'd-1', reference: 'Bordereau 448812', deposited_on: '2026-11-04' },
+      deposit: { id: 'a4399f80-a9d0-4dec-b8e0-d927f54bf70c', reference: 'BO-27 160249', deposited_on: '2026-11-17' },
     },
     {
       id: 's-2',
@@ -185,7 +186,7 @@ it('FINANCE opens Finance › Encaissements: last 7 local days, per day × colle
 
   const sessions = within(section(fr.finance.cash.sessions.title)).getAllByRole('row').slice(1)
   expect(sessions.map(cells)).toEqual([
-    ['Guichet 1', 'Karim', at('2026-11-03T08:00:00Z'), at('2026-11-03T18:00:00Z'), '10', dh(100_050), dh(99_050), spaced(i18n.t('sales.amount', { amount: formatDh(-1000, 'fr', 'exceptZero') })), `Bordereau 448812 · ${day('2026-11-04')}`],
+    ['Guichet 1', 'Karim', at('2026-11-03T08:00:00Z'), at('2026-11-03T18:00:00Z'), '10', dh(100_050), dh(99_050), spaced(i18n.t('sales.amount', { amount: formatDh(-1000, 'fr', 'exceptZero') })), `BO-27 160249 · ${day('2026-11-17')}`],
     ['Guichet 2', 'Nadia', at('2026-11-03T08:05:00Z'), at('2026-11-03T18:10:00Z'), '2', dh(25_000), dh(25_000), fr.finance.cash.noGap, fr.finance.cash.sessions.notDeposited],
     ['Guichet 1', 'Karim', at('2026-11-04T08:00:00Z'), fr.finance.cash.sessions.open, '0', dh(0), fr.finance.cash.sessions.atClose, fr.finance.cash.sessions.atClose, fr.finance.cash.sessions.noDeposit],
     ['Guichet 3', 'Nadia', at('2026-11-04T09:00:00Z'), at('2026-11-04T17:00:00Z'), '1', dh(10_000), dh(10_500), spaced(i18n.t('sales.amount', { amount: formatDh(500, 'fr', 'exceptZero') })), fr.finance.cash.sessions.notDeposited],

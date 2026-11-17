@@ -33,39 +33,18 @@ const me = (role: Role): Me => ({
   memberships: [{ organizer_id: 'org-a', organizer_name: 'Atlas FC', role }],
 })
 
-// source: contract (04 §Finance, GET /org/finance/deposits; demo 5a: Guichet Nord closed at 700 DH, Guichet Sud at 300 DH).
-const NORD: DepositSession = { id: 's-nord', label: 'Guichet Nord', staff: { id: 'st-1', name: 'Salma' }, closed_at: '2026-11-25T18:00:00Z', declared_mad: 70_000 }
-const SUD: DepositSession = { id: 's-sud', label: 'Guichet Sud', staff: { id: 'st-2', name: 'Omar' }, closed_at: '2026-11-25T18:30:00Z', declared_mad: 30_000 }
-const EST: DepositSession = { id: 's-est', label: 'Guichet Est', staff: { id: 'st-2', name: 'Omar' }, closed_at: '2026-11-20T18:00:00Z', declared_mad: 50_000 }
-const LIVE: Deposit = {
-  id: 'd-2',
-  deposited_on: '2026-11-21',
-  amount_mad: 50_000,
-  reference: 'Bordereau 448700',
-  recorded_by: { id: 'u-2', name: 'Nadia' },
-  recorded_at: '2026-11-21T10:00:00Z',
-  voided_at: null,
-  voided_by: null,
-  void_reason: null,
-  sessions: [EST],
-  declared_mad: 50_000,
-  variance_mad: 0,
-}
-const VOIDED: Deposit = {
-  ...LIVE,
-  id: 'd-1',
-  deposited_on: '2026-11-20',
-  amount_mad: 49_000,
-  reference: 'Bordereau 448699',
-  voided_at: '2026-11-20T12:00:00Z',
-  voided_by: { id: 'u-1', name: 'Samira' },
-  void_reason: 'montant mal saisi',
-  sessions: [],
-  declared_mad: null,
-  variance_mad: null,
-}
-const GAP: Deposit = { ...LIVE, id: 'd-3', deposited_on: '2026-11-22', amount_mad: 49_000, reference: 'Bordereau 448750', variance_mad: -1000 }
-const DEPOSITS: Deposits = { deposits: [GAP, LIVE, VOIDED], undeposited: [NORD, SUD] }
+// Answers captured from the real API (BO-27 real run, recipe `backend/http/lot5-cash-crm.http`, event 59): Guichet
+// Nord (Caissier Dev) closed at 800 DH (3 places, a 250 DH cash code, a 100 DH pass code), Guichet Sud (Ops Dev) at
+// 300 DH. `undeposited` keeps these two (the real list also held earlier runs' sessions).
+const NORD: DepositSession = {"id": "73dba7ae-0f0b-4ff5-bd43-0701cedfecd0", "label": "Guichet Nord", "staff": {"id": "a7a5fc00-0000-4000-8000-000000000202", "name": "Caissier Dev"}, "closed_at": "2026-11-17T16:02:50.495684Z", "declared_mad": 80000}
+const SUD: DepositSession = {"id": "0b21acce-f9b9-4dbb-894b-d28e6117d9af", "label": "Guichet Sud", "staff": {"id": "a7a5fc00-0000-4000-8000-000000000203", "name": "Ops Dev"}, "closed_at": "2026-11-17T16:02:50.699245Z", "declared_mad": 30000}
+const CREATED: Deposit = {"id": "a4399f80-a9d0-4dec-b8e0-d927f54bf70c", "deposited_on": "2026-11-17", "amount_mad": 109000, "reference": "BO-27 160249", "recorded_by": {"id": "a7a5fc00-0000-4000-8000-000000000204", "name": "Finance Dev"}, "recorded_at": "2026-11-17T16:02:50.896151Z", "voided_at": null, "voided_by": null, "void_reason": null, "sessions": [{"id": "73dba7ae-0f0b-4ff5-bd43-0701cedfecd0", "label": "Guichet Nord", "staff": {"id": "a7a5fc00-0000-4000-8000-000000000202", "name": "Caissier Dev"}, "closed_at": "2026-11-17T16:02:50.495684Z", "declared_mad": 80000}, {"id": "0b21acce-f9b9-4dbb-894b-d28e6117d9af", "label": "Guichet Sud", "staff": {"id": "a7a5fc00-0000-4000-8000-000000000203", "name": "Ops Dev"}, "closed_at": "2026-11-17T16:02:50.699245Z", "declared_mad": 30000}], "declared_mad": 110000, "variance_mad": -1000} // 4.3: 1 090 DH over 1 100 DH declared
+const LIVE: Deposit = {"id": "d3e40b33-0c19-4d97-9891-1fe6025a433f", "deposited_on": "2026-11-17", "amount_mad": 110000, "reference": "BO-27 160249", "recorded_by": {"id": "a7a5fc00-0000-4000-8000-000000000204", "name": "Finance Dev"}, "recorded_at": "2026-11-17T16:02:51.187092Z", "voided_at": null, "voided_by": null, "void_reason": null, "sessions": [{"id": "73dba7ae-0f0b-4ff5-bd43-0701cedfecd0", "label": "Guichet Nord", "staff": {"id": "a7a5fc00-0000-4000-8000-000000000202", "name": "Caissier Dev"}, "closed_at": "2026-11-17T16:02:50.495684Z", "declared_mad": 80000}, {"id": "0b21acce-f9b9-4dbb-894b-d28e6117d9af", "label": "Guichet Sud", "staff": {"id": "a7a5fc00-0000-4000-8000-000000000203", "name": "Ops Dev"}, "closed_at": "2026-11-17T16:02:50.699245Z", "declared_mad": 30000}], "declared_mad": 110000, "variance_mad": 0} // 5.4: recorded again at 1 100 DH
+const VOIDED: Deposit = {"id": "a4399f80-a9d0-4dec-b8e0-d927f54bf70c", "deposited_on": "2026-11-17", "amount_mad": 109000, "reference": "BO-27 160249", "recorded_by": {"id": "a7a5fc00-0000-4000-8000-000000000204", "name": "Finance Dev"}, "recorded_at": "2026-11-17T16:02:50.896151Z", "voided_at": "2026-11-17T16:02:51.096696Z", "voided_by": {"id": "a7a5fc00-0000-4000-8000-000000000201", "name": "Admin Dev"}, "void_reason": "montant mal saisi", "sessions": [], "declared_mad": null, "variance_mad": null} // the 4.3 deposit after the ADMIN void (5.2)
+const ERR_DEPOSITED = {"code": "VALIDATION_FAILED", "message": "Invalid request body", "details": {"reason": "DEPOSITED", "fields": {"session_ids[0]": "deposited"}}}
+const ERR_OPEN = {"code": "VALIDATION_FAILED", "message": "Invalid request body", "details": {"reason": "OPEN", "fields": {"session_ids[0]": "open"}}}
+const ERR_BEFORE_CLOSE = {"code": "VALIDATION_FAILED", "message": "Invalid request body", "details": {"reason": "BEFORE_CLOSE", "fields": {"deposited_on": "must not be before a session's close day"}}}
+const DEPOSITS: Deposits = { deposits: [LIVE, VOIDED], undeposited: [NORD, SUD] }
 
 type Call = { method: string; path: string; org: string | null; body: unknown }
 type Handler = (c: Call) => Response | undefined
@@ -122,30 +101,30 @@ async function openSheet(user: ReturnType<typeof userEvent.setup>, sessions: Dep
   return within(await screen.findByRole('dialog'))
 }
 
-it('FINANCE: tick both tills → sheet; "12,5" and "990,00" read as integer centimes, the gap previews live, POST sends centimes', async () => {
+it('FINANCE: tick both tills → sheet; "12,5" and "1090,00" read as integer centimes, the gap previews live, POST sends centimes', async () => {
   const user = userEvent.setup()
-  const calls = stubApi('FINANCE', (c) => (c.method === 'POST' && c.path === '/org/finance/deposits' ? Response.json({ ...LIVE, id: 'd-9', reference: 'Bordereau 448812' }, { status: 201 }) : undefined))
+  const calls = stubApi('FINANCE', (c) => (c.method === 'POST' && c.path === '/org/finance/deposits' ? Response.json(CREATED, { status: 201 }) : undefined))
   renderApp('/finance/deposits')
 
   // À déposer: oldest first as sent, closed time in the venue zone.
   await screen.findByRole('heading', { name: fr.finance.deposits.todo.title })
   expect(todo().getAllByRole('row').slice(1).map(cells)).toEqual([
-    ['', 'Guichet Nord', 'Salma', at(NORD.closed_at), dh(70_000)],
-    ['', 'Guichet Sud', 'Omar', at(SUD.closed_at), dh(30_000)],
+    ['', 'Guichet Nord', 'Caissier Dev', at(NORD.closed_at), dh(80_000)],
+    ['', 'Guichet Sud', 'Ops Dev', at(SUD.closed_at), dh(30_000)],
   ])
   expect((todo().getByRole('button', { name: fr.finance.deposits.record }) as HTMLButtonElement).disabled).toBe(true)
   const sheet = await openSheet(user)
-  expect(sheet.getByText(spaced(dh(100_000)))).toBeTruthy() // Déclaré Σ
+  expect(sheet.getByText(spaced(dh(110_000)))).toBeTruthy() // Déclaré Σ
   const variance = () => screen.getByTestId('deposit-variance')
   expect(variance().textContent).toBe(fr.finance.deposits.sheet.varianceWaiting)
 
   await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '12,5')
-  expect(variance().textContent).toBe(signed(1250 - 100_000)) // 1250 centimes, not 1249.9999
+  expect(variance().textContent).toBe(signed(1250 - 110_000)) // 1250 centimes, not 1249.9999
   await user.clear(sheet.getByLabelText(fr.finance.deposits.sheet.amount))
-  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '990,00')
+  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '1090,00')
   expect(variance().textContent).toMatch(/^-10,00\sDH$/u)
   expect(variance().className).toContain('text-destructive')
-  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.reference), '  Bordereau 448812 ')
+  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.reference), '  BO-27 160249 ')
   await user.click(sheet.getByRole('button', { name: fr.finance.deposits.sheet.submit }))
 
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
@@ -154,9 +133,9 @@ it('FINANCE: tick both tills → sheet; "12,5" and "990,00" read as integer cent
     method: 'POST',
     path: '/org/finance/deposits',
     org: 'org-a',
-    body: { deposited_on: todayIn(CASA), amount_mad: 99_000, reference: 'Bordereau 448812', session_ids: ['s-nord', 's-sud'] },
+    body: { deposited_on: todayIn(CASA), amount_mad: 109_000, reference: 'BO-27 160249', session_ids: [NORD.id, SUD.id] },
   })
-  expect(await screen.findByText(i18n.t('finance.deposits.sheet.done', { reference: 'Bordereau 448812' }))).toBeTruthy()
+  expect(await screen.findByText(i18n.t('finance.deposits.sheet.done', { reference: CREATED.reference }))).toBeTruthy()
   // Every finance query of the organizer is refetched.
   await waitFor(() => expect(calls.filter((c) => c.path.startsWith('/org/finance/deposits?'))).toHaveLength(2))
 })
@@ -178,16 +157,15 @@ it('the sheet refuses a bad amount, an empty reference and a future date; nothin
 })
 
 it.each([
-  ['DEPOSITED', 'session_ids[1]', 'Guichet Sud'],
-  ['OPEN', 'session_ids[0]', 'Guichet Nord'],
-] as const)('a 422 %s on %s: its copy on that session row', async (reason, field, label) => {
+  ['DEPOSITED', ERR_DEPOSITED],
+  ['OPEN', ERR_OPEN],
+] as const)('a 422 %s (the real answer, on session_ids[0]): its copy on that session row', async (reason, body) => {
   const user = userEvent.setup()
-  stubApi('FINANCE', (c) =>
-    c.method === 'POST' ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { [field]: 'invalid' }, reason } }, { status: 422 }) : undefined,
-  )
+  const label = 'Guichet Nord'
+  stubApi('FINANCE', (c) => (c.method === 'POST' ? Response.json(body, { status: 422 }) : undefined))
   renderApp('/finance/deposits')
   const sheet = await openSheet(user)
-  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '1000')
+  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '1100')
   await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.reference), 'B-2')
   await user.click(sheet.getByRole('button', { name: fr.finance.deposits.sheet.submit }))
 
@@ -204,34 +182,34 @@ it('DEPOSITED on one row: "Retirer" takes it out of the sheet, the total and gap
   const calls = stubApi('FINANCE', (c) =>
     c.method === 'POST'
       ? ++posts === 1
-        ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { 'session_ids[1]': 'invalid' }, reason: 'DEPOSITED' } }, { status: 422 })
-        : Response.json({ ...LIVE, id: 'd-9', reference: 'B-4' }, { status: 201 })
+        ? Response.json(ERR_DEPOSITED, { status: 422 })
+        : Response.json(LIVE, { status: 201 })
       : undefined,
   )
   renderApp('/finance/deposits')
   const sheet = await openSheet(user)
-  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '700')
+  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '300')
   await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.reference), 'B-4')
   await user.click(sheet.getByRole('button', { name: fr.finance.deposits.sheet.submit }))
   await sheet.findByText(fr.finance.deposits.sheet.DEPOSITED)
-  expect(sheet.queryByRole('button', { name: i18n.t('finance.deposits.sheet.removeLabel', { label: NORD.label, cashier: NORD.staff.name }) })).toBeNull() // only refused rows
+  expect(sheet.queryByRole('button', { name: i18n.t('finance.deposits.sheet.removeLabel', { label: SUD.label, cashier: SUD.staff.name }) })).toBeNull() // only refused rows
 
-  await user.click(sheet.getByRole('button', { name: i18n.t('finance.deposits.sheet.removeLabel', { label: SUD.label, cashier: SUD.staff.name }) }))
-  expect(sheet.queryByText('Guichet Sud')).toBeNull()
+  await user.click(sheet.getByRole('button', { name: i18n.t('finance.deposits.sheet.removeLabel', { label: NORD.label, cashier: NORD.staff.name }) }))
+  expect(sheet.queryByText('Guichet Nord')).toBeNull()
   expect(sheet.queryByText(fr.finance.deposits.sheet.DEPOSITED)).toBeNull()
-  expect(screen.getByTestId('deposit-variance').textContent).toBe(fr.finance.cash.noGap) // 700 DH − Nord's 700 DH
+  expect(screen.getByTestId('deposit-variance').textContent).toBe(fr.finance.cash.noGap) // 300 DH − Sud's 300 DH
   await user.click(sheet.getByRole('button', { name: fr.finance.deposits.sheet.submit }))
 
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   const sent = calls.filter((c) => c.method === 'POST').map((c) => (c.body as { session_ids: string[] }).session_ids)
-  expect(sent).toEqual([['s-nord', 's-sud'], ['s-nord']])
+  expect(sent).toEqual([[NORD.id, SUD.id], [SUD.id]])
 })
 
 it('a 422 BEFORE_CLOSE on deposited_on: its copy on the date field', async () => {
   const user = userEvent.setup()
   stubApi('FINANCE', (c) =>
     c.method === 'POST'
-      ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { deposited_on: 'invalid' }, reason: 'BEFORE_CLOSE' } }, { status: 422 })
+      ? Response.json(ERR_BEFORE_CLOSE, { status: 422 })
       : undefined,
   )
   renderApp('/finance/deposits')
@@ -252,21 +230,29 @@ it('the deposits table: date, référence, montant, déclaré, écart (red when 
   await screen.findByRole('heading', { name: fr.finance.deposits.list.title })
   const rows = within(section(fr.finance.deposits.list.title)).getAllByRole('row').slice(1)
   expect(rows.map(cells)).toEqual([
-    [day('2026-11-22'), 'Bordereau 448750', dh(49_000), dh(50_000), spaced(signed(-1000)), 'Guichet Est · Omar', `Nadia${at(LIVE.recorded_at)}`],
-    [day('2026-11-21'), 'Bordereau 448700', dh(50_000), dh(50_000), fr.finance.cash.noGap, 'Guichet Est · Omar', `Nadia${at(LIVE.recorded_at)}`],
-    [day('2026-11-20'), 'Bordereau 448699', dh(49_000), '', '', i18n.t('finance.deposits.list.voided', { reason: 'montant mal saisi' }), `Nadia${at(LIVE.recorded_at)}`],
+    [day('2026-11-17'), 'BO-27 160249', dh(110_000), dh(110_000), fr.finance.cash.noGap, 'Guichet Nord · Caissier DevGuichet Sud · Ops Dev', `Finance Dev${at(LIVE.recorded_at)}`],
+    [day('2026-11-17'), 'BO-27 160249', dh(109_000), '', '', i18n.t('finance.deposits.list.voided', { reason: 'montant mal saisi' }), `Finance Dev${at(VOIDED.recorded_at)}`],
   ])
   const gap = (row: HTMLElement) => within(row).getAllByRole('cell')[4]!
-  expect(gap(rows[0]!).className).toContain('text-destructive')
-  expect(gap(rows[1]!).className).not.toContain('text-destructive')
-  expect(within(rows[2]!).getAllByRole('cell')[1]!.className).toContain('line-through')
+  expect(gap(rows[0]!).className).not.toContain('text-destructive')
+  expect(within(rows[1]!).getAllByRole('cell')[1]!.className).toContain('line-through')
+})
+
+it('a deposit with a gap: écart −10 DH in red (the real 4.3 answer)', async () => {
+  stubApi('OPS', (c) => (c.path.startsWith('/org/finance/deposits?') ? Response.json({ deposits: [CREATED], undeposited: [] }) : undefined))
+  renderApp('/finance/deposits')
+  await screen.findByRole('heading', { name: fr.finance.deposits.list.title })
+  const [row] = within(section(fr.finance.deposits.list.title)).getAllByRole('row').slice(1)
+  const gap = within(row!).getAllByRole('cell')[4]!
+  expect(gap.textContent).toMatch(/^-10,00\sDH$/u)
+  expect(gap.className).toContain('text-destructive')
 })
 
 it('OPS reads only: no checkbox, no "Enregistrer un dépôt", no "Annuler"', async () => {
   stubApi('OPS')
   renderApp('/finance/deposits')
   await screen.findByRole('heading', { name: fr.finance.deposits.list.title })
-  expect(screen.getByText('Guichet Nord')).toBeTruthy()
+  expect(todo().getByText('Guichet Nord')).toBeTruthy()
   expect(screen.queryByRole('checkbox')).toBeNull()
   expect(screen.queryByRole('button', { name: fr.finance.deposits.record })).toBeNull()
   expect(screen.queryByRole('button', { name: i18n.t('finance.deposits.void.label', { reference: LIVE.reference }) })).toBeNull()
@@ -283,11 +269,12 @@ it('FINANCE records but cannot void', async () => {
 it('ADMIN voids a live deposit with a reason (required); a voided row offers no Annuler', async () => {
   const user = userEvent.setup()
   const calls = stubApi('ADMIN', (c) =>
-    c.method === 'POST' && c.path === '/org/finance/deposits/d-2/void' ? Response.json({ ...LIVE, voided_at: '2026-11-26T10:00:00Z', void_reason: 'montant mal saisi', sessions: [] }) : undefined,
+    c.method === 'POST' && c.path === `/org/finance/deposits/${LIVE.id}/void` ? Response.json({ ...VOIDED, id: LIVE.id }) : undefined,
   )
   renderApp('/finance/deposits')
   await screen.findByRole('heading', { name: fr.finance.deposits.list.title })
-  expect(screen.queryByRole('button', { name: i18n.t('finance.deposits.void.label', { reference: VOIDED.reference }) })).toBeNull()
+  // Both rows carry the reference "BO-27 160249": only the live one has the button.
+  expect(screen.getAllByRole('button', { name: i18n.t('finance.deposits.void.label', { reference: VOIDED.reference }) })).toHaveLength(1)
   await user.click(screen.getByRole('button', { name: i18n.t('finance.deposits.void.label', { reference: LIVE.reference }) }))
 
   const dialog = within(await screen.findByRole('dialog'))
@@ -299,7 +286,7 @@ it('ADMIN voids a live deposit with a reason (required); a voided row offers no 
   await user.type(dialog.getByLabelText(fr.finance.deposits.void.reason), 'montant mal saisi')
   await user.click(dialog.getByRole('button', { name: fr.finance.deposits.void.submit }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ method: 'POST', path: '/org/finance/deposits/d-2/void', org: 'org-a', body: { reason: 'montant mal saisi' } }])
+  expect(calls.filter((c) => c.method === 'POST')).toEqual([{ method: 'POST', path: `/org/finance/deposits/${LIVE.id}/void`, org: 'org-a', body: { reason: 'montant mal saisi' } }])
 })
 
 it('query keys start with org, <organizer>; requests carry the same X-Organizer-Id; the range is sent as local dates', async () => {
