@@ -17,6 +17,7 @@ import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/blocks.dart';
+import 'package:jomhor_fan/ui/motion.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
 /// Screen 4 · Paiement: named holders, summary, method (card, wallet, cash from `payment_methods`). "Payer"
@@ -90,15 +91,33 @@ class _FormState extends ConsumerState<_Form> {
   /// Lot 5 step 4: "J'ai un code promo" was tapped; [_promo] is sent only while the field is open.
   var _promoOpen = false;
   late final _promo = TextEditingController()..addListener(_promoChanged);
+  var _promoText = '';
+  final GlobalKey _promoField = GlobalKey();
+  final _list = ScrollController();
 
   // The Q21 confirmation appears as soon as a friend's phone is typed.
   void _phoneChanged() => setState(() {});
 
-  // The CTA follows the code ("Réserver avec le code"); a new code drops the old refusal.
+  // The CTA follows the code ("Réserver avec le code"); a new code drops the old refusal. Only a text change counts:
+  // tapping into the field (a selection change) keeps the refusal on screen.
   void _promoChanged() {
+    if (_promo.text == _promoText) return;
+    _promoText = _promo.text;
     setState(() {});
     ref.read(checkoutControllerProvider(widget.args).notifier).clearPromoRefusal();
   }
+
+  /// A refusal is said under the field: bring the field into view, even when the fan had scrolled down to the holder
+  /// rows (where the list may not have built it: back to the top first, then once more).
+  void _revealPromo({bool again = true}) => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    if (_promoField.currentContext case final field?) {
+      Scrollable.ensureVisible(field, duration: motionOf(context, JomhorMotion.base));
+    } else if (again && _list.hasClients) {
+      _list.jumpTo(0);
+      _revealPromo(again: false);
+    }
+  });
 
   String get _code => _promoOpen ? _promo.text.trim() : '';
 
@@ -122,6 +141,7 @@ class _FormState extends ConsumerState<_Form> {
     for (final c in [..._names, ..._phones, _promo]) {
       c.dispose();
     }
+    _list.dispose();
     super.dispose();
   }
 
@@ -186,6 +206,9 @@ class _FormState extends ConsumerState<_Form> {
     ref.listen(checkoutControllerProvider(args).select((s) => s.error?.code), (_, code) {
       if (code == 'ADMISSION_REQUIRED') context.go('/events/${args.eventId}/queue');
     });
+    ref.listen(checkoutControllerProvider(args).select((s) => s.promoRefusal), (_, reason) {
+      if (reason != null) _revealPromo();
+    });
     final locked = state.order != null; // The holders are on the order now.
     final busy = state.busy;
     final split = state.summary(unitMad: widget.price.priceMad, qty: args.qty, paying: _paying(state).length);
@@ -198,6 +221,7 @@ class _FormState extends ConsumerState<_Form> {
       children: [
         Expanded(
           child: ListView(
+            controller: _list,
             padding: const EdgeInsets.all(JomhorSpace.xl),
             children: [
               if (state.left case final left?)
@@ -287,6 +311,7 @@ class _FormState extends ConsumerState<_Form> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
+                          key: _promoField,
                           child: TextField(
                             key: const Key('promo.field'),
                             controller: _promo,

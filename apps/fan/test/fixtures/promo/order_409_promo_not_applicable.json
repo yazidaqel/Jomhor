@@ -1,9 +1,9 @@
 {
- "source": "contract (docs/04-api.md Lot 5 step 4: POST /fan/orders promo_code, §Promo codes, PROMO_REFUSED); BE-65 not run yet, to be replaced by the FL-32 real run's capture",
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): POST /fan/orders with FL32PCT20 (scope Plein tarif) on a Virage place",
  "status": 409,
  "body": {
   "code": "PROMO_REFUSED",
-  "message": "PROMO_REFUSED",
+  "message": "This promo code can't be used",
   "details": {
    "field": "promo_code",
    "reason": "NOT_APPLICABLE"

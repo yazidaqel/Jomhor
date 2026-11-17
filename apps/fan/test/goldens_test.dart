@@ -598,7 +598,7 @@ void main() {
     testWidgets('$locale · screen 4 with a promo code', (tester) async {
       await phone(tester);
       final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
-      final sale = PromoSale(clock);
+      final sale = PromoSale(clock, dir: 'goldens/promo');
       final c = await pumpJomhor(
         tester,
         backend: sale.handle,
@@ -634,7 +634,7 @@ void main() {
     testWidgets('$locale · cash order with a promo code', (tester) async {
       await phone(tester);
       final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
-      final sale = PromoSale(clock)
+      final sale = PromoSale(clock, dir: 'goldens/promo')
         ..coded = true
         ..status = 'AWAITING_CASH'
         ..paymentMethod = 'CASH_AGENCY'

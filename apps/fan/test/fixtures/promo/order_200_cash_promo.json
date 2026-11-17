@@ -1,0 +1,59 @@
+{
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): GET /fan/orders/{id} after a CASH_AGENCY /pay on the AMOUNT order: AWAITING_CASH, cash.amount_mad = total_mad 25 000",
+ "status": 200,
+ "body": {
+  "id": "638ce354-925d-4c4c-9842-eb366e757290",
+  "event_id": 49,
+  "channel": "APP",
+  "status": "AWAITING_CASH",
+  "payment_status": "PENDING",
+  "total_mad": 25000,
+  "reserved_until": "2026-11-18T14:21:03.817545Z",
+  "paid_at": null,
+  "items": [
+   {
+    "price_category_id": "1ab881af-819f-4b4f-ac83-c63f9030116f",
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "Plein tarif",
+    "qty": 2,
+    "unit_price_mad": 15000,
+    "holders": [
+     {
+      "label": "Karim I."
+     },
+     {
+      "label": "Karim I."
+     }
+    ]
+   }
+  ],
+  "ticket_ids": [],
+  "payment_method": "CASH_AGENCY",
+  "cash": {
+   "pay_code": "116XHP",
+   "amount_mad": 25000,
+   "points": [
+    {
+     "name": "Guichet Grand Stade",
+     "address": "Porte 1",
+     "hours": "Lun-Sam 10:00-19:00"
+    },
+    {
+     "name": "Boutique du club",
+     "address": "Centre-ville",
+     "hours": "Lun-Sam 09:00-18:00"
+    }
+   ],
+   "networks": [
+    "Réseau cash simulé"
+   ]
+  },
+  "group": null,
+  "product": null,
+  "installment": null,
+  "pass_id": null,
+  "promo_code": "FL32AMT50",
+  "discount_mad": 5000
+ }
+}

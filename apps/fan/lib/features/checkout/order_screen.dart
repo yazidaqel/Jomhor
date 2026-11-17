@@ -177,7 +177,7 @@ class _OrderState extends ConsumerWidget {
           style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
           textAlign: TextAlign.center,
         ),
-        Center(child: PromoLine(order: order)), // Lot 5 step 4.
+        PromoLine(order: order, alignment: Alignment.center), // Lot 5 step 4.
         if (again != PayAgain.no) ...[
           const SizedBox(height: JomhorSpace.xl),
           OutlinedButton(
@@ -280,7 +280,7 @@ class _Paid extends ConsumerWidget {
                 key: const Key('order.paidBody'),
                 textAlign: TextAlign.center,
               ),
-              Center(child: PromoLine(order: order)), // Lot 5 step 4.
+              PromoLine(order: order, alignment: Alignment.center), // Lot 5 step 4.
               const SizedBox(height: JomhorSpace.xl),
               switch ((order.product, order.passId)) {
                 (_?, final passId?) => FilledButton(

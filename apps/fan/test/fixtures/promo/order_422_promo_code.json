@@ -1,12 +1,12 @@
 {
- "source": "contract (docs/04-api.md Lot 5 step 4: POST /fan/orders promo_code, §Promo codes, PROMO_REFUSED); BE-65 not run yet, to be replaced by the FL-32 real run's capture: a code outside ^[A-Z0-9]{4,20}$ after trim and uppercase",
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): POST /fan/orders with \"AB-12\" (outside ^[A-Z0-9]{4,20}$)",
  "status": 422,
  "body": {
   "code": "VALIDATION_FAILED",
-  "message": "VALIDATION_FAILED",
+  "message": "Invalid request body",
   "details": {
    "fields": {
-    "promo_code": "PATTERN"
+    "promo_code": "4-20 letters A-Z or digits"
    }
   }
  }
