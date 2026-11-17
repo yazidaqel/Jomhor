@@ -78,7 +78,7 @@ const SALES: EventSales = {
   refunded: 0,
   refunded_mad: 0,
   revenue_mad: 9_007_199_254_740_991, // 2^53 − 1 centimes: exact only through formatDh's bigint path
-  discount_mad: 0, // source: contract (04 /sales, Lot 5 step 4)
+  discount_mad: 0, // as the real API sends it for an event without codes (BO-26 real run, event 51)
   zones: [
     { zone_id: 3, code: 'NORD', name: 'Virage Nord', quota: 12000, paid: 1000, held: 12, awaiting_cash: 0, refunded: 0, revenue_mad: 5_000_000 },
     { zone_id: 4, code: 'EST', name: 'Latérale Est', quota: 6000, paid: 250, held: 0, awaiting_cash: 0, refunded: 0, revenue_mad: 3_000_000 },

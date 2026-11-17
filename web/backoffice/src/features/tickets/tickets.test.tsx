@@ -191,19 +191,61 @@ it('the confirm dialog needs a reason; block then sends it and refetches the lis
   await waitFor(() => expect(lookups(calls)).toHaveLength(2)) // refetched after the write
 })
 
-it('ADMIN refunds a blocked ticket with a reason', async () => {
-  const calls = stubApi('ADMIN')
+// Captured from the real API (BO-26 real run, event 50): a Plein tarif ticket at 150 DH from an order of 2 discounted
+// 20 % by BO26PCT20 (total 240 DH), before and after the ADMIN refund (⌊15 000 × 24 000 ÷ 30 000⌋ = 120 DH).
+const DISCOUNTED_ROW = row({
+  id: '7f80aa97-b702-4071-b447-2c950d29d839',
+  ticket_no: '0D29 D839',
+  zone: { id: 2, code: 'EST', name: 'Est' },
+  holder_name: 'Yazid Aqel',
+  holder_label: 'Yazid A.',
+  unit_price_mad: 15000,
+  order_id: '75558205-a0d5-40db-8239-179b8bceaa1c',
+  channel: 'APP',
+  payment_method: 'CASH_AGENCY',
+  issued_at: '2026-11-17T14:21:49.145223Z',
+})
+const DISCOUNTED_REFUNDED: TicketRow = { ...DISCOUNTED_ROW, status: 'REFUNDED', refund: { id: 'e3e8fb05-ea59-4a54-b6fa-e346e00b2ee4', status: 'REQUIRED', amount_mad: 12000 } }
+
+it('ADMIN refunds with a reason: the dialog never states the list price; the toast and the row show refund.amount_mad', async () => {
+  let refunded = false
+  const calls = stubApi('ADMIN', {
+    lookup: () => Response.json([refunded ? DISCOUNTED_REFUNDED : DISCOUNTED_ROW]),
+    write: () => {
+      refunded = true
+      return Response.json(DISCOUNTED_REFUNDED)
+    },
+  })
   renderApp()
-  const user = await search('1A2B3C4D')
-  await user.click(await screen.findByRole('button', { name: i18n.t('tickets.actions.refund.label', { ticket: '1A2B 3C4D' }) }))
-  const dialog = await screen.findByRole('dialog', { name: i18n.t('tickets.actions.refund.title', { ticket: '1A2B 3C4D' }) })
+  const user = await search('0D29D839')
+  await user.click(await screen.findByRole('button', { name: i18n.t('tickets.actions.refund.label', { ticket: '0D29 D839' }) }))
+  const dialog = await screen.findByRole('dialog', { name: i18n.t('tickets.actions.refund.title', { ticket: '0D29 D839' }) })
   expect(within(dialog).getByText(fr.tickets.actions.refund.body)).toBeTruthy()
-  // The amount owed back, from the row's unit price, before confirming.
-  expect(within(dialog).getByText(spaced(i18n.t('tickets.actions.refund.amount', { amount: formatDh(15_050, 'fr') })))).toBeTruthy()
-  expect(i18n.t('tickets.actions.refund.amount', { amount: formatDh(15_050, 'fr') })).toMatch(/150,50\sDH$/u)
-  await user.type(within(dialog).getByRole('textbox', { name: fr.tickets.reason }), 'Match reporté pour ce fan')
+  // The lookup has only the list price (150 DH); the order was discounted, so no amount before the server says.
+  expect(within(dialog).getByText(fr.tickets.actions.refund.amountByPayment)).toBeTruthy()
+  expect(within(dialog).queryByText(/150,00/u)).toBeNull()
+  await user.type(within(dialog).getByRole('textbox', { name: fr.tickets.reason }), 'BO-26 real run')
   await user.click(within(dialog).getByRole('button', { name: fr.tickets.actions.refund.confirm }))
-  await waitFor(() => expect(writes(calls)).toEqual([{ method: 'POST', path: '/org/tickets/t-2/refund', org: 'org-a', body: { reason: 'Match reporté pour ce fan' } }]))
+  await waitFor(() => expect(writes(calls)).toEqual([{ method: 'POST', path: `/org/tickets/${DISCOUNTED_ROW.id}/refund`, org: 'org-a', body: { reason: 'BO-26 real run' } }]))
+
+  const done = i18n.t('tickets.actions.refund.done', { ticket: '0D29 D839', amount: formatDh(12000, 'fr') })
+  expect(done).toBe('Billet 0D29 D839 remboursé : 120,00 DH à rendre.')
+  expect(await screen.findByText(spaced(done))).toBeTruthy()
+  await waitFor(() => expect(within(rowOf('0D29 D839')).getByText(spaced(i18n.t('tickets.refund.REQUIRED', { amount: formatDh(12000, 'fr') })))).toBeTruthy())
+  expect(within(rowOf('0D29 D839')).queryByText(/150,00/u)).toBeNull()
+})
+
+it('refunding a free place (pass ticket, invitation): 0,00 DH before, "rien à rendre" after (no refunds row)', async () => {
+  const free = passRow({ id: 't-9', ticket_no: '5E6F 7A8B' })
+  stubApi('ADMIN', { lookup: () => Response.json([free]), write: () => Response.json({ ...free, status: 'REFUNDED', refund: null }) })
+  renderApp()
+  const user = await search('5E6F7A8B')
+  await user.click(await screen.findByRole('button', { name: i18n.t('tickets.actions.refund.label', { ticket: '5E6F 7A8B' }) }))
+  const dialog = await screen.findByRole('dialog')
+  expect(within(dialog).getByText(spaced(i18n.t('tickets.actions.refund.amount', { amount: formatDh(0, 'fr') })))).toBeTruthy()
+  await user.type(within(dialog).getByRole('textbox', { name: fr.tickets.reason }), 'Invitation annulée')
+  await user.click(within(dialog).getByRole('button', { name: fr.tickets.actions.refund.confirm }))
+  expect(await screen.findByText(i18n.t('tickets.actions.refund.doneNothing', { ticket: '5E6F 7A8B' }))).toBeTruthy()
 })
 
 it.each([

@@ -62,7 +62,7 @@ const SALES: EventSales = {
   refunded: 3,
   refunded_mad: 45_150,
   revenue_mad: 9_007_199_254_740_991, // 2^53 − 1 centimes: exact only if never divided as a float
-  discount_mad: 0, // source: contract (04 /sales, Lot 5 step 4); the discount test below sets it
+  discount_mad: 0, // as the real API sends it for an event without codes (BO-26 real run, event 51)
   zones: [{ zone_id: 3, code: 'NORD', name: 'Virage Nord', quota: 12000, paid: 1000, held: 12, awaiting_cash: 5, refunded: 2, revenue_mad: 5_000_000 }],
   channels: [
     { channel: 'APP', paid: 900, revenue_mad: 4_500_050 },
@@ -200,9 +200,36 @@ it('empty states: no refunds to make, no paid ticket yet, no zone', async () => 
   expect(within(section(fr.sales.refunds.title)).queryByRole('table')).toBeNull()
 })
 
-// source: contract (04 /sales, Lot 5 step 4; plan §12.1 exit 4b): ABONNES20 gave 60 DH and DERBY50 50 DH on PAID
-// orders; one ABONNES20 ticket refunded at 120 DH (proportional).
-const DISCOUNTED: EventSales = { ...SALES, revenue_mad: 2_400_000, discount_mad: 11_000, refunded: 1, refunded_mad: 12_000 }
+// Captured from the real API (BO-26 real run, event 50): 4 Plein tarif places at 150 DH paid; BO26PCT20 gave 60 DH and
+// BO26AMT50 50 DH on PAID orders; one BO26PCT20 ticket refunded at 120 DH (⌊15 000 × 24 000 ÷ 30 000⌋).
+const DISCOUNTED: EventSales = {
+  event_id: 50,
+  quota: 225,
+  paid: 4,
+  held: 1,
+  awaiting_cash: 0,
+  refunded: 1,
+  revenue_mad: 60000,
+  discount_mad: 11000,
+  refunded_mad: 12000,
+  zones: [
+    { zone_id: 2, code: 'EST', name: 'Est', quota: 120, paid: 4, held: 0, awaiting_cash: 0, refunded: 1, revenue_mad: 60000 },
+    { zone_id: 4, code: 'SUD', name: 'Sud', quota: 105, paid: 0, held: 1, awaiting_cash: 0, refunded: 0, revenue_mad: 0 },
+  ],
+  channels: [
+    { channel: 'APP', paid: 4, revenue_mad: 60000 },
+    { channel: 'WEB', paid: 0, revenue_mad: 0 },
+    { channel: 'POS', paid: 0, revenue_mad: 0 },
+  ],
+  methods: [
+    { method: 'CARD', paid: 0, revenue_mad: 0 },
+    { method: 'CASH_AGENCY', paid: 4, revenue_mad: 60000 },
+    { method: 'WALLET', paid: 0, revenue_mad: 0 },
+    { method: 'POS_CASH', paid: 0, revenue_mad: 0 },
+    { method: 'FREE', paid: 0, revenue_mad: 0 },
+  ],
+  refunds_required: [],
+}
 
 it('B3 shows "Remises accordées" from discount_mad, and the net = revenue − discounts − refunds', async () => {
   stubApi('FINANCE', () => Response.json(DISCOUNTED))
@@ -211,10 +238,10 @@ it('B3 shows "Remises accordées" from discount_mad, and the net = revenue − d
   const kpi = (await screen.findByText(fr.sales.kpi.discount, { selector: 'span' })).closest('[data-slot="card"]') as HTMLElement
   expect(within(kpi).getByText(spaced(i18n.t('sales.kpi.discountValue', { amount: formatDh(11_000, 'fr') })), { selector: '.text-2xl' })).toBeTruthy()
   expect(i18n.t('sales.kpi.discountValue', { amount: formatDh(11_000, 'fr') })).toBe('−110,00 DH')
-  // 24 000,00 − 110,00 − 120,00 = 23 770,00 DH, under the gross revenue.
+  // 600,00 − 110,00 − 120,00 = 370,00 DH, under the gross revenue.
   const revenue = screen.getByText(fr.sales.kpi.revenue, { selector: 'span' }).closest('[data-slot="card"]') as HTMLElement
-  expect(within(revenue).getByText(spaced(dh(2_400_000)), { selector: '.text-2xl' })).toBeTruthy()
-  expect(within(revenue).getByText(spaced(i18n.t('sales.kpi.net', { amount: formatDh(2_377_000, 'fr') })))).toBeTruthy()
+  expect(within(revenue).getByText(spaced(dh(60_000)), { selector: '.text-2xl' })).toBeTruthy()
+  expect(within(revenue).getByText(spaced(i18n.t('sales.kpi.net', { amount: formatDh(37_000, 'fr') })))).toBeTruthy()
 })
 
 it('the net subtracts without float rounding (bigint), and no discount reads 0,00 DH', async () => {

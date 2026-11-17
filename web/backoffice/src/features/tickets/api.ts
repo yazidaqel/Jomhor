@@ -13,7 +13,10 @@ export type TicketRow = {
   zone: { id: number; code: string; name: string }
   holder_name: string | null
   holder_label: string | null
-  /** What the holder paid for this place (centimes): the amount a refund owes back. */
+  /**
+   * The list price of the place (centimes). Not what a refund pays back once a promo code discounted the order (04
+   * §Promo codes Refunds: proportional, less); the lookup has no exact amount until `refund.amount_mad` is set.
+   */
   unit_price_mad: number
   order_id: string
   channel: SalesChannel
