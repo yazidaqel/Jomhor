@@ -12,9 +12,10 @@ import { ApiError, path } from '@/lib/api'
 import { mapUrl, useVenue, type Gate, type VenueDetail, type Zone } from './api'
 import { DeleteButton, DeleteDialog, EditButton, GateDialog, VenueDialog, ZoneDialog } from './dialogs'
 import { GateZoneMatrix } from './GateZoneMatrix'
+import { MapCard } from './MapCard'
 import { useDialog } from './useDialog'
 
-/** B10 Lieux, one venue: zones, gates and the gate → zone matrix. */
+/** B10 Lieux, one venue: zones, gates, the gate → zone matrix and the venue map. */
 export function VenuePage() {
   const { t, i18n } = useTranslation()
   const id = useParams().id!
@@ -57,6 +58,7 @@ export function VenuePage() {
             <Gates venue={venue.data} canWrite={canWrite} />
           </div>
           <GateZoneMatrix venue={venue.data} />
+          <MapCard venue={venue.data} />
         </>
       )}
     </div>

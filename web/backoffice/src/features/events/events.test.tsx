@@ -524,9 +524,10 @@ it('FINANCE: no write action on the list or the event, fields read-only', async 
 
 const VENUE_DETAIL: VenueDetail = {
   ...VENUES[0]!,
+    layout: null,
   zones: [
-    { id: 1, code: 'HONNEUR', name: 'Tribune d’honneur', capacity: 3000, seated: true },
-    { id: 2, code: 'NORD', name: 'Tribune Nord', capacity: 20000, seated: false },
+    { id: 1, code: 'HONNEUR', name: 'Tribune d’honneur', capacity: 3000, seated: true, map_slot: null },
+    { id: 2, code: 'NORD', name: 'Tribune Nord', capacity: 20000, seated: false, map_slot: null },
   ],
   gates: [
     { id: 'g-1', code: 'P1', name: 'Porte 1', zone_ids: [1], directions: null, latitude: null, longitude: null },

@@ -56,13 +56,14 @@ const VENUES: Venue[] = [
 const VENUE_DETAILS: Record<string, VenueDetail> = {
   'v-1': {
     ...VENUES[0]!,
+    layout: null,
     zones: [
-      { id: 1, code: 'EST', name: 'Tribune Est', capacity: 8000, seated: false },
-      { id: 2, code: 'NORD', name: 'Tribune Nord', capacity: 20000, seated: false },
+      { id: 1, code: 'EST', name: 'Tribune Est', capacity: 8000, seated: false, map_slot: null },
+      { id: 2, code: 'NORD', name: 'Tribune Nord', capacity: 20000, seated: false, map_slot: null },
     ],
     gates: [],
   },
-  'v-2': { ...VENUES[1]!, zones: [{ id: 3, code: 'PARTERRE', name: 'Parterre', capacity: 3000, seated: false }], gates: [] },
+  'v-2': { ...VENUES[1]!, layout: null, zones: [{ id: 3, code: 'PARTERRE', name: 'Parterre', capacity: 3000, seated: false, map_slot: null }], gates: [] },
 }
 const SERIES: Series[] = [{ id: 's-1', name: 'Saison 2026-27', starts_on: '2026-08-15', ends_on: '2027-06-30' }]
 const PASS: Product = {
