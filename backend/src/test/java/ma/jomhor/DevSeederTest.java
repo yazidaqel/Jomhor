@@ -49,14 +49,16 @@ class DevSeederTest {
                 ctx.getBean(DevSeeder.class).run(null); // a restart
 
                 // BE-72: ATLAS FC's finance settings and till money on the two previous local days (once, the restart
-                // adds none); the statement job issues each due day once, with its invoice
+                // adds none); the statement job issues each due day once, with its invoice. One instant for the job
+                // and the expectation, so a run across midnight or 01:00 can't disagree with itself.
+                Instant now = Instant.now();
                 var job = ctx.getBean(SettlementService.class);
-                job.run();
-                job.run();
+                job.runAt(now);
+                job.runAt(now);
                 ZoneId zone = DevSeeder.FINANCE_ZONE;
-                LocalDate today = LocalDate.now(zone);
+                LocalDate today = now.atZone(zone).toLocalDate();
                 List<String> days = new ArrayList<>(List.of(today.minusDays(2) + " 100000 NONE"));
-                if (!Instant.now().isBefore(today.atStartOfDay(zone).toInstant().plus(Duration.ofHours(1)))) {
+                if (!now.isBefore(today.atStartOfDay(zone).toInstant().plus(Duration.ofHours(1)))) {
                     days.add(today.minusDays(1) + " 32000 NONE"); // yesterday is due from 01:00
                 }
                 assertThat(jdbc.sql("select day::text || ' ' || till_mad || ' ' || status::text from settlements "

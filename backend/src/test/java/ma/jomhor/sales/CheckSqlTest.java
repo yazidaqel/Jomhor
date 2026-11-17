@@ -332,7 +332,8 @@ class CheckSqlTest extends QueueFixture {
     }
 
     /**
-     * BE-72: two statements issued by the job (a fee, then a till-only day with a carried debt) are clean; each
+     * BE-72: two statements issued by the job (a fee and a payout, then a till-only day whose fees carry a debt out to
+     * the next statement) are clean; each
      * settlement check fires alone on one crafted breach, in a transaction that rolls back (invoices are immutable: their
      * trigger is disabled inside it). The invoice year 2045 is this test's alone.
      */

@@ -8,6 +8,8 @@
 # before that start) and till money on those two days, 1 000 DH then 320 DH. About a minute after startup
 # (finance.initial-delay) the statement job issues both: till money only, so both read "Rien à verser" (NONE), each with
 # its fee invoice, and the second opens with the first one's carried debt. Card and network money comes from step 2.
+# Timing: before 01:00 on the day of first start, step 1.1 shows one NONE row, not two (yesterday is issued from 01:00);
+# steps 4.1 and 4.2 run the next day with @today left at its old value (yesterday's statement is then in range).
 # Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phone is made up.
 # Card payment: open the response's redirect_url in a browser and click "Approuver" right away (8 min hold).
 # At the end, backend/loadtest/check.sql must print no rows:
