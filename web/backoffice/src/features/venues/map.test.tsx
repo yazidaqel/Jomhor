@@ -35,8 +35,9 @@ const me = (role: Role): Me => ({
   memberships: [{ organizer_id: 'org-a', organizer_name: 'Atlas FC', role }],
 })
 
-// source: contract (docs/04-api.md GET /org/venues/{id} + §Venue map; the dev seed's map, plan Q242). Zones by code,
-// as the API lists them: EST=3, HONNEUR=1, NORD=2, SUD=4.
+// Captured from the real API (BO-29 real run, dev stack, recipe `backend/http/venue-map.http`, ATLAS FC's Grand Stade
+// on the seeded STADIUM map): GET /org/venues/{id}, zones by code as the API lists them (EST=2, HONNEUR=3, NORD=1,
+// PRESSE=19 unmapped, SUD=4). Only the id is the test's own and the seven gates are left out: the card reads neither.
 const venue = (): VenueDetail => ({
   id: 'v-1',
   name: 'Grand Stade',
@@ -45,10 +46,11 @@ const venue = (): VenueDetail => ({
   timezone: 'Africa/Casablanca',
   layout: 'STADIUM',
   zones: [
-    { id: 3, code: 'EST', name: 'Tribune Est', capacity: 12000, seated: false, map_slot: 'EAST' },
-    { id: 1, code: 'HONNEUR', name: 'Tribune d’honneur', capacity: 3000, seated: true, map_slot: 'WEST' },
-    { id: 2, code: 'NORD', name: 'Virage Nord', capacity: 15000, seated: false, map_slot: 'NORTH' },
-    { id: 4, code: 'SUD', name: 'Virage Sud', capacity: 15000, seated: false, map_slot: 'SOUTH' },
+    { id: 2, code: 'EST', name: 'Est', capacity: 14000, seated: false, map_slot: 'EAST' },
+    { id: 3, code: 'HONNEUR', name: 'Honneur', capacity: 6000, seated: true, map_slot: 'WEST' },
+    { id: 1, code: 'NORD', name: 'Nord', capacity: 12000, seated: false, map_slot: 'NORTH' },
+    { id: 19, code: 'PRESSE', name: 'Tribune de presse', capacity: 60, seated: true, map_slot: null },
+    { id: 4, code: 'SUD', name: 'Sud', capacity: 12000, seated: false, map_slot: 'SOUTH' },
   ],
   gates: [],
 })
@@ -152,9 +154,9 @@ it('sends the exact PUT body with the organizer header, toasts and refetches; Sa
       body: {
         layout: 'STADIUM',
         zones: [
-          { zone_id: 3, map_slot: 'SOUTH_EAST' },
-          { zone_id: 1, map_slot: 'WEST' },
-          { zone_id: 2, map_slot: 'NORTH' },
+          { zone_id: 2, map_slot: 'SOUTH_EAST' },
+          { zone_id: 3, map_slot: 'WEST' },
+          { zone_id: 1, map_slot: 'NORTH' },
           { zone_id: 4, map_slot: 'SOUTH' },
         ],
       },
@@ -190,8 +192,8 @@ it('switching template keeps the shared slot ids, lists the zones that drop off,
   expect(puts(calls).at(-1)!.body).toEqual({
     layout: 'CENTER_STAGE',
     zones: [
-      { zone_id: 1, map_slot: 'WEST' },
-      { zone_id: 2, map_slot: 'NORTH' },
+      { zone_id: 3, map_slot: 'WEST' },
+      { zone_id: 1, map_slot: 'NORTH' },
       { zone_id: 4, map_slot: 'SOUTH' },
     ],
   })
@@ -227,13 +229,18 @@ it('Stade → Théâtre → Stade without saving restores the saved placements; 
   expect(puts(calls)).toEqual([])
 })
 
-// 04: the first failing check answers 422 with that one field. `zones[i]` indexes the body: EST, HONNEUR, NORD, SUD.
+/** A 422 as the real API answered it (BO-29 real run): one field, with the server's reason. */
+const invalid = (key: string, reason: string) =>
+  Response.json({ code: 'VALIDATION_FAILED', message: 'Invalid request body', details: { fields: { [key]: reason } } }, { status: 422 })
+
+// 04: the first failing check answers 422 with that one field. `zones[i]` indexes the body: EST, HONNEUR, NORD, SUD
+// (PRESSE is off the map, so not in the body).
 it.each([
-  ['layout', () => template(), fr.venues.map.layoutInvalid],
-  ['zones[1].map_slot', () => slotOf('HONNEUR'), fr.venues.map.slotInvalid],
-])('a 422 on %s lands on its Select', async (key, trigger, message) => {
+  ['layout', 'must be a layout of docs/venue-layouts.json', () => template(), fr.venues.map.layoutInvalid],
+  ['zones[1].map_slot', 'is already listed', () => slotOf('HONNEUR'), fr.venues.map.slotInvalid],
+])('a 422 on %s lands on its Select', async (key, reason, trigger, message) => {
   const user = userEvent.setup()
-  stubApi('ADMIN', venue(), () => Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { [key]: 'invalid' } } }, { status: 422 }))
+  stubApi('ADMIN', venue(), () => invalid(key, reason))
   await renderVenue()
   await pick(user, slotOf('EST'), 'Sud-Est')
   await user.click(saveButton())
@@ -245,8 +252,8 @@ it.each([
 it('a 422 on zones[i].zone_id (zone deleted meanwhile) shows as a toast; the refetch drops the zone', async () => {
   const user = userEvent.setup()
   const calls = stubApi('ADMIN', venue(), (state) => {
-    state.zones = state.zones.filter((z) => z.id !== 2) // NORD, body index 2, deleted by someone else
-    return Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { 'zones[2].zone_id': 'invalid' } } }, { status: 422 })
+    state.zones = state.zones.filter((z) => z.id !== 1) // NORD, body index 2, deleted by someone else
+    return invalid('zones[2].zone_id', 'must be a zone of this venue')
   })
   await renderVenue()
   await pick(user, slotOf('EST'), 'Sud-Est')
@@ -259,7 +266,7 @@ it('a 422 on zones[i].zone_id (zone deleted meanwhile) shows as a toast; the ref
 
 it('a 422 on `zones` (no Select of its own) shows as the form error', async () => {
   const user = userEvent.setup()
-  stubApi('ADMIN', venue(), () => Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { zones: 'invalid' } } }, { status: 422 }))
+  stubApi('ADMIN', venue(), () => invalid('zones', 'must be empty when layout is null'))
   await renderVenue()
   await pick(user, slotOf('EST'), 'Sud-Est')
   await user.click(saveButton())

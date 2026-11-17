@@ -17,38 +17,22 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-// source: contract (docs/04-api.md fan GET /fan/events/{id} + §Venue map: `layout`, `zones[].map_slot`; the dev seed's
-// STADIUM mapping, plan Q242). VIP's slot isn't a STADIUM slot: unmapped, list only.
-const ZONES = [
-  {
-    id: 3,
-    code: 'NORD',
-    name: 'Tribune Nord',
-    seated: false,
-    gate_codes: ['P4'],
-    map_slot: 'NORTH',
-    prices: [
-      { price_category_id: 'pc-tribune', name: 'Tribune', price_mad: 12050, remaining: 30, audience: 'ALL' },
-      { price_category_id: 'pc-membres', name: 'Membres', price_mad: 3000, remaining: 100, audience: 'MEMBERS' },
-      { price_category_id: 'pc-virage', name: 'Virage', price_mad: 5000, remaining: 2300, audience: 'ALL' },
-    ],
-  },
-  { id: 4, code: 'SUD', name: 'Tribune Sud', seated: true, gate_codes: ['P2'], map_slot: 'SOUTH', prices: [{ price_category_id: 'pc-sud', name: 'Plein', price_mad: 8000, remaining: 0, audience: 'ALL' }] },
-  {
-    id: 5,
-    code: 'EST',
-    name: 'Tribune Est',
-    seated: true,
-    gate_codes: [],
-    map_slot: 'EAST',
-    prices: [
-      { price_category_id: 'pc-est', name: 'Plein', price_mad: 6000, remaining: 0, audience: 'ALL' },
-      { price_category_id: 'pc-est-m', name: 'Membres', price_mad: 4000, remaining: 50, audience: 'MEMBERS' },
-    ],
-  },
-  { id: 6, code: 'HONNEUR', name: 'Tribune d’honneur', seated: true, gate_codes: [], map_slot: 'WEST', prices: [{ price_category_id: 'pc-honneur', name: 'Plein', price_mad: 25000, remaining: 10, audience: 'ALL' }] },
-  { id: 7, code: 'VIP', name: 'Salon VIP', seated: true, gate_codes: [], map_slot: 'ROOFTOP', prices: [{ price_category_id: 'pc-vip', name: 'Plein', price_mad: 90000, remaining: 5, audience: 'ALL' }] },
-] satisfies Zone[]
+// source: real run WS-18 (dev stack with BE-73..75, 2026-11-17), as received: GET /fan/events/1 (ATLAS FC, Grand Stade
+// on STADIUM, the Q242 seed mapping) and GET /fan/events/34 (a members-only zone).
+const REAL_1 = {"id":1,"organizer_id":"a7a5fc00-0000-4000-8000-000000000001","organizer":{"slug":"atlas-fc","name":"ATLAS FC","crest_url":null},"status":"ON_SALE","event_type":"FOOTBALL_MATCH","title":"ATLAS FC vs Rapid Oued","starts_at":"2026-11-27T20:16:00Z","doors_open_at":"2026-11-27T18:16:00Z","timezone":"Africa/Casablanca","venue":{"name":"Grand Stade","city":"Casablanca"},"metadata":{"matchday": 12, "opponent": "Rapid Oued", "competition": "Championnat"},"sale_starts_at":null,"sales_close_at":"2026-11-27T19:16:00Z","on_sale":true,"sold_out":false,"from_price_mad":5000,"per_account_limit":4,"room":null,"layout":"STADIUM","zones":[{"id":1,"code":"NORD","name":"Nord","seated":false,"gate_codes":["P3","P4","P5"],"prices":[{"price_category_id":"e1c78348-3b47-4893-85bd-bae9297c3b17","name":"Plein tarif","price_mad":5000,"remaining":1998,"audience":"ALL"}],"map_slot":"NORTH"},{"id":2,"code":"EST","name":"Est","seated":false,"gate_codes":["P3","P5","P6"],"prices":[{"price_category_id":"a5a687bd-cfd9-485d-a106-367cf55bdfe7","name":"Plein tarif","price_mad":8000,"remaining":2995,"audience":"ALL"}],"map_slot":"EAST"},{"id":3,"code":"HONNEUR","name":"Honneur","seated":true,"gate_codes":["P1","P2"],"prices":[{"price_category_id":"8121f8db-9a12-49c3-9de8-d8792871d7d0","name":"Plein tarif","price_mad":25000,"remaining":494,"audience":"ALL"}],"map_slot":"WEST"},{"id":4,"code":"SUD","name":"Sud","seated":false,"gate_codes":["P7"],"prices":[{"price_category_id":"ea76c71f-5a6f-418f-a8bf-4dc2fa8e6edd","name":"Plein tarif","price_mad":5000,"remaining":2000,"audience":"ALL"}],"map_slot":"SOUTH"}],"payment_methods":["CARD","WALLET","CASH_AGENCY"],"cash_until":"2026-11-27T17:16:00Z"}
+const REAL_34 = {"id":34,"organizer_id":"a7a5fc00-0000-4000-8000-000000000001","organizer":{"slug":"atlas-fc","name":"ATLAS FC","crest_url":null},"status":"ON_SALE","event_type":"FOOTBALL_MATCH","title":"FL-30 real run 8755 membres","starts_at":"2027-03-20T19:00:00Z","doors_open_at":null,"timezone":"Africa/Casablanca","venue":{"name":"Grand Stade","city":"Casablanca"},"metadata":{"opponent": "FL-30"},"sale_starts_at":null,"sales_close_at":"2027-03-20T18:00:00Z","on_sale":true,"sold_out":false,"from_price_mad":null,"per_account_limit":4,"room":null,"layout":"STADIUM","zones":[{"id":1,"code":"NORD","name":"Nord","seated":false,"gate_codes":["P3","P4","P5"],"prices":[{"price_category_id":"3f7b8e5c-5f67-45cb-8146-40affe7a7c6f","name":"Tarif membres","price_mad":3000,"remaining":10,"audience":"MEMBERS"}],"map_slot":"NORTH"}],"payment_methods":["CARD","WALLET","CASH_AGENCY"],"cash_until":"2027-03-20T16:00:00Z"}
+
+const [NORD, EST, HONNEUR, SUD] = REAL_1.zones as Zone[] as [Zone, Zone, Zone, Zone]
+const MEMBERS_PRICE = (REAL_34.zones as Zone[])[0]!.prices[0]!
+// States the dev data doesn't hold, derived from the real rows (only the named fields change): NORD with a second ALL
+// price and the real members price; EST members-only (its ALL price sold out); SUD sold out; VIP on a slot STADIUM lacks.
+const ZONES: Zone[] = [
+  { ...NORD, prices: [...NORD.prices, { ...NORD.prices[0]!, price_category_id: 'pc-tribune', name: 'Tribune', price_mad: 12050, remaining: 30 }, MEMBERS_PRICE] },
+  { ...EST, prices: [{ ...EST.prices[0]!, remaining: 0 }, { ...MEMBERS_PRICE, price_category_id: 'pc-est-m' }] },
+  HONNEUR,
+  { ...SUD, prices: [{ ...SUD.prices[0]!, remaining: 0 }] },
+  { ...HONNEUR, id: 5, code: 'VIP', name: 'Salon VIP', map_slot: 'ROOFTOP', prices: [{ ...HONNEUR.prices[0]!, price_category_id: 'pc-vip' }] },
+]
 
 const fr = getDictionary('fr')
 const copy = (l: Locale) => {
@@ -101,16 +85,16 @@ describe('StageMap', () => {
 
   it('block lines and accessible names: "dès {price}", "Membres", and the name in full', () => {
     render()
-    expect(block('NORTH').textContent).toBe('Tribune Nord' + 'dès \u206650\u00a0DH\u2069' + 'Membres')
-    expect(block('NORTH').getAttribute('aria-label')).toBe('Tribune Nord, dès \u206650\u00a0DH\u2069, membres')
-    expect(block('WEST').getAttribute('aria-label')).toBe('Tribune d’honneur, dès \u2066250\u00a0DH\u2069')
+    expect(block('NORTH').textContent).toBe('Nord' + 'dès \u206650\u00a0DH\u2069' + 'Membres')
+    expect(block('NORTH').getAttribute('aria-label')).toBe('Nord, dès \u206650\u00a0DH\u2069, membres')
+    expect(block('WEST').getAttribute('aria-label')).toBe('Honneur, dès \u2066250\u00a0DH\u2069')
   })
 
   it.each<[string, string | null, Zone[]]>([
     ['no layout', null, ZONES],
     ['an unknown layout', 'ARENA_2030', ZONES],
     ['a layout with no zone on it', 'STADIUM', ZONES.map((z) => ({ ...z, map_slot: null }))],
-    ['only slots the layout lacks', 'STADIUM', ZONES.map((z) => ({ ...z, map_slot: z.id === 3 ? 'FLOOR_FRONT' : 'ROOFTOP' }))],
+    ['only slots the layout lacks', 'STADIUM', ZONES.map((z) => ({ ...z, map_slot: z.id === 1 ? 'FLOOR_FRONT' : 'ROOFTOP' }))],
   ])('%s → no map, the grid shows every price', (_, layout, zones) => {
     render({ layout, zones })
     expect(map()).toBeNull()
@@ -127,27 +111,35 @@ describe('StageMap', () => {
     render()
     expect(block('SOUTH').disabled).toBe(true)
     expect(block('SOUTH').textContent).toContain('Complet')
-    expect(block('SOUTH').getAttribute('aria-label')).toBe('Tribune Sud, complet')
+    expect(block('SOUTH').getAttribute('aria-label')).toBe('Sud, complet')
     expect(block('NORTH').disabled).toBe(false)
   })
 
   it('a tap selects the first open price: cheapest ALL before a cheaper MEMBERS one; a members-only zone → its members price', () => {
     render()
     click(block('NORTH'))
-    expect(card('Virage').getAttribute('aria-pressed')).toBe('true')
+    expect(card('Plein tarif · Debout · Portes P3, P4, P5').getAttribute('aria-pressed')).toBe('true')
     expect(block('NORTH').getAttribute('aria-pressed')).toBe('true')
-    expect(el.querySelector('aside')!.textContent).toContain('Tribune Nord')
+    expect(el.querySelector('aside')!.textContent).toContain('Nord')
 
     click(block('EAST'))
-    expect(card('Membres · Assis').getAttribute('aria-pressed')).toBe('true')
-    expect(card('Membres · Assis').textContent).toContain('40\u00a0DH')
+    expect(card('Tarif membres · Debout · Portes P3, P5, P6').getAttribute('aria-pressed')).toBe('true')
+    expect(card('Tarif membres · Debout · Portes P3, P5, P6').textContent).toContain('30\u00a0DH')
     expect(block('EAST').getAttribute('aria-pressed')).toBe('true')
     expect(block('NORTH').getAttribute('aria-pressed')).toBe('false')
   })
 
+  it('real #34: a members-only zone shows "Membres"; a tap selects its members price', () => {
+    render({ zones: REAL_34.zones as Zone[] })
+    expect(block('NORTH').textContent).toBe('Nord' + 'dès \u206630\u00a0DH\u2069' + 'Membres')
+    click(block('NORTH'))
+    expect(card('Nord').getAttribute('aria-pressed')).toBe('true')
+    expect(card('Nord').querySelector('[data-members]')).not.toBeNull()
+  })
+
   it('a card tap moves the highlight to its zone (same state as a block tap)', () => {
     render()
-    click(card('Tribune d’honneur'))
+    click(card('Honneur'))
     expect(block('WEST').getAttribute('aria-pressed')).toBe('true')
     click(card('Tribune · Debout'))
     expect(block('NORTH').getAttribute('aria-pressed')).toBe('true')
@@ -164,7 +156,7 @@ describe('StageMap', () => {
 
   it.each(LAYOUT_IDS)('layout %s renders every slot as a block, in JSON order, inside the canvas', (id) => {
     const slots = layouts.layouts[id as keyof typeof layouts.layouts].slots
-    const zones = slots.map((s, i) => ({ ...ZONES[3]!, id: i + 1, name: `Z${i}`, map_slot: s.id, prices: [{ ...ZONES[3]!.prices[0]!, price_category_id: `pc-${i}` }] }))
+    const zones = slots.map((s, i) => ({ ...HONNEUR, id: i + 1, name: `Z${i}`, map_slot: s.id, prices: [{ ...HONNEUR.prices[0]!, price_category_id: `pc-${i}` }] }))
     render({ layout: id, zones })
     expect(blocks().map((b) => b.dataset.slot)).toEqual(slots.map((s) => s.id))
     for (const b of blocks()) {
@@ -194,13 +186,13 @@ describe('StageMap', () => {
 describe('W2 with the map (server render)', () => {
   beforeEach(() => {
     vi.stubEnv('API_BASE_URL', 'http://backend.test/v1')
-    vi.stubGlobal('fetch', vi.fn(async () => json(200, rawEvent({ layout: 'STADIUM', zones: ZONES }))))
+    vi.stubGlobal('fetch', vi.fn(async () => json(200, REAL_1)))
   })
 
   it('getEvent maps `layout` and `map_slot`; absent (an older backend) → null', async () => {
     const e = (await getEvent(12, NOW))!
     expect(e.layout).toBe('STADIUM')
-    expect(e.zones.map((z) => z.map_slot)).toEqual(['NORTH', 'SOUTH', 'EAST', 'WEST', 'ROOFTOP'])
+    expect(e.zones.map((z) => z.map_slot)).toEqual(['NORTH', 'EAST', 'WEST', 'SOUTH'])
     vi.stubGlobal('fetch', vi.fn(async () => json(200, rawEvent())))
     const old = (await getEvent(12, NOW))!
     expect([old.layout, ...old.zones.map((z) => z.map_slot)]).toEqual([null, null, null])
@@ -218,7 +210,7 @@ describe('W2 with the map (server render)', () => {
       /html:lang\(ar\) \[data-map\] \.text-label \{\s*letter-spacing: 0 !important;\s*text-transform: none !important;\s*font-weight: 700 !important;/,
     )
     expect(h.indexOf('data-map')).toBeLessThan(h.indexOf(ar.event.seated)) // the first card's detail line
-    expect(h).toContain(`aria-label="${ar.event.mapSoldOut.replace('{zone}', 'Tribune Sud')}"`)
+    expect(h).toContain(`aria-label="${ar.event.mapBlock.replace('{zone}', 'Honneur').replace('{price}', '\u2066250\u00a0DH\u2069')}"`)
   })
 
   it('FR: the server HTML has the map, and the page still renders without it for an unmapped event', async () => {
