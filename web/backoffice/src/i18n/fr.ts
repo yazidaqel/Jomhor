@@ -576,6 +576,8 @@ export const fr = {
         declared: 'Déclaré',
         variance: 'Écart',
         varianceWaiting: 'Saisissez le montant',
+        remove: 'Retirer',
+        removeLabel: 'Retirer {{label}} · {{cashier}} du dépôt',
         submit: 'Enregistrer le dépôt',
         done: 'Dépôt {{reference}} enregistré.',
         dateInvalid: 'Choisissez la date du dépôt.',

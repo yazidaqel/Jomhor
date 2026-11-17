@@ -284,7 +284,8 @@ function DepositSheet(props: { sessions: DepositSession[]; zone: string; open: b
   const { t, i18n } = useTranslation()
   const { dh, gap } = useMoney()
   const record = useRecordDeposit()
-  const { sessions } = props
+  // The sessions picked when the sheet opened; a refused one can be taken out here, so the next try can succeed.
+  const [sessions, setSessions] = useState(props.sessions)
   const today = todayIn(DEFAULT_ZONE)
   const declared = sum(sessions)
   // Per session id: why the server refused it (422 on `session_ids[i]`).
@@ -310,6 +311,7 @@ function DepositSheet(props: { sessions: DepositSession[]; zone: string; open: b
     } catch (e) {
       const fields = e instanceof ApiError && e.code === 'VALIDATION_FAILED' ? Object.keys(Object(e.details.fields)) : []
       const rows: Record<string, string> = {}
+      let onField = false
       for (const f of fields) {
         const i = /^session_ids\[(\d+)\]$/.exec(f)?.[1]
         const id = i === undefined ? undefined : sessionIds[Number(i)]
@@ -319,9 +321,12 @@ function DepositSheet(props: { sessions: DepositSession[]; zone: string; open: b
           form.setError('deposited_on', { message: r ? t(`finance.deposits.sheet.${r}`) : t('common.fieldInvalid') }, { shouldFocus: true })
         } else if (f === 'amount_mad') form.setError('amount', { message: t('common.fieldInvalid') }, { shouldFocus: true })
         else if (f === 'reference') form.setError('reference', { message: t('common.fieldInvalid') }, { shouldFocus: true })
+        else continue
+        onField ||= !id
       }
       setRefused(rows)
-      form.setError('root', { message: t(errorKey(e)) })
+      // A refusal placed on a row or a field says it there; the form-wide message only for the rest.
+      if (Object.keys(rows).length === 0 && !onField) form.setError('root', { message: t(errorKey(e)) })
     }
   })
 
@@ -387,7 +392,23 @@ function DepositSheet(props: { sessions: DepositSession[]; zone: string; open: b
                       </span>
                       <span className="tabular-nums">{dh(s.declared_mad)}</span>
                     </div>
-                    {refused[s.id] && <p className="text-sm text-destructive">{refused[s.id]}</p>}
+                    {refused[s.id] && (
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm text-destructive">{refused[s.id]}</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          aria-label={t('finance.deposits.sheet.removeLabel', { label: s.label, cashier: s.staff.name })}
+                          onClick={() => {
+                            setSessions((list) => list.filter((x) => x.id !== s.id))
+                            setRefused((r) => Object.fromEntries(Object.entries(r).filter(([id]) => id !== s.id)))
+                          }}
+                        >
+                          {t('finance.deposits.sheet.remove')}
+                        </Button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -410,7 +431,7 @@ function DepositSheet(props: { sessions: DepositSession[]; zone: string; open: b
             <Button type="button" variant="outline" onClick={() => props.onOpenChange(false)}>
               {t('common.cancel')}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || sessions.length === 0}>
               {t('finance.deposits.sheet.submit')}
             </Button>
           </SheetFooter>

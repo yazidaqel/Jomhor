@@ -89,7 +89,8 @@ const SALES: EventSales = {
     { channel: 'POS', paid: 0, revenue_mad: 0 },
   ],
   methods: (['CARD', 'WALLET', 'CASH_AGENCY', 'POS_CASH', 'FREE'] as const).map((method) => ({ method, paid: 0, revenue_mad: 0 })),
-  refunds_required: [],  free: { passes: 0, invitations: 0 }, // Lot 5 step 5, source: contract (04 /sales `free`)
+  refunds_required: [],
+  free: { passes: 0, invitations: 0 }, // Lot 5 step 5, source: contract (04 /sales `free`)
 }
 
 type Call = { path: string; org: string | null }
@@ -168,6 +169,28 @@ it('ADMIN lands on Aperçu: the next event, its KPIs from /sales, zones, channel
   expect(calls.filter((c) => c.path.endsWith('/sales'))).toEqual([{ path: '/org/events/1/sales', org: 'org-a' }])
   const nav = within(screen.getByRole('navigation', { name: fr.nav.label }))
   expect(nav.getByRole('link', { name: fr.nav.overview }).getAttribute('aria-current')).toBe('page')
+})
+
+it('Lot 5 step 5: channel shares are out of the channels’ sum, not paid (free places are in no channel)', async () => {
+  // source: contract (04 /sales `free`): paid 1 255 = 900 APP + 350 WEB + 2 pass tickets + 3 invitations.
+  stubApi('ADMIN', undefined, undefined, () => Response.json({ ...SALES, paid: 1255, free: { passes: 2, invitations: 3 } }))
+  renderApp()
+  const card = (await screen.findByRole('heading', { name: fr.overview.channels.title })).closest('[data-slot="card"]') as HTMLElement
+  await within(card).findByText(spaced(dh(4_500_050)))
+  const share = (name: string) => (within(card).getByText(name).closest('li')!.querySelector('[aria-hidden="true"] > div') as HTMLElement).style.width
+  expect(share(fr.sales.channels.names.APP)).toBe('72%') // 900 ÷ 1 250, not ÷ 1 255
+  expect(share(fr.sales.channels.names.WEB)).toBe('28%')
+  expect(share(fr.sales.channels.names.POS)).toBe('0%')
+})
+
+it('Lot 5 step 5: only free places: the channels card says no place was sold', async () => {
+  stubApi('ADMIN', undefined, undefined, () =>
+    Response.json({ ...SALES, paid: 5, free: { passes: 2, invitations: 3 }, channels: SALES.channels.map((c) => ({ ...c, paid: 0, revenue_mad: 0 })) }),
+  )
+  renderApp()
+  const card = (await screen.findByRole('heading', { name: fr.overview.channels.title })).closest('[data-slot="card"]') as HTMLElement
+  expect(await within(card).findByText(fr.sales.channels.noSales)).toBeTruthy()
+  expect(within(card).queryByRole('listitem')).toBeNull()
 })
 
 it('FINANCE sees the figures but no "Nouvel événement"', async () => {

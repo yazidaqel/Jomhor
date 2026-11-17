@@ -194,7 +194,37 @@ it.each([
   const message = await sheet.findByText(fr.finance.deposits.sheet[reason])
   expect(message.closest('li')!.textContent).toContain(label)
   expect(sheet.getAllByText(fr.finance.deposits.sheet[reason])).toHaveLength(1)
+  expect(sheet.queryByText(fr.errors.VALIDATION_FAILED)).toBeNull() // the row says it; no second, form-wide message
   expect(screen.getByRole('dialog')).toBeTruthy() // stays open
+})
+
+it('DEPOSITED on one row: "Retirer" takes it out of the sheet, the total and gap follow, and the retry sends the rest', async () => {
+  const user = userEvent.setup()
+  let posts = 0
+  const calls = stubApi('FINANCE', (c) =>
+    c.method === 'POST'
+      ? ++posts === 1
+        ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { 'session_ids[1]': 'invalid' }, reason: 'DEPOSITED' } }, { status: 422 })
+        : Response.json({ ...LIVE, id: 'd-9', reference: 'B-4' }, { status: 201 })
+      : undefined,
+  )
+  renderApp('/finance/deposits')
+  const sheet = await openSheet(user)
+  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.amount), '700')
+  await user.type(sheet.getByLabelText(fr.finance.deposits.sheet.reference), 'B-4')
+  await user.click(sheet.getByRole('button', { name: fr.finance.deposits.sheet.submit }))
+  await sheet.findByText(fr.finance.deposits.sheet.DEPOSITED)
+  expect(sheet.queryByRole('button', { name: i18n.t('finance.deposits.sheet.removeLabel', { label: NORD.label, cashier: NORD.staff.name }) })).toBeNull() // only refused rows
+
+  await user.click(sheet.getByRole('button', { name: i18n.t('finance.deposits.sheet.removeLabel', { label: SUD.label, cashier: SUD.staff.name }) }))
+  expect(sheet.queryByText('Guichet Sud')).toBeNull()
+  expect(sheet.queryByText(fr.finance.deposits.sheet.DEPOSITED)).toBeNull()
+  expect(screen.getByTestId('deposit-variance').textContent).toBe(fr.finance.cash.noGap) // 700 DH − Nord's 700 DH
+  await user.click(sheet.getByRole('button', { name: fr.finance.deposits.sheet.submit }))
+
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  const sent = calls.filter((c) => c.method === 'POST').map((c) => (c.body as { session_ids: string[] }).session_ids)
+  expect(sent).toEqual([['s-nord', 's-sud'], ['s-nord']])
 })
 
 it('a 422 BEFORE_CLOSE on deposited_on: its copy on the date field', async () => {
