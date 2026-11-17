@@ -167,6 +167,32 @@ passes:
   # (docs/04-api.md §Passes Reminder).
   reminder-before: ${PASSES_REMINDER_BEFORE:3d}
 
+finance:
+  # Daily settlement statements and fee invoices (docs/04-api.md §Finance, plan lot-5 §13.4.4).
+  # The statement day: payments are settled by the local day of their completed_at in this zone.
+  timezone: ${FINANCE_TIMEZONE:Africa/Casablanca}
+  # The statement job runs this long after the previous run ends, on every instance (organizer try-lock).
+  tick: ${FINANCE_TICK:10m}
+  # The first run after startup: soon, so a restart catches up on due days without waiting a whole tick.
+  initial-delay: ${FINANCE_INITIAL_DELAY:1m}
+  # A day is issued once the next one has begun + this, so payment callbacks in flight at midnight commit first.
+  issue-delay: ${FINANCE_ISSUE_DELAY:1h}
+  # due_on = day + this; a Saturday or Sunday moves to Monday.
+  payout-days: ${FINANCE_PAYOUT_DAYS:2}
+  # VAT on Jomhor's fee, basis points (2000 = 20 %).
+  vat-rate-bp: ${FINANCE_VAT_RATE_BP:2000}
+  # Jomhor's legal mentions as invoice issuer (plan Q230), copied into each invoice at issue. Demo values in dev and
+  # test only; required under prod (startup check, BE-71).
+  issuer:
+    legal-name: ${FINANCE_ISSUER_LEGAL_NAME:}
+    legal-form: ${FINANCE_ISSUER_LEGAL_FORM:}
+    capital: ${FINANCE_ISSUER_CAPITAL:}
+    address: ${FINANCE_ISSUER_ADDRESS:}
+    rc: ${FINANCE_ISSUER_RC:}
+    if: ${FINANCE_ISSUER_IF:}
+    tp: ${FINANCE_ISSUER_TP:}
+    ice: ${FINANCE_ISSUER_ICE:}
+
 notifications:
   push:
     # Push adapter (docs/04-api.md §Notifications): 'log' = dev/staging, refused under prod; 'fcm' comes with BE-36.

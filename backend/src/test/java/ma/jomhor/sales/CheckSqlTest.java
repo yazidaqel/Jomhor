@@ -13,6 +13,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import ma.jomhor.finance.Ledger;
+import ma.jomhor.finance.application.SettlementService;
 import ma.jomhor.payments.PaymentTest;
 import ma.jomhor.sales.application.OrderService;
 import ma.jomhor.sales.products.application.PassTicketService;
@@ -36,6 +38,9 @@ class CheckSqlTest extends QueueFixture {
 
     @Autowired
     TransactionTemplate tx;
+
+    @Autowired
+    SettlementService settlements;
 
     /**
      * A sale with no breach, on a 3-place category (sold out): the fan's order A of 2 places is PAID (2 VALID tickets,
@@ -309,6 +314,69 @@ class CheckSqlTest extends QueueFixture {
         assertThat(foundFor(foreignSession)).containsExactly("DEPOSIT_TENANT");
         sql("update pos_sessions set deposit_id = null where id = ?::uuid", foreignSession);
         assertThat(foundFor(foreignSession)).isEmpty();
+    }
+
+    /** One mutation inside a transaction that rolls back; the check.sql rows about {@code ref} meanwhile. */
+    private List<Object> rolledBack(String ref, String... statements) {
+        return tx.execute(t -> {
+            t.setRollbackOnly();
+            for (String s : statements) {
+                sql(s);
+            }
+            try {
+                return foundFor(ref);
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        });
+    }
+
+    /**
+     * BE-72: two statements issued by the job (a fee and a payout, then a till-only day whose fees carry a debt out to
+     * the next statement) are clean; each
+     * settlement check fires alone on one crafted breach, in a transaction that rolls back (invoices are immutable: their
+     * trigger is disabled inside it). The invoice year 2045 is this test's alone.
+     */
+    @Test
+    void settlementChecksFireOnTheirOwnBreach() throws Exception {
+        ZoneId zone = ZoneId.of("Africa/Casablanca");
+        UUID org = organizer("Club " + UUID.randomUUID());
+        Ledger.activate(jdbc, org, 500, "2045-03-01");
+        int event = Ledger.event(jdbc, org, "Match");
+        Instant day1 = LocalDate.parse("2045-03-01").atTime(12, 0).atZone(zone).toInstant();
+        Instant day2 = LocalDate.parse("2045-03-02").atTime(12, 0).atZone(zone).toInstant();
+        Ledger.pay(jdbc, org, Ledger.eventOrder(jdbc, org, event, "PAID"), "CARD", "FAKE", 1_000_00, day1);
+        Ledger.pay(jdbc, org, Ledger.eventOrder(jdbc, org, event, "PAID"), "POS_CASH", "POS", 200_00, day1);
+        Ledger.pay(jdbc, org, Ledger.eventOrder(jdbc, org, event, "PAID"), "POS_CASH", "POS", 3_000_00, day2);
+        settlements.runAt(LocalDate.parse("2045-03-04").atStartOfDay(zone).toInstant());
+        String first = jdbc.sql("select id::text from settlements where organizer_id = ? and day = '2045-03-01'")
+                .param(org).query(String.class).single();
+        String second = jdbc.sql("select id::text from settlements where organizer_id = ? and day = '2045-03-02'")
+                .param(org).query(String.class).single();
+        assertThat(jdbc.sql("select carried_in_mad from settlements where id = ?::uuid").param(second)
+                .query(Long.class).single()).isZero();
+        assertThat(breaches(org)).isEmpty();
+
+        assertThat(rolledBack(first, "update settlement_lines set amount_mad = amount_mad + 1 where settlement_id = '"
+                + first + "' and collector = 'POS'")).containsExactly("SETTLEMENT_LINES");
+        UUID late = Ledger.eventOrder(jdbc, org, event, "PAID");
+        assertThat(rolledBack(first, "insert into payments (organizer_id, order_id, method, provider, amount_mad, status,"
+                + " completed_at) values ('" + org + "', '" + late + "', 'CARD', 'FAKE', 100, 'SUCCEEDED', '"
+                + day1 + "')")).containsExactly("SETTLEMENT_PAYMENTS");
+        assertThat(rolledBack(first, "update settlements set payout_mad = payout_mad + 1 where id = '" + first + "'"))
+                .containsExactly("SETTLEMENT_FORMULA");
+        assertThat(rolledBack(second, "update settlements set carried_in_mad = -1 where id = '" + second + "'"))
+                .containsExactly("SETTLEMENT_FORMULA");
+        String disable = "alter table invoices disable trigger invoices_immutable";
+        assertThat(rolledBack(first, disable, "delete from invoices where settlement_id = '" + first + "'"))
+                .containsExactly("SETTLEMENT_NO_INVOICE");
+        assertThat(rolledBack(first, disable, "update invoices set vat_mad = vat_mad + 1, amount_ttc_mad = amount_ttc_mad"
+                + " + 1 where settlement_id = '" + first + "'")).containsExactly("INVOICE_AMOUNTS");
+        assertThat(rolledBack(second, disable, "update invoices set seq = seq + 1000 where settlement_id = '" + second
+                + "'")).containsExactly("INVOICE_SEQ");
+        assertThat(breaches(org)).isEmpty(); // all rolled back
+        assertThat(jdbc.sql("select tgenabled::text from pg_trigger where tgname = 'invoices_immutable'")
+                .query(String.class).single()).isEqualTo("O");
     }
 
     @Test

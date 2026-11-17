@@ -263,6 +263,45 @@ class JdbcPayments implements Payments, PendingPayments {
                 .list();
     }
 
+    @Override
+    public List<SettledPayment> succeeded(UUID org, Instant from, Instant to) {
+        return jdbc.sql("""
+                        select order_id, method::text as method, provider, amount_mad, completed_at
+                        from payments
+                        where organizer_id = :org and status = 'SUCCEEDED' and completed_at >= :from and completed_at < :to
+                        """)
+                .param("org", org).param("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+                .param("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC))
+                .query((rs, n) -> new SettledPayment(rs.getObject("order_id", UUID.class),
+                        PaymentMethod.valueOf(rs.getString("method")), rs.getString("provider"), rs.getLong("amount_mad"),
+                        rs.getObject("completed_at", OffsetDateTime.class).toInstant()))
+                .list();
+    }
+
+    @Override
+    public long[] succeededSince(UUID org, Instant since) {
+        return jdbc.sql("""
+                        select coalesce(sum(amount_mad) filter (where provider <> 'POS'), 0),
+                               coalesce(sum(amount_mad) filter (where provider = 'POS'), 0), count(*)
+                        from payments
+                        where organizer_id = :org and status = 'SUCCEEDED' and completed_at >= :since
+                        """)
+                .param("org", org).param("since", OffsetDateTime.ofInstant(since, ZoneOffset.UTC))
+                .query((rs, n) -> new long[] {rs.getLong(1), rs.getLong(2), rs.getLong(3)}).single();
+    }
+
+    @Override
+    public Optional<Instant> firstSucceeded(UUID org, Instant from, Instant to) {
+        return jdbc.sql("""
+                        select completed_at from payments
+                        where organizer_id = :org and status = 'SUCCEEDED' and completed_at >= :from and completed_at < :to
+                        order by completed_at limit 1
+                        """)
+                .param("org", org).param("from", OffsetDateTime.ofInstant(from, ZoneOffset.UTC))
+                .param("to", OffsetDateTime.ofInstant(to, ZoneOffset.UTC))
+                .query(OffsetDateTime.class).optional().map(OffsetDateTime::toInstant);
+    }
+
     private static Payment payment(ResultSet rs, int n) throws SQLException {
         return new Payment(rs.getObject("id", UUID.class), rs.getObject("organizer_id", UUID.class),
                 rs.getObject("order_id", UUID.class), PaymentMethod.valueOf(rs.getString("method")),

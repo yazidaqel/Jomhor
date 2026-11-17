@@ -2,6 +2,7 @@ package ma.jomhor.tenancy.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.tenancy.domain.CashPoint;
@@ -70,6 +71,12 @@ public interface Accounts {
     record LoyaltySetting(boolean present, List<LoyaltyTier> tiers) {}
 
     boolean organizerExists(UUID organizerId);
+
+    /** organizers.settings.finance as JSON text; empty when the key is absent (or no such organizer). */
+    Optional<String> finance(UUID organizerId);
+
+    /** Every organizer whose settings hold a finance key → that value as JSON text, by id. */
+    Map<UUID, String> financeAll();
 
     /** Organizers with a slug (the club directory), by name then id. */
     List<Organizer> listedOrganizers();

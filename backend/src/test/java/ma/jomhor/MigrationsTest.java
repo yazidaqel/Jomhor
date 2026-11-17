@@ -23,12 +23,72 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV36Apply() {
+    void v1ToV37Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
                         "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32",
-                        "33", "34", "35", "36");
+                        "33", "34", "35", "36", "37");
+    }
+
+    /**
+     * V37: a statement's status agrees with its payout and payout fields (settlements_status); a line has exactly one
+     * subject (settlement_lines_subject); an invoice's TTC is HT + VAT (invoices_ttc), its number and (year, seq)
+     * unique; invoices refuse UPDATE, DELETE and TRUNCATE, even on no row.
+     */
+    @Test
+    void settlementsAndImmutableInvoices() {
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var user = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        var staff = jdbcTemplate.queryForObject("insert into staff (organizer_id, user_id, name, role) "
+                + "values (?, ?, 'Salma', 'FINANCE') returning id", UUID.class, org, user);
+        String statement = "insert into settlements (organizer_id, day, collected_mad, till_mad, fee_rate_bp, "
+                + "fee_ht_mad, fee_vat_mad, carried_in_mad, payout_mad, due_on, status, paid_at, paid_by, "
+                + "payout_reference) values (?, current_date - ?, 0, 0, 0, 0, 0, 0, ?, current_date, "
+                + "?::settlement_status, ?, ?, ?) returning id";
+        Timestamp now = Timestamp.from(Instant.now());
+        Object[][] bad = {{1, 0L, "DUE", null, null, null}, {2, 100L, "NONE", null, null, null},
+            {3, 100L, "PAID", null, null, null}, {4, 100L, "DUE", now, staff, "VIR"},
+            {5, 100L, "PAID", now, null, "VIR"}, {6, 100L, "PAID", now, staff, null}};
+        for (Object[] b : bad) {
+            assertThatThrownBy(() -> jdbcTemplate.queryForObject(statement, UUID.class, org, b[0], b[1], b[2], b[3],
+                    b[4], b[5])).as(Arrays.toString(b)).isInstanceOf(DataIntegrityViolationException.class)
+                    .hasMessageContaining("settlements_status");
+        }
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(statement, UUID.class, org, 7, 0L, "NONE", null, null,
+                "")).isInstanceOf(DataIntegrityViolationException.class);
+        var paid = jdbcTemplate.queryForObject(statement, UUID.class, org, 8, 100L, "PAID", now, staff, "VIR 0042");
+        var none = jdbcTemplate.queryForObject(statement, UUID.class, org, 9, 0L, "NONE", null, null, null);
+        assertThatThrownBy(() -> jdbcTemplate.queryForObject(statement, UUID.class, org, 9, 0L, "NONE", null, null,
+                null)).isInstanceOf(DuplicateKeyException.class); // one statement per organizer and day
+
+        var product = jdbcTemplate.queryForObject("insert into products (organizer_id, kind, name, price_mad, "
+                + "sales_close_at, valid_until) values (?, 'MEMBERSHIP', 'Adhésion', 100, now(), now()) returning id",
+                UUID.class, org);
+        String line = "insert into settlement_lines (organizer_id, settlement_id, event_id, product_id, method, "
+                + "collector, payments, amount_mad) values (?, ?, null, ?, 'CARD', 'FAKE', ?, 100)";
+        assertThatThrownBy(() -> jdbcTemplate.update(line, org, paid, null, 1))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("settlement_lines_subject");
+        assertThatThrownBy(() -> jdbcTemplate.update(line, org, paid, product, 0))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        jdbcTemplate.update(line, org, paid, product, 1);
+
+        String invoice = "insert into invoices (organizer_id, settlement_id, year, seq, number, issued_on, issuer, "
+                + "customer, amount_ht_mad, vat_rate_bp, vat_mad, amount_ttc_mad) values (?, ?, 1999, ?, ?, "
+                + "current_date, '{}', '{}', 100, 2000, 20, ?)";
+        assertThatThrownBy(() -> jdbcTemplate.update(invoice, org, paid, 1, "JMH-1999-000001", 119L))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("invoices_ttc");
+        jdbcTemplate.update(invoice, org, paid, 1, "JMH-1999-000001", 120L);
+        assertThatThrownBy(() -> jdbcTemplate.update(invoice, org, none, 1, "JMH-1999-000001-b", 120L))
+                .isInstanceOf(DuplicateKeyException.class); // (year, seq)
+        assertThatThrownBy(() -> jdbcTemplate.update(invoice, org, paid, 2, "JMH-1999-000002", 120L))
+                .isInstanceOf(DuplicateKeyException.class); // one invoice per statement
+        for (String sql : new String[] {"update invoices set vat_mad = vat_mad", "update invoices set seq = seq where false",
+                "delete from invoices where false", "delete from invoices where year = 1999", "truncate invoices"}) {
+            assertThatThrownBy(() -> jdbcTemplate.execute(sql)).as(sql).isInstanceOf(DataAccessException.class)
+                    .hasMessageContaining("invoices are immutable");
+        }
     }
 
     /**

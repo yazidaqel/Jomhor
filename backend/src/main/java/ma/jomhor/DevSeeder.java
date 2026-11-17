@@ -2,6 +2,10 @@ package ma.jomhor;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,6 +40,8 @@ import tools.jackson.databind.node.JsonNodeFactory;
  * priced, published, and the demo fan gets a ticket for it (a till sale by the dev admin on that club's till, with
  * two paper tickets); then the club's ON_SALE demo events get their times moved relative to now, so the stack is
  * always testable. Past events are closed once and left alone; the demo fan was admitted at most of the archive ones.
+ * The first run also gives ATLAS FC its finance settings (500 bp, from two local days ago) and till money on those two
+ * days, so the statement job issues two statements at startup (plan lot-5 §13.1 Exit 5b, BE-72).
  */
 @Component
 @Profile("dev")
@@ -122,6 +128,56 @@ class DevSeeder implements ApplicationRunner {
 
     void seed() {
         CLUBS.forEach(this::seed);
+        finance();
+    }
+
+    /** Africa/Casablanca, the statement day's zone (finance.timezone's default). */
+    static final ZoneId FINANCE_ZONE = ZoneId.of("Africa/Casablanca");
+
+    /**
+     * Once (while ATLAS FC has no settings.finance): demo finance settings from two local days ago, then till sales on
+     * the upcoming match (4 Honneur places, 1 000 DH, two days ago; 4 Est places, 320 DH, yesterday: a till sale
+     * holds at most the per-account limit) with their payments' completed_at moved to noon of those days, as if sold
+     * then. Online money comes from the demo itself (lot5-settlements.http): card and network payments need the
+     * gateway's signed callbacks.
+     */
+    private void finance() {
+        boolean done = jdbc.sql("select settings -> 'finance' is not null from organizers where id = ?").param(ORG)
+                .query(Boolean.class).single();
+        if (done) {
+            return;
+        }
+        LocalDate today = LocalDate.now(FINANCE_ZONE);
+        jdbc.sql("update organizers set settings = settings || jsonb_build_object('finance', jsonb_build_object("
+                        + "'legal_name', 'ATLAS FC SA', 'address', 'Grand Stade, Casablanca', 'ice', '001234567000089', "
+                        + "'if', '12345678', 'rc', 'Casablanca 123456', 'rib', '011780000012345678901234', "
+                        + "'fee_rate_bp', 500, 'start_on', ?)) where id = ?")
+                .params(today.minusDays(2).toString(), ORG).update();
+        Event.Summary upcoming = events.list(ORG, null, null).stream().filter(e -> e.title().equals(UPCOMING.title()))
+                .findFirst().orElseThrow();
+        Map<String, UUID> priceOf = new HashMap<>();
+        events.prices(ORG, upcoming.id()).forEach(p -> priceOf.put(p.zoneCode(), p.id()));
+        var till = pos.open(ORG, ADMIN, "Guichet relevés");
+        long cash = tillDay(upcoming.id(), priceOf.get("HONNEUR"), 4, today.minusDays(2))
+                + tillDay(upcoming.id(), priceOf.get("EST"), 4, today.minusDays(1));
+        if (till.created()) {
+            pos.close(ORG, ADMIN, StaffRole.ADMIN, till.session().id(), cash);
+        }
+        log.info("[dev seed] ATLAS FC finance settings and till money on {} and {}", today.minusDays(2),
+                today.minusDays(1));
+    }
+
+    /** One till sale of {@code qty} places, its payment moved to noon of {@code day}; returns its amount. */
+    private long tillDay(int eventId, UUID price, int qty, LocalDate day) {
+        List<HolderRequest> holders = Stream.generate(() -> new HolderRequest("Supporter Atlas", null)).limit(qty)
+                .toList();
+        var order = pos.sale(ORG, ADMIN, UUID.randomUUID(), eventId, List.of(new ItemRequest(price, qty, holders)))
+                .view().order();
+        jdbc.sql("update payments set completed_at = ? where organizer_id = ? and order_id = ? and status = 'SUCCEEDED'")
+                .params(OffsetDateTime.ofInstant(day.atTime(12, 0).atZone(FINANCE_ZONE).toInstant(), ZoneOffset.UTC),
+                        ORG, order.id())
+                .update();
+        return order.totalMad();
     }
 
     private void seed(Club club) {

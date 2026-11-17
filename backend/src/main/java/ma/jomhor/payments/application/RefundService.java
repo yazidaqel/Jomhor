@@ -35,6 +35,11 @@ public class RefundService {
         return refunds.insert(org, user, eventId, ticketId, orderId, amountMad, reason);
     }
 
+    /** The organizer's REQUIRED refunds: {count, Σ amount_mad} (04 /org/finance/settlements refunds_required). */
+    public long[] requiredTotals(UUID org) {
+        return refunds.requiredTotals(org);
+    }
+
     public List<Refund> list(UUID org, Refund.Status status, Integer eventId) {
         return refunds.list(org, status, eventId);
     }

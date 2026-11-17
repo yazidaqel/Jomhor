@@ -19,6 +19,9 @@ public interface Refunds {
 
     Optional<Refund> get(UUID org, UUID refundId);
 
+    /** The organizer's REQUIRED refunds: {count, Σ amount_mad}, in one aggregate. */
+    long[] requiredTotals(UUID org);
+
     /** The refund's status, its row locked until the end of the transaction. */
     Optional<Refund.Status> lockStatus(UUID org, UUID refundId);
 

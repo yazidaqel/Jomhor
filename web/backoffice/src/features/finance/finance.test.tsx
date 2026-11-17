@@ -162,6 +162,9 @@ it('FINANCE opens Finance › Encaissements: last 7 local days, per day × colle
 
   await screen.findByRole('navigation', { name: fr.nav.label })
   await user.click(await nav().findByRole('link', { name: fr.nav.finance }))
+  // Lot 5 step 5b: Relevés is FINANCE's first tab; Encaissements is one click away.
+  await waitFor(() => expect(router.state.location.pathname).toBe('/finance/settlements'))
+  await user.click(await screen.findByRole('tab', { name: fr.finance.tabs.cash }))
   expect(router.state.location.pathname).toBe('/finance/cash')
   expect(await screen.findByRole('heading', { name: fr.finance.cash.days.title })).toBeTruthy()
   expect(nav().getByRole('link', { name: fr.nav.finance }).getAttribute('aria-current')).toBe('page')

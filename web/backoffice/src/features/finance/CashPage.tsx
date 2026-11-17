@@ -99,7 +99,7 @@ export function RangeForm({ id, initial, onSubmit }: { id: string; initial: Days
   )
 }
 
-function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+export function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <Card className={cn('gap-0 overflow-hidden pb-0', STICKY_TABLE)}>
       <CardHeader className="border-b pb-5">

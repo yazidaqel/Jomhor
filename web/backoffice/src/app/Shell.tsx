@@ -92,7 +92,7 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
     group: 'relations',
     items: [
       { key: 'invitations', icon: IdCard, to: '/invitations', roles: ['ADMIN', 'OPS', 'FINANCE'] },
-      { key: 'finance', icon: Landmark, to: '/finance/cash', roles: ['ADMIN', 'OPS', 'FINANCE'] },
+      { key: 'finance', icon: Landmark, to: '/finance', roles: ['ADMIN', 'OPS', 'FINANCE'] },
       { key: 'crm', icon: Users, to: '/crm', roles: ['ADMIN', 'OPS', 'FINANCE'] },
     ],
   },

@@ -47,3 +47,15 @@ payments:
 notifications:
   push:
     provider: ${NOTIFICATIONS_PUSH_PROVIDER:log} # logs path + token tail; refused under prod
+
+# Demo issuer for local invoices (plan lot-5 Q230): not Jomhor's real legal IDs.
+finance:
+  issuer:
+    legal-name: ${FINANCE_ISSUER_LEGAL_NAME:Jomhor Démo SARL}
+    legal-form: ${FINANCE_ISSUER_LEGAL_FORM:SARL}
+    capital: ${FINANCE_ISSUER_CAPITAL:100 000 DH}
+    address: ${FINANCE_ISSUER_ADDRESS:Casablanca (adresse de démonstration)}
+    rc: ${FINANCE_ISSUER_RC:Casablanca 000000}
+    if: ${FINANCE_ISSUER_IF:00000000}
+    tp: ${FINANCE_ISSUER_TP:00000000}
+    ice: ${FINANCE_ISSUER_ICE:000000000000000}

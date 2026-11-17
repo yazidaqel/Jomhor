@@ -5,7 +5,7 @@ import { CrmPage } from '@/features/crm/CrmPage'
 import { DevicesPage } from '@/features/devices/DevicesPage'
 import { EventPage } from '@/features/events/EventPage'
 import { EventsPage } from '@/features/events/EventsPage'
-import { FinancePage } from '@/features/finance/FinancePage'
+import { FinanceHome, FinancePage } from '@/features/finance/FinancePage'
 import { InvitationPrintPage, InvitationsIndexPage, InvitationsPage } from '@/features/invitations/InvitationsPage'
 import { LiveIndexPage, LivePage } from '@/features/live/LivePage'
 import { RoomPage } from '@/features/room/RoomPage'
@@ -50,8 +50,9 @@ export const routes: RouteObject[] = [
       { path: 'products/:id', element: <ProductPage /> },
       { path: 'devices', element: <DevicesPage /> },
       { path: 'pos', element: <PosPage /> },
-      // B8: one route per tab (Lot 5 step 5 adds Dépôts).
-      { path: 'finance', element: <Navigate to="/finance/cash" replace /> },
+      // B8: one route per tab (Lot 5 step 5 adds Dépôts, 5b Relevés, the default for ADMIN and FINANCE).
+      { path: 'finance', element: <FinanceHome /> },
+      { path: 'finance/settlements', element: <FinancePage tab="settlements" /> },
       { path: 'finance/cash', element: <FinancePage tab="cash" /> },
       { path: 'finance/deposits', element: <FinancePage tab="deposits" /> },
       { path: 'crm', element: <CrmPage /> },

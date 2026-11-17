@@ -1,0 +1,228 @@
+### Lot 5 step 5b demo, daily statements, fee invoices and payouts (IntelliJ HTTP client): plan lot-5 §13.1 Exit 5b on
+### one instance; Lot5SettlementFlowTest runs the full week (every kind of payment, fixed clock) in CI.
+#
+# Start the backend with the dev profile on port 8080, so @base and the card redirect (PUBLIC_BASE_URL, dev default
+# http://localhost:8080/v1) agree:
+#   docker compose up -d && SERVER_PORT=8080 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Dev seed (first start on a fresh database): ATLAS FC with finance settings (500 bp, RIB •••• 1234, start_on two days
+# before that start) and till money on those two days, 1 000 DH then 320 DH. About a minute after startup
+# (finance.initial-delay) the statement job issues both: till money only, so both read "Rien à verser" (NONE), each with
+# its fee invoice, and the second opens with the first one's carried debt. Card and network money comes from step 2.
+# Timing: before 01:00 on the day of first start, step 1.1 shows one NONE row, not two (yesterday is issued from 01:00);
+# steps 4.1 and 4.2 run the next day with @today left at its old value (yesterday's statement is then in range).
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phone is made up.
+# Card payment: open the response's redirect_url in a browser and click "Approuver" right away (8 min hold).
+# At the end, backend/loadtest/check.sql must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@adminPhone = +212600000001
+@opsPhone = +212600000003
+@financePhone = +212600000004
+@fanPhone = +212611188001
+@code = 123456
+# SET @today BEFORE A RUN: today's date (YYYY-MM-DD) in Africa/Casablanca (finance.timezone), the statements' local
+# day. It is the end of the range read below (at most 92 days, from @from); the value below is only the day this file
+# was written. Set @from a few days earlier so the seeded statements are in range. (Not computed in a pre-request
+# script: the client's JavaScript has no reliable time-zone support, and the server's local day must match.)
+@today = 2026-11-17
+@from = 2026-11-01
+
+### ---------- (0) staff logins ----------
+
+### 0.1 FINANCE (Finance Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{financePhone}}"}
+
+### 0.2 FINANCE: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{financePhone}}", "code": "{{code}}"}
+
+> {% client.global.set("financeToken", response.body.token); %}
+
+### 0.3 OPS (Ops Dev): ask for a code (sets up the match; no Relevés: 403)
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 0.4 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("opsToken", response.body.token); %}
+
+### 0.5 ADMIN (Admin Dev): ask for a code (the refund)
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 0.6 ADMIN: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("adminToken", response.body.token); %}
+
+### ---------- (1) B8 Relevés: the seeded statements ----------
+
+### 1.1 FINANCE: the range -> settings {legal_name, ice, rib_last4 "1234", fee_rate_bp 500, start_on}, open (not yet
+### issued: today's money), refunds_required, due {count, amount_mad, overdue}, vat_rate_bp 2000, settlements newest
+### first: two NONE rows (fees 50 + 10 DH, then 16 + 3,20 DH with "report" −60 DH), each with invoice {id, number}
+GET {{base}}/org/finance/settlements?from={{from}}&to={{today}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+> {%
+    client.global.set("settlementId", response.body.settlements[0].id);
+    client.global.set("invoiceId", response.body.settlements[0].invoice.id);
+%}
+
+### 1.2 FINANCE: the newest statement's sheet -> lines by title, method, collector ("Guichet" for the till)
+GET {{base}}/org/finance/settlements/{{settlementId}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### 1.3 FINANCE: its invoice -> application/pdf, facture-JMH-….pdf, no-store: issuer and customer mentions, the
+### service line "Frais de service billetterie · relevé du …", HT, TVA 20 %, TTC, "Réglée par compensation …"; no RIB
+GET {{base}}/org/finance/invoices/{{invoiceId}}.pdf
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### 1.4 FINANCE: the CSV -> releves-{from}-{today}.csv: a "releve" row then its "ligne" rows, per statement
+GET {{base}}/org/finance/settlements.csv?from={{from}}&to={{today}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### 1.5 FINANCE: "Versement reçu" on a NONE statement -> 409 SETTLEMENT_STATUS, details.status NONE
+POST {{base}}/org/finance/settlements/{{settlementId}}/paid
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reference": "VIR 0042"}
+
+### 1.6 OPS: no Relevés -> 403
+GET {{base}}/org/finance/settlements?from={{from}}&to={{today}}
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (2) Today: a 250 DH card payment, "Pas encore relevé" until tomorrow 01:00 ----------
+
+### 2.1 OPS: the Grand Stade zones (Est)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("estId", response.body.zones.find(z => z.code === "EST").id); %}
+
+### 2.2 OPS: the match (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo relevés",
+ "starts_at": "2027-02-28T19:00:00Z", "metadata": {"opponent": "Démo"}}
+
+> {% client.global.set("match", response.body.id); %}
+
+### 2.3 OPS: "Pelouse" in Est, 250 DH
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Pelouse", "price_mad": 25000, "quota": 50}
+
+> {% client.global.set("pelouseCat", response.body.id); %}
+
+### 2.4 OPS: publish (DRAFT -> ON_SALE)
+POST {{base}}/org/events/{{match}}/publish
+Authorization: Bearer {{opsToken}}
+X-Organizer-Id: {{org}}
+
+### 2.5 Fan: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{fanPhone}}"}
+
+### 2.6 Fan: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{fanPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("fanToken", response.body.token); %}
+
+### 2.7 Fan: one Pelouse place -> 201 RESERVED
+POST {{base}}/fan/orders
+Authorization: Bearer {{fanToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "items": [{"price_category_id": "{{pelouseCat}}", "qty": 1,
+  "holders": [{"name": "Hamza Bennani"}]}]}
+
+> {% client.global.set("order", response.body.id); %}
+
+### 2.8 Fan: pay by card -> 200 {redirect_url}: open it in a browser and click "Approuver"
+POST {{base}}/fan/orders/{{order}}/pay
+Authorization: Bearer {{fanToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 2.9 FINANCE: open.collected_mad grew by 25000, open.payments by 1; no statement for today (issued tomorrow at
+### 01:00 + the next tick: DUE when online money − fees + the carried debt > 0, due day + 2, a weekend → Monday)
+GET {{base}}/org/finance/settlements?from={{from}}&to={{today}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (3) A refund: "Remboursements à faire", no issued statement changes ----------
+
+### 3.1 Fan: the order's ticket (ticket_ids)
+GET {{base}}/fan/orders/{{order}}
+Authorization: Bearer {{fanToken}}
+
+> {% client.global.set("ticketId", response.body.ticket_ids[0]); %}
+
+### 3.2 ADMIN: refund it -> 200; a REQUIRED refund of 250 DH
+POST {{base}}/org/tickets/{{ticketId}}/refund
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "Empêchement"}
+
+### 3.3 FINANCE: refunds_required {count 1, amount_mad 25000}; the settlements rows are as in 1.1
+GET {{base}}/org/finance/settlements?from={{from}}&to={{today}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (4) Tomorrow, after 01:00 + a tick (or a restart: the job runs a minute after startup) ----------
+
+### 4.1 FINANCE: today's statement is issued, DUE; due.count 1
+GET {{base}}/org/finance/settlements?from={{from}}&to={{today}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("dueId", response.body.settlements.find(s => s.status === "DUE").id); %}
+
+### 4.2 FINANCE: "Versement reçu" -> 200 PAID, paid_by Finance Dev, payout_reference "VIR 0042"; a replay -> 200 as is
+POST {{base}}/org/finance/settlements/{{dueId}}/paid
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reference": "VIR 0042"}

@@ -8,7 +8,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.catalog.application.Inventory.Hold;
@@ -591,5 +593,23 @@ class JdbcOrders implements Orders {
     private static RefundRequired refundRequired(ResultSet rs, int n) throws SQLException {
         return new RefundRequired(UUID.fromString(rs.getString("payment_id")), rs.getObject("order_id", UUID.class),
                 rs.getLong("amount_mad"), rs.getString("reason"), instant(rs, "at"));
+    }
+
+    @Override
+    public Map<UUID, Subject> subjects(UUID org, Collection<UUID> orderIds) {
+        Map<UUID, Subject> subjects = new HashMap<>();
+        jdbc.sql("""
+                        select o.id, o.event_id,
+                               (select i.product_id from order_items i
+                                where i.organizer_id = o.organizer_id and i.order_id = o.id and o.event_id is null
+                                order by i.id limit 1) as product_id
+                        from orders o where o.organizer_id = :org and o.id = any(cast(:ids as uuid[]))
+                        """)
+                .param("org", org).param("ids", orderIds.toArray(UUID[]::new))
+                .query(rs -> {
+                    subjects.put(rs.getObject("id", UUID.class), new Subject(rs.getObject("event_id", Integer.class),
+                            rs.getObject("product_id", UUID.class)));
+                });
+        return subjects;
     }
 }

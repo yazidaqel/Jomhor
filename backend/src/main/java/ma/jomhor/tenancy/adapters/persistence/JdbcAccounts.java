@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -132,6 +133,25 @@ class JdbcAccounts implements Accounts {
     public boolean organizerExists(UUID organizerId) {
         return jdbc.sql("select exists (select 1 from organizers where id = ?)").param(organizerId)
                 .query(Boolean.class).single();
+    }
+
+    @Override
+    public Optional<String> finance(UUID organizerId) {
+        return jdbc.sql("select settings -> 'finance' from organizers where id = ? and settings -> 'finance' is not null")
+                .param(organizerId).query(String.class).optional();
+    }
+
+    // The statement job's system read over every organizer (it serves them all).
+    @Override
+    public Map<UUID, String> financeAll() {
+        Map<UUID, String> all = new LinkedHashMap<>();
+        jdbc.sql("""
+                        select id, settings -> 'finance' as finance from organizers
+                        where settings -> 'finance' is not null order by id""")
+                .query(rs -> {
+                    all.put(rs.getObject("id", UUID.class), rs.getString("finance"));
+                });
+        return all;
     }
 
     // Platform reads of the organizers table itself (public directory), not of a tenant table.
