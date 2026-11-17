@@ -130,3 +130,11 @@ Order: contracts → backend → clients. FL-34, WS-18 and BO-29 run in parallel
 - **Per-event map override.**
 - **The map elsewhere:** gate hints on the map; the map in B2/B4, the scanner, the PDF or the ticket.
 - **A colour column.** The `zoneA/B/C` palette by position stays.
+
+## 9. Carried forward
+
+| Item | When | Source |
+| --- | --- | --- |
+| Back-office toasts (bottom right) cover the B10 Plan card's Save button on tall windows while showing | if staff report it | BO-29 real run |
+| A sold-out block wasn't reachable on the dev data; covered by unit tests only | next real run with a sold-out zone | WS-18 real run |
+| AR (Darija) map labels and group copy need a native check (Q240) | before "Live" | plan Q240 |
