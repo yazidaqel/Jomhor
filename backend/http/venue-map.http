@@ -129,7 +129,8 @@ Content-Type: application/json
 
 {"layout": "STADIUM", "zones": [{"zone_id": {{nord}}, "map_slot": "ORCHESTRA"}]}
 
-### 4.5 "Aucun plan (liste)": no map, the screens show the list
+### 4.5 "Aucun plan (liste)": no map, the screens show the list (until the next dev restart: DevSeeder maps a venue with
+### no layout to STADIUM again)
 PUT {{base}}/org/venues/{{venue}}/map
 Authorization: Bearer {{orgToken}}
 X-Organizer-Id: {{org}}

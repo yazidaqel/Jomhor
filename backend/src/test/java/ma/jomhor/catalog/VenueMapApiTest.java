@@ -235,8 +235,10 @@ class VenueMapApiTest extends OrgApiTest {
             }
             Future<MockHttpServletResponse> put = pool.submit(() ->
                     putMap(a, venueId, map("STADIUM", nord, "NORTH", sud, "SOUTH")).andReturn().getResponse());
+            // only the PUT's slot update (pgjdbc sends it with $1 placeholders), not any other waiter in the database
             long deadline = System.nanoTime() + 10_000_000_000L;
-            while (jdbc.sql("select count(*) from pg_stat_activity where wait_event_type = 'Lock' and datname = current_database()")
+            while (jdbc.sql("select count(*) from pg_stat_activity where wait_event_type = 'Lock' "
+                            + "and datname = current_database() and query like 'update zones set map_slot = $1 %'")
                     .query(Integer.class).single() == 0) {
                 assertThat(System.nanoTime()).as("PUT should wait on the deleted zone").isLessThan(deadline);
                 Thread.onSpinWait();

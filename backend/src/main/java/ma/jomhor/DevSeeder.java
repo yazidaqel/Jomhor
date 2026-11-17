@@ -138,7 +138,10 @@ class DevSeeder implements ApplicationRunner {
         venueMap();
     }
 
-    /** Only while the venue has no layout: a map edited in the back-office (or set to a layout with no zone) stays. */
+    /**
+     * Only while the venue has no layout: a map edited in the back-office (or set to a layout with no zone) stays. "Aucun
+     * plan (liste)" sets the layout to null, so the next restart seeds STADIUM again.
+     */
     private void venueMap() {
         Venue.Detail venue = venues.get(ORG, VENUE);
         if (venue.layout() != null) {
