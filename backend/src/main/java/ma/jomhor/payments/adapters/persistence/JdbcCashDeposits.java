@@ -16,7 +16,13 @@ import ma.jomhor.payments.domain.CashDeposit;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-/** cash_deposits and pos_sessions.deposit_id. Staff names are joined on the row's organizer (read only). */
+/**
+ * cash_deposits and pos_sessions.deposit_id. Staff names are joined on the row's organizer (read only).
+ *
+ * <p>ponytail: no index on pos_sessions.deposit_id, so the deposit → sessions join (reads) and the void's session
+ * lookup scan the organizer's sessions; a club has a few hundred a year. Add (organizer_id, deposit_id) if one
+ * organizer's pos_sessions ever reach the 100,000s.
+ */
 @Repository
 class JdbcCashDeposits implements CashDeposits {
 
@@ -81,12 +87,13 @@ class JdbcCashDeposits implements CashDeposits {
                         where organizer_id = ? and id = ? and voided_at is null
                         """)
                 .params(reason, org, userId, org, depositId).update();
-        return jdbc.sql("""
-                        with freed as (update pos_sessions set deposit_id = null
-                                       where organizer_id = ? and deposit_id = ? returning id)
-                        select id from freed order by id
-                        """)
+        // Session rows locked in id order, as lockSessions does, so a void and a create never deadlock.
+        List<UUID> freed = jdbc.sql("select id from pos_sessions where organizer_id = ? and deposit_id = ? order by id"
+                        + " for update")
                 .params(org, depositId).query(UUID.class).list();
+        jdbc.sql("update pos_sessions set deposit_id = null where organizer_id = ? and id = any(?)")
+                .params(org, freed.toArray(UUID[]::new)).update();
+        return freed;
     }
 
     @Override
@@ -95,8 +102,6 @@ class JdbcCashDeposits implements CashDeposits {
                 .stream().findFirst();
     }
 
-    // ponytail: the session join has no index on deposit_id; a club has a few hundred sessions a year. Add
-    // (organizer_id, deposit_id) if one organizer's pos_sessions ever reach the 100,000s.
     @Override
     public List<CashDeposit> between(UUID org, LocalDate from, LocalDate to) {
         return assemble(jdbc.sql(SELECT + " where d.organizer_id = ? and d.deposited_on between ? and ?" + ORDER)

@@ -52,8 +52,9 @@ public class DepositService {
     }
 
     /**
-     * 04 POST /org/finance/deposits. Body checks, then the sessions under their row locks (id order): UNKNOWN, OPEN,
-     * DEPOSITED on the first failing {@code session_ids[i]}; then the slip date against the sessions' close days.
+     * 04 POST /org/finance/deposits, in 04's bullet order: body checks, then the sessions under their row locks (id
+     * order): UNKNOWN, OPEN, DEPOSITED on the first failing {@code session_ids[i]}; then the slip date (FUTURE,
+     * BEFORE_CLOSE).
      */
     @Transactional
     public CashDeposit create(UUID org, UUID user, LocalDate depositedOn, Long amountMad, String reference,
@@ -66,12 +67,6 @@ public class DepositService {
                 || new HashSet<>(sessionIds).size() != sessionIds.size()) {
             throw invalid("session_ids", "1 to " + MAX_SESSIONS + " distinct session ids", null);
         }
-        if (depositedOn == null) {
-            throw invalid("deposited_on", "required", null);
-        }
-        if (depositedOn.isAfter(LocalDate.now(ZONE))) {
-            throw invalid("deposited_on", "must not be after today", "FUTURE");
-        }
         Map<UUID, Locked> locked = deposits.lockSessions(org, sessionIds).stream()
                 .collect(Collectors.toMap(Locked::id, Function.identity()));
         for (int i = 0; i < sessionIds.size(); i++) {
@@ -80,6 +75,12 @@ public class DepositService {
             if (reason != null) {
                 throw invalid("session_ids[" + i + "]", reason.toLowerCase(), reason);
             }
+        }
+        if (depositedOn == null) {
+            throw invalid("deposited_on", "required", null);
+        }
+        if (depositedOn.isAfter(LocalDate.now(ZONE))) {
+            throw invalid("deposited_on", "must not be after today", "FUTURE");
         }
         if (locked.values().stream().anyMatch(s -> depositedOn.isBefore(s.closedAt().atZone(ZONE).toLocalDate()))) {
             throw invalid("deposited_on", "must not be before a session's close day", "BEFORE_CLOSE");
@@ -93,13 +94,16 @@ public class DepositService {
         return deposits.get(org, id).orElseThrow();
     }
 
-    /** 04 POST /org/finance/deposits/{id}/void: live → voided, sessions freed, audited; voided → unchanged. */
+    /**
+     * 04 POST /org/finance/deposits/{id}/void: unknown → 404; voided → unchanged, whatever the reason (a retry); live →
+     * the reason checked, voided, sessions freed, audited.
+     */
     @Transactional
     public CashDeposit voidDeposit(UUID org, UUID user, UUID depositId, String reason) {
-        String why = text("reason", reason, 200);
         boolean voided = deposits.lockVoided(org, depositId)
                 .orElseThrow(() -> ApiException.notFound("Deposit not found"));
         if (!voided) {
+            String why = text("reason", reason, 200);
             List<UUID> freed = deposits.voidDeposit(org, user, depositId, why);
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("reason", why);

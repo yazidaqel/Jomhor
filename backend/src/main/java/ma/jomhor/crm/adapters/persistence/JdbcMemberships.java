@@ -8,6 +8,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.UUID;
 import ma.jomhor.crm.application.Memberships;
@@ -31,6 +32,13 @@ class JdbcMemberships implements Memberships {
             exists (select 1 from scans s
                     where s.organizer_id = t.organizer_id and s.event_id = t.event_id and s.ticket_id = t.id
                       and s.result in ('OK', 'OVERRIDE') and s.direction = 'IN')""";
+
+    /**
+     * The CRM export's rows among live members {@code m} (04 §Finance CRM export); its one parameter is the pass holders
+     * as a uuid[].
+     */
+    private static final String EXPORTABLE =
+            "(m.marketing_push or m.marketing_whatsapp or m.paid_until > now() or m.user_id = any(?))";
 
     private final JdbcClient jdbc;
 
@@ -123,7 +131,7 @@ class JdbcMemberships implements Memberships {
 
     /** reachable_push: the push opt-in and a live token (PushTokens.liveTokenOf, as the PUSH MEMBERS estimate). */
     @Override
-    public Counts counts(UUID org) {
+    public Counts counts(UUID org, Set<UUID> passHolders) {
         return jdbc.sql("""
                         select count(*) as members,
                                count(*) filter (where m.joined_at > now() - interval '7 days') as joined_7d,
@@ -132,14 +140,42 @@ class JdbcMemberships implements Memberships {
                                count(*) filter (where m.marketing_push and\s"""
                         + PushTokens.liveTokenOf("m.user_id") + """
                                ) as reachable_push,
-                               count(*) filter (where m.paid_until > now()) as paid
+                               count(*) filter (where m.paid_until > now()) as paid,
+                               count(*) filter (where\s""" + EXPORTABLE + """
+                               ) as exportable
                         from memberships m
                         where m.organizer_id = ? and m.left_at is null""")
-                .param(org)
+                .params(passHolders.toArray(UUID[]::new), org)
                 .query((rs, n) -> new Counts(rs.getLong("members"), rs.getLong("joined_7d"),
                         rs.getLong("marketing_push"), rs.getLong("marketing_whatsapp"), rs.getLong("reachable_push"),
-                        rs.getLong("paid")))
+                        rs.getLong("paid"), rs.getLong("exportable")))
                 .single();
+    }
+
+    // The phone leaves the database only with a WhatsApp opt-in (CNDP minimisation, plan lot-5 Q235).
+    @Override
+    public List<ExportRow> exportRows(UUID org, Set<UUID> passHolders) {
+        UUID[] holders = passHolders.toArray(UUID[]::new);
+        return jdbc.sql("""
+                        select m.number, u.display_name, case when m.marketing_whatsapp then u.phone_e164 end as phone,
+                               u.locale, m.joined_at, m.marketing_push, m.marketing_whatsapp, m.paid_until,
+                               m.user_id = any(?) as pass_holder,
+                               (select count(distinct t.event_id) from tickets t
+                                where t.organizer_id = m.organizer_id and t.holder_user_id = m.user_id
+                                  and\s""" + ADMITTED + """
+                               ) as attended
+                        from memberships m join users u on u.id = m.user_id
+                        where m.organizer_id = ? and m.left_at is null and\s""" + EXPORTABLE + """
+                        order by m.number""")
+                .params(holders, org, holders)
+                .query((rs, n) -> {
+                    OffsetDateTime paid = rs.getObject("paid_until", OffsetDateTime.class);
+                    return new ExportRow(rs.getInt("number"), rs.getString("display_name"), rs.getString("phone"),
+                            rs.getString("locale"), rs.getObject("joined_at", OffsetDateTime.class).toInstant(),
+                            rs.getBoolean("marketing_push"), rs.getBoolean("marketing_whatsapp"),
+                            paid == null ? null : paid.toInstant(), rs.getBoolean("pass_holder"), rs.getLong("attended"));
+                })
+                .list();
     }
 
     @Override

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.crm.domain.Loyalty;
@@ -39,7 +40,7 @@ public class MembershipService {
     /** GET /org/members/summary: counts only, no name or phone. */
     public record Summary(long members, @JsonProperty("joined_7d") long joined7d, long marketingPush,
                           long marketingWhatsapp, long reachablePush, List<TierCount> tiers, long paid,
-                          boolean paidRequired) {}
+                          boolean paidRequired, long exportable) {}
 
     public record TierCount(String code, String name, long members) {}
 
@@ -92,7 +93,7 @@ public class MembershipService {
 
     /** Live members with paid_until after now (04 GET /org/products/{id} MEMBERSHIP {@code paid_members}). */
     public long paidMembers(UUID org) {
-        return memberships.counts(org).paid();
+        return memberships.counts(org, Set.of()).paid();
     }
 
     /** The fan's paid_until in the organizer's club (left or not), or null (never paid, or no membership). */
@@ -168,16 +169,17 @@ public class MembershipService {
 
     /**
      * 04 GET /org/members/summary: live members' counts, and every tier of the organizer (by min_events, fr names,
-     * zeros included) with its members, each placed by events attended as /fan/me/membership does.
+     * zeros included) with its members, each placed by events attended as /fan/me/membership does. {@code exportable}
+     * counts the CRM export's rows for these current pass holders (CrmExportService.summary supplies them).
      */
-    public Summary summary(UUID org) {
+    Summary summary(UUID org, Set<UUID> passHolders) {
         List<LoyaltyTier> tiers = organizers.loyaltyTiers(org);
-        Memberships.Counts n = memberships.counts(org);
+        Memberships.Counts n = memberships.counts(org, passHolders);
         Map<Long, Long> byAttended = memberships.membersByEventsAttended(org);
         return new Summary(n.members(), n.joined7d(), n.marketingPush(), n.marketingWhatsapp(), n.reachablePush(),
                 tiers.stream().map(t -> new TierCount(t.code(), Loyalty.name(t, "fr"), byAttended.entrySet().stream()
                         .filter(e -> Loyalty.tier(tiers, e.getKey()).equals(t)).mapToLong(Map.Entry::getValue).sum()))
-                        .toList(), n.paid(), paidRequired(org));
+                        .toList(), n.paid(), paidRequired(org), n.exportable());
     }
 
     /** The audit payload: the two booleans, nothing else. */

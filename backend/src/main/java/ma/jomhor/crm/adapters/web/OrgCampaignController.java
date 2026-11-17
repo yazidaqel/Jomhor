@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import ma.jomhor.crm.application.CampaignService;
-import ma.jomhor.crm.application.MembershipService;
 import ma.jomhor.crm.domain.Campaign;
 import ma.jomhor.notifications.domain.FanMessage.Channel;
 import ma.jomhor.tenancy.domain.OrgContext;
@@ -19,7 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * docs/04-api.md §Organizer /org/campaigns and /org/members/summary. Roles come from OrgContextInterceptor: ADMIN and
+ * docs/04-api.md §Organizer /org/campaigns (/org/members/summary is in OrgMembersController). Roles come from OrgContextInterceptor: ADMIN and
  * OPS read and write, FINANCE reads (its POST/PATCH are 403 there), CASHIER, GATE and SUPERVISOR get 403.
  */
 @RestController
@@ -58,16 +57,8 @@ class OrgCampaignController {
     }
 
     private final CampaignService campaigns;
-    private final MembershipService memberships;
-
-    OrgCampaignController(CampaignService campaigns, MembershipService memberships) {
+    OrgCampaignController(CampaignService campaigns) {
         this.campaigns = campaigns;
-        this.memberships = memberships;
-    }
-
-    @GetMapping("/org/members/summary")
-    MembershipService.Summary summary(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org) {
-        return memberships.summary(org.organizerId());
     }
 
     @GetMapping("/org/campaigns")

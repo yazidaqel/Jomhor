@@ -24,7 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
  * zones and quota from catalog's EventService, REFUNDED tickets from TicketService, and payments' refunds total
  * (PendingPayments) and refund flags (audit_log). Money in centimes. {@code paid} and {@code revenueMad} are gross:
  * they keep counting refunded tickets, and list prices: {@code discountMad} is what promo codes took off PAID orders
- * (net = revenueMad - discountMad - refundedMad).
+ * (net = revenueMad - discountMad - refundedMad). Channels count sales only: pass ticket and invitation orders (method
+ * FREE) are in {@code free} instead, so paid = Σ channels + free (Lot 5 step 5).
  */
 @Service
 public class SalesReport {
@@ -35,9 +36,14 @@ public class SalesReport {
     /** Every payment_method of the schema, in its order, reported with zeros when unused. */
     static final List<String> METHODS = Arrays.stream(Order.PaymentMethod.values()).map(Enum::name).toList();
 
+    private static final String FREE = Order.PaymentMethod.FREE.name();
+
     public record EventSales(int eventId, long quota, long paid, long held, long awaitingCash, long refunded,
                              long revenueMad, long discountMad, long refundedMad, List<ZoneSales> zones, List<ChannelSales> channels,
-                             List<MethodSales> methods, List<RefundRequired> refundsRequired) {}
+                             List<MethodSales> methods, Free free, List<RefundRequired> refundsRequired) {}
+
+    /** Places in PAID FREE orders: pass tickets (pass_id) and invitations (invited_by). */
+    public record Free(long passes, long invitations) {}
 
     public record ZoneSales(int zoneId, String code, String name, long quota, long paid, long held, long awaitingCash,
                             long refunded, long revenueMad) {}
@@ -72,7 +78,8 @@ public class SalesReport {
                     refunded.getOrDefault(z.zoneId(), 0L), sum(l, SalesLine::revenueMad));
         }).toList();
         List<ChannelSales> channels = CHANNELS.stream().map(c -> {
-            List<SalesLine> l = lines.stream().filter(x -> x.channel().equals(c)).toList();
+            List<SalesLine> l = lines.stream().filter(x -> x.channel().equals(c) && !FREE.equals(x.paymentMethod()))
+                    .toList();
             return new ChannelSales(c, sum(l, SalesLine::paid), sum(l, SalesLine::revenueMad));
         }).toList();
         List<MethodSales> methods = METHODS.stream().map(m -> {
@@ -82,7 +89,13 @@ public class SalesReport {
         return new EventSales(eventId, zones.stream().mapToLong(ZoneSales::quota).sum(), sum(lines, SalesLine::paid),
                 sum(lines, SalesLine::held), sum(lines, SalesLine::awaitingCash),
                 refunded.values().stream().mapToLong(Long::longValue).sum(), sum(lines, SalesLine::revenueMad),
-                orders.discountMad(org, eventId), payments.refundedMad(org, eventId), zones, channels, methods, orders.refundsRequired(org, eventId));
+                orders.discountMad(org, eventId), payments.refundedMad(org, eventId), zones, channels, methods,
+                new Free(free(lines, "PASS"), free(lines, "INVITE")), orders.refundsRequired(org, eventId));
+    }
+
+    private static long free(List<SalesLine> lines, String kind) {
+        return sum(lines.stream().filter(x -> FREE.equals(x.paymentMethod()) && kind.equals(x.free())).toList(),
+                SalesLine::paid);
     }
 
     private static <T> long sum(List<T> rows, ToLongFunction<T> f) {

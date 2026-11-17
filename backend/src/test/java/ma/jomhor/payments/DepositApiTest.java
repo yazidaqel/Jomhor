@@ -153,6 +153,13 @@ class DepositApiTest extends OrgApiTest {
         String foreign = closed(admin().org(), "Ailleurs", "2 days", 1000);
 
         refused(deposit(finance, body(today(), 1000, "R", List.of(open(org)))), "session_ids[0]", "OPEN");
+        // only the first failing session in request order: one field, one reason
+        String twoBad = body(deposit(finance, body(today(), 1000, "R", List.of(ok, open(org), taken)))
+                .andExpect(status().isUnprocessableContent()).andExpect(jsonPath("$.details.reason").value("OPEN")));
+        assertThat(JsonPath.<Map<String, Object>>read(twoBad, "$.details.fields")).containsOnlyKeys("session_ids[1]");
+        String reversed = body(deposit(finance, body(today(), 1000, "R", List.of(taken, open(org))))
+                .andExpect(jsonPath("$.details.reason").value("DEPOSITED")));
+        assertThat(JsonPath.<Map<String, Object>>read(reversed, "$.details.fields")).containsOnlyKeys("session_ids[0]");
         refused(deposit(finance, body(today(), 1000, "R", List.of(ok, taken))), "session_ids[1]", "DEPOSITED");
         refused(deposit(finance, body(today(), 1000, "R", List.of(ok, foreign))), "session_ids[1]", "UNKNOWN");
         refused(deposit(finance, body(today(), 1000, "R", List.of(UUID.randomUUID().toString()))), "session_ids[0]",
@@ -183,6 +190,9 @@ class DepositApiTest extends OrgApiTest {
                 "FUTURE");
         refused(deposit(finance, body(today.minusDays(1).toString(), 1000, "R", List.of(yesterday, now))),
                 "deposited_on", "BEFORE_CLOSE");
+        // 04's order: the sessions are checked before the slip date
+        refused(deposit(finance, body(today.plusDays(1).toString(), 1000, "R", List.of(UUID.randomUUID().toString()))),
+                "session_ids[0]", "UNKNOWN");
         refused(deposit(finance, body("2026-13-01", 1000, "R", List.of(yesterday))), "deposited_on", null);
         refused(deposit(finance, body(today.toString(), "990.0", "R", List.of(yesterday))), "amount_mad", null);
         refused(deposit(finance, body(today.toString(), "\"990\"", "R", List.of(yesterday))), "amount_mad", null);
@@ -267,6 +277,9 @@ class DepositApiTest extends OrgApiTest {
         String again = body(voidIt(admin, id, "autre raison").andExpect(status().isOk()));
         assertThat(JsonPath.<String>read(again, "$.void_reason")).isEqualTo("montant mal saisi");
         assertThat(JsonPath.<String>read(again, "$.voided_at")).isEqualTo(JsonPath.read(json, "$.voided_at"));
+        // a retry with an empty or overlong reason too: the reason is checked on a live deposit only
+        voidIt(admin, id, " ").andExpect(status().isOk()).andExpect(jsonPath("$.void_reason").value("montant mal saisi"));
+        voidIt(admin, id, "x".repeat(201)).andExpect(status().isOk());
         assertThat(audits(org, "deposit.void")).hasSize(1);
 
         // the freed sessions take a new deposit
@@ -278,6 +291,36 @@ class DepositApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
         voidIt(admin(), second, "x").andExpect(status().isNotFound());
         assertThat(depositOf(nord)).hasToString(second);
+    }
+
+    @Test
+    void aVoidRacingACreateOnTheSameSessionsNeverDeadlocks() throws Exception {
+        Caller admin = admin();
+        UUID org = admin.org();
+        Caller finance = caller(org, "FINANCE");
+        for (int round = 0; round < 10; round++) {
+            List<String> sessions = IntStream.range(0, 6).mapToObj(i -> closed(org, "S" + i, "1 day", 1000)).toList();
+            String id = recorded(finance, today(), 6000, sessions.toArray(String[]::new));
+            List<String> reversed = sessions.reversed();
+            int voidStatus;
+            int createStatus;
+            try (var pool = Executors.newFixedThreadPool(2)) {
+                var start = new CountDownLatch(1);
+                Future<Integer> v = pool.submit(() -> {
+                    start.await();
+                    return voidIt(admin, id, "erreur").andReturn().getResponse().getStatus();
+                });
+                Future<Integer> c = pool.submit(() -> {
+                    start.await();
+                    return deposit(finance, body(today(), 6000, "R", reversed)).andReturn().getResponse().getStatus();
+                });
+                start.countDown();
+                voidStatus = v.get();
+                createStatus = c.get();
+            }
+            assertThat(voidStatus).as("round " + round).isEqualTo(200);
+            assertThat(createStatus).as("round " + round).isIn(201, 422); // before the void commits: DEPOSITED
+        }
     }
 
     // ---------- list ----------

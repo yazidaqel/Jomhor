@@ -2,10 +2,12 @@ package ma.jomhor.sales.products.application;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.sales.products.domain.Installment;
 import ma.jomhor.sales.products.domain.Pass;
@@ -47,6 +49,9 @@ public interface Passes {
 
     /** The account's passes that aren't CANCELLED, newest first. */
     List<Owned> owned(UUID userId);
+
+    /** Holders of an ACTIVE or SUSPENDED pass of the organizer in a series with ends_on ≥ {@code today}. One statement. */
+    Set<UUID> liveHolders(UUID org, LocalDate today);
 
     /** Event id → the holder's ticket from the pass's ticket orders (CANCELLED ones left out). */
     Map<Integer, UUID> tickets(UUID org, UUID passId, UUID holderId);

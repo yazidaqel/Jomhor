@@ -266,6 +266,9 @@ class PassTicketJobTest extends PaymentTest {
         assertThat(JsonPath.<Integer>read(json, "$.paid")).isEqualTo(2);
         assertThat(JsonPath.<Integer>read(json, "$.revenue_mad")).isZero();
         assertThat(JsonPath.<List<Integer>>read(json, "$.methods[?(@.method == 'FREE')].paid")).containsExactly(2);
+        // Lot 5 step 5: not an app sale, so not in channels; free.passes instead
+        assertThat(JsonPath.<List<Integer>>read(json, "$.channels[*].paid")).containsOnly(0);
+        assertThat(JsonPath.<Map<String, Object>>read(json, "$.free")).isEqualTo(Map.of("passes", 2, "invitations", 0));
         assertThat(JsonPath.<List<Integer>>read(json, "$.methods[?(@.method == 'FREE')].revenue_mad"))
                 .containsExactly(0);
 
