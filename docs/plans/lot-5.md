@@ -2377,6 +2377,7 @@ Gate API, manifest format, token and vectors: unchanged.
 | Splitting discounts per zone | if finance asks | Q238 |
 | Meta templates (`waitlist_open`, `installment_due`) | with BE-36 | unchanged |
 | **Lot 5 complete** after 5b; Lot 6 (hardening, the deferred §5.4 run, pen test, runbooks incl. a finance runbook: setting `settings.finance`, sending payouts, the year-end numbering check) | 6 | — |
+| Invoice PDF uses the standard PDF font: a legal name in Arabic script prints as "?". Embed an Arabic font with shaping if a club's registered name isn't in Latin script | when a club needs it | BE-71 |
 
 ---
 
