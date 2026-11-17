@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
@@ -290,8 +292,8 @@ final _firstLetter = RegExp(r'\p{L}', unicode: true);
 String crestInitial(String name) => (_firstLetter.firstMatch(name)?[0] ?? '').toUpperCase();
 
 /// The club line of event cards and tickets (DESIGN.md §Multi-club adjustments): crest 20 + the club name in
-/// caption, in a bidi isolate of its own direction; [trailing] at the end ("Suivre" on Accueil), at most half the
-/// line, so a longer label (EN "Following", a larger text size) ellipsises instead of overflowing.
+/// caption, in a bidi isolate of its own direction; [trailing] at the end ("Suivre" on Accueil). Where the trailing
+/// would overflow (a larger text size), it ellipsises instead; elsewhere the layout is the plain row's.
 class ClubLine extends StatelessWidget {
   const new({required this.name, this.crestUrl, this.trailing, this.color = JomhorColors.textSecondary, super.key});
 
@@ -300,11 +302,17 @@ class ClubLine extends StatelessWidget {
   final Widget? trailing;
   final Color color;
 
+  static const double _crest = 20;
+
+  /// The least the name keeps beside a trailing: one caption glyph or its ellipsis. EN "Following" (84 px) fits
+  /// beside it on a 390 px phone, where the calendar row leaves the line 126 px.
+  static const double _minName = 12;
+
   @override
   Widget build(BuildContext context) {
     Widget line([Widget? end]) => Row(
       children: [
-        Crest(name: name, url: crestUrl, size: 20),
+        Crest(name: name, url: crestUrl, size: _crest),
         const SizedBox(width: JomhorSpace.s),
         Flexible(
           child: Text(
@@ -323,7 +331,10 @@ class ClubLine extends StatelessWidget {
       final t => LayoutBuilder(
         builder: (_, box) => line(
           ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: box.maxWidth / 2),
+            // Capped only where it would overflow: the name keeps room for its ellipsis, never less than half.
+            constraints: BoxConstraints(
+              maxWidth: math.max(box.maxWidth / 2, box.maxWidth - _crest - JomhorSpace.s - _minName),
+            ),
             child: t,
           ),
         ),

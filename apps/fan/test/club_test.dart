@@ -331,7 +331,8 @@ void main() {
   });
 
   // The EN "Follow" / "Following" at the end of Accueil's club lines (under screen 7) overflowed the ~126 px the
-  // calendar row leaves them: the trailing now takes at most half the line and ellipsises.
+  // calendar row leaves them under the wide test font: the trailing ellipsises where it would overflow (real fonts
+  // and 150 % text: club_line_test.dart).
   testWidgets('screen 7 non-member and the Accueil under it lay out in en, fr and ar', (tester) async {
     for (final locale in ['en', 'fr', 'ar']) {
       tallView(tester);
