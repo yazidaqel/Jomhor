@@ -100,3 +100,83 @@ export const useDeposits = (range: { from: string; to: string }) =>
 export const useRecordDeposit = () => useOrgMutation(['finance'], (body: NewDeposit, send) => send<Deposit>({ method: 'POST', path: '/org/finance/deposits', body }))
 export const useVoidDeposit = () =>
   useOrgMutation(['finance'], ({ id, reason }: { id: string; reason: string }, send) => send<Deposit>({ method: 'POST', path: `${path('org', 'finance', 'deposits', id)}/void`, body: { reason } }))
+
+// GET /org/finance/settlements, /settlements/{id}, /settlements.csv, POST /settlements/{id}/paid and GET
+// /org/finance/invoices/{id}.pdf (04-api §Finance, Lot 5 step 5b): ADMIN, FINANCE only (OPS gets 403). Every figure is
+// the server's: the statement formula is computed there once, never again here.
+export const SETTLEMENT_ROLES: readonly Role[] = ['ADMIN', 'FINANCE']
+
+/** `DUE`: Jomhor owes `payout_mad` by `due_on`; `PAID`: the organizer recorded the transfer; `NONE`: nothing to pay. */
+export type SettlementStatus = 'DUE' | 'PAID' | 'NONE'
+export type Settlement = {
+  id: string
+  /** The statement's local day (`YYYY-MM-DD`) in the response's `timezone`. */
+  day: string
+  status: SettlementStatus
+  /** `DUE` and `due_on` before today (local), computed by the server. */
+  overdue: boolean
+  /** Card, wallet and agency cash: held by Jomhor, paid out. */
+  collected_mad: number
+  /** Cash taken at the organizer's own tills: in the fee base, never paid out. */
+  till_mad: number
+  fee_rate_bp: number
+  fee_ht_mad: number
+  fee_vat_mad: number
+  /** ≤ 0: a negative balance carried from the previous statement. */
+  carried_in_mad: number
+  payout_mad: number
+  due_on: string
+  paid_at: string | null
+  paid_by: { id: string; name: string } | null
+  payout_reference: string | null
+  invoice: { id: string; number: string } | null
+}
+export type SettlementLine = {
+  event_id: number | null
+  product_id: string | null
+  title: string
+  method: string
+  /** The payment's `provider`; `collector_name` its display name (as `/finance/cash`). */
+  collector: string
+  collector_name: string
+  payments: number
+  amount_mad: number
+}
+export type SettlementDetail = Settlement & { lines: SettlementLine[] }
+export type Settlements = {
+  from: string
+  to: string
+  /** `finance.timezone`: the zone of `day`, `due_on` and `paid_at`. */
+  timezone: string
+  /** Null when Jomhor has not set (or mis-set) the organizer's finance settings; `open` is null then too. */
+  settings: { legal_name: string; ice: string; rib_last4: string; fee_rate_bp: number; start_on: string } | null
+  /** `SUCCEEDED` payments not yet in a statement, since `since` (an instant: the start of a local day). */
+  open: { since: string; collected_mad: number; till_mad: number; payments: number } | null
+  refunds_required: { count: number; amount_mad: number }
+  /** Newest `day` first. */
+  settlements: Settlement[]
+}
+
+const days = (range: { from: string; to: string }) => `?${new URLSearchParams(range)}`
+
+/** Local days on `day` (finance timezone), both included, ≤ 92 days. */
+export const useSettlements = (range: { from: string; to: string }) => useOrgQuery<Settlements>(['finance', 'settlements', range], `/org/finance/settlements${days(range)}`)
+export const useSettlement = (id: string) => useOrgQuery<SettlementDetail>(['finance', 'settlements', 'detail', id], path('org', 'finance', 'settlements', id))
+
+/** "Versement reçu": refetches the list and the open statement (the row's status and badge move). */
+export const usePayoutReceived = () =>
+  useOrgMutation(['finance', 'settlements'], ({ id, reference }: { id: string; reference: string }, send) =>
+    send<Settlement>({ method: 'POST', path: `${path('org', 'finance', 'settlements', id)}/paid`, body: { reference } }),
+  )
+
+/** A file (CSV, PDF) with Bearer + X-Organizer-Id, saved under the server's filename, else `fallback`. */
+export function useOrgDownload() {
+  const { t } = useTranslation()
+  const { organizer_id: organizerId } = useOrganizer()
+  return useMutation({
+    mutationFn: ({ path, fallback }: { path: string; fallback: string }) => download(path, fallback, { organizerId }),
+    onError: (e) => toast.error(t(errorKey(e))),
+  })
+}
+export const settlementsCsvPath = (range: { from: string; to: string }) => `/org/finance/settlements.csv${days(range)}`
+export const invoicePdfPath = (id: string) => path('org', 'finance', 'invoices', `${id}.pdf`)

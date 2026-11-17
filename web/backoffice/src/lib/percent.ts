@@ -10,3 +10,9 @@ export function percent(part: number, whole: number, locale: string) {
   if (r >= 0.995 && r < 1) return `> ${fmt(0.99, 0)}` // rounding would claim a sell-out that has not happened
   return fmt(r, r < 0.1 ? 1 : 0)
 }
+
+/** Basis points → `5`, `2,5`, `1,25` (no `%`): a fee rate, exact (integer maths, then a decimal string handed to Intl). */
+export function formatBp(bp: number, locale: string) {
+  const decimal = `${Math.trunc(bp / 100)}.${String(bp % 100).padStart(2, '0')}` as `${number}`
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(decimal)
+}
