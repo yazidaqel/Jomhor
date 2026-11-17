@@ -2,11 +2,13 @@ package ma.jomhor.sales.products.application;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import ma.jomhor.catalog.application.EventService;
@@ -227,6 +229,14 @@ public class PassService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void cancelExpired(Collection<UUID> productOrderIds) {
         passes.cancelExpired(productOrderIds);
+    }
+
+    /**
+     * The organizer's current pass holders (04 §Finance CRM export "abonné"): an ACTIVE or SUSPENDED pass in a series
+     * whose ends_on is {@code today} or later (the caller's local day). One statement.
+     */
+    public Set<UUID> liveHolders(UUID org, LocalDate today) {
+        return passes.liveHolders(org, today);
     }
 
     /**

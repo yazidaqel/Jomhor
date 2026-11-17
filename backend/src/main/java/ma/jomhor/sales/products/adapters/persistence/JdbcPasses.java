@@ -4,14 +4,17 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.sales.products.application.Passes;
 import ma.jomhor.sales.products.domain.Installment;
@@ -38,6 +41,16 @@ class JdbcPasses implements Passes {
     public void lockAccount(UUID userId, UUID seriesId) {
         jdbc.sql("select 1 from pg_advisory_xact_lock(hashtext(cast(:user as text)), hashtext(cast(:series as text)))")
                 .param("user", userId.toString()).param("series", seriesId.toString()).query(Integer.class).single();
+    }
+
+    @Override
+    public Set<UUID> liveHolders(UUID org, LocalDate today) {
+        return new HashSet<>(jdbc.sql("""
+                        select distinct p.user_id from passes p
+                          join event_series s on s.id = p.series_id and s.organizer_id = p.organizer_id
+                        where p.organizer_id = :org and p.status in ('ACTIVE', 'SUSPENDED') and s.ends_on >= :today
+                        """)
+                .param("org", org).param("today", today).query(UUID.class).list());
     }
 
     @Override

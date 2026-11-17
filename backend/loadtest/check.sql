@@ -173,6 +173,29 @@ where r.amount_mad = 0
 
 union all
 
+-- Till deposits (docs/04-api.md §Finance Deposits): only a closed session goes into a deposit (pos_sessions_deposit
+-- refuses it too), a session is in a deposit of its own organizer (the foreign key is on the id only), and a voided
+-- deposit holds no session (its void freed them). No event: ref = the session id.
+select 'DEPOSIT_OPEN_SESSION', null::integer, p.id::text, format('open session in deposit %s', p.deposit_id)
+from pos_sessions p
+where p.deposit_id is not null and p.closed_at is null
+
+union all
+
+select 'DEPOSIT_TENANT', null::integer, p.id::text, format('session in deposit %s of organizer %s', d.id, d.organizer_id)
+from pos_sessions p
+join cash_deposits d on d.id = p.deposit_id
+where d.organizer_id <> p.organizer_id
+
+union all
+
+select 'DEPOSIT_VOIDED', null::integer, p.id::text, format('session still in voided deposit %s', d.id)
+from pos_sessions p
+join cash_deposits d on d.id = p.deposit_id and d.organizer_id = p.organizer_id
+where d.voided_at is not null
+
+union all
+
 -- Admission out of rank order: an entry admitted without a rank, or past the room's admitted_through.
 select 'ADMISSION_ORDER', w.event_id, q.id::text,
        format('admitted with rank %s, admitted_through %s', coalesce(q.rank::text, 'null'), w.admitted_through)

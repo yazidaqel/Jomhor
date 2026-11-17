@@ -198,7 +198,8 @@ public interface Orders {
      */
     List<SalesLine> salesLines(UUID org, int eventId);
 
-    record SalesLine(UUID priceCategoryId, String channel, String paymentMethod, long paid, long held,
+    /** {@code free}: PASS (pass_id set) or INVITE (invited_by set) for pass ticket and invitation orders, else null. */
+    record SalesLine(UUID priceCategoryId, String channel, String paymentMethod, String free, long paid, long held,
                      long awaitingCash, long revenueMad) {}
 
     /** Σ discount_mad of the event's PAID orders (04 GET /org/events/{id}/sales {@code discount_mad}). */

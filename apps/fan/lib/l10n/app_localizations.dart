@@ -1836,7 +1836,7 @@ abstract class AppLocalizations {
   /// No description provided for @clubWhatsappBody.
   ///
   /// In fr, this message translates to:
-  /// **'Les nouvelles du club sur ton WhatsApp.'**
+  /// **'Les nouvelles du club sur ton WhatsApp. Le club reçoit ton numéro pour te les envoyer.'**
   String get clubWhatsappBody;
 
   /// Section over the 12-dot row.

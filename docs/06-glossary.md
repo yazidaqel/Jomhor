@@ -24,6 +24,7 @@
 | till session | caisse | الصندوق | one cashier's shift; expected vs declared cash |
 | guichet | guichet | الشباك | club point of sale (back-office POS page) |
 | collector | encaisseur | — | who took the cash: POS or a network |
+| bank deposit | dépôt | إيداع بنكي | — |
 | refund | remboursement | استرجاع | — |
 | transfer | transfert | تحويل | The ticket is cancelled and a new one is issued to the recipient (new QR) |
 | re-issue | réémission | إعادة الإصدار | A new ticket for the same holder after a lost phone |

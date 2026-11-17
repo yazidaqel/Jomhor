@@ -413,6 +413,19 @@ These override the screen specs above (see `docs/plans/lot-5.md` §12).
 | Screen 4 / W3 | Under the summary: text button "J'ai un code promo" → input + "Retirer". With a code, the CTA reads "Réserver avec le code" → the hold → summary line "Code {CODE} · −{discount}" (accent), total from the server, countdown, then "Payer {total}" as today.<br>`PROMO_REFUSED` under the field: `UNKNOWN` "Code inconnu ou expiré", `NOT_APPLICABLE` "Ce code ne s'applique pas à ces places", `USED_UP` "Ce code a atteint sa limite", `ACCOUNT_LIMIT` "Tu as déjà utilisé ce code".<br>Split rows: caption "Le code s'applique à tes places". |
 | Order screen (app), W4 | Summary line "Code {CODE} · −{discount}" when `discount_mad` > 0. The cash code amount is `total_mad` (unchanged). |
 
+## Lot 5 step 5 adjustments
+
+These override the screen specs above (see `docs/plans/lot-5.md` §13).
+
+| Where | Change |
+| --- | --- |
+| B8 Finance `/finance` | Tabs **Encaissements** (Lot 3) · **Dépôts** (5a). OPS sees Encaissements and Dépôts. |
+| B8 Encaissements (5a) | Sessions table + column "Dépôt": "{reference} · {date}", or amber "Non déposé". Totals + "À déposer {undeposited_mad}". |
+| B8 Dépôts (5a) | **"À déposer":** closed sessions (caisse, caissier, clôturée le in the venue zone, déclaré) with checkboxes → "Enregistrer un dépôt".<br>**Sheet:**<br>• date (≤ today), montant (DH → centimes as integers), "Référence du bordereau";<br>• the selected sessions with "Déclaré {Σ}" and a live "Écart {montant − Σ}" preview;<br>• errors: `OPEN` "Caisse encore ouverte", `DEPOSITED` "Session déjà déposée", `BEFORE_CLOSE` "Avant la clôture de la caisse".<br>**Table:** date, référence, montant, déclaré, écart (red when ≠ 0), sessions, enregistré par; voided rows struck through with "Annulé · {reason}".<br>**"Annuler":** ADMIN only, reason dialog "Les sessions reviennent dans « À déposer »".<br>OPS read-only. |
+| B9 Membres (5a) | "Exporter (CSV)", ADMIN only. Dialog:<br>• "{exportable} fans · {marketing_whatsapp} avec téléphone";<br>• copy "Données personnelles : membres ayant accepté les messages du club, membres à jour de cotisation et abonnés. Le téléphone figure seulement pour ceux qui ont accepté WhatsApp. Utilisez ce fichier selon votre déclaration CNDP et ne le partagez pas.";<br>• CTA "Télécharger". |
+| B3 Ventes (5a) | Card "Places offertes · Abonnés {free.passes} · Invitations {free.invitations}". Channels table = sales only. |
+| 7 · Club, join sheet and opt-ins (5a) | `clubWhatsappBody`: "Les nouvelles du club sur ton WhatsApp. Le club reçoit ton numéro pour te les envoyer." (ar, en alike). |
+
 ## Theming per organizer
 
 None: Jomhor is not white-label (`BRAND.md`). `organizers.settings.theme` is not read by the fan app, the shop or

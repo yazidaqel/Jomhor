@@ -69,6 +69,7 @@ const SALES: EventSales = {
     { channel: 'WEB', paid: 350, revenue_mad: 0 },
     { channel: 'POS', paid: 0, revenue_mad: 0 },
   ],
+  free: { passes: 0, invitations: 0 }, // as the real API sends it for an event without free places (BO-27 real run, event 51)
   methods: [
     { method: 'CARD', paid: 800, revenue_mad: 4_000_050 },
     { method: 'WALLET', paid: 0, revenue_mad: 0 },
@@ -221,6 +222,7 @@ const DISCOUNTED: EventSales = {
     { channel: 'WEB', paid: 0, revenue_mad: 0 },
     { channel: 'POS', paid: 0, revenue_mad: 0 },
   ],
+  free: { passes: 0, invitations: 0 }, // as the real API sends it for an event without free places (BO-27 real run, event 51)
   methods: [
     { method: 'CARD', paid: 0, revenue_mad: 0 },
     { method: 'CASH_AGENCY', paid: 4, revenue_mad: 60000 },
@@ -265,6 +267,35 @@ it('a /sales without discount_mad (a backend before BE-65) still renders B3: dis
   const kpi = (await screen.findByText(fr.sales.kpi.discount, { selector: 'span' })).closest('[data-slot="card"]') as HTMLElement
   expect(within(kpi).getByText(spaced(dh(0)), { selector: '.text-2xl' })).toBeTruthy()
   expect(screen.getByText(spaced(i18n.t('sales.kpi.net', { amount: formatDh(9_007_199_254_695_841n, 'fr') })))).toBeTruthy()
+})
+
+// Captured from the real API (BO-27 real run, event 59): a 250 DH cash code in the app, 5 places at two tills, 1 pass
+// ticket (a 100 DH pass of the event's series) and 3 press invitations.
+const FREE_SPLIT: EventSales = {"event_id": 59, "quota": 142, "paid": 10, "held": 0, "awaiting_cash": 0, "refunded": 0, "revenue_mad": 100000, "discount_mad": 0, "refunded_mad": 0, "zones": [{"zone_id": 2, "code": "EST", "name": "Est", "quota": 142, "paid": 10, "held": 0, "awaiting_cash": 0, "refunded": 0, "revenue_mad": 100000}], "channels": [{"channel": "APP", "paid": 1, "revenue_mad": 25000}, {"channel": "WEB", "paid": 0, "revenue_mad": 0}, {"channel": "POS", "paid": 5, "revenue_mad": 75000}], "methods": [{"method": "CARD", "paid": 0, "revenue_mad": 0}, {"method": "CASH_AGENCY", "paid": 1, "revenue_mad": 25000}, {"method": "WALLET", "paid": 0, "revenue_mad": 0}, {"method": "POS_CASH", "paid": 5, "revenue_mad": 75000}, {"method": "FREE", "paid": 4, "revenue_mad": 0}], "free": {"passes": 1, "invitations": 3}, "refunds_required": []}
+
+it('B3 "Places offertes" from free (Abonnés 1 · Invitations 3); the channels table shows the sales as sent', async () => {
+  stubApi('FINANCE', () => Response.json(FREE_SPLIT))
+  renderApp('/events/1/sales')
+
+  const free = within(await screen.findByRole('heading', { name: fr.sales.free.title }).then((h) => h.closest('[data-slot="card"]') as HTMLElement))
+  const figure = (label: string) => free.getByText(label).closest('div')!.querySelector('dd')!.textContent
+  expect(figure(fr.sales.free.passes)).toBe('1')
+  expect(figure(fr.sales.free.invitations)).toBe('3')
+  expect(within(section(fr.sales.channels.title)).getAllByRole('row').slice(1).map(cells)).toEqual([
+    [fr.sales.channels.names.APP, n(1), dh(25_000)],
+    [fr.sales.channels.names.WEB, n(0), dh(0)],
+    [fr.sales.channels.names.POS, n(5), dh(75_000)],
+  ])
+  // paid = Σ channels + free, as the API guarantees: 1 + 5 + 1 + 3.
+  expect(screen.getByText(spaced(i18n.t('events.soldOfQuota', { sold: 10, quota: FREE_SPLIT.quota })))).toBeTruthy()
+})
+
+it('only free places: the channels card says no place was sold, not that nothing is paid', async () => {
+  stubApi('FINANCE', () =>
+    Response.json({ ...FREE_SPLIT, paid: 4, channels: FREE_SPLIT.channels.map((c) => ({ ...c, paid: 0, revenue_mad: 0 })) }),
+  )
+  renderApp('/events/1/sales')
+  expect(await within(await screen.findByRole('heading', { name: fr.sales.channels.title }).then((h) => h.closest('[data-slot="card"]') as HTMLElement)).findByText(fr.sales.channels.noSales)).toBeTruthy()
 })
 
 it('a 403 shows the FORBIDDEN copy, no figures, and is not retried', async () => {

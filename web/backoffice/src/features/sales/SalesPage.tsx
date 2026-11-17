@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Banknote, Hourglass, Store, Ticket, TicketPercent } from 'lucide-react'
+import { Banknote, Gift, Hourglass, IdCard, Store, Ticket, TicketPercent } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useParams } from 'react-router'
 import { ErrorNotice, PageHeader } from '@/components/page'
@@ -20,6 +20,11 @@ import { netMad, useSales, type EventSales } from './api'
 import { RefundsTodo } from './RefundsTodo'
 
 type Reason = keyof typeof fr.sales.refunds.reasons
+/** "Places offertes" (Lot 5 step 5): pass tickets, then invitations. */
+const FREE_ROWS = [
+  ['passes', IdCard],
+  ['invitations', Gift],
+] as const
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -106,6 +111,7 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
   const n = (count: number) => count.toLocaleString(i18n.language)
   const dh = (centimes: number) => t('sales.amount', { amount: formatDh(centimes, i18n.language) })
   const discount = sales.discount_mad ?? 0 // absent from a backend before BE-65
+  const sold = sales.channels.reduce((a, c) => a + c.paid, 0) // sales only: free places are not in a channel
   const reason = (code: string) => (Object.hasOwn(fr.sales.refunds.reasons, code) ? t(`sales.refunds.reasons.${code as Reason}`) : code)
 
   return (
@@ -173,10 +179,25 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
         )}
       </Section>
 
+      {/* Lot 5 step 5: places given away (pass tickets, invitations) apart from the sales channels below. */}
+      <Section title={t('sales.free.title')} description={t('sales.free.description')}>
+        <dl className="grid gap-3 sm:grid-cols-2">
+          {FREE_ROWS.map(([key, Icon]) => (
+            <div key={key} className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
+              <span className="flex size-8 items-center justify-center rounded-lg bg-muted">
+                <Icon className="size-4 text-foreground/70" aria-hidden="true" />
+              </span>
+              <dt className="text-sm text-muted-foreground">{t(`sales.free.${key}`)}</dt>
+              <dd className="ml-auto text-xl font-semibold tabular-nums">{n(sales.free[key])}</dd>
+            </div>
+          ))}
+        </dl>
+      </Section>
+
       <Section title={t('sales.channels.title')}>
         {/* 04: channels always lists APP, WEB and POS, zeros included; all-zero rows say nothing a notice doesn't. */}
-        {sales.paid === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('sales.channels.empty')}</p>
+        {sold === 0 ? (
+          <p className="text-sm text-muted-foreground">{t(sales.paid === 0 ? 'sales.channels.empty' : 'sales.channels.noSales')}</p>
         ) : (
           <Table>
             <TableHeader>

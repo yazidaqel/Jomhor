@@ -16,7 +16,7 @@ class MembersSummaryApiTest extends CrmTest {
     private String summary(Club c) throws Exception {
         String json = body(call(caller(c.org(), "OPS"), get("/org/members/summary")).andExpect(status().isOk()));
         assertKeys(json, "$", "members", "joined_7d", "marketing_push", "marketing_whatsapp", "reachable_push", "tiers",
-                "paid", "paid_required");
+                "paid", "paid_required", "exportable");
         List<Map<String, Object>> tiers = JsonPath.read(json, "$.tiers");
         assertThat(tiers).allSatisfy(t -> assertThat(t).containsOnlyKeys("code", "name", "members"));
         return json;
@@ -66,6 +66,7 @@ class MembersSummaryApiTest extends CrmTest {
         assertThat(number(json, "$.marketing_push")).isEqualTo(3);
         assertThat(number(json, "$.marketing_whatsapp")).isOne();
         assertThat(number(json, "$.reachable_push")).isOne();
+        assertThat(number(json, "$.exportable")).isEqualTo(3); // the opt-ins; the rejoined member has none (BE-68)
         for (UUID u : List.of(fresh, old, rejoined, revoked, left)) {
             assertThat(json).doesNotContain(phone(u)).doesNotContain(u.toString());
         }

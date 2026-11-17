@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import ma.jomhor.crm.domain.Member;
 
@@ -42,12 +43,30 @@ public interface Memberships {
 
     /**
      * Live members (left_at null) of the organizer; reachablePush = push opt-in and a live push token; paid =
-     * paid_until after now.
+     * paid_until after now; exportable = the rows of {@link #exportRows} for the same {@code passHolders}.
      */
     record Counts(long members, long joined7d, long marketingPush, long marketingWhatsapp, long reachablePush,
-                  long paid) {}
+                  long paid, long exportable) {}
 
-    Counts counts(UUID org);
+    Counts counts(UUID org, Set<UUID> passHolders);
+
+    /**
+     * A row of the CRM export (docs/04-api.md §Finance CRM export). {@code phone} is null unless the member accepted
+     * WhatsApp; {@code name} may be null; {@code passHolder}: the user is in the passHolders given.
+     */
+    record ExportRow(int number, String name, String phone, String locale, Instant joinedAt, boolean marketingPush,
+                     boolean marketingWhatsapp, Instant paidUntil, boolean passHolder, long eventsAttended) {
+        @Override
+        public String toString() {
+            return "ExportRow[" + number + "]";
+        }
+    }
+
+    /**
+     * Live members with an opt-in, paid_until after now, or in {@code passHolders}, by number, with their events
+     * attended (as {@link #eventsAttended}). One statement whatever the member count.
+     */
+    List<ExportRow> exportRows(UUID org, Set<UUID> passHolders);
 
     /** Live members by their events attended (as {@link #eventsAttended}): attended → members. */
     Map<Long, Long> membersByEventsAttended(UUID org);

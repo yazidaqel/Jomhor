@@ -424,6 +424,23 @@ create table waitlist_entries (                       -- sold-out waitlist (docs
 create index on waitlist_entries (event_id, notified_at, joined_at);
 -- Rows are deleted on leave and 30 days after the event's starts_at (waitlist.retention).
 
+-- ---------- point of sale: cash deposits (Lot 5 step 5) ----------
+create table cash_deposits (                          -- till cash taken to the bank (docs/04-api.md §Finance Deposits)
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  deposited_on  date not null,                        -- the bank slip's date
+  amount_mad    bigint not null check (amount_mad >= 0),   -- centimes on the slip
+  reference     text not null check (char_length(reference) between 1 and 100),   -- slip or bank reference
+  recorded_by   uuid not null references staff(id),
+  recorded_at   timestamptz not null default now(),
+  voided_at     timestamptz,                          -- a wrong entry: its sessions are freed (audit deposit.void keeps their ids)
+  voided_by     uuid references staff(id),
+  void_reason   text check (char_length(void_reason) between 1 and 200),
+  constraint cash_deposits_void check ((voided_at is null) = (voided_by is null)
+                                       and (voided_at is null) = (void_reason is null))
+);
+create index on cash_deposits (organizer_id, deposited_on desc);
+
 -- ---------- point of sale ----------
 create table pos_sessions (
   id            uuid primary key default gen_random_uuid(),
@@ -434,10 +451,13 @@ create table pos_sessions (
   closed_at     timestamptz,
   expected_mad  bigint,                                 -- Σ SUCCEEDED payments of the session, frozen at close (centimes)
   declared_mad  bigint check (declared_mad >= 0),       -- cash counted by the cashier at close (centimes)
+  deposit_id    uuid references cash_deposits(id),    -- the live deposit that took this closed session's cash; null = not deposited (Lot 5 step 5)
   constraint pos_sessions_close check ((closed_at is null) = (expected_mad is null)
-                                       and (closed_at is null) = (declared_mad is null))
+                                       and (closed_at is null) = (declared_mad is null)),
+  constraint pos_sessions_deposit check (deposit_id is null or closed_at is not null)
 );
 create unique index on pos_sessions (organizer_id, staff_id) where closed_at is null;   -- one open till per cashier
+create index on pos_sessions (organizer_id, closed_at) where closed_at is not null and deposit_id is null;   -- à déposer
 
 -- ---------- payments ----------
 create type payment_status as enum ('PENDING','SUCCEEDED','FAILED');

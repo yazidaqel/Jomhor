@@ -1026,7 +1026,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clubWhatsappTitle => 'Club WhatsApp messages';
 
   @override
-  String get clubWhatsappBody => 'Club news on your WhatsApp.';
+  String get clubWhatsappBody => 'Club news on your WhatsApp. The club receives your number to send them to you.';
 
   @override
   String get clubSeason => 'Your season';

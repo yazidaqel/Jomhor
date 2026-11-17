@@ -1,0 +1,482 @@
+### Lot 5 step 5a demo, till deposits, free places and the CRM export (IntelliJ HTTP client): plan lot-5 §13.1 Exit 5a
+### (1)-(6), (8) on one instance; Lot5CashCrmFlowTest runs the same flow in CI.
+#
+# Start the backend with the dev profile on port 8080, so @base and the card redirect (PUBLIC_BASE_URL, dev default
+# http://localhost:8080/v1) agree (dev seed: ATLAS FC with a cash point, Admin Dev +212600000001, Caissier Dev
+# +212600000002, Ops Dev +212600000003, Finance Dev +212600000004, Grand Stade with Est and Sud; the simulated card
+# gateway is on):
+#   docker compose up -d && SERVER_PORT=8080 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phones are made up.
+# Card payments: open the response's redirect_url in a browser and click "Approuver" right away (8 min hold).
+# The two tills: Caissier Dev runs "Guichet Nord", Ops Dev "Guichet Sud" (one open till per staff member). A till left
+# open by an earlier run answers 200 with it at 3.1/3.6: close it first. Each run makes a new match.
+# Pass tickets (free.passes, step 5) come from lot5-passes.http: run it first with this match in its series to see
+# them; without it free.passes reads 0. Karim's paid cotisation and Nadia's pass (step 6) come from the same file.
+# At the end, backend/loadtest/check.sql must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@adminPhone = +212600000001
+@cashierPhone = +212600000002
+@opsPhone = +212600000003
+@financePhone = +212600000004
+@buyerPhone = +212611177001
+@yazidPhone = +212611177002
+@karimPhone = +212611177003
+@aminePhone = +212611177004
+@saraPhone = +212611177005
+@code = 123456
+# SET @today BEFORE A RUN: today's date (YYYY-MM-DD) in Africa/Casablanca, the venue's zone. It is the deposits' slip
+# date (a later day is refused as FUTURE) and the range of the Encaissements and Dépôts reads; the value below is only
+# the day this file was written. (Not computed in a pre-request script: the client's JavaScript has no reliable
+# time-zone support, and the server's local day must match.)
+@today = 2026-11-17
+
+### ---------- (0) staff logins ----------
+
+### 0.1 OPS (Ops Dev, also "Guichet Sud"): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 0.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 0.3 ADMIN (Admin Dev): ask for a code (void, CRM export)
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 0.4 ADMIN: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("adminToken", response.body.token); %}
+
+### 0.5 CASHIER (Caissier Dev, "Guichet Nord"): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}"}
+
+### 0.6 CASHIER: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("cashierToken", response.body.token); %}
+
+### 0.7 FINANCE (Finance Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{financePhone}}"}
+
+### 0.8 FINANCE: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{financePhone}}", "code": "{{code}}"}
+
+> {% client.global.set("financeToken", response.body.token); %}
+
+### ---------- (1) Set-up: the match, "Plein tarif" 150 DH, "Tribune" 250 DH, "Presse" (Invitations) ----------
+
+### 1.1 OPS: the Grand Stade zones (Est)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("estId", response.body.zones.find(z => z.code === "EST").id); %}
+
+### 1.2 OPS: the match (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo dépôts",
+ "starts_at": "2027-01-31T19:00:00Z", "metadata": {"opponent": "Démo"}}
+
+> {% client.global.set("match", response.body.id); %}
+
+### 1.3 OPS: "Plein tarif" in Est, 150 DH
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Plein tarif", "price_mad": 15000, "quota": 100}
+
+> {% client.global.set("pleinCat", response.body.id); %}
+
+### 1.4 OPS: "Tribune" in Est, 250 DH
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Tribune", "price_mad": 25000, "quota": 20}
+
+> {% client.global.set("tribuneCat", response.body.id); %}
+
+### 1.5 OPS: "Presse" in Est (Invitations, 0 DH)
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Presse", "price_mad": 0, "quota": 20, "audience": "INVITE"}
+
+> {% client.global.set("presseCat", response.body.id); %}
+
+### 1.6 OPS: publish (DRAFT -> ON_SALE)
+POST {{base}}/org/events/{{match}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (2) A fan's 250 DH cash code (collected at Guichet Nord in 3.3) ----------
+
+### 2.1 Buyer: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{buyerPhone}}"}
+
+### 2.2 Buyer: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{buyerPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("buyerToken", response.body.token); %}
+
+### 2.3 Buyer: one Tribune place -> 201 RESERVED
+POST {{base}}/fan/orders
+Authorization: Bearer {{buyerToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "items": [{"price_category_id": "{{tribuneCat}}", "qty": 1,
+  "holders": [{"name": "Omar Alaoui"}]}]}
+
+> {% client.global.set("codeOrder", response.body.id); %}
+
+### 2.4 Buyer: a cash code -> 200 {pay_code, amount_mad 25000}
+POST {{base}}/fan/orders/{{codeOrder}}/pay
+Authorization: Bearer {{buyerToken}}
+Content-Type: application/json
+
+{"method": "CASH_AGENCY"}
+
+> {% client.global.set("payCode", response.body.pay_code); %}
+
+### ---------- (3) Tills: Nord 3 × 150 DH + the code, declares 700 DH; Sud 2 × 150 DH, declares 300 DH ----------
+
+### 3.1 CASHIER: open "Guichet Nord" -> 201
+POST {{base}}/org/pos/sessions
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Guichet Nord"}
+
+> {% client.global.set("nordId", response.body.id); %}
+
+### 3.2 CASHIER: 3 places, 450 DH cash
+POST {{base}}/org/pos/orders
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"sale_id": "{{$random.uuid}}", "event_id": {{match}}, "items": [{"price_category_id": "{{pleinCat}}", "qty": 3,
+  "holders": [{"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}]}]}
+
+### 3.3 CASHIER: "Encaisser" the 250 DH code -> 200, the buyer's order PAID
+POST {{base}}/org/pos/codes/{{payCode}}/collect
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"amount_mad": 25000}
+
+### 3.4 CASHIER: close declaring 700 DH -> 200 {expected_mad 70000, variance_mad 0, deposit null}
+POST {{base}}/org/pos/sessions/{{nordId}}/close
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"declared_mad": 70000}
+
+### 3.5 OPS: open "Guichet Sud" -> 201
+POST {{base}}/org/pos/sessions
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Guichet Sud"}
+
+> {% client.global.set("sudId", response.body.id); %}
+
+### 3.6 OPS: 2 places, 300 DH cash (B3's POS 2)
+POST {{base}}/org/pos/orders
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"sale_id": "{{$random.uuid}}", "event_id": {{match}}, "items": [{"price_category_id": "{{pleinCat}}", "qty": 2,
+  "holders": [{"name": "Karim Benali"}, {"name": "Karim Benali"}]}]}
+
+### 3.7 OPS: close declaring 300 DH
+POST {{base}}/org/pos/sessions/{{sudId}}/close
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"declared_mad": 30000}
+
+### ---------- (4) B8 Encaissements and Dépôts ----------
+
+### 4.1 FINANCE: Encaissements today -> both sessions deposit null ("Non déposé"), totals.undeposited_mad 100000
+GET {{base}}/org/finance/cash?from={{today}}&to={{today}}&timezone=Africa/Casablanca
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### 4.2 FINANCE: Dépôts -> undeposited lists Nord then Sud (oldest closed first)
+GET {{base}}/org/finance/deposits?from={{today}}&to={{today}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### 4.3 FINANCE: "Bordereau 448812", 990 DH over both -> 201 {declared_mad 100000, variance_mad -1000} (écart −10 DH)
+# deposited_on: today, in the venue's zone (a later date is FUTURE).
+POST {{base}}/org/finance/deposits
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"deposited_on": "{{today}}", "amount_mad": 99000, "reference": "Bordereau 448812",
+ "session_ids": ["{{nordId}}", "{{sudId}}"]}
+
+> {% client.global.set("depositId", response.body.id); %}
+
+### 4.4 FINANCE: Guichet Sud again -> 422 VALIDATION_FAILED on session_ids[0], reason DEPOSITED ("Session déjà déposée")
+POST {{base}}/org/finance/deposits
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"deposited_on": "{{today}}", "amount_mad": 30000, "reference": "Bordereau 448813",
+ "session_ids": ["{{sudId}}"]}
+
+### 4.5 FINANCE: Encaissements -> both sessions deposit {reference "Bordereau 448812"}, undeposited_mad 0; the CSV has depot;depose_le
+GET {{base}}/org/finance/cash.csv?from={{today}}&to={{today}}&timezone=Africa/Casablanca
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (5) Void and record again ----------
+
+### 5.1 FINANCE: void -> 403 (ADMIN only)
+POST {{base}}/org/finance/deposits/{{depositId}}/void
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "montant mal saisi"}
+
+### 5.2 ADMIN: void -> 200 {voided_at, voided_by, void_reason, sessions []}; both sessions "Non déposé" again
+POST {{base}}/org/finance/deposits/{{depositId}}/void
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "montant mal saisi"}
+
+### 5.3 OPS: record -> 403 (OPS reads the tab only)
+POST {{base}}/org/finance/deposits
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"deposited_on": "{{today}}", "amount_mad": 100000, "reference": "Bordereau 448812",
+ "session_ids": ["{{nordId}}", "{{sudId}}"]}
+
+### 5.4 FINANCE: 1 000 DH -> 201 {variance_mad 0}
+POST {{base}}/org/finance/deposits
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"deposited_on": "{{today}}", "amount_mad": 100000, "reference": "Bordereau 448812",
+ "session_ids": ["{{nordId}}", "{{sudId}}"]}
+
+### 5.5 OPS: Dépôts -> the live deposit and the voided one ("Annulé · montant mal saisi"); undeposited []
+GET {{base}}/org/finance/deposits?from={{today}}&to={{today}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (6) B3: 3 invitations and 4 app places; channels count sales only ----------
+
+### 6.1 OPS: 3 press invitations -> 201
+POST {{base}}/org/events/{{match}}/invitations
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"invitation_id": "{{$random.uuid}}", "items": [{"price_category_id": "{{presseCat}}", "qty": 3, "holders": [
+  {"name": "Nadia Berrada"}, {"name": "Salma Tazi"}, {"name": "Karim El Idrissi"}]}]}
+
+### 6.2 Yazid: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}"}
+
+### 6.3 Yazid: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("yazidToken", response.body.token); %}
+
+### 6.4 Yazid: 4 places in the app -> 201
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "items": [{"price_category_id": "{{pleinCat}}", "qty": 4,
+  "holders": [{"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}]}]}
+
+> {% client.global.set("yazidOrder", response.body.id); %}
+
+### 6.5 Yazid: pay by card -> open redirect_url, "Approuver"
+POST {{base}}/fan/orders/{{yazidOrder}}/pay
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 6.6 FINANCE: B3 -> channels APP 5 (4 + the cash-code place), POS 5 (the tills' 3 + 2), free {passes 0, invitations 3};
+# paid = Σ channels.paid + free.passes + free.invitations; methods.FREE = 3
+GET {{base}}/org/events/{{match}}/sales
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (7) CRM: Yazid (push), Karim (WhatsApp), Amine (nothing), Sara (joins, leaves) ----------
+
+### 7.1 Yazid: "Yazid", fr
+PATCH {{base}}/fan/me
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"display_name": "Yazid", "locale": "fr"}
+
+### 7.2 Yazid: joins, push only -> 201
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": true, "marketing_whatsapp": false}
+
+### 7.3 Karim: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}"}
+
+### 7.4 Karim: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("karimToken", response.body.token); %}
+
+### 7.5 Karim: "Karim", then joins with WhatsApp only -> 201
+PATCH {{base}}/fan/me
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"display_name": "Karim", "locale": "fr"}
+
+### 7.6 Karim: joins
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": false, "marketing_whatsapp": true}
+
+### 7.7 Amine: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{aminePhone}}"}
+
+### 7.8 Amine: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{aminePhone}}", "code": "{{code}}"}
+
+> {% client.global.set("amineToken", response.body.token); %}
+
+### 7.9 Amine: joins with no opt-in (never exported)
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{amineToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": false, "marketing_whatsapp": false}
+
+### 7.10 Sara: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}"}
+
+### 7.11 Sara: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{saraPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("saraToken", response.body.token); %}
+
+### 7.12 Sara: joins with both opt-ins
+PUT {{base}}/fan/me/membership
+Authorization: Bearer {{saraToken}}
+Content-Type: application/json
+
+{"organizer_id": "{{org}}", "marketing_push": true, "marketing_whatsapp": true}
+
+### 7.13 Sara: leaves -> 204 (left: never exported)
+DELETE {{base}}/fan/me/membership?organizer={{org}}
+Authorization: Bearer {{saraToken}}
+
+### ---------- (8) B9 "Exporter (CSV)" ----------
+
+### 8.1 ADMIN: summary -> exportable (the file's row count) and marketing_whatsapp ("{exportable} fans · {n} avec téléphone")
+GET {{base}}/org/members/summary
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+
+### 8.2 FINANCE: the export -> 403 (ADMIN only; OPS too)
+GET {{base}}/org/crm/export.csv
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### 8.3 ADMIN: the export -> 200 text/csv, Cache-Control no-store, fans-{today}.csv: Yazid (oui;non), Karim with his
+# phone (non;oui); no Amine, no Sara. Audit crm.export {rows, with_phone}, no name or phone.
+GET {{base}}/org/crm/export.csv
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}

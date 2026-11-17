@@ -257,12 +257,16 @@ class _CardClubLine extends ConsumerWidget {
             children: [
               const Icon(Icons.check_rounded, size: 14, color: JomhorColors.accent),
               const SizedBox(width: JomhorSpace.xs),
-              Text(
-                l.clubFollowing,
-                style: JomhorType.caption.copyWith(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: JomhorColors.accent,
+              Flexible(
+                child: Text(
+                  l.clubFollowing,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: JomhorType.caption.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: JomhorColors.accent,
+                  ),
                 ),
               ),
             ],
@@ -277,7 +281,7 @@ class _CardClubLine extends ConsumerWidget {
             foregroundColor: JomhorColors.accent,
             textStyle: JomhorType.caption.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
           ),
-          child: Text(l.clubFollow),
+          child: Text(l.clubFollow, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       },
     );

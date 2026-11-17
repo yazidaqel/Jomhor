@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
@@ -290,7 +292,8 @@ final _firstLetter = RegExp(r'\p{L}', unicode: true);
 String crestInitial(String name) => (_firstLetter.firstMatch(name)?[0] ?? '').toUpperCase();
 
 /// The club line of event cards and tickets (DESIGN.md §Multi-club adjustments): crest 20 + the club name in
-/// caption, in a bidi isolate of its own direction; [trailing] at the end ("Suivre" on Accueil).
+/// caption, in a bidi isolate of its own direction; [trailing] at the end ("Suivre" on Accueil). Where the trailing
+/// would overflow (a larger text size), it ellipsises instead; elsewhere the layout is the plain row's.
 class ClubLine extends StatelessWidget {
   const new({required this.name, this.crestUrl, this.trailing, this.color = JomhorColors.textSecondary, super.key});
 
@@ -299,22 +302,45 @@ class ClubLine extends StatelessWidget {
   final Widget? trailing;
   final Color color;
 
+  static const double _crest = 20;
+
+  /// The least the name keeps beside a trailing: one caption glyph or its ellipsis. EN "Following" (84 px) fits
+  /// beside it on a 390 px phone, where the calendar row leaves the line 126 px.
+  static const double _minName = 12;
+
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Crest(name: name, url: crestUrl, size: 20),
-      const SizedBox(width: JomhorSpace.s),
-      Flexible(
-        child: Text(
-          AppLocalizations.of(context).isolate(name),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: JomhorType.caption.copyWith(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+  Widget build(BuildContext context) {
+    Widget line([Widget? end]) => Row(
+      children: [
+        Crest(name: name, url: crestUrl, size: _crest),
+        const SizedBox(width: JomhorSpace.s),
+        Flexible(
+          child: Text(
+            AppLocalizations.of(context).isolate(name),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: JomhorType.caption.copyWith(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+        ?end,
+      ],
+    );
+    // Only a line with a trailing measures itself (tickets and the inbox keep a plain Row).
+    return switch (trailing) {
+      null => line(),
+      final t => LayoutBuilder(
+        builder: (_, box) => line(
+          ConstrainedBox(
+            // Capped only where it would overflow: the name keeps room for its ellipsis, never less than half.
+            constraints: BoxConstraints(
+              maxWidth: math.max(box.maxWidth / 2, box.maxWidth - _crest - JomhorSpace.s - _minName),
+            ),
+            child: t,
+          ),
         ),
       ),
-      ?trailing,
-    ],
-  );
+    };
+  }
 }
 
 /// A soft accent light, for the corner of a hero surface (the 12 % disc of the mockups, blurred).

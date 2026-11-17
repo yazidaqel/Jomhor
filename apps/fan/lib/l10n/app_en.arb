@@ -302,7 +302,7 @@
   "clubPushTitle": "Club notifications",
   "clubPushBody": "Matches, tickets and club news, on this phone.",
   "clubWhatsappTitle": "Club WhatsApp messages",
-  "clubWhatsappBody": "Club news on your WhatsApp.",
+  "clubWhatsappBody": "Club news on your WhatsApp. The club receives your number to send them to you.",
   "clubSeason": "Your season",
   "clubSeasonNext": "Next · {date}",
   "clubSeasonLabel": "{attended} of {total}",

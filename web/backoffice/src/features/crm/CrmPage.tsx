@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CampaignsTab } from './CampaignsTab'
 import { MembersTab } from './MembersTab'
 
-/** B9 Fans · CRM (Lot 4): member counts and campaigns. ADMIN, OPS write; FINANCE reads. Export is Lot 5. */
+/** B9 Fans · CRM (Lot 4): member counts and campaigns. ADMIN, OPS write; FINANCE reads. The CSV export (Lot 5 step 5) is ADMIN only. */
 export function CrmPage() {
   const { t } = useTranslation()
   return (

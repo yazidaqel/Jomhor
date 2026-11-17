@@ -23,12 +23,48 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV35Apply() {
+    void v1ToV36Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
                         "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32",
-                        "33", "34", "35");
+                        "33", "34", "35", "36");
+    }
+
+    /**
+     * V36: a deposit takes only closed sessions (pos_sessions_deposit); a void sets its time, staff and reason together
+     * (cash_deposits_void); amounts are >= 0 and references 1-100 characters.
+     */
+    @Test
+    void cashDepositsTakeClosedSessionsOnly() {
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        var user = jdbcTemplate.queryForObject("insert into users (phone_e164) values (?) returning id", UUID.class,
+                randomPhone());
+        var staff = jdbcTemplate.queryForObject("insert into staff (organizer_id, user_id, name, role) "
+                + "values (?, ?, 'Salma', 'FINANCE') returning id", UUID.class, org, user);
+        String deposit = "insert into cash_deposits (organizer_id, deposited_on, amount_mad, reference, recorded_by) "
+                + "values (?, current_date, ?, ?, ?) returning id";
+        for (Object[] b : new Object[][] {{-1L, "R"}, {0L, ""}, {0L, "x".repeat(101)}}) {
+            assertThatThrownBy(() -> jdbcTemplate.queryForObject(deposit, UUID.class, org, b[0], b[1], staff))
+                    .as(Arrays.toString(b)).isInstanceOf(DataIntegrityViolationException.class);
+        }
+        var id = jdbcTemplate.queryForObject(deposit, UUID.class, org, 0L, "x".repeat(100), staff);
+        assertThatThrownBy(() -> jdbcTemplate.update("update cash_deposits set voided_at = now() where id = ?", id))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("cash_deposits_void");
+        assertThatThrownBy(() -> jdbcTemplate.update("update cash_deposits set voided_at = now(), voided_by = ?, "
+                + "void_reason = '' where id = ?", staff, id)).isInstanceOf(DataIntegrityViolationException.class);
+
+        var open = jdbcTemplate.queryForObject("insert into pos_sessions (organizer_id, staff_id, label) "
+                + "values (?, ?, 'Nord') returning id", UUID.class, org, staff);
+        assertThatThrownBy(() -> jdbcTemplate.update("update pos_sessions set deposit_id = ? where id = ?", id, open))
+                .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("pos_sessions_deposit");
+        jdbcTemplate.update("update pos_sessions set closed_at = now(), expected_mad = 0, declared_mad = 0, "
+                + "deposit_id = ? where id = ?", id, open);
+        assertThatThrownBy(() -> jdbcTemplate.update("update pos_sessions set closed_at = null, expected_mad = null, "
+                + "declared_mad = null where id = ?", open)).isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining("pos_sessions_deposit");
+        jdbcTemplate.update("update cash_deposits set voided_at = now(), voided_by = ?, void_reason = 'erreur' "
+                + "where id = ?", staff, id);
     }
 
     /**

@@ -200,8 +200,9 @@ class PosApiTest extends PaymentTest {
         String json = body(call(cashier, post("/org/pos/sessions/" + id + "/close"), "{\"declared_mad\": 14500}")
                 .andExpect(status().isOk()));
         assertKeys(json, "$", "id", "label", "staff", "opened_at", "closed_at", "orders", "tickets", "prints",
-                "expected_mad", "declared_mad", "variance_mad");
+                "expected_mad", "declared_mad", "variance_mad", "deposit");
         assertKeys(json, "$.staff", "id", "name");
+        assertThat(JsonPath.<Object>read(json, "$.deposit")).isNull(); // the finance session shape: not deposited yet
         assertThat(JsonPath.<Integer>read(json, "$.expected_mad")).isEqualTo(15000); // 5000 sale + 10000 code
         assertThat(JsonPath.<Integer>read(json, "$.declared_mad")).isEqualTo(14500);
         assertThat(JsonPath.<Integer>read(json, "$.variance_mad")).isEqualTo(-500);

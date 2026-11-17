@@ -1,8 +1,8 @@
 import { useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { useOrganizer, useOrgQuery } from '@/features/auth/organizer'
-import { download } from '@/lib/api'
+import { useOrganizer, useOrgMutation, useOrgQuery, type Role } from '@/features/auth/organizer'
+import { download, path } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 
 // GET /org/finance/cash and its .csv (04-api §Organizer, Lot 3 Q50). ADMIN, OPS, FINANCE. Every `*_mad` is integer
@@ -32,6 +32,8 @@ export type CashSession = {
   declared_mad: number | null
   /** declared − expected. */
   variance_mad: number | null
+  /** Lot 5 step 5: its live deposit (`deposited_on` a local date), null while not deposited. */
+  deposit: { id: string; reference: string; deposited_on: string } | null
 }
 export type CashReport = {
   from: string
@@ -39,7 +41,8 @@ export type CashReport = {
   timezone: string
   days: CashDay[]
   sessions: CashSession[]
-  totals: { collected_mad: number; declared_mad: number; variance_mad: number; open_sessions: number }
+  /** `undeposited_mad` (Lot 5 step 5): Σ `declared_mad` of the range's closed sessions with no live deposit. */
+  totals: { collected_mad: number; declared_mad: number; variance_mad: number; open_sessions: number; undeposited_mad: number }
 }
 
 /**
@@ -61,3 +64,39 @@ export function useCashCsv() {
     onError: (e) => toast.error(t(errorKey(e))),
   })
 }
+
+// GET, POST /org/finance/deposits and POST /org/finance/deposits/{id}/void (04-api §Finance, Lot 5 step 5). GET:
+// ADMIN, OPS, FINANCE; POST: ADMIN, FINANCE; void: ADMIN.
+export type DepositSession = { id: string; label: string; staff: { id: string; name: string }; closed_at: string; declared_mad: number }
+export type Deposit = {
+  id: string
+  /** Local date of the bank slip (`YYYY-MM-DD`). */
+  deposited_on: string
+  amount_mad: number
+  reference: string
+  recorded_by: { id: string; name: string }
+  recorded_at: string
+  voided_at: string | null
+  voided_by: { id: string; name: string } | null
+  void_reason: string | null
+  /** Empty once voided; `declared_mad` and `variance_mad` are null then. */
+  sessions: DepositSession[]
+  declared_mad: number | null
+  /** amount − Σ declared. */
+  variance_mad: number | null
+}
+/** `deposits` newest `deposited_on` first, voided included; `undeposited` every closed session in no live deposit (not range-bound), oldest first. */
+export type Deposits = { deposits: Deposit[]; undeposited: DepositSession[] }
+export type NewDeposit = { deposited_on: string; amount_mad: number; reference: string; session_ids: string[] }
+
+export const RECORD_ROLES: readonly Role[] = ['ADMIN', 'FINANCE']
+export const VOID_ROLES: readonly Role[] = ['ADMIN']
+
+/** Local dates `YYYY-MM-DD` on `deposited_on`, both included, ≤ 92 days. */
+export const useDeposits = (range: { from: string; to: string }) =>
+  useOrgQuery<Deposits>(['finance', 'deposits', range], `/org/finance/deposits?${new URLSearchParams(range)}`)
+
+/** Both writes refetch every finance query of the organizer: a session's "Dépôt" column and `undeposited_mad` move too. */
+export const useRecordDeposit = () => useOrgMutation(['finance'], (body: NewDeposit, send) => send<Deposit>({ method: 'POST', path: '/org/finance/deposits', body }))
+export const useVoidDeposit = () =>
+  useOrgMutation(['finance'], ({ id, reason }: { id: string; reason: string }, send) => send<Deposit>({ method: 'POST', path: `${path('org', 'finance', 'deposits', id)}/void`, body: { reason } }))

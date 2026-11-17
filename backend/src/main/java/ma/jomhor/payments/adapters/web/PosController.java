@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import ma.jomhor.catalog.application.Inventory.SalePrice;
@@ -62,9 +63,19 @@ class PosController {
 
     record StaffRef(UUID id, String name) {}
 
-    /** The finance session shape (04 GET /org/finance/cash sessions[]). */
+    /** The finance session shape (04 GET /org/finance/cash sessions[]); deposit: its live deposit, else null. */
     record ClosedSession(UUID id, String label, StaffRef staff, Instant openedAt, Instant closedAt, long orders,
-                         long tickets, long prints, Long expectedMad, Long declaredMad, Long varianceMad) {}
+                         long tickets, long prints, Long expectedMad, Long declaredMad, Long varianceMad,
+                         DepositRef deposit) {
+        static ClosedSession of(PosSession s) {
+            PosSession.Deposit d = s.deposit();
+            return new ClosedSession(s.id(), s.label(), new StaffRef(s.staffId(), s.staffName()), s.openedAt(),
+                    s.closedAt(), s.orders(), s.tickets(), s.prints(), s.expectedSoFar(), s.declaredMad(),
+                    s.varianceMad(), d == null ? null : new DepositRef(d.id(), d.reference(), d.depositedOn()));
+        }
+    }
+
+    record DepositRef(UUID id, String reference, LocalDate depositedOn) {}
 
     record HolderDto(String label) {}
 
@@ -128,9 +139,7 @@ class PosController {
     @PostMapping("/org/pos/sessions/{id}/close")
     ClosedSession close(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id,
                         @Valid @RequestBody CloseBody body) {
-        PosSession s = pos.close(org.organizerId(), org.userId(), org.role(), id, body.declaredMad());
-        return new ClosedSession(s.id(), s.label(), new StaffRef(s.staffId(), s.staffName()), s.openedAt(),
-                s.closedAt(), s.orders(), s.tickets(), s.prints(), s.expectedMad(), s.declaredMad(), s.varianceMad());
+        return ClosedSession.of(pos.close(org.organizerId(), org.userId(), org.role(), id, body.declaredMad()));
     }
 
     @PostMapping("/org/pos/orders")

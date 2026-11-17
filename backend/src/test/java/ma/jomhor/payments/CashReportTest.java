@@ -91,7 +91,8 @@ class CashReportTest extends PaymentTest {
         String json = body(report(s.org(), "?from=2026-06-01&to=2026-06-07").andExpect(status().isOk()));
         assertKeys(json, "$", "from", "to", "timezone", "days", "sessions", "totals");
         assertKeys(json, "$.days[0]", "day", "collector", "collector_name", "method", "payments", "amount_mad");
-        assertKeys(json, "$.totals", "collected_mad", "declared_mad", "variance_mad", "open_sessions");
+        assertKeys(json, "$.totals", "collected_mad", "declared_mad", "variance_mad", "open_sessions",
+                "undeposited_mad");
         assertThat(JsonPath.<String>read(json, "$.timezone")).isEqualTo("Africa/Casablanca"); // the default
         assertThat(JsonPath.<String>read(json, "$.from")).isEqualTo("2026-06-01"); // the local dates, echoed
         assertThat(JsonPath.<String>read(json, "$.to")).isEqualTo("2026-06-07");
@@ -149,7 +150,7 @@ class CashReportTest extends PaymentTest {
         assertThat(JsonPath.<List<Integer>>read(json, "$.days[*].amount_mad")).containsExactly(5000, 5000, 10000);
         assertThat(JsonPath.<List<Integer>>read(json, "$.days[*].payments")).containsExactly(1, 1, 1);
         assertKeys(json, "$.sessions[0]", "id", "label", "staff", "opened_at", "closed_at", "orders", "tickets",
-                "prints", "expected_mad", "declared_mad", "variance_mad");
+                "prints", "expected_mad", "declared_mad", "variance_mad", "deposit");
         assertThat(JsonPath.<List<String>>read(json, "$.sessions[*].id")).containsExactly(session);
         assertThat(JsonPath.<Integer>read(json, "$.sessions[0].expected_mad")).isEqualTo(15000); // so far
         assertThat(JsonPath.<Object>read(json, "$.sessions[0].closed_at")).isNull();
@@ -159,7 +160,7 @@ class CashReportTest extends PaymentTest {
         assertThat(JsonPath.<Integer>read(json, "$.sessions[0].tickets")).isEqualTo(3);
         assertThat(JsonPath.<String>read(json, "$.sessions[0].staff.name")).isNotBlank();
         assertThat(JsonPath.<Map<String, Object>>read(json, "$.totals")).isEqualTo(Map.of("collected_mad", 20000,
-                "declared_mad", 0, "variance_mad", 0, "open_sessions", 1));
+                "declared_mad", 0, "variance_mad", 0, "open_sessions", 1, "undeposited_mad", 0));
 
         call(cashier, post("/org/pos/sessions/" + session + "/close"), "{\"declared_mad\": 14000}")
                 .andExpect(status().isOk());
@@ -169,7 +170,21 @@ class CashReportTest extends PaymentTest {
         assertThat(JsonPath.<Integer>read(json, "$.sessions[0].variance_mad")).isEqualTo(-1000);
         assertThat(JsonPath.<String>read(json, "$.sessions[0].closed_at")).matches("\\d{4}-\\d{2}-\\d{2}T.*Z");
         assertThat(JsonPath.<Map<String, Object>>read(json, "$.totals")).isEqualTo(Map.of("collected_mad", 20000,
-                "declared_mad", 14000, "variance_mad", -1000, "open_sessions", 0));
+                "declared_mad", 14000, "variance_mad", -1000, "open_sessions", 0, "undeposited_mad", 14000));
+
+        // Lot 5 step 5: a live deposit shows on its session and leaves "à déposer"; a voided one frees it again.
+        String today = LocalDate.now(ZoneId.of("Africa/Casablanca")).toString();
+        String deposit = JsonPath.read(body(call(caller(s.org().org(), "FINANCE"), post("/org/finance/deposits"), """
+                {"deposited_on": "%s", "amount_mad": 14000, "reference": "BORD 7", "session_ids": ["%s"]}
+                """.formatted(today, session)).andExpect(status().isCreated())), "$.id");
+        json = body(report(s.org(), aroundNow()).andExpect(status().isOk()));
+        assertThat(JsonPath.<Map<String, Object>>read(json, "$.sessions[0].deposit"))
+                .isEqualTo(Map.of("id", deposit, "reference", "BORD 7", "deposited_on", today));
+        assertThat(JsonPath.<Integer>read(json, "$.totals.undeposited_mad")).isZero();
+        call(s.org(), post("/org/finance/deposits/" + deposit + "/void"), "{\"reason\": \"montant mal saisi\"}")
+                .andExpect(status().isOk());
+        report(s.org(), aroundNow()).andExpect(jsonPath("$.sessions[0].deposit").isEmpty())
+                .andExpect(jsonPath("$.totals.undeposited_mad").value(14000));
 
         // A session opened before the range is not listed; its payments in the range still are.
         jdbc.sql("update pos_sessions set opened_at = now() - interval '3 days' where id = ?::uuid").param(session).update();
@@ -196,6 +211,10 @@ class CashReportTest extends PaymentTest {
         jdbc.sql("update pos_sessions set closed_at = '2026-11-06T00:15:00Z' where id = ?::uuid").param(session).update();
         String staff = jdbc.sql("select s.name from pos_sessions p join staff s on s.id = p.staff_id where p.id = ?::uuid")
                 .param(session).query(String.class).single();
+        // Its bank deposit: the slip's reference is typed text (formula-guarded), the slip date a plain date.
+        call(caller(s.org().org(), "FINANCE"), post("/org/finance/deposits"), """
+                {"deposited_on": "2026-11-06", "amount_mad": 124050, "reference": "=BORD 1", "session_ids": ["%s"]}
+                """.formatted(session)).andExpect(status().isCreated());
         // A till label typed as a formula: escaped as text; the negative gap above stays a plain number.
         Caller other = caller(s.org().org(), "CASHIER");
         String formula = openSession(other, "=1+1");
@@ -215,10 +234,12 @@ class CashReportTest extends PaymentTest {
         String text = new String(bytes, 3, bytes.length - 3, StandardCharsets.UTF_8);
         assertThat(text).endsWith("\r\n");
         assertThat(text.split("\r\n", -1)).containsExactly(
-                "kind;jour;encaisseur;moyen;paiements;montant;caisse;caissier;ouverture;cloture;attendu;declare;ecart",
-                "jour;2026-11-06;Guichet;POS_CASH;1;1250,50;;;;;;;",
-                "caisse;;;;;;\"Guichet; \"\"Nord\"\"\";" + staff + ";2026-11-05 18:00;2026-11-06 01:15;1250,50;1240,50;-10,00",
-                "caisse;;;;;;'=1+1;" + otherStaff + ";2026-11-06 10:00;;0,00;;",
+                "kind;jour;encaisseur;moyen;paiements;montant;caisse;caissier;ouverture;cloture;attendu;declare;ecart;depot;"
+                        + "depose_le",
+                "jour;2026-11-06;Guichet;POS_CASH;1;1250,50;;;;;;;;;",
+                "caisse;;;;;;\"Guichet; \"\"Nord\"\"\";" + staff + ";2026-11-05 18:00;2026-11-06 01:15;1250,50;1240,50;-10,00;"
+                        + "'=BORD 1;2026-11-06",
+                "caisse;;;;;;'=1+1;" + otherStaff + ";2026-11-06 10:00;;0,00;;;;",
                 "");
         // the same range checks as the JSON
         call(s.org(), get("/org/finance/cash.csv?from=2026-01-01&to=2026-06-01"))

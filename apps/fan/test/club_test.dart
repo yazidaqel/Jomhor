@@ -305,6 +305,58 @@ void main() {
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('club.optin.push'))).value, isTrue);
   });
 
+  // FL-33 (CNDP): the WhatsApp opt-in says the club receives the fan's number, in every locale.
+  testWidgets('join sheet: the WhatsApp opt-in says the club gets the number (fr, ar, en)', (tester) async {
+    for (final (locale, sentence) in [
+      ('fr', 'Le club reçoit ton numéro pour te les envoyer.'),
+      ('ar', 'النادي كيوصلو الرقم ديالك باش يصيفطهم ليك.'),
+      ('en', 'The club receives your number to send them to you.'),
+    ]) {
+      tallView(tester);
+      final c = await pumpJomhor(
+        tester,
+        backend: ClubBackend().handle,
+        tokens: MemoryTokenStore('jwt'),
+        follows: (ids: const [testOrganizer], seen: true, chip: chipAll),
+        locale: Locale(locale),
+      );
+      c.read(routerProvider).go('/club');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
+      await tester.pumpAndSettle();
+      final body = find.descendant(of: find.byKey(const Key('club.optin.whatsapp')), matching: find.byType(Text)).last;
+      expect(tester.widget<Text>(body).data, endsWith(sentence), reason: locale);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  // The EN "Follow" / "Following" at the end of Accueil's club lines (under screen 7) overflowed the ~126 px the
+  // calendar row leaves them under the wide test font: the trailing ellipsises where it would overflow (real fonts
+  // and 150 % text: club_line_test.dart).
+  testWidgets('screen 7 non-member and the Accueil under it lay out in en, fr and ar', (tester) async {
+    for (final locale in ['en', 'fr', 'ar']) {
+      tallView(tester);
+      final c = await pumpJomhor(
+        tester,
+        backend: ClubBackend().handle,
+        tokens: MemoryTokenStore('jwt'),
+        follows: (ids: const [testOrganizer], seen: true, chip: chipAll),
+        locale: Locale(locale),
+      );
+      // Both ends show: "Follow" on a club not followed, "Following" on Atlas.
+      bool keyed(Widget w, String prefix) =>
+          w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith(prefix);
+      expect(find.byWidgetPredicate((w) => keyed(w, 'home.follow.')), findsWidgets);
+      expect(find.byWidgetPredicate((w) => keyed(w, 'home.following.')), findsWidgets);
+      expect(tester.takeException(), isNull, reason: '$locale Accueil');
+      c.read(routerProvider).go('/club');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('club.joinCard.$testOrganizer')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '$locale screen 7');
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
   testWidgets('the number is padded to 6 and rolls once: not on reopen, not after a relaunch', (tester) async {
     final backend = ClubBackend(members: {testOrganizer: memberJson()});
     const follows = (ids: [testOrganizer], seen: true, chip: chipAll);

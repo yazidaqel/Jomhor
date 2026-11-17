@@ -90,6 +90,7 @@ const SALES: EventSales = {
   ],
   methods: (['CARD', 'WALLET', 'CASH_AGENCY', 'POS_CASH', 'FREE'] as const).map((method) => ({ method, paid: 0, revenue_mad: 0 })),
   refunds_required: [],
+  free: { passes: 0, invitations: 0 }, // as the real API sends it for an event without free places (BO-27 real run, event 51)
 }
 
 type Call = { path: string; org: string | null }
@@ -168,6 +169,30 @@ it('ADMIN lands on Aperçu: the next event, its KPIs from /sales, zones, channel
   expect(calls.filter((c) => c.path.endsWith('/sales'))).toEqual([{ path: '/org/events/1/sales', org: 'org-a' }])
   const nav = within(screen.getByRole('navigation', { name: fr.nav.label }))
   expect(nav.getByRole('link', { name: fr.nav.overview }).getAttribute('aria-current')).toBe('page')
+})
+
+it('Lot 5 step 5: channel shares are out of the channels’ sum, not paid (free places are in no channel)', async () => {
+  // Captured from the real API (BO-27 real run, event 59): paid 10 = 1 APP + 5 POS + 1 pass ticket + 3 invitations.
+  const real: EventSales = {"event_id": 59, "quota": 142, "paid": 10, "held": 0, "awaiting_cash": 0, "refunded": 0, "revenue_mad": 100000, "discount_mad": 0, "refunded_mad": 0, "zones": [{"zone_id": 2, "code": "EST", "name": "Est", "quota": 142, "paid": 10, "held": 0, "awaiting_cash": 0, "refunded": 0, "revenue_mad": 100000}], "channels": [{"channel": "APP", "paid": 1, "revenue_mad": 25000}, {"channel": "WEB", "paid": 0, "revenue_mad": 0}, {"channel": "POS", "paid": 5, "revenue_mad": 75000}], "methods": [{"method": "CARD", "paid": 0, "revenue_mad": 0}, {"method": "CASH_AGENCY", "paid": 1, "revenue_mad": 25000}, {"method": "WALLET", "paid": 0, "revenue_mad": 0}, {"method": "POS_CASH", "paid": 5, "revenue_mad": 75000}, {"method": "FREE", "paid": 4, "revenue_mad": 0}], "free": {"passes": 1, "invitations": 3}, "refunds_required": []}
+  stubApi('ADMIN', undefined, undefined, () => Response.json({ ...real, event_id: DETAIL.id }))
+  renderApp()
+  const card = (await screen.findByRole('heading', { name: fr.overview.channels.title })).closest('[data-slot="card"]') as HTMLElement
+  await within(card).findByText(spaced(dh(75_000)))
+  const share = (name: string) => (within(card).getByText(name).closest('li')!.querySelector('[aria-hidden="true"] > div') as HTMLElement).style.width
+  // jsdom keeps 6 significant digits of a width.
+  expect(parseFloat(share(fr.sales.channels.names.APP))).toBeCloseTo((1 / 6) * 100, 3) // 1 ÷ 6 sold, not ÷ 10 paid
+  expect(parseFloat(share(fr.sales.channels.names.POS))).toBeCloseTo((5 / 6) * 100, 3)
+  expect(share(fr.sales.channels.names.WEB)).toBe('0%')
+})
+
+it('Lot 5 step 5: only free places: the channels card says no place was sold', async () => {
+  stubApi('ADMIN', undefined, undefined, () =>
+    Response.json({ ...SALES, paid: 5, free: { passes: 2, invitations: 3 }, channels: SALES.channels.map((c) => ({ ...c, paid: 0, revenue_mad: 0 })) }),
+  )
+  renderApp()
+  const card = (await screen.findByRole('heading', { name: fr.overview.channels.title })).closest('[data-slot="card"]') as HTMLElement
+  expect(await within(card).findByText(fr.sales.channels.noSales)).toBeTruthy()
+  expect(within(card).queryByRole('listitem')).toBeNull()
 })
 
 it('FINANCE sees the figures but no "Nouvel événement"', async () => {

@@ -1,6 +1,6 @@
 # Lot 5 · Organizer platform: implementation plan
 
-As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 4, §12): BE-67, FL-33, WS-18, BO-27, Q222, P155; next migration V36. Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
+As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 5, §13): BE-73, FL-34, WS-18, BO-29, Q240, P167; next migration V38. Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
 
 ## 1. Lot
 
@@ -1894,3 +1894,497 @@ None. The 500-place limit is a 04 rule, not a knob.
 | CSV paste for bulk invitations, generated single-use codes, codes at the till | when the club asks | §12.8 |
 | Plan header line 3 says "next migration V29" | W0-1 | P154 |
 | B7 "Imprimer" prints every ticket of a batch (WhatsApp ones and revoked ones too, the latter as "non valable"); print only `PAPER` tickets if clubs ask (add `delivery` to the print data) | when a club asks | BO-25 real run |
+
+## 13. Step 5 · Finance and CRM export
+
+Status: **agreed 2026-11-17** by the founder, every default: agent model, per-club fee rate + 20 % VAT taken from the payout, refunds stay the club's, no fee back on refund (Q222–Q224); manual transfer, day + 2 (weekend → Monday), the club confirms "Versement reçu" with the bank reference (Q226–Q227); invoices built now with Jomhor's legal IDs as empty settings, real invoices blocked until they are filled and an accountant confirms (Q228–Q230); CRM export as specified, phone only with WhatsApp consent, the opt-in sentence added (Q235–Q236). Waiting on the founder: the first club's fee rate, Jomhor's legal IDs, the accountant's review, the club's CNDP declaration.
+
+As of 2026-11-17 · owner: tech-lead · status: **proposed**, waiting for the founder's calls on Q222–Q224, Q227, Q228–Q230, Q235–Q236. V35 is the latest migration (step 4b, PR #26), so step 5 starts at V36. This is the **last step of Lot 5**. It ships in two sub-steps:
+- **5a** uses V36, on branch `feat/lot-5-cash-crm` from `main` (e69dcfa).
+- **5b** uses V37, on branch `feat/lot-5-settlements` from `main` once 5a is merged.
+- Ids used: Q222–Q239, P155–P166, BE-67–BE-72, FL-33, BO-27–BO-28 (WS-18 unused: the web shop doesn't change).
+- Next free ids: BE-73, FL-34, WS-18, BO-29, Q240, P167. Next migration: V38.
+
+### 13.1 Scope and exit
+
+Scope (§9 row 5, §11.9, §12.9):
+
+- **Daily settlement statements:** one per organizer per local day with at least one payment.
+  - They are built from `payments` `SUCCEEDED`, so product, pass, installment and membership money settles like event money.
+  - The statement lists money held by Jomhor (card, wallet, agency cash) apart from cash taken at the club's tills.
+  - It shows the fee, the VAT, any negative balance carried over, and the payout.
+- **VAT invoices:** Jomhor's fee invoice to the organizer.
+  - Numbered with no gaps, per year.
+  - The organizer's and Jomhor's legal details are copied into the invoice when it's issued.
+  - The PDF is drawn on request from the stored row (PDFBox). No file storage.
+- **48 h payouts:** each statement is due on day + 2 (a Saturday or Sunday moves to Monday).
+  - V1 moves no money. Jomhor sends the transfer by hand.
+  - The organizer's ADMIN/FINANCE records "Versement reçu" with the bank reference (Q227).
+- **Bank-deposit matching for till cash** (02 threat model): FINANCE records a bank deposit against one or more closed till sessions.
+  - Gap = amount on the slip − Σ declared cash.
+  - Sessions not yet deposited are listed. An ADMIN can void a deposit (audited).
+- **`/org/crm/export.csv`:**
+  - one row per live member who accepted push or WhatsApp, plus paid members and current pass holders;
+  - the phone only for members who accepted WhatsApp;
+  - ADMIN only, audited (Q235).
+- **Carried in:**
+  - `/sales` channels no longer count pass-ticket and invitation orders; a new `free: {passes, invitations}` (Q194, Q211, Q237);
+  - discounts reach settlements through `total_mad` (Q238);
+  - zero-amount refunds: already done in 4a (confirmed: `TicketAdminService` writes no row when the amount is 0, `ZeroRefundTest`, V34).
+
+**Two sub-steps, each one PR.** 5a needs none of the founder's money answers. 5b needs the fee rate and Jomhor's legal details (demo values in dev/test).
+
+| Sub-step | Scope | Exit |
+| --- | --- | --- |
+| **5a · Cash deposits, CRM export, `/sales` split** | V36 `cash_deposits`; deposits API; `/finance/cash` shows deposits; CRM export + `exportable` count; `/sales` `free`; B8 Dépôts, B9 export, B3; app opt-in copy | Demo 5a; CI green on `Lot5CashCrmFlowTest` and the 5a tests |
+| **5b · Settlements, invoices, payouts** | V37 `settlements`, `settlement_lines`, `invoices`; the `finance` module; the statement job; invoice numbering + PDF; "Versement reçu"; B8 Relevés | Demo 5b; CI green on `Lot5SettlementFlowTest` and the 5b tests |
+
+**What step 5 reuses:**
+
+- `payments` as the only source of money in. `SUCCEEDED` is final, and `completed_at` is set when the payment succeeds, so a closed day never changes.
+- `provider` tells who holds the cash: `POS` = a club till; anything else = Jomhor's merchant account or a network.
+- `CashReport`: local days from a time zone, the 92-day limit, `dh()`, the CSV shape.
+- `common/Csv`: BOM, `;`, quoting, formula guard.
+- PDFBox (ticket PDF) for the invoice.
+- `pos_sessions` (declared vs expected).
+- `RefundService` and `/org/refunds`: unchanged (Q224).
+- `organizers.settings`: a new `finance` object, set by ops, like `cash_points` (Q231).
+- crm `Memberships`, its loyalty query, `/org/members/summary`.
+- The `SalesReport` read model.
+- The job pattern: try-lock and a unique key, as `ManifestBuildJob` and the pass job.
+
+No new runtime component, no Kafka, no external service. Payzone stays simulated. No hosting-provider dependency, no file storage.
+
+**Exit 5a, demo-complete** (locally, dev backend):
+
+1. **Tills:** cashier Salma opens "Guichet Nord", sells 3 places for 450 DH, collects a 250 DH cash code, and closes declaring 700 DH. "Guichet Sud" closes declaring 300 DH.
+2. **B8 Encaissements:** both sessions read "Non déposé", and the KPI reads "À déposer 1 000 DH".
+3. **B8 Dépôts:**
+   - FINANCE ticks both sessions and records "Bordereau 448812" on 26 nov. for 990 DH. Écart: −10 DH, in red. Both sessions now show the reference.
+   - Recording a second deposit with Guichet Sud → "Session déjà déposée".
+4. **Void:** an ADMIN voids the deposit ("montant mal saisi"). The sessions go back to "Non déposé". FINANCE records it again at 1 000 DH → écart 0. OPS sees the tab read-only.
+5. **B3:** an event with 2 pass tickets, 3 invitations, 4 places sold in the app and 2 at a till.
+   - Channels: APP 4, POS 2.
+   - "Places offertes · Abonnés 2 · Invitations 3".
+   - `paid` = 11 = Σ channels + free.
+6. **CRM** (B9 Membres → "Exporter (CSV)", ADMIN):
+   - The members: Yazid (push only), Karim (WhatsApp, paid member), Nadia (no opt-in, active pass), Amine (no opt-in), Sara (left).
+   - The dialog reads "3 fans · 1 avec téléphone". The file has Yazid, Karim and Nadia; only Karim's phone is filled in; Nadia reads "abonné: oui". Amine and Sara aren't in it.
+   - FINANCE and OPS see no button (403). Audit `crm.export {rows: 3, with_phone: 1}`.
+7. **App:** the club join sheet shows the new WhatsApp line (fr, ar).
+8. **Correctness:** `check.sql` is clean.
+
+**Exit 5b, demo-complete** (dev seeder: ATLAS FC finance settings at 500 bp and payments on the two previous days, so the job issues them at startup):
+
+1. **Statement of Thu 26 nov.:**
+   - Payments: card 3 000 DH (2 events) + 400 DH (pass installment), wallet 150 DH (membership), network cash 450 DH. Total "En ligne" **4 000 DH**.
+   - Tills: 1 000 DH.
+   - Frais HT 250 DH (⌊500 000 × 500 ÷ 10 000⌋ centimes), TVA 50 DH. **À verser 3 700 DH**, due Mon 30 nov. (Sat 28 → Monday).
+   - The sheet lists the lines per event and product × method × collector.
+2. **Invoice JMH-2026-000001:** the PDF shows every Q230 mention, 250,00 HT, TVA 20 % 50,00, TTC 300,00, "Réglée par compensation sur le versement du relevé du 26/11/2026".
+3. **Fri 27 nov.:** till cash only, 800 DH.
+   - Frais 40 + 8 DH; "Rien à verser"; invoice JMH-2026-000002.
+   - The next statement opens with "Report −48 DH".
+4. **Today:** a card payment of 250 DH made during the demo appears under "Pas encore relevé". Nothing is issued before tomorrow 01:00.
+5. **Payout:**
+   - FINANCE clicks "Versement reçu" on the 26th with "VIR 0042" → "Versé le …".
+   - A seeded `DUE` statement past its due date reads "En retard" in red.
+   - OPS has no Relevés tab.
+6. **Refund:** an ADMIN refunds a card ticket. It appears in "Remboursements à faire" (B8 KPI), and no issued statement changes.
+7. **Correctness:** `check.sql` is clean (line sums, payout formula, carried balance, invoice numbers with no gaps, invoice amounts = statement fee).
+
+### 13.2 What it builds on, spec refs
+
+| Area | State on `main` (e69dcfa) | Step 5 use |
+| --- | --- | --- |
+| Payments | `payments` (method, provider `FAKE`/`PAYZONE`/`POS`/`FAKE_CASH`/network, amount, `completed_at`, `pos_session_id`). Index `(organizer_id, completed_at) where SUCCEEDED`. `CashReport` groups cash payments by local day × collector | Statements read `SUCCEEDED` payments of a local day through a payments application call. `provider = 'POS'` = till (club-held) |
+| Tills | `pos_sessions` with `expected_mad`/`declared_mad` frozen at close; `/finance/cash` sessions with `variance_mad`; CSV | + `deposit_id`; deposits API; `undeposited_mad` |
+| Refunds | `refunds` `REQUIRED`→`DONE` by hand (`RefundService`: "no gateway refund API"); `payment.refund_required` audit flags in `/sales` and B14 | Unchanged; the B8 KPI counts `REQUIRED` (Q224) |
+| Orders | `total_mad` net of `discount_mad`; product orders (`event_id` null, one `product_id` item); pass and invitation orders `PAID`, `FREE`, total 0, no payment | A statement line's subject = the order's event or its item's product. FREE orders have no payment, so they never settle |
+| Sales report | `SalesReport`: channels and methods by `PAID` orders' channel / `payment_method`; FREE orders counted in APP (passes) and POS (invitations) | Channels exclude `payment_method = 'FREE'`; + `free` |
+| CRM | `memberships` (number, joined_at, left_at, opt-ins, `paid_until`); loyalty read over tickets/scans; `/org/members/summary` counts only; Csv for exports | Export query (one statement); `exportable` |
+| Passes | `passes` (status, series), `event_series.ends_on` | `PassService.liveHolders(org, today)` for the "abonné" column |
+| Tenancy | `organizers.settings` jsonb (crest, cash_points, loyalty), parsed in `OrganizerService` with defaults + WARN on malformed | + `finance` object (Q231) |
+| PDF | PDFBox 3.0.8 (`TicketPdf`) | `InvoicePdf` |
+| Jobs / locks | Advisory classes 1–9 in the `EventLock` javadoc | Class 10 (statement per organizer, try-lock), class 11 (invoice number per year) |
+| Back-office | `features/finance/CashPage.tsx` (B8 Encaissements), `features/crm` (B9 Membres · Campagnes), `features/sales` (B3), `features/overview` (B0 reads `/sales` channels) | B8 tabs Relevés · Encaissements · Dépôts; B9 export; B3 free places |
+| Seeder | `DevSeeder` (dev profile) | Seeds finance settings + past payments for the 5b demo |
+
+Spec refs:
+
+- `CLAUDE.md`: non-negotiables (centimes, `organizer_id` on every table, no PII where it doesn't belong, no football names); stack (Kafka only for a real async boundary); conventions (records as DTOs, contract test per endpoint).
+- `docs/00-product.md`: §Why it can win ("Finance" row: daily settlement, VAT invoices, 48 h payouts, cash reconciliation; "Organizer data" row: owns and exports its fan base); §Product surfaces (back-office: finance, CRM export); §V1 in lots (Lot 5 row).
+- `docs/01-architecture.md`: §Components (back-office finance, CRM); modules (`finance`, `crm`); multi-instance paragraph (locks, jobs); §Key flows 2 ("→ settlement").
+- `docs/02`: §End of event ("the basis for settlement"); §Data model; threat model ("Insider issues free tickets" residual: "bank deposit matching with the Lot 5 finance module").
+- `docs/03`: `organizers.settings`, `pos_sessions`, `payments`, `refunds`, `orders` (`total_mad`, `discount_mad`, `pass_id`, `invited_by`), `order_items.product_id`, `passes`, `memberships`, `settlements` (draft), `audit_log`.
+- `docs/04`: header (money in centimes, RFC 3339); errors; §Payments; §Passes Sales; §Invitations; §Promo codes Refunds; §Organizer (role line, `/sales`, `/org/refunds*`, `/org/finance/cash`, `/org/finance/settlements`, `/org/crm/export.csv`, `/org/members/summary`); §Point of sale (sessions, close); §Campaigns Audience (opt-ins).
+- `docs/06`: payment methods, opt-in.
+- `design/DESIGN.md`: Back-office table (B8 `/finance`, B9 `/crm`), Lot 3 adjustments (B8 Encaissements), Lot 4 (B9 Membres, screen 7 Club opt-ins), step 3 (B14 "Encaissé"), step 4 (B3 "Remises accordées").
+- Plans: lot-3 Q50 (cash report), Q52 (refunds by hand); lot-4 Q62 (marketing vs service info); lot-5 Q194, Q201, Q210, Q211, Q218, Q219, §11.9, §12.9.
+
+### 13.3 Open questions (each has a default, none blocks)
+
+| # | Question | Default for step 5 |
+| --- | --- | --- |
+| Q222 | Who holds the money? *(founder)* | **Jomhor collects as the organizer's agent:** card and wallet (Payzone merchant account, simulated now) and agency cash (networks pay Jomhor). The organizer holds only the cash taken at its own tills (`provider = 'POS'`). So the statement separates **collected** (held by Jomhor, paid out) from **till** (held by the club, shown for the fee and the books). The contract must say "encaissement au nom et pour le compte de l'organisateur" (see Q228). |
+| Q223 | Fee terms *(founder)* | **`settings.finance.fee_rate_bp` per organizer (0–10 000 basis points), on Σ `SUCCEEDED` payments of the day, online and till.**<br>• `fee_ht = ⌊(collected + till) × rate ÷ 10 000⌋`, VAT on top, deducted from the payout.<br>• No fixed fee per ticket. FREE orders carry none (no payment).<br>• Not reversed by a refund (invoices stay final, no credit notes).<br>• Payzone's and the networks' own fees are Jomhor's cost, inside the rate.<br>**No default rate:** an organizer without valid finance settings gets no statements (B8 shows "pas encore activés"). |
+| Q224 | Refunds and the payout *(founder)* | **Nothing is taken off the payout for refunds.** The organizer receives all its fans' money, so it pays refunds back by hand, as since Lot 3 (`/org/refunds` → "Marquer remboursé"). The same goes for `payment.refund_required` (paid, no ticket). B8 shows the `REQUIRED` count and amount as a KPI. **Revisit when Payzone is live with refunds through its API:** those refunds then leave Jomhor's account and must be taken off the payout (§13.9). |
+| Q225 | What a statement is | **One per organizer per local day (`finance.timezone`, `Africa/Casablanca`) with at least one `SUCCEEDED` payment, by `payments.completed_at`.**<br>• Issued by the job once that day has ended + `finance.issue-delay` (1 h), so callbacks in flight at midnight commit first.<br>• Days are built in order from `settings.finance.start_on`; days with no payment get none.<br>• Immutable once issued (only the payout status moves).<br>• Lines = payments grouped by subject (the order's event, or its item's product) × method × collector.<br>• The current day is shown live as "Pas encore relevé" (not stored). |
+| Q226 | "48 h payouts" | **`due_on` = day + `finance.payout-days` (2); a Saturday or Sunday moves to Monday.** Moroccan bank holidays are not modelled (`ponytail:` in `Payout.dueOn`; a holiday list in settings if it bites). B8 marks a `DUE` statement past `due_on` as "En retard". |
+| Q227 | How payouts are made and recorded *(founder)* | **V1 moves no money.** It computes `payout_mad` and `due_on`. Jomhor sends the transfer by hand from its bank portal, using the statement (screen or CSV). **The payee records it:** the organizer's ADMIN/FINANCE clicks "Versement reçu" with the bank reference → `PAID`, audited. Statements whose payout is 0 are `NONE`.<br>Left out: a bank transfer file (formats differ per bank), a bank API, a platform-wide payout view (it needs a platform-operator auth; Jomhor support uses a FINANCE staff row at the club while there is one club), batching several days into one transfer (one reference can be typed on each). |
+| Q228 | What is invoiced, and to whom? *(founder + accountant)* | **Jomhor's fee, to the organizer, one invoice per statement with `fee_ht_mad > 0`**, issued in the statement's transaction. **No invoice to fans:** the ticket and the order page are the receipt. The ticket price is set by the organizer, VAT included, and the VAT on tickets is the organizer's (agent model). Accountant: confirm the agent model (VAT only on the commission), and one invoice per day vs one per month. |
+| Q229 | Invoice numbering | **`JMH-{year}-{seq:06d}`**, `year` = the local year of `issued_on`.<br>• `seq` = max + 1 for that year, taken under a global advisory lock (class 11, year) in the issuing transaction, so a rollback leaves no gap. `unique (year, seq)` as a backstop.<br>• One sequence for every organizer (Jomhor is the issuer). Numbers follow issue order, so dates never go back.<br>• Rows are never updated or deleted (DB trigger, like `scans`).<br>• Credit notes are left out. Accountant: confirm the yearly restart. |
+| Q230 | Invoice mentions *(accountant)* | **Issuer (config `finance.issuer.*`, required under `prod`):**<br>• legal name, legal form and capital, registered address;<br>• RC (number + court), IF, TP, ICE (15 digits).<br>**Customer (copied from `settings.finance` at issue):** legal name, address, ICE.<br>**The invoice:**<br>• number, issue date;<br>• service "Frais de service billetterie · relevé du {day}", base (encaissements du jour), rate;<br>• HT, TVA 20 % and its amount, TTC;<br>• payment "Réglée par compensation sur le versement du relevé du {day}".<br>Amounts are DH with a comma, computed with integers. Accountant to confirm:<br>• a due-date mention under law 69-21 (payment terms);<br>• the amount in words (customary, not built);<br>• DGI e-invoicing dates (V1 issues PDFs). |
+| Q231 | Organizer legal and bank details | **`organizers.settings.finance`** = `{legal_name, address, ice (15 digits), if, rc, rib (24 digits), fee_rate_bp, start_on}`.<br>• Set by Jomhor ops from the signed contract and a bank RIB certificate (SQL, as `cash_points`).<br>• **Never writable through `/org`:** a hijacked ADMIN account could otherwise redirect payouts.<br>• Shown read-only in B8, with only the RIB's last 4 digits.<br>• Missing or malformed → no statements, WARN (the loyalty precedent), `settings: null` in the API. |
+| Q232 | VAT rounding | `fee_vat = ⌊(fee_ht × finance.vat-rate-bp + 5 000) ÷ 10 000⌋` (half-up). One line per invoice, so there is no per-line rounding drift. Accountant to confirm. |
+| Q233 | Bank-deposit matching | **Typed in by FINANCE; no bank feed or statement import.**<br>• A deposit = slip date, amount, reference, and the closed sessions it covers; each session is in at most one live deposit.<br>• `variance_mad = amount − Σ declared`.<br>• Sessions not yet deposited are listed oldest first.<br>• An ADMIN voids a wrong deposit with a reason (audited with its session ids); its sessions become free again.<br>• It is a control on the club's own cash: it doesn't touch statements. |
+| Q234 | Agency cash timing | **Counted on the day the network confirms it** (`completed_at`), even though the network pays Jomhor later. Jomhor carries that delay and risk. Matching networks' remittances is left out (networks are simulated until BE-27). |
+| Q235 | CRM export contents *(founder, CNDP)* | **ADMIN only.**<br>**Rows:** live members (`left_at` null) with ≥ 1 opt-in, or `paid_until > now`, or a pass `ACTIVE`/`SUSPENDED` in a series whose `ends_on ≥` today.<br>**Columns:** `numero;nom;telephone;langue;membre_depuis;notifications;whatsapp;cotisation_jusqu_au;abonne;matchs`.<br>• `telephone` only when `marketing_whatsapp` (minimisation: push goes through Jomhor, paid/pass rows are contract data, not consent to be contacted).<br>• `nom` = `users.display_name` (may be empty).<br>Ticket holders who aren't members are never exported. Audit `crm.export {rows, with_phone}` (no names or phones). `Cache-Control: no-store`. |
+| Q236 | Consent wording *(founder, CNDP)* | **The app's WhatsApp opt-in line adds "Le club reçoit ton numéro pour te les envoyer."** (fr/ar/en). Existing opt-ins are kept (pre-launch). The club is the controller of its members file, Jomhor the processor: a data-processing agreement plus the club's CNDP declaration ("fichier adhérents, prospection") gate Live, not the demo. |
+| Q237 | `/sales` split (Q194, Q211) | **`channels` count only orders whose `payment_method ≠ 'FREE'`.** New `free: {passes, invitations}` = places in `PAID` FREE orders with `pass_id` / `invited_by`. `paid` is unchanged, so `paid = Σ channels.paid + free.passes + free.invitations` (tested). `methods.FREE` stays (it is their sum). |
+| Q238 | Discounts and refunds in the net (Q219) | Statements are built from payments, so **every amount is already net of discounts** (`total_mad`). Refunds are not netted (Q224). `/sales` net stays `revenue − discount − refunded`. Splitting the discount per zone is left out. |
+| Q239 | Mockups before building? | **No blocking round.** §13.4.6 + B8/B9 follow the Encaissements and Membres patterns; FR + AR goldens of the app's join sheet. |
+
+### 13.4 Contract changes
+
+#### 13.4.1 Problems found
+
+| # | Where | Problem | Fix |
+| --- | --- | --- | --- |
+| P155 | 03 `pos_sessions` | Nothing records which bank deposit took a till's cash (02 threat residual) | `cash_deposits` + `pos_sessions.deposit_id` (5a) |
+| P156 | 04 `/org/finance/cash`, new deposits rows | No deposit field, no "à déposer" total, no way to record or void a deposit | Append + three rows (5a) |
+| P157 | 04 `/org/crm/export.csv` | Placeholder | Full row (5a); `/org/members/summary` + `exportable` |
+| P158 | 04 `/org/events/{id}/sales` | Channels count pass-ticket (APP) and invitation (POS) orders; `methods.FREE` mixes both (§11.9, §12.9) | Channels without FREE orders; + `free` (5a) |
+| P159 | 03 `settlements` (draft) | `text` status, period range, `event_id`, no lines, no till/collected split, no fee VAT, no carried balance, no due date, no payout reference; never migrated | Reshaped + `settlement_lines` (5b) |
+| P160 | 03 | No invoices | `invoices` + immutability trigger (5b) |
+| P161 | 03 `organizers.settings` | No finance shape | `finance` comment (5b) |
+| P162 | 04 `/org/finance/settlements` | Placeholder | List, detail, CSV, "paid", invoice PDF, new §Finance (5b) |
+| P163 | 04 errors, role line | No status error for payouts; no roles for the new paths | `SETTLEMENT_STATUS`; role line (5a, 5b) |
+| P164 | 02, 01, 06, `check.sql`, config | New tables, locks, threats, terms | §13.4.4, §13.4.5 |
+| P165 | `design/DESIGN.md` | B8 shows only Encaissements; B9 has no export; B3 mixes free places | §13.4.6 |
+| P166 | Plan header line 3 | Next ids | §13.4.5 |
+| — | Football names / floats / PII in QR / server on the gate path | All OK:<br>• **Names:** `settlements`, `settlement_lines`, `invoices`, `cash_deposits` (no football names).<br>• **Money:** every amount bigint centimes; rates in integer basis points; integer division only; DH text by integer maths (`CashReport.dh`).<br>• **PII:** no fan data in statements, lines, invoices or audits; the RIB is organizer business data, never returned in full; the CRM export is personal data by design: ADMIN only, minimised, audited, `no-store`.<br>• **Gate:** zero diff under `…/gate`, `apps/scanner`, `packages/core`; no token or manifest change. | OK |
+
+#### 13.4.2 `docs/03-schema.sql`
+
+**5a**
+
+```sql
+-- ---------- point of sale: cash deposits (Lot 5 step 5) ----------
+create table cash_deposits (                          -- till cash taken to the bank (docs/04-api.md §Finance Deposits)
+  id            uuid primary key default gen_random_uuid(),
+  organizer_id  uuid not null references organizers(id),
+  deposited_on  date not null,                        -- the bank slip's date
+  amount_mad    bigint not null check (amount_mad >= 0),   -- centimes on the slip
+  reference     text not null check (char_length(reference) between 1 and 100),   -- slip or bank reference
+  recorded_by   uuid not null references staff(id),
+  recorded_at   timestamptz not null default now(),
+  voided_at     timestamptz,                          -- a wrong entry: its sessions are freed (audit deposit.void keeps their ids)
+  voided_by     uuid references staff(id),
+  void_reason   text check (char_length(void_reason) between 1 and 200),
+  constraint cash_deposits_void check ((voided_at is null) = (voided_by is null)
+                                       and (voided_at is null) = (void_reason is null))
+);
+create index on cash_deposits (organizer_id, deposited_on desc);
+
+-- ---------- point of sale: pos_sessions (add) ----------
+  deposit_id    uuid references cash_deposits(id),    -- the live deposit that took this closed session's cash; null = not deposited
+  constraint pos_sessions_deposit check (deposit_id is null or closed_at is not null)
+create index on pos_sessions (organizer_id, closed_at) where closed_at is not null and deposit_id is null;   -- à déposer
+```
+
+**5b**
+
+```sql
+-- organizers.settings shape (add):
+--   "finance": {"legal_name": "Atlas FC SA", "address": "Stade de l'Atlas, Casablanca", "ice": "001234567000089",
+--               "if": "12345678", "rc": "Casablanca 123456", "rib": "011780000012345678901234",
+--               "fee_rate_bp": 500, "start_on": "2026-12-01"}
+--   Jomhor's fee contract and the organizer's legal and bank details (docs/04-api.md §Finance). Set by Jomhor ops from
+--   the signed contract and a RIB certificate; never writable through /org. ice 15 digits, rib 24 digits,
+--   fee_rate_bp 0–10 000. Absent or malformed: no settlement statements (WARN).
+
+-- ---------- finance (replaces the draft settlements table) ----------
+create type settlement_status as enum ('DUE','PAID','NONE');   -- NONE: payout 0 (fees covered nothing, or a carried debt)
+
+create table settlements (                            -- daily statement (docs/04-api.md §Finance); immutable but for the payout fields
+  id                uuid primary key default gen_random_uuid(),
+  organizer_id      uuid not null references organizers(id),
+  day               date not null,                    -- local day (finance.timezone) of the payments' completed_at
+  collected_mad     bigint not null check (collected_mad >= 0),   -- SUCCEEDED payments held by Jomhor (provider <> 'POS')
+  till_mad          bigint not null check (till_mad >= 0),        -- SUCCEEDED payments taken at club tills (provider 'POS'); kept by the club
+  fee_rate_bp       integer not null check (fee_rate_bp between 0 and 10000),   -- settings.finance.fee_rate_bp at issue
+  fee_ht_mad        bigint not null check (fee_ht_mad >= 0),      -- floor((collected + till) × rate / 10 000)
+  fee_vat_mad       bigint not null check (fee_vat_mad >= 0),     -- floor((fee_ht × vat_rate_bp + 5 000) / 10 000)
+  carried_in_mad    bigint not null check (carried_in_mad <= 0),  -- least(0, previous statement's collected − fees + carried_in)
+  payout_mad        bigint not null check (payout_mad >= 0),      -- greatest(0, collected − fee_ht − fee_vat + carried_in)
+  due_on            date not null,                    -- day + finance.payout-days; Saturday/Sunday → Monday
+  status            settlement_status not null,       -- DUE when payout > 0, else NONE; DUE → PAID by the organizer
+  issued_at         timestamptz not null default now(),
+  paid_at           timestamptz,                      -- "Versement reçu"
+  paid_by           uuid references staff(id),
+  payout_reference  text check (char_length(payout_reference) between 1 and 100),   -- the bank transfer's reference
+  unique (organizer_id, day),
+  constraint settlements_status check ((status = 'NONE') = (payout_mad = 0)
+                                       and (status = 'PAID') = (paid_at is not null)
+                                       and (paid_at is null) = (paid_by is null)
+                                       and (paid_at is null) = (payout_reference is null))
+);
+
+create table settlement_lines (                       -- the statement's payments by subject × method × collector
+  id              uuid primary key default gen_random_uuid(),
+  organizer_id    uuid not null references organizers(id),
+  settlement_id   uuid not null references settlements(id),
+  event_id        integer references events(id),      -- an event order's payments
+  product_id      uuid references products(id),       -- a product order's (pass purchase, installment, membership)
+  method          payment_method not null,
+  collector       text not null,                      -- payments.provider ('POS' = club till)
+  payments        integer not null check (payments > 0),
+  amount_mad      bigint not null check (amount_mad >= 0),
+  constraint settlement_lines_subject check ((event_id is null) <> (product_id is null))
+);
+create index on settlement_lines (settlement_id);
+
+create table invoices (                               -- Jomhor's fee invoice to the organizer (docs/04-api.md §Finance Invoice)
+  id              uuid primary key default gen_random_uuid(),
+  organizer_id    uuid not null references organizers(id),   -- the customer
+  settlement_id   uuid not null unique references settlements(id),
+  year            smallint not null,                  -- local year of issued_on
+  seq             integer not null check (seq > 0),   -- max + 1 under advisory lock (11 << 32) | year: no gaps
+  number          text not null unique,               -- 'JMH-2026-000001'
+  issued_on       date not null,
+  issuer          jsonb not null,                     -- finance.issuer at issue (legal mentions)
+  customer        jsonb not null,                     -- settings.finance at issue: legal_name, address, ice (no RIB)
+  amount_ht_mad   bigint not null check (amount_ht_mad > 0),   -- = settlements.fee_ht_mad
+  vat_rate_bp     integer not null check (vat_rate_bp between 0 and 10000),
+  vat_mad         bigint not null check (vat_mad >= 0),
+  amount_ttc_mad  bigint not null,
+  created_at      timestamptz not null default now(),
+  unique (year, seq),
+  constraint invoices_ttc check (amount_ttc_mad = amount_ht_mad + vat_mad)
+);
+create function invoices_immutable() returns trigger language plpgsql as $$
+begin
+  raise exception 'invoices are immutable: % refused', tg_op using errcode = 'restrict_violation';
+end
+$$;
+create trigger invoices_immutable before update or delete or truncate on invoices
+  for each statement execute function invoices_immutable();
+```
+
+Flyway, one task per migration:
+
+| File | Task | Content |
+| --- | --- | --- |
+| `V36__cash_deposits.sql` | BE-67 | `cash_deposits`, `pos_sessions.deposit_id` + `pos_sessions_deposit` + partial index |
+| `V37__settlements.sql` | BE-70 | `settlement_status`, `settlements`, `settlement_lines`, `invoices` + trigger (the draft table was never migrated: plain `create`) |
+
+The tenant allowlist stays at 5 (every new table carries `organizer_id`; the invoice sequence is a lock, not a table).
+
+#### 13.4.3 `docs/04-api.md`
+
+**Errors, add** (header stays "Lot 0 to Lot 5")
+
+| Code | HTTP | When |
+| --- | --- | --- |
+| `SETTLEMENT_STATUS` | 409 | **Lot 5 step 5b:** "Versement reçu" on a statement whose status is `NONE` (nothing to pay); `details.status`. |
+
+**§Organizer: role line, append.** "Lot 5 step 5: `GET /org/finance/deposits` ADMIN, OPS, FINANCE; `POST /org/finance/deposits` ADMIN, FINANCE; `POST /org/finance/deposits/{id}/void` ADMIN. `GET /org/crm/export.csv` ADMIN only. **5b:** `/org/finance/settlements*` and `/org/finance/invoices/*` ADMIN, FINANCE (read); `POST /org/finance/settlements/{id}/paid` ADMIN, FINANCE. OPS, CASHIER, GATE, SUPERVISOR get 403 on these."
+
+**New §Finance** (after §Point of sale)
+
+| Rule | Value |
+| --- | --- |
+| Money flow (5b) | Jomhor collects card, wallet and agency-cash payments for the organizer (as its agent). The organizer keeps the cash taken at its tills (`provider` `POS`). Refunds are paid back by the organizer (§Organizer refund) and are never taken off a payout. |
+| Statement (5b) | For each organizer with valid `settings.finance`, and each local day `d` (`finance.timezone`) from `start_on` with ≥ 1 `SUCCEEDED` payment, built in day order once `now ≥` start of `d + 1` + `finance.issue-delay` (1 h). Built every `finance.tick` (10 min), under `pg_try_advisory_xact_lock` (10, hashtext(organizer id)), `unique (organizer_id, day)`. P = the payments with `completed_at` in `[d, d + 1)`:<br>• `collected_mad` = Σ P with `provider ≠ 'POS'`; `till_mad` = Σ P with `provider = 'POS'`;<br>• `fee_ht_mad` = ⌊(collected + till) × `fee_rate_bp` ÷ 10 000⌋; `fee_vat_mad` = ⌊(fee_ht × `finance.vat-rate-bp` + 5 000) ÷ 10 000⌋;<br>• `carried_in_mad` = least(0, x of the previous statement), else 0; x = collected − fee_ht − fee_vat + carried_in;<br>• `payout_mad` = greatest(0, x); status `DUE` if > 0, else `NONE`;<br>• `due_on` = d + `finance.payout-days` (2), a Saturday or Sunday → the next Monday;<br>• lines: P grouped by subject (the order's `event_id`, else its item's `product_id`) × `method` × `provider`.<br>Then the invoice (below), audit `settlement.issue` (SYSTEM, `{day, payout_mad, invoice}`), one transaction. A statement is never changed afterwards except "Versement reçu". |
+| Invoice (5b) | When `fee_ht_mad > 0`: `year` = local year of the issue date, `seq` = max(seq of that year) + 1 under `pg_advisory_xact_lock((11 << 32) \| year)`, `number` = `JMH-{year}-{seq, 6 digits}`. `issuer` = config `finance.issuer` and `customer` = `settings.finance` (legal name, address, ICE) are copied in. HT = `fee_ht_mad`, VAT = `fee_vat_mad`, TTC = their sum. Never updated or deleted. The PDF is drawn from the row on each request (§Organizer). No credit notes in V1. |
+| Payout (5b) | No money moves through the API. Jomhor transfers `payout_mad` by `due_on`. The organizer records it with `POST …/settlements/{id}/paid`. `overdue` = `DUE` and `due_on` < today (local). |
+| Deposits (5a) | A deposit takes ≥ 1 closed till sessions of the organizer that are in no live deposit. `variance_mad` = `amount_mad` − Σ their `declared_mad`. Voiding frees them. Deposits never change statements. |
+| CRM export (5a) | Rows: live members (`left_at` null) with `marketing_push` or `marketing_whatsapp`, or `paid_until > now`, or a pass `ACTIVE`/`SUSPENDED` in a series with `ends_on ≥` today (local). `telephone` only when `marketing_whatsapp`. Non-member ticket holders are never exported. |
+
+**§Organizer: add, replace or append rows**
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/org/events/{id}/sales` | Append (5a): "**Lot 5 step 5:** `channels` count only orders whose `payment_method` isn't `FREE`. + `free: {passes, invitations}`: places in `PAID` FREE orders with `pass_id` / with `invited_by`. `paid` is unchanged: `paid` = Σ `channels.paid` + `free.passes` + `free.invitations`. `methods` unchanged (`FREE` = their sum)." |
+| GET | `/org/finance/cash` | Append (5a): "**Lot 5 step 5:** each `sessions` row + `deposit: {id, reference, deposited_on} \| null` (its live deposit). `totals` + `undeposited_mad` = Σ `declared_mad` of the closed sessions of the range with no live deposit. CSV: + columns `depot;depose_le` on `caisse` rows." |
+| GET | `/org/finance/deposits?from=&to=` | 5a. Local days on `deposited_on` (`YYYY-MM-DD`, both included, ≤ 92 days, else 422). → `{deposits:[{id, deposited_on, amount_mad, reference, recorded_by:{id, name}, recorded_at, voided_at, voided_by:{id, name} \| null, void_reason, sessions:[{id, label, staff:{id, name}, closed_at, declared_mad}], declared_mad, variance_mad}], undeposited:[{id, label, staff:{id, name}, closed_at, declared_mad}]}`. `deposits` newest `deposited_on` first, voided included (their `sessions` empty, `declared_mad` and `variance_mad` null). `undeposited` = every closed session of the organizer with no live deposit (not limited to the range), oldest `closed_at` first, at most 200. |
+| POST | `/org/finance/deposits` | 5a. `{deposited_on, amount_mad, reference, session_ids:[uuid]}`.<br>• `amount_mad` int ≥ 0; `reference` trimmed, 1–100 (422);<br>• `session_ids` 1–100 distinct (422 on `session_ids`); each a session of this organizer (else 422 on `session_ids[i]`, `details.reason` `UNKNOWN`), closed (`OPEN`), in no live deposit (`DEPOSITED`), checked under the sessions' row locks taken in id order;<br>• `deposited_on` ≤ today in `Africa/Casablanca` and ≥ the latest local `closed_at` date of its sessions (422 on `deposited_on`, `details.reason` `FUTURE` / `BEFORE_CLOSE`).<br>One transaction: deposit row, `deposit_id` on each session. Audit `deposit.create` (`{amount_mad, reference, session_ids}`). → `201` (a list row). |
+| POST | `/org/finance/deposits/{id}/void` | 5a. `{reason}` (1–200). Live → `voided_*` set, its sessions' `deposit_id` cleared, audit `deposit.void` (`{reason, session_ids}`); already voided → `200` unchanged. Unknown or another organizer's → 404. → list row. |
+| GET | `/org/crm/export.csv` | **Replaces the placeholder** (5a). The rows of §Finance CRM export, by `numero`. `;`, UTF-8 BOM, CRLF. Header `numero;nom;telephone;langue;membre_depuis;notifications;whatsapp;cotisation_jusqu_au;abonne;matchs`.<br>• `nom` = `display_name` through the CSV text guard (empty when null);<br>• `telephone` E.164 or empty;<br>• `langue` `fr`/`ar`/`en`;<br>• dates local (`Africa/Casablanca`) `yyyy-MM-dd`, `cotisation_jusqu_au` empty when null;<br>• booleans `oui`/`non`; `abonne` per §Finance;<br>• `matchs` = events attended (as `/fan/me/membership`).<br>`Content-Disposition: attachment; filename="fans-{yyyy-MM-dd}.csv"`, `Cache-Control: no-store`. Audit `crm.export` (`{rows, with_phone}`; no name or phone). A constant number of SQL statements whatever the member count. |
+| GET | `/org/members/summary` | Append (5a): "**Lot 5 step 5:** + `exportable` (the CRM export's row count)." |
+| GET | `/org/finance/settlements?from=&to=` | **Replaces the placeholder** (5b). Local days on `day` (≤ 92, else 422). → `{from, to, timezone, settings: {legal_name, ice, rib_last4, fee_rate_bp, start_on} \| null, open: {since, collected_mad, till_mad, payments} \| null, refunds_required: {count, amount_mad}, settlements:[row]}`.<br>`row` = `{id, day, status, overdue, collected_mad, till_mad, fee_rate_bp, fee_ht_mad, fee_vat_mad, carried_in_mad, payout_mad, due_on, paid_at, paid_by:{id, name} \| null, payout_reference, invoice:{id, number} \| null}`, newest `day` first.<br>• `settings` null when missing or malformed (then `open` null);<br>• `open` = `SUCCEEDED` payments not yet in a statement (`completed_at` ≥ `since` = start of the day after the latest statement, else of `start_on`);<br>• `refunds_required` = the organizer's `REQUIRED` refunds (count, Σ). |
+| GET | `/org/finance/settlements/{id}` | 5b. The row + `lines:[{event_id \| null, product_id \| null, title, method, collector, collector_name, payments, amount_mad}]` by `title`, then `method`, then `collector`. `collector_name` as `/finance/cash`. Unknown or another organizer's → 404. |
+| GET | `/org/finance/settlements.csv?from=&to=` | 5b. Same range rules. `;`, UTF-8 BOM, CRLF. Columns `kind;jour;libelle;moyen;encaisseur;paiements;montant;en_ligne;guichets;frais_ht;tva;report;a_verser;echeance;statut;facture;reference`. `ligne` rows fill `jour`…`montant`; `releve` rows fill `jour` and `en_ligne`…`reference`. Amounts as DH with a comma (integer maths). File `releves-{from}-{to}.csv`. |
+| POST | `/org/finance/settlements/{id}/paid` | 5b. `{reference}` (trimmed, 1–100, 422). Under the row lock: `DUE` → `PAID` (`paid_at` now, `paid_by`, `payout_reference`), audit `settlement.paid` (`{reference}`); `PAID` → `200` unchanged; `NONE` → 409 `SETTLEMENT_STATUS`. → row. |
+| GET | `/org/finance/invoices/{id}.pdf` | 5b. `application/pdf`, `Content-Disposition: attachment; filename="facture-{number}.pdf"`, `Cache-Control: no-store`. A4, FR. The §Finance Invoice fields and the mentions of plan Q230. Unknown or another organizer's → 404. |
+
+Gate API, manifest format, token and vectors: unchanged.
+
+#### 13.4.4 Config (backend `application.yml`)
+
+5b only:
+
+| Key | Env | Default | Note |
+| --- | --- | --- | --- |
+| `finance.timezone` | `FINANCE_TIMEZONE` | `Africa/Casablanca` | the statement day |
+| `finance.tick` | `FINANCE_TICK` | `10m` | job period |
+| `finance.issue-delay` | `FINANCE_ISSUE_DELAY` | `1h` | wait after midnight |
+| `finance.payout-days` | `FINANCE_PAYOUT_DAYS` | `2` | weekend → Monday |
+| `finance.vat-rate-bp` | `FINANCE_VAT_RATE_BP` | `2000` | 20 % |
+| `finance.issuer.{legal-name, legal-form, capital, address, rc, if, tp, ice}` | `FINANCE_ISSUER_*` | demo values in `dev`/`test` | **Required under `prod`: startup fails if any is blank or `ice` isn't 15 digits** |
+
+5a: none.
+
+#### 13.4.5 `docs/02`, `docs/01`, `docs/06`, `check.sql`, plan header
+
+| Where | Change |
+| --- | --- |
+| 02 §Data model | • `pos_sessions` + `deposit_id`<br>• new rows: `cash_deposits` (id, organizer_id, deposited_on, amount_mad, reference, recorded_by, voided_at), `settlements` (organizer_id, day, collected_mad, till_mad, fee_rate_bp, fee_ht_mad, fee_vat_mad, carried_in_mad, payout_mad, due_on, status DUE/PAID/NONE, payout_reference), `settlement_lines` (settlement_id, event_id \| product_id, method, collector, payments, amount_mad), `invoices` (settlement_id, year, seq, number, issuer, customer, HT, VAT, TTC; immutable) |
+| 02 threat model | **"Insider issues free tickets"** residual: "bank deposit matching with the Lot 5 finance module" → "till cash matched to bank deposits per session (gap and sessions not yet deposited shown, voids audited)".<br>**New rows:**<br>• "Payout redirected to another account \| the RIB is set by Jomhor ops from a bank certificate, never through `/org`; only its last 4 digits are shown \| a Jomhor ops insider";<br>• "Invoice number reused or edited \| numbers taken under a lock in the issuing transaction, rows immutable (trigger), details copied in at issue \| none in the app; database superuser";<br>• "Fan file leaks from the CRM export \| ADMIN only, minimised (phone only with WhatsApp consent), audited, `no-store` \| the file leaves the platform: the club's responsibility under its CNDP declaration" |
+| 01 | Modules: `finance` = settlements, invoices, the statement job. Multi-instance paragraph: + "the settlement statement per organizer: try-lock (10, hashtext(organizer)); invoice numbers: `(11 << 32) \| year`". §Key flows 2: "→ settlement" becomes "→ daily statement (payments-based) → payout". |
+| `common/EventLock` javadoc (BE-70) | Classes 10 and 11 |
+| 06 | settlement statement · `relevé` · كشف التسوية<br>payout · `versement` · تحويل المستحقات<br>service fee · `frais de service` · رسوم الخدمة<br>invoice · `facture` · فاتورة<br>carried balance · `report` · رصيد مُرحَّل<br>bank deposit · `dépôt` · إيداع بنكي<br>ICE · `ICE` · المعرف الموحد للمقاولة |
+| `backend/loadtest/check.sql` | **5a (BE-69):** a session with `deposit_id` and `closed_at` null; a session linked to a voided deposit.<br>**5b (BE-72):** a statement whose `collected_mad`/`till_mad` ≠ its day's payments recomputed, or ≠ Σ its lines; `fee_ht`, `fee_vat`, `payout_mad`, `carried_in_mad` ≠ the 04 formulas; `fee_ht > 0` without an invoice; invoice HT ≠ `fee_ht_mad` or VAT ≠ `fee_vat_mad`; `seq` ≠ row number within its year |
+| `docs/plans/lot-5.md` line 3 | "Next ids (after step 5, §13): BE-73, FL-34, WS-18, BO-29, Q240, P167; next migration V38. Lot 5 complete." |
+
+#### 13.4.6 `design/DESIGN.md`
+
+**New "Lot 5 step 5 adjustments":**
+
+| Where | Change |
+| --- | --- |
+| B8 Finance `/finance` | Tabs **Relevés** (5b, default for ADMIN/FINANCE) · **Encaissements** (Lot 3) · **Dépôts** (5a). OPS sees Encaissements and Dépôts only. |
+| B8 Encaissements (5a) | Sessions table + column "Dépôt": "{reference} · {date}", or amber "Non déposé". Totals + "À déposer {undeposited_mad}". |
+| B8 Dépôts (5a) | **"À déposer":** closed sessions (caisse, caissier, clôturée le in the venue zone, déclaré) with checkboxes → "Enregistrer un dépôt".<br>**Sheet:**<br>• date (≤ today), montant (DH → centimes as integers), "Référence du bordereau";<br>• the selected sessions with "Déclaré {Σ}" and a live "Écart {montant − Σ}" preview;<br>• errors: `OPEN` "Caisse encore ouverte", `DEPOSITED` "Session déjà déposée", `BEFORE_CLOSE` "Avant la clôture de la caisse".<br>**Table:** date, référence, montant, déclaré, écart (red when ≠ 0), sessions, enregistré par; voided rows struck through with "Annulé · {reason}".<br>**"Annuler":** ADMIN only, reason dialog "Les sessions reviennent dans « À déposer »".<br>OPS read-only. |
+| B8 Relevés (5b) | **Settings card:** raison sociale, ICE, "RIB •••• {last4}", "Frais {rate} % HT", helper "Gérés par Jomhor · écrivez-nous pour les modifier". `settings` null → empty state "Relevés pas encore activés · Jomhor configure votre contrat, votre ICE et votre RIB".<br>**KPIs:**<br>• "Pas encore relevé · {open.collected} en ligne · {open.till} aux guichets";<br>• "À recevoir" (Σ `payout_mad` of `DUE`);<br>• "Remboursements à faire · {count} · {amount}" → B3 refunds.<br>**Date range + table:** jour, en ligne, guichets, frais TTC, report, à verser, échéance, statut badge (À verser · **En retard** red · Versé le {date} · Rien à verser), facture (number → PDF download).<br>**Row → sheet:**<br>• lines grouped by event/product (title, moyen, encaisseur, paiements, montant);<br>• a formula block "En ligne − Frais HT − TVA 20 % + Report = À verser" with server amounts only;<br>• "Versement reçu" (ADMIN/FINANCE, `DUE` only) → dialog "Référence du virement reçu" (1–100).<br>"Exporter CSV" for the range. |
+| B9 Membres (5a) | "Exporter (CSV)", ADMIN only. Dialog:<br>• "{exportable} fans · {marketing_whatsapp} avec téléphone";<br>• copy "Données personnelles : membres ayant accepté les messages du club, membres à jour de cotisation et abonnés. Le téléphone figure seulement pour ceux qui ont accepté WhatsApp. Utilise ce fichier selon ta déclaration CNDP et ne le partage pas.";<br>• CTA "Télécharger". |
+| B3 Ventes (5a) | Card "Places offertes · Abonnés {free.passes} · Invitations {free.invitations}". Channels table = sales only. |
+| 7 · Club, join sheet and opt-ins (5a) | `clubWhatsappBody`: "Les nouvelles du club sur ton WhatsApp. Le club reçoit ton numéro pour te les envoyer." (ar, en alike). |
+
+### 13.5 Tasks
+
+#### Wave 0: orchestrator and founder (before any builder)
+
+| # | Owner | Area | Done |
+| --- | --- | --- | --- |
+| W0-1 | orchestrator | `docs/01`, `02`, `03`, `04`, `06`, `design/DESIGN.md`, plan header | §13.4 applied (5a and 5b parts together) after the founder agrees |
+| W0-2 | orchestrator | git | `feat/lot-5-cash-crm` from `main` (e69dcfa); `feat/lot-5-settlements` once 5a merges. No new CI job |
+| W0-3 | founder | — | The calls on Q222–Q224 (fee rate for the first club), Q227, Q228–Q230 (Jomhor's legal IDs), Q235–Q236. **Before Live, not the demo:** the accountant signs off the invoice template, numbering and rounding; the fee contract with the club states the agent model; the club's CNDP declaration and a data-processing agreement are in place |
+
+#### Tasks
+
+`backend` runs serially and is on the critical path. ∥ rows run alongside, in disjoint folders. *(contract-first)* means the task starts on the §13.4 shapes with fixtures and is done only after one run against the real endpoint. Every client task ships fr/ar/en strings (no hard-coded strings or colours). No web-shop task in step 5.
+
+**5a · Cash deposits, CRM export, `/sales` split**
+
+| Wave | # | Owner | Files / area | Task | Done = test | Blocked on |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | BE-67 | backend | • V36<br>• `backend/…/payments/domain/CashDeposit`, `…/payments/application/DepositService` + `CashDeposits` port, `…/payments/adapters/persistence/JdbcCashDeposits`<br>• `…/payments/adapters/web` (deposits on the finance controller)<br>• `…/payments/application/CashReport` (`deposit`, `undeposited_mad`, CSV columns) | Deposits | • **`DepositApiTest`:** 2 closed sessions (700 + 300) → 201, `variance_mad` −1 000 at 99 000, both linked, audit `deposit.create` key set.<br>• Refusals: an open session → 422 `session_ids[0]` `OPEN`; a deposited one → `DEPOSITED`; org B's or unknown → `UNKNOWN`; duplicates or empty → 422 on `session_ids`; tomorrow → `FUTURE`; before a session's close day → `BEFORE_CLOSE`; `amount_mad` 990.0 or "990" → 422; reference of 0 or 101 chars → 422.<br>• Two parallel deposits of one session → exactly one 201.<br>• Void (ADMIN) → sessions unlinked, audit with session ids; void again → 200 unchanged; FINANCE void → 403.<br>• GET: range, voided included with empty sessions, `undeposited` oldest first.<br>• Roles: OPS GET 200 / POST 403; CASHIER 403; org B id → 404.<br>• **`CashReportTest`** + `deposit` per session, `undeposited_mad`, CSV `depot;depose_le`.<br>• **`MigrationsTest` V36:** `pos_sessions_deposit` refuses a deposit on an open session; allowlist still 5 | W0-1 |
+| 1 ∥ | BO-27 | backoffice | • `web/backoffice/src/features/finance` (`DepositsTab.tsx` new, `CashPage.tsx` "Dépôt" column and KPI, tabs shell, `api.ts`)<br>• `src/features/crm` (`MembersTab.tsx` export button + dialog, `api.ts` blob download)<br>• `src/features/sales` (`SalesPage.tsx` "Places offertes")<br>• `src/features/overview` (only if its test pins channel figures)<br>• `src/app` (B8 tab routes), `src/i18n/fr.ts` | B8 Dépôts, B9 export, B3 | • **`deposits.test.tsx`:** undeposited list → select → sheet; DH → centimes as integers ("990,00" → 99000, "12,5" → 1250, no float); écart preview; `OPEN`/`DEPOSITED`/`BEFORE_CLOSE` copy on the row or field; void ADMIN only with a reason; FINANCE records but can't void; OPS read-only; query keys include the organizer.<br>• **`finance.test.tsx`:** "Dépôt" column, "Non déposé", "À déposer".<br>• **`crm.test.tsx`:** export only for ADMIN; dialog counts from `exportable`/`marketing_whatsapp`; download as a blob with the auth header, filename from `Content-Disposition`; the CSV never enters the query cache.<br>• **`sales.test.tsx`:** "Places offertes" from `free`; channels as sent.<br>• `overview.test.tsx` green | BE-67, BE-68 *(contract-first)* |
+| 1 ∥ | FL-33 | flutter | • `apps/fan/lib/l10n/app_{fr,ar,en}.arb` (`clubWhatsappBody`)<br>• `apps/fan/test/goldens_test.dart` (join sheet re-recorded) | Consent copy | The club test finds the new sentence in fr/ar/en; goldens fr + ar of the join sheet re-recorded; no other diff under `apps/` | W0-1 (Q236; the default applies) |
+| 2 | BE-68 | backend | • `backend/…/sales/application/SalesReport`, `Orders.salesLines` / `JdbcOrders` (FREE orders out of channels, `free` counts by `pass_id`/`invited_by`)<br>• `…/sales/products/application/PassService` (`liveHolders(org, today)`)<br>• `…/crm/application/CrmExportService` (new), `Memberships` + `JdbcMemberships.exportRows` (one statement: members, users, attended), `…/crm/adapters/web` (`/org/crm/export.csv`, `exportable` in the summary) | `/sales` split, CRM export | • **`SalesFreeTest`:** 2 pass tickets, 3 invitations, 4 APP places, 2 POS places → APP 4, POS 2, WEB 0; `free` {2, 3}; `paid` 11 = Σ + free; `methods.FREE` 5; revenue unchanged; every `SalesApiTest` case green.<br>• **`CrmExportApiTest`:**<br>(a) the five members of demo 5a → exactly Yazid, Karim, Nadia, by number; a pass of an ended series → `abonne` `non`; a left member who paid → absent;<br>(b) header exact; BOM, CRLF, `;`; `telephone` only for WhatsApp opt-ins; a `display_name` "=HYPERLINK(…)" → `'=HYPERLINK(…)`; dates local; `matchs` = `/fan/me/membership` events_attended;<br>(c) `no-store`, filename;<br>(d) audit `crm.export` `{rows: 3, with_phone: 1}`, no name or phone in the payload;<br>(e) OPS / FINANCE / CASHIER 403; org B members never in org A's file;<br>(f) the statement counter gives the same SQL count for 3 and 300 members.<br>• **`MembersSummaryApiTest`:** `exportable` = the export's row count | BE-67 |
+| 3 | BE-69 | backend | `backend/src/test/…/Lot5CashCrmFlowTest`, `backend/http/lot5-cash-crm.http`, `backend/loadtest/check.sql` (5a rows) | 5a exit flow | **`Lot5CashCrmFlowTest`** per §13.1 5a: two tills closed; deposit with a −10 DH gap; double deposit refused; void and re-record; `/finance/cash` deposits and `undeposited_mad` 0; `/sales` `free`; CRM file rows; `check.sql` returns no rows | BE-68 |
+| exit 5a | — | orchestrator + founder | — | Demo per §13.1 5a, locally | All rows above green; manual demo | all |
+
+**5b · Settlements, invoices, payouts**
+
+| Wave | # | Owner | Files / area | Task | Done = test | Blocked on |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | BE-70 | backend | • V37<br>• `backend/…/finance` (new module):<br>  – `domain/Statement` (pure: `build(payments, rate, vatBp, carriedIn)`), `domain/Payout` (`dueOn`);<br>  – `application/SettlementService` (reads; the build transaction: statement, lines, invoice number + snapshots, audit), `Settlements` port;<br>  – `adapters/persistence/JdbcSettlements`, `adapters/SettlementJob`, `adapters/web/OrgFinanceSettlementController` (list, detail, CSV)<br>• `…/payments/application` (`settlementPayments(org, from, to)`: method, provider, amount, order id)<br>• `…/sales/application` (`subjects(org, orderIds)`: event id or product id + title)<br>• `…/tenancy/application/OrganizerService` (`finance(org)`, `withFinance()`; malformed → WARN)<br>• `common/EventLock` javadoc (10, 11); `application.yml` (`finance.*`) | Statements | • **`StatementTest`** (pure, property-style over random payments): integers only; Σ lines = collected + till; `fee_ht` = ⌊base × rate ÷ 10 000⌋; VAT half-up (25 000 → 5 000; 24 999 → 5 000; 2 → 0); payout ≥ 0; carried ≤ 0 and carried forward exactly; NONE ⇔ payout 0; `dueOn` Thu 26 → Mon 30, Fri 27 → Mon 30 (Sun 29), Mon → Wed.<br>• **`SettlementJobTest`** (fixed clock):<br>– the demo days give 400 000 / 100 000 / 25 000 / 5 000 / 370 000 due Mon, then a till-only day → NONE, carried −4 800 on the next;<br>– nothing before 01:00; days built in order from `start_on`; an empty day gets no row;<br>– product, installment and membership payments as product lines; a FREE order gives no line; a `refund_required` payment is counted;<br>– a refund changes no issued statement;<br>– missing or malformed settings → no row, `settings: null`, one WARN;<br>– invoice only when `fee_ht > 0`, copies the details in, no RIB in `customer`.<br>• **`MultiInstanceTest`** +: two contexts run the job at once → each day once, invoice seqs 1..n with no gap.<br>• **`SettlementApiTest`:** list (range ≤ 92, `open`, `refunds_required`, `settings.rib_last4` only, `overdue`); detail lines ordered with `collector_name`; CSV exact (BOM, DH comma, `ligne`/`releve`); ADMIN/FINANCE 200, OPS/CASHIER 403; org B → 404.<br>• **`MigrationsTest` V37:** `settlements_status`, `settlement_lines_subject`, `invoices_ttc`; an UPDATE or DELETE on `invoices` raises; allowlist still 5 | 5a merged |
+| 1 ∥ | BO-28 | backoffice | • `web/backoffice/src/features/finance` (`SettlementsTab.tsx`, `SettlementSheet.tsx`, `PayoutDialog.tsx`, settings card, `api.ts`)<br>• `src/app` (Relevés as the default tab, hidden for OPS)<br>• `src/i18n/fr.ts` | B8 Relevés | **`settlements.test.tsx`:**<br>• `settings: null` → empty state; settings card with masked RIB;<br>• KPIs from `open` and `refunds_required` (link to B3);<br>• rows and badges (À verser, En retard from `overdue`, Versé le, Rien à verser);<br>• sheet lines grouped; the formula block shows server amounts only (no client money maths);<br>• "Versement reçu" only ADMIN/FINANCE and only `DUE`, reference 1–100, `SETTLEMENT_STATUS` → toast;<br>• invoice PDF and CSV as blobs with the auth header;<br>• OPS: no Relevés tab;<br>• query keys include organizer and range;<br>• `finance.test.tsx` and `deposits.test.tsx` still green | BE-70, BE-71 *(contract-first)* |
+| 2 | BE-71 | backend | • `backend/…/finance/adapters/pdf/InvoicePdf` (PDFBox)<br>• `…/finance/adapters/web` (`/invoices/{id}.pdf`, `/settlements/{id}/paid`)<br>• `…/finance/application/SettlementService` (`paid`)<br>• startup check of `finance.issuer` under `prod` | Invoice PDF, payout record | • **`InvoicePdfTest`:** text extracted (PDFBox) holds the number, issue date, every issuer and customer mention of Q230, "Frais de service billetterie · relevé du 26/11/2026", 250,00 / TVA 20 % / 50,00 / 300,00, the compensation line; no RIB, no fan data; `application/pdf`, filename, `no-store`; org B → 404; OPS 403.<br>• **`InvoiceNumberTest`:** a forced failure after numbering rolls back, and the next statement takes the same seq; year rollover (the 31 Dec statement issued on 1 Jan → `JMH-2027-000001`).<br>• **`SettlementPaidApiTest`:** DUE → PAID with `paid_by`, reference and audit; replay → 200 unchanged with nothing new audited; NONE → 409 `SETTLEMENT_STATUS` + `details.status`; reference "" or 101 chars → 422; FINANCE 200, OPS 403.<br>• **`FinanceConfigTest`:** `prod` with a blank issuer ICE fails at startup; `dev` starts with demo values | BE-70 |
+| 3 | BE-72 | backend | `backend/src/test/…/Lot5SettlementFlowTest`, `backend/http/lot5-settlements.http`, `backend/loadtest/check.sql` (5b rows), `backend/…/DevSeeder` (finance settings + payments on the two previous local days, dev only) | 5b exit flow | **`Lot5SettlementFlowTest`** per §13.1 5b, on a fixed clock: card, wallet, network cash, till sale, collected code, pass installment, membership → the statement figures of the demo; invoice PDF; till-only day carried; "Versement reçu"; a refund changes nothing issued; `check.sql` returns no rows. **`DevSeederTest`:** a dev start issues the two seeded statements once | BE-71 |
+| exit 5b | — | orchestrator + founder | — | Demo per §13.1 5b, locally | All rows above green; manual demo | all |
+
+`reviewer` runs after every builder task.
+- **5a:** BE-67 → BE-68 → BE-69, with BO-27 and FL-33 alongside and BO-27's real run after BE-68.
+- **5b:** BE-70 → BE-71 → BE-72, with BO-28 alongside and its real run after BE-71.
+
+**Cut order (if needed):**
+
+1. The settlement CSV (the screen and PDF stay).
+2. The weekend shift (`due_on` = day + 2 calendar days).
+3. The carried balance (a negative day then reads payout 0 with "dû par le club", collected by hand).
+4. The B9 export dialog counts (a plain confirm).
+
+**Never cut:**
+
+- integer money (basis-point rates, floor and half-up rules in one pure function);
+- statements built only from `SUCCEEDED` payments, immutable once issued;
+- invoice numbers with no gaps, taken in the issuing transaction, rows immutable, details copied in at issue;
+- finance settings never writable through `/org`, and the RIB never returned in full;
+- the payee records payouts, audited;
+- deposits only on closed sessions, one live deposit per session, voids audited;
+- CRM export ADMIN-only, minimised, audited, `no-store`, formula-guarded;
+- tenant scoping of every new table and path;
+- zero diff in the gate, the scanner and `packages/core`.
+
+### 13.6 Review focus
+
+| Area | What the reviewer checks hardest |
+| --- | --- |
+| Money | Every amount `bigint`/`long` centimes; rates in basis points; `fee_ht` floor and VAT half-up by integer division in `Statement` only; DH text through `CashReport.dh`; no float anywhere (BO: DH → centimes as integer parsing) |
+| Statement build | • Payments only (`SUCCEEDED`, `completed_at` in the local day by the server's tzdata); `provider = 'POS'` is the only till test.<br>• Days in order, empty days skipped, `issue-delay` respected; carried balance from the previous row only.<br>• One transaction for statement + lines + invoice + audit; try-lock + `unique (organizer_id, day)`.<br>• Lines recompute to the totals (`check.sql`). Nothing writes a statement after issue except the payout fields |
+| Invoices | • `seq` = max + 1 under `(11 << 32) \| year`, inside the issuing transaction (rollback test).<br>• Trigger blocks UPDATE/DELETE/TRUNCATE.<br>• `issuer`/`customer` copied in at issue (a later settings change doesn't alter an old PDF); no RIB in `customer`.<br>• Prod startup refuses a blank issuer. Every Q230 mention present |
+| Tenancy and settings | All new reads filter `organizer_id`; org B → 404 on settlements, invoices, deposits; `settings.finance` parsed in tenancy with WARN on malformed; no `/org` path writes it; only `rib_last4` leaves the server |
+| Payouts | `paid` idempotent under the row lock; `NONE` → 409; reference length; audit; only ADMIN/FINANCE; `overdue` computed server-side |
+| Deposits | Session locks in id order; `OPEN`/`DEPOSITED`/`UNKNOWN` under those locks (parallel test); `pos_sessions_deposit` check; void frees sessions and audits their ids; no change to `expected`/`declared`; no statement impact |
+| CRM export / privacy | ADMIN only; rows exactly per §Finance CRM export (left members never, non-member holders never); phone only with WhatsApp consent; `Csv.text` on names; `no-store`; audit without PII; no phone in logs; one statement (no N+1); crm reads passes through `PassService`, not the passes table |
+| `/sales` | `paid` = Σ channels + free (test); `methods` unchanged; B0 and B3 still read consistent figures |
+| Contract | Every new or changed 04 row has a contract test; error codes and reasons exactly as 04; V36/V37 names = 03; 02/01/06 match; `check.sql` updated |
+| Names / gate | No football names; zero diff under `…/gate`, `apps/scanner`, `packages/core`; token vectors unchanged; `apps/fan` diff limited to the arb strings and goldens |
+
+### 13.7 Risks
+
+| Risk | Mitigation |
+| --- | --- |
+| No real money moves in V1 (Payzone and networks simulated) | Formulas proven exactly on simulated data (`check.sql`, property tests); checking against Payzone's and the networks' own settlement reports is carried to the kit (§13.9) |
+| An invoice goes out with a wrong mention, and there are no credit notes | Accountant sign-off on the template, numbering and rounding gates Live (W0-3); demo values in dev; issuer config required in prod |
+| Payout redirected by a hijacked account | RIB set only by Jomhor ops from a bank certificate, never via `/org`; masked; 02 threat row |
+| Agency cash paid out before the network pays Jomhor | Accepted (Q234); networks simulated until BE-27; checking remittances is carried |
+| The club doesn't refund fans after receiving the money | Refunds stay the club's job (Q224); B8 KPI "Remboursements à faire" with count and amount; revisit with Payzone refunds |
+| Weekends and bank holidays break "48 h" | Weekend → Monday; holidays not modelled (`ponytail:`); "En retard" is visible to both sides |
+| Statement job down for a while | It catches up in day order on restart; invoices dated at issue, so numbers stay chronological |
+| Payments in flight at midnight | `issue-delay` 1 h; `completed_at` is set when the payment succeeds, never backdated |
+| A till-heavy club runs a lasting negative balance | Carried and shown ("Report"); collecting it is by hand (left out) |
+| CRM file leaks once downloaded | ADMIN only, minimised, audited; the club's CNDP declaration and the data-processing agreement gate Live |
+| Fee base includes `refund_required` payments (money owed back) | Rare (late successes); counted because they were collected; `ponytail:` in `Statement` |
+
+### 13.8 Deliberately left out
+
+- **Money movement:** bank APIs, transfer files, a platform operator UI/API, batching several days into one transfer, chargebacks, checking against Payzone's or the networks' reports, gateway refunds taken off the payout.
+- **Invoicing:** credit notes, monthly invoices, invoices to fans, amount in words, DGI e-invoicing, a statement PDF, file storage of PDFs, multi-currency, fixed per-ticket fees, a fan-paid service fee.
+- **Finance settings editor** in B8 (ops sets them), a bank-holiday calendar, collecting a negative balance.
+- **Deposits:** bank statement import, automatic matching, deposits of agency cash.
+- **CRM:** segments and filters, scheduled exports, exporting non-member ticket holders, an export API for third-party CRMs.
+- **Reporting:** splitting discounts per zone (Q238), VAT on tickets on the organizer's behalf.
+
+### 13.9 Carried forward (update §7)
+
+| Item | Lot | Note |
+| --- | --- | --- |
+| Product, installment and pass money in settlements and invoices; pass-holder and paid-member export; `/sales` channels counting pass/invitation orders; discounts in settlements | done in step 5 | §11.9, §12.9; strike when merged |
+| Zero-amount refunds | done in 4a (confirmed) | Q210 |
+| Refunds through Payzone's API taken off the payout | when Payzone is live | Q224 |
+| Checking Payzone's settlements, MDR and network remittances | with the Payzone kit / BE-27 | Q234 |
+| Credit notes (corrections, refunded fees) | when the accountant or a club asks | Q223, Q229 |
+| DGI e-invoicing | per the accountant's answer | Q230 |
+| Bank-holiday calendar for `due_on` | if a holiday payout bites | `ponytail:` in `Payout.dueOn` |
+| Platform operator view of payouts (all organizers), transfer file | with the second organizer (Lot 6) | Q227 |
+| B8 finance settings editor with a verification step for RIB changes | when a club asks | Q231 |
+| CRM segments, scheduled exports | when the club asks | §13.8 |
+| Splitting discounts per zone | if finance asks | Q238 |
+| Meta templates (`waitlist_open`, `installment_due`) | with BE-36 | unchanged |
+| **Lot 5 complete** after 5b; Lot 6 (hardening, the deferred §5.4 run, pen test, runbooks incl. a finance runbook: setting `settings.finance`, sending payouts, the year-end numbering check) | 6 | — |
+
+---
+
+Files referenced:
+- `C:/Users/aqely/IdeaProjects/jomhor/docs/plans/lot-5.md` (where §13 goes; header line 3 to update)
+- `C:/Users/aqely/IdeaProjects/jomhor/docs/03-schema.sql` (draft `settlements`, lines 679–691; `pos_sessions`; `organizers.settings` comment)
+- `C:/Users/aqely/IdeaProjects/jomhor/docs/04-api.md` (placeholders at lines 371–372; `/sales` line 343; `/finance/cash` line 370; role line 311)
+- `C:/Users/aqely/IdeaProjects/jomhor/docs/02-gate-validation-and-data-model.md` (threat model line 191)
+- `C:/Users/aqely/IdeaProjects/jomhor/design/DESIGN.md` (B8/B9 rows 209–210; Lot 3 B8 line 281; Lot 4 B9 line 309)
+- `C:/Users/aqely/IdeaProjects/jomhor/backend/src/main/java/ma/jomhor/payments/application/CashReport.java`, `.../sales/application/SalesReport.java`, `.../tickets/application/TicketAdminService.java` (lines 101–108, zero-amount refunds), `.../common/Csv.java`, `.../common/EventLock.java`, `.../crm/application/Memberships.java`, `.../tenancy/application/OrganizerService.java`, `.../DevSeeder.java`
+- `C:/Users/aqely/IdeaProjects/jomhor/apps/fan/lib/l10n/app_fr.arb` (line 423 `clubWhatsappBody`)

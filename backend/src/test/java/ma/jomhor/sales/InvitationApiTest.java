@@ -201,6 +201,9 @@ class InvitationApiTest extends PaymentTest {
         assertThat(JsonPath.<Integer>read(json, "$.paid")).isEqualTo(4);
         assertThat(JsonPath.<Integer>read(json, "$.revenue_mad")).isZero();
         assertThat(JsonPath.<List<Integer>>read(json, "$.methods[?(@.method == 'FREE')].paid")).containsExactly(4);
+        // Lot 5 step 5: not a till sale, so not in channels; free.invitations instead
+        assertThat(JsonPath.<List<Integer>>read(json, "$.channels[*].paid")).containsOnly(0);
+        assertThat(JsonPath.<Map<String, Object>>read(json, "$.free")).isEqualTo(Map.of("passes", 0, "invitations", 4));
 
         // Revoke: REFUNDED, the place back, no refunds row, its QR null, the next delta REFUNDED.
         call(s.admin(), post("/org/tickets/" + karim + "/refund"), "{\"reason\": \"Erreur\"}")
