@@ -2227,7 +2227,7 @@ Gate API, manifest format, token and vectors: unchanged.
 
 | Key | Env | Default | Note |
 | --- | --- | --- | --- |
-| `finance.timezone` | `FINANCE_TIMEZONE` | `Africa/Casablanca` | the statement day |
+| `finance.timezone` | `FINANCE_TIMEZONE` | `Africa/Casablanca` | the statement day; `backend/loadtest/check.sql` (`SETTLEMENT_PAYMENTS`) hardcodes the same zone and must change with it |
 | `finance.tick` | `FINANCE_TICK` | `10m` | job period |
 | `finance.issue-delay` | `FINANCE_ISSUE_DELAY` | `1h` | wait after midnight |
 | `finance.payout-days` | `FINANCE_PAYOUT_DAYS` | `2` | weekend → Monday |
