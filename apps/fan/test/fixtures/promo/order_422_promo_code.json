@@ -1,0 +1,13 @@
+{
+ "source": "contract (docs/04-api.md Lot 5 step 4: POST /fan/orders promo_code, §Promo codes, PROMO_REFUSED); BE-65 not run yet, to be replaced by the FL-32 real run's capture: a code outside ^[A-Z0-9]{4,20}$ after trim and uppercase",
+ "status": 422,
+ "body": {
+  "code": "VALIDATION_FAILED",
+  "message": "VALIDATION_FAILED",
+  "details": {
+   "fields": {
+    "promo_code": "PATTERN"
+   }
+  }
+ }
+}

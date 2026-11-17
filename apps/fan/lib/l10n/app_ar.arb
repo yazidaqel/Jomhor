@@ -488,5 +488,12 @@
   "installmentOf": "القسط {seq}/{n}",
   "errorPassStatus": "هاد الاشتراك ما كيقبلش الخلاص دابا.",
   "errorPlanNotOffered": "الخلاص على دفعات ما بقاش متوفر. ختار من جديد.",
-  "orderPaidInstallmentBody": "القسط {seq}/{n} تخلص. لقا الاشتراك والتذاكر ديالك ف«تذاكري»."
+  "orderPaidInstallmentBody": "القسط {seq}/{n} تخلص. لقا الاشتراك والتذاكر ديالك ف«تذاكري».",
+  "promoToggle": "عندي كود برومو",
+  "promoLabel": "كود البرومو",
+  "promoRemove": "حيد",
+  "promoReserveCta": "حجز بالكود",
+  "promoLine": "الكود {code} · {discount}",
+  "promoRefused": "{reason, select, NOT_APPLICABLE{هاد الكود ما كيتطبقش على هاد البلايص} USED_UP{هاد الكود وصل للحد ديالو} ACCOUNT_LIMIT{سبق ليك ستعملتي هاد الكود} other{كود ما معروفش ولا سالا}}",
+  "promoSplitCaption": "الكود كيتطبق غير على البلايص ديالك"
 }

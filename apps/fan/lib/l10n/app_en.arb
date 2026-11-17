@@ -488,5 +488,12 @@
   "installmentOf": "Installment {seq}/{n}",
   "errorPassStatus": "This season pass takes no payment right now.",
   "errorPlanNotOffered": "Paying in installments is no longer offered. Choose again.",
-  "orderPaidInstallmentBody": "Installment {seq}/{n} paid. Find your season pass and tickets in Tickets."
+  "orderPaidInstallmentBody": "Installment {seq}/{n} paid. Find your season pass and tickets in Tickets.",
+  "promoToggle": "I have a promo code",
+  "promoLabel": "Promo code",
+  "promoRemove": "Remove",
+  "promoReserveCta": "Reserve with the code",
+  "promoLine": "Code {code} · {discount}",
+  "promoRefused": "{reason, select, NOT_APPLICABLE{This code doesn't apply to these seats} USED_UP{This code has reached its limit} ACCOUNT_LIMIT{You've already used this code} other{Unknown or expired code}}",
+  "promoSplitCaption": "The code applies to your seats"
 }

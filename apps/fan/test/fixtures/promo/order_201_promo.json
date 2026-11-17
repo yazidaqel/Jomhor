@@ -1,0 +1,31 @@
+{
+ "source": "contract (docs/04-api.md Lot 5 step 4: POST /fan/orders promo_code, §Promo codes, PROMO_REFUSED); BE-65 not run yet, to be replaced by the FL-32 real run's capture: ATLAS20 (PERCENT 20) on 2 x 50 DH, discount = floor(10 000 x 20 / 100) = 2 000, total_mad 8 000",
+ "status": 201,
+ "body": {
+  "id": "0b8e7a52-0000-4000-8000-0000000000cc",
+  "status": "RESERVED",
+  "reserved_until": "2027-02-20T12:08:00Z",
+  "total_mad": 8000,
+  "items": [
+   {
+    "price_category_id": "pc-1-0",
+    "zone_id": 1,
+    "zone_name": "Tribune Nord",
+    "name": "Tarif 0",
+    "qty": 2,
+    "unit_price_mad": 5000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     },
+     {
+      "label": "Sara B."
+     }
+    ]
+   }
+  ],
+  "group": null,
+  "promo_code": "ATLAS20",
+  "discount_mad": 2000
+ }
+}

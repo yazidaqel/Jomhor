@@ -134,6 +134,11 @@ void main() {
   });
 
   Future<ProviderContainer> open(WidgetTester tester, String location, {bool signedIn = true}) async {
+    // Every row of screen 4 built at once (ListView children are lazy; the promo code button sits above the rows).
+    tester.view
+      ..physicalSize = const Size(800, 2400)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final container = await pumpJomhor(
       tester,
       backend: sale.handle,
@@ -382,6 +387,7 @@ void main() {
     await tester.pump();
     expect(find.text('Réservation expirée'), findsNothing);
     expect(find.byType(OrderScreen), findsOneWidget);
+    await tester.pump(); // The order read answers one frame later in the tall view.
     expect(find.byKey(const Key('order.pending')), findsOneWidget);
   });
 

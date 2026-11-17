@@ -23,6 +23,8 @@ class FanOrder {
     this.product,
     this.passId,
     this.installment,
+    this.promoCode,
+    this.discountMad = 0,
   });
 
   factory fromJson(Map<String, Object?> j) => FanOrder(
@@ -55,9 +57,17 @@ class FanOrder {
       {'seq': final int seq, 'of': final int of} => (seq: seq, of: of),
       _ => null,
     },
+    promoCode: j['promo_code'] as String?,
+    discountMad: j['discount_mad'] as int? ?? 0,
   );
 
   final String id;
+
+  /// Lot 5 step 4: the promo code on this order (normalized by the server), else null.
+  final String? promoCode;
+
+  /// What the code took off, in centimes, as sent (0 without a code); [totalMad] is already net of it.
+  final int discountMad;
 
   /// Null for a product order (Lot 5 step 3: a pass or a membership), which has [product] instead.
   final int? eventId;

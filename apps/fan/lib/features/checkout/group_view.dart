@@ -9,6 +9,7 @@ import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/holder_name.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
+import 'package:jomhor_fan/features/checkout/promo_line.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
@@ -82,6 +83,7 @@ class GroupView extends ConsumerWidget {
         ),
         const SizedBox(height: JomhorSpace.l),
         _PaidFigure(paid: paid, total: total),
+        PromoLine(order: order), // Lot 5 step 4: the code took off the buyer's places only.
         const SizedBox(height: JomhorSpace.xxl),
         for (final m in order.group!.members) ...[
           _MemberCard(

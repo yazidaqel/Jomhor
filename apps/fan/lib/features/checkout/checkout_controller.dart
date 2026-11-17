@@ -57,9 +57,14 @@ class CheckoutState {
     this.ownPhones = const {},
     this.limitRow,
     this.refusedRow,
+    this.promoRefusal,
   });
 
   final CheckoutPhase phase;
+
+  /// Lot 5 step 4: why the promo code was refused (`PROMO_REFUSED` `details.reason`; a 422 on `promo_code` reads
+  /// `UNKNOWN`), said under the code field. No order was made.
+  final String? promoRefusal;
 
   /// `422 TOO_LATE`: sales close too soon for friends to pay later; the "Paie sa place" switches are off for good.
   final bool splitTooLate;
@@ -137,6 +142,7 @@ class CheckoutState {
     Set<int>? ownPhones,
     ({int row, String label})? limitRow,
     ({int row, ApiError error})? refusedRow,
+    String? promoRefusal,
   }) => CheckoutState(
     phase: phase,
     badNames: badNames ?? const {},
@@ -153,6 +159,7 @@ class CheckoutState {
     ownPhones: ownPhones ?? const {},
     limitRow: limitRow,
     refusedRow: refusedRow,
+    promoRefusal: promoRefusal,
   );
 }
 
@@ -193,12 +200,16 @@ class CheckoutController extends Notifier<CheckoutState> {
   /// pay their own place (split pay), unless split pay was refused as too late. Returns where to send the fan
   /// to pay (the hosted page, or the cash order screen), or null when something needs their attention
   /// (state says what).
+  ///
+  /// With a [promoCode] (Lot 5 step 4) it only holds: the fan sees the server's discount and total first, and the
+  /// next submit pays.
   Future<PayStart?> submit(
     List<String> names,
     List<String> phones, {
     required bool friendsConsent,
     PayMethod method = PayMethod.card,
     Set<int> pays = const {},
+    String promoCode = '',
   }) async {
     if (state.cardOpened || state.phase == CheckoutPhase.working || state.phase == CheckoutPhase.busy) return null;
     state = _with(state, method: method);
@@ -233,9 +244,11 @@ class CheckoutController extends Notifier<CheckoutState> {
       // never goes on to hold places, /pay or the card page.
       await _saveMyName(holders.first.name);
       if (!ref.mounted) return null;
-      final (order, serverDate) = await _reserveWhenNotBusy(holders);
+      final code = promoCode.trim();
+      final (order, serverDate) = await _reserveWhenNotBusy(holders, code.isEmpty ? null : code);
       if (!ref.mounted) return null;
       _startHold(order, serverDate);
+      if (code.isNotEmpty) return null; // Held with the code: "Payer {total}" pays.
     } on ApiError catch (e) {
       if (e.code == 'ADMISSION_REQUIRED' && ref.mounted) await _dropAdmission();
       if (ref.mounted) state = _failed(e, holders);
@@ -328,7 +341,7 @@ class CheckoutController extends Notifier<CheckoutState> {
 
   /// `SALE_BUSY` answers wait `retry_after_s` (+ jitter up to 3 s) with a visible countdown, then the same
   /// request goes again (with the same admission token, docs/04-api.md §On-sale).
-  Future<(FanOrder, DateTime?)> _reserveWhenNotBusy(List<HolderInput> holders) async {
+  Future<(FanOrder, DateTime?)> _reserveWhenNotBusy(List<HolderInput> holders, String? promoCode) async {
     while (true) {
       try {
         return await _repo.reserve(
@@ -336,6 +349,7 @@ class CheckoutController extends Notifier<CheckoutState> {
           priceCategoryId: args.priceCategoryId,
           holders: holders,
           admissionToken: await _admission(),
+          promoCode: promoCode,
         );
       } on ApiError catch (e) {
         if (e.code != 'SALE_BUSY') rethrow;
@@ -418,27 +432,38 @@ class CheckoutController extends Notifier<CheckoutState> {
     splitTooLate: state.splitTooLate,
   );
 
+  /// "Retirer", or a new code typed: the refusal under the field goes.
+  void clearPromoRefusal() {
+    if (state.promoRefusal != null) state = _with(state, clearPromo: true);
+  }
+
   /// [s] with another method, refused set or cash flag; everything else kept. Giving [refused] also clears the
   /// method unless one is given (the refused row loses the selection).
-  static CheckoutState _with(CheckoutState s, {PayMethod? method, Set<PayMethod>? refused, bool? payingCash}) =>
-      CheckoutState(
-        phase: s.phase,
-        badNames: s.badNames,
-        badPhones: s.badPhones,
-        error: s.error,
-        retryIn: s.retryIn,
-        order: s.order,
-        left: s.left,
-        consentMissing: s.consentMissing,
-        cardOpened: s.cardOpened,
-        method: refused != null ? method : method ?? s.method,
-        refused: refused ?? s.refused,
-        payingCash: payingCash ?? s.payingCash,
-        splitTooLate: s.splitTooLate,
-        ownPhones: s.ownPhones,
-        limitRow: s.limitRow,
-        refusedRow: s.refusedRow,
-      );
+  static CheckoutState _with(
+    CheckoutState s, {
+    PayMethod? method,
+    Set<PayMethod>? refused,
+    bool? payingCash,
+    bool clearPromo = false,
+  }) => CheckoutState(
+    phase: s.phase,
+    badNames: s.badNames,
+    badPhones: s.badPhones,
+    error: s.error,
+    retryIn: s.retryIn,
+    order: s.order,
+    left: s.left,
+    consentMissing: s.consentMissing,
+    cardOpened: s.cardOpened,
+    method: refused != null ? method : method ?? s.method,
+    refused: refused ?? s.refused,
+    payingCash: payingCash ?? s.payingCash,
+    splitTooLate: s.splitTooLate,
+    ownPhones: s.ownPhones,
+    limitRow: s.limitRow,
+    refusedRow: s.refusedRow,
+    promoRefusal: clearPromo ? null : s.promoRefusal,
+  );
 
   CheckoutState _failed(ApiError e, List<HolderInput> holders) {
     // Split pay (docs/04-api.md §Split pay): too late to share, so every switch goes off and the fan pays again
@@ -446,6 +471,14 @@ class CheckoutController extends Notifier<CheckoutState> {
     if (e.code == 'VALIDATION_FAILED' && e.details['reason'] == 'TOO_LATE') {
       return state.next(CheckoutPhase.editing, splitTooLate: true);
     }
+    // Lot 5 step 4: the code can't apply (no order made), or its format is refused (a 422 with the body's shape).
+    if (e.code == 'PROMO_REFUSED') {
+      return state.next(CheckoutPhase.editing, promoRefusal: e.details['reason'] as String? ?? 'UNKNOWN');
+    }
+    final badCode = switch ((e.code, e.details['fields'])) {
+      ('VALIDATION_FAILED', final Map<String, Object?> f) when f.containsKey('promo_code') => 'UNKNOWN',
+      _ => null,
+    };
     if (e.details['fields'] case final Map<String, Object?> fields when e.code == 'VALIDATION_FAILED') {
       final badNames = <int>{};
       final badPhones = <int>{};
@@ -466,8 +499,15 @@ class CheckoutController extends Notifier<CheckoutState> {
         }
       }
       if (badNames.isNotEmpty || badPhones.isNotEmpty || ownPhones.isNotEmpty) {
-        return state.next(CheckoutPhase.editing, badNames: badNames, badPhones: badPhones, ownPhones: ownPhones);
+        return state.next(
+          CheckoutPhase.editing,
+          badNames: badNames,
+          badPhones: badPhones,
+          ownPhones: ownPhones,
+          promoRefusal: badCode,
+        );
       }
+      if (badCode != null) return state.next(CheckoutPhase.editing, promoRefusal: badCode);
     }
     // Lot 5 step 2: a place's holder isn't a member early enough, or would hold too many places: said on that row.
     if ((e.code, e.details)

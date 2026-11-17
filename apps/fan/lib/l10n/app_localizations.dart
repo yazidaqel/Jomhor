@@ -2942,6 +2942,48 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Échéance {seq}/{n} payée. Retrouve ton abonnement et tes billets dans Billets.'**
   String orderPaidInstallmentBody(int seq, int n);
+
+  /// Screen 4 text button under the summary (Lot 5 step 4): opens the code field.
+  ///
+  /// In fr, this message translates to:
+  /// **'J\'ai un code promo'**
+  String get promoToggle;
+
+  /// Screen 4 code field label.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code promo'**
+  String get promoLabel;
+
+  /// Screen 4: clears the code before the hold.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retirer'**
+  String get promoRemove;
+
+  /// Screen 4 CTA with a code typed: holds first, the server sends the discount and total.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réserver avec le code'**
+  String get promoReserveCta;
+
+  /// Summary line on screen 4 after the hold and on the order screen when discount_mad > 0. discount is the amount with its minus sign, as sent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code {code} · {discount}'**
+  String promoLine(String code, String discount);
+
+  /// PROMO_REFUSED details.reason under the code field (UNKNOWN and a 422 on promo_code read other).
+  ///
+  /// In fr, this message translates to:
+  /// **'{reason, select, NOT_APPLICABLE{Ce code ne s\'applique pas à ces places} USED_UP{Ce code a atteint sa limite} ACCOUNT_LIMIT{Tu as déjà utilisé ce code} other{Code inconnu ou expiré}}'**
+  String promoRefused(String reason);
+
+  /// Screen 4 split summary with a code: friends who pay their own place pay full price.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le code s\'applique à tes places'**
+  String get promoSplitCaption;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

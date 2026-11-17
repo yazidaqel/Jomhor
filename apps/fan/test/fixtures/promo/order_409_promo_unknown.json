@@ -1,0 +1,12 @@
+{
+ "source": "contract (docs/04-api.md Lot 5 step 4: POST /fan/orders promo_code, §Promo codes, PROMO_REFUSED); BE-65 not run yet, to be replaced by the FL-32 real run's capture",
+ "status": 409,
+ "body": {
+  "code": "PROMO_REFUSED",
+  "message": "PROMO_REFUSED",
+  "details": {
+   "field": "promo_code",
+   "reason": "UNKNOWN"
+  }
+ }
+}

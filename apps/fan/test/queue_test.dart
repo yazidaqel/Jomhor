@@ -32,6 +32,9 @@ import 'helpers.dart';
 const zone = 'Africa/Casablanca';
 
 void main() {
+  // Screen 4's lazy rows: the friend's phone may sit below the built part of the list.
+  final phoneField = find.byKey(const Key('holder.1.phone'));
+
   late TestClock clock;
   late RoomSale sale;
   late List<bool> wake;
@@ -873,7 +876,8 @@ void main() {
         await start(tester, location: '/events/1/checkout?price=${priceId('MEMBERS')}&qty=2');
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const Key('holder.1.name')), 'Sara Benali');
-        await tester.enterText(find.byKey(const Key('holder.1.phone')), '0612345678');
+        await tester.dragUntilVisible(phoneField, find.byType(ListView).last, const Offset(0, -100));
+        await tester.enterText(phoneField, '0612345678');
         await tester.dragUntilVisible(
           find.byKey(const Key('checkout.consent')),
           find.byType(ListView).last,
@@ -1042,7 +1046,8 @@ void main() {
         );
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const Key('holder.1.name')), 'Sara Benali');
-        await tester.enterText(find.byKey(const Key('holder.1.phone')), '0612345678');
+        await tester.dragUntilVisible(phoneField, find.byType(ListView).last, const Offset(0, -100));
+        await tester.enterText(phoneField, '0612345678');
         await tester.dragUntilVisible(
           find.byKey(const Key('checkout.consent')),
           find.byType(ListView).last,

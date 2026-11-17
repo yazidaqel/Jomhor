@@ -8,6 +8,7 @@ import 'package:jomhor_fan/app/error_text.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
 import 'package:jomhor_fan/features/checkout/method_rows.dart';
+import 'package:jomhor_fan/features/checkout/promo_line.dart';
 import 'package:jomhor_fan/features/club/dues.dart' show DuesClubLink;
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
@@ -86,8 +87,25 @@ class _FormState extends ConsumerState<_Form> {
   /// The card page is on screen (pushed above this one).
   var _cardOpen = false;
 
+  /// Lot 5 step 4: "J'ai un code promo" was tapped; [_promo] is sent only while the field is open.
+  var _promoOpen = false;
+  late final _promo = TextEditingController()..addListener(_promoChanged);
+
   // The Q21 confirmation appears as soon as a friend's phone is typed.
   void _phoneChanged() => setState(() {});
+
+  // The CTA follows the code ("Réserver avec le code"); a new code drops the old refusal.
+  void _promoChanged() {
+    setState(() {});
+    ref.read(checkoutControllerProvider(widget.args).notifier).clearPromoRefusal();
+  }
+
+  String get _code => _promoOpen ? _promo.text.trim() : '';
+
+  void _removePromo() {
+    _promo.clear();
+    setState(() => _promoOpen = false);
+  }
 
   @override
   void initState() {
@@ -101,7 +119,7 @@ class _FormState extends ConsumerState<_Form> {
 
   @override
   void dispose() {
-    for (final c in [..._names, ..._phones]) {
+    for (final c in [..._names, ..._phones, _promo]) {
       c.dispose();
     }
     super.dispose();
@@ -124,6 +142,7 @@ class _FormState extends ConsumerState<_Form> {
       friendsConsent: _consent,
       method: method,
       pays: _paying(ref.read(provider)),
+      promoCode: _code,
     );
     if (start == null || !mounted) return; // Left the screen: no payment page.
     final order = ref.read(provider).order!;
@@ -205,6 +224,7 @@ class _FormState extends ConsumerState<_Form> {
                     children: [
                       _Line(l.summaryLine(args.qty, widget.zone.name), l.dh(widget.price.priceMad * args.qty)),
                       _Line(l.serviceFee, l.dh(0)),
+                      if (state.order case final o?) PromoLine(order: o),
                       const Divider(color: JomhorColors.border),
                       if (split.friends == 0)
                         _Line(l.total, l.dh(total), strong: true)
@@ -235,11 +255,69 @@ class _FormState extends ConsumerState<_Form> {
                             style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
                           ),
                         ),
+                        if (_code.isNotEmpty || state.order?.promoCode != null)
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text(
+                              l.promoSplitCaption,
+                              key: const Key('promo.splitCaption'),
+                              style: JomhorType.caption.copyWith(color: JomhorColors.textMuted),
+                            ),
+                          ),
                       ],
                     ],
                   ),
                 ),
               ),
+              // Lot 5 step 4: the code, before the hold only (after it, the summary line says what it took off).
+              if (!locked)
+                if (!_promoOpen)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton(
+                      key: const Key('promo.open'),
+                      onPressed: busy ? null : () => setState(() => _promoOpen = true),
+                      child: Text(l.promoToggle),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(top: JomhorSpace.m),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('promo.field'),
+                            controller: _promo,
+                            enabled: !busy,
+                            autofocus: true,
+                            textCapitalization: TextCapitalization.characters,
+                            textDirection: TextDirection.ltr, // A code reads left to right in every locale.
+                            decoration: InputDecoration(
+                              labelText: l.promoLabel,
+                              errorText: switch (state.promoRefusal) {
+                                final reason? => l.promoRefused(reason),
+                                null => null,
+                              },
+                              errorMaxLines: 2,
+                              prefixIcon: const Icon(Icons.local_offer_outlined),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: JomhorSpace.s),
+                        Padding(
+                          padding: const EdgeInsets.only(top: JomhorSpace.xs),
+                          child: TextButton(
+                            key: const Key('promo.remove'),
+                            style: TextButton.styleFrom(minimumSize: const Size(0, JomhorSize.touchMin)),
+                            onPressed: busy ? null : _removePromo,
+                            child: Text(l.promoRemove),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               const SizedBox(height: JomhorSpace.xl),
               SectionLabel(l.holdersTitle),
               const SizedBox(height: JomhorSpace.xs),
@@ -377,7 +455,11 @@ class _FormState extends ConsumerState<_Form> {
                     onPressed: busy || selected == null || (state.phase == CheckoutPhase.expired && !state.cardOpened)
                         ? null
                         : _pay,
-                    child: Text(state.cardOpened ? l.checkPayment : payCtaText(l, selected, total)),
+                    child: Text(switch (state) {
+                      CheckoutState(cardOpened: true) => l.checkPayment,
+                      CheckoutState(order: null) when _code.isNotEmpty => l.promoReserveCta,
+                      _ => payCtaText(l, selected, total),
+                    }),
                   ),
                   const SizedBox(height: JomhorSpace.xs),
                   Text(
