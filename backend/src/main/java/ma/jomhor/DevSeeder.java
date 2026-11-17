@@ -18,6 +18,7 @@ import ma.jomhor.catalog.application.EventService;
 import ma.jomhor.catalog.application.EventService.EventInput;
 import ma.jomhor.catalog.application.VenueService;
 import ma.jomhor.catalog.domain.Event;
+import ma.jomhor.catalog.domain.Venue;
 import ma.jomhor.payments.application.PosService;
 import ma.jomhor.sales.application.OrderService.HolderRequest;
 import ma.jomhor.sales.application.OrderService.ItemRequest;
@@ -41,7 +42,8 @@ import tools.jackson.databind.node.JsonNodeFactory;
  * two paper tickets); then the club's ON_SALE demo events get their times moved relative to now, so the stack is
  * always testable. Past events are closed once and left alone; the demo fan was admitted at most of the archive ones.
  * The first run also gives ATLAS FC its finance settings (500 bp, from two local days ago) and till money on those two
- * days, so the statement job issues two statements at startup (plan lot-5 §13.1 Exit 5b, BE-72).
+ * days, so the statement job issues two statements at startup (plan lot-5 §13.1 Exit 5b, BE-72). While ATLAS FC's venue
+ * has no map, it gets the STADIUM one (plan venue-map Q242); Olympique Tensift's venue stays unmapped (the list).
  */
 @Component
 @Profile("dev")
@@ -104,6 +106,10 @@ class DevSeeder implements ApplicationRunner {
     static final Map<String, long[]> PRICES = Map.of("NORD", new long[] {5_000, 2_000}, "SUD", new long[] {5_000, 2_000},
             "EST", new long[] {8_000, 3_000}, "HONNEUR", new long[] {25_000, 500});
 
+    /** Plan venue-map Q242: ATLAS FC's zone codes on the STADIUM slots; the corners stay free. */
+    static final Map<String, String> ATLAS_MAP = Map.of("NORD", "NORTH", "SUD", "SOUTH", "EST", "EAST",
+            "HONNEUR", "WEST");
+
     private static final Logger log = LoggerFactory.getLogger(DevSeeder.class);
 
     private final EventService events;
@@ -129,6 +135,19 @@ class DevSeeder implements ApplicationRunner {
     void seed() {
         CLUBS.forEach(this::seed);
         finance();
+        venueMap();
+    }
+
+    /** Only while the venue has no layout: a map edited in the back-office (or set to a layout with no zone) stays. */
+    private void venueMap() {
+        Venue.Detail venue = venues.get(ORG, VENUE);
+        if (venue.layout() != null) {
+            return;
+        }
+        List<Venue.MapEntry> entries = venue.zones().stream().filter(z -> ATLAS_MAP.containsKey(z.code()))
+                .map(z -> new Venue.MapEntry(z.id(), ATLAS_MAP.get(z.code()))).toList();
+        venues.replaceMap(ORG, VENUE, "STADIUM", entries);
+        log.info("[dev seed] ATLAS FC venue map: STADIUM");
     }
 
     /** Africa/Casablanca, the statement day's zone (finance.timezone's default). */

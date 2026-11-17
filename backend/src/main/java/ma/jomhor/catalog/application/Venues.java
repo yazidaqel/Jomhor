@@ -62,4 +62,13 @@ public interface Venues {
     boolean deleteGate(UUID org, UUID venueId, UUID gateId);
 
     void replaceGateZones(UUID org, UUID gateId, Collection<Integer> zoneIds);
+
+    /** Sets venues.layout (null = no map). */
+    void setLayout(UUID org, UUID venueId, String layout);
+
+    /** Every zone of the venue loses its map_slot. */
+    void clearMapSlots(UUID org, UUID venueId);
+
+    /** False if the zone isn't (or is no longer) a zone of this venue. */
+    boolean setMapSlot(UUID org, UUID venueId, int zoneId, String mapSlot);
 }

@@ -78,18 +78,18 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.name").value("Grand Stade"))
                 .andExpect(jsonPath("$.city").value("Casablanca"))
                 .andExpect(jsonPath("$.capacity").value(45000)));
-        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "layout");
         String id = JsonPath.read(json, "$.id");
         assertThat(jdbc.sql("select organizer_id from venues where id = ?::uuid").param(id).query(UUID.class).single())
                 .isEqualTo(a.org());
 
         json = body(call(a, post("/org/venues"), "{\"name\": \"Salle\", \"capacity\": 300}")
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.city").doesNotExist()));
-        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "layout");
 
         json = body(call(a, get("/org/venues")).andExpect(status().isOk())
                 .andExpect(jsonPath("$[*].name").value(contains("Grand Stade", "Salle"))));
-        assertKeys(json, "$[0]", "id", "name", "city", "capacity", "timezone");
+        assertKeys(json, "$[0]", "id", "name", "city", "capacity", "timezone", "layout");
     }
 
     @Test
@@ -121,8 +121,8 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.gates[*].code").value(contains("P1", "P2")))
                 .andExpect(jsonPath("$.gates[0].zone_ids").value(contains(Math.min(nord, est), Math.max(nord, est))))
                 .andExpect(jsonPath("$.gates[1].zone_ids", empty())));
-        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "zones", "gates");
-        assertKeys(json, "$.zones[0]", "id", "code", "name", "capacity", "seated");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "layout", "zones", "gates");
+        assertKeys(json, "$.zones[0]", "id", "code", "name", "capacity", "seated", "map_slot");
         assertKeys(json, "$.gates[0]", "id", "code", "name", "directions", "latitude", "longitude", "zone_ids");
     }
 
@@ -268,7 +268,7 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.name").value("Stade"))
                 .andExpect(jsonPath("$.city").value("Rabat"))
                 .andExpect(jsonPath("$.capacity").value(2000)));
-        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "zones", "gates");
+        assertKeys(json, "$", "id", "name", "city", "capacity", "timezone", "layout", "zones", "gates");
 
         call(a, patch("/org/venues/" + venueId), "{\"name\": \"Nouveau\", \"city\": \"\"}")
                 .andExpect(status().isOk())
@@ -294,7 +294,7 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.name").value("Nord"))
                 .andExpect(jsonPath("$.capacity").value(0))
                 .andExpect(jsonPath("$.seated").value(false)));
-        assertKeys(json, "$", "id", "code", "name", "capacity", "seated");
+        assertKeys(json, "$", "id", "code", "name", "capacity", "seated", "map_slot");
         int zoneId = JsonPath.read(json, "$.id");
         assertThat(jdbc.sql("select organizer_id from zones where id = ?").param(zoneId).query(UUID.class).single())
                 .isEqualTo(a.org());
@@ -305,7 +305,7 @@ class VenueApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.code").value("nord"))
                 .andExpect(jsonPath("$.capacity").value(500))
                 .andExpect(jsonPath("$.seated").value(true)));
-        assertKeys(json, "$", "id", "code", "name", "capacity", "seated");
+        assertKeys(json, "$", "id", "code", "name", "capacity", "seated", "map_slot");
 
         String gateId = gate(a, venueId, "P1");
         putGateZones(a, gateId, zoneId).andExpect(status().isOk());

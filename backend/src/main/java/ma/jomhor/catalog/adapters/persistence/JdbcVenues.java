@@ -19,8 +19,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcVenues implements Venues {
 
-    private static final String VENUE_COLUMNS = "id, name, city, capacity, timezone";
-    private static final String ZONE_COLUMNS = "id, code, name, capacity, seated";
+    private static final String VENUE_COLUMNS = "id, name, city, capacity, timezone, layout";
+    private static final String ZONE_COLUMNS = "id, code, name, capacity, seated, map_slot";
     private static final String GATE_SELECT = """
             select g.id, g.code, g.name, g.directions, g.latitude, g.longitude,
                    array(select gz.zone_id::int from gate_zones gz
@@ -210,14 +210,32 @@ class JdbcVenues implements Venues {
         }
     }
 
+    @Override
+    public void setLayout(UUID org, UUID venueId, String layout) {
+        jdbc.sql("update venues set layout = cast(:layout as text) where organizer_id = :org and id = :id")
+                .param("org", org).param("id", venueId).param("layout", layout).update();
+    }
+
+    @Override
+    public void clearMapSlots(UUID org, UUID venueId) {
+        jdbc.sql("update zones set map_slot = null where organizer_id = :org and venue_id = :venue and map_slot is not null")
+                .param("org", org).param("venue", venueId).update();
+    }
+
+    @Override
+    public boolean setMapSlot(UUID org, UUID venueId, int zoneId, String mapSlot) {
+        return jdbc.sql("update zones set map_slot = :slot where organizer_id = :org and venue_id = :venue and id = :id")
+                .param("org", org).param("venue", venueId).param("id", zoneId).param("slot", mapSlot).update() == 1;
+    }
+
     private static Venue venue(ResultSet rs, int n) throws SQLException {
         return new Venue(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("city"), rs.getInt("capacity"),
-                rs.getString("timezone"));
+                rs.getString("timezone"), rs.getString("layout"));
     }
 
     private static Zone zone(ResultSet rs, int n) throws SQLException {
         return new Zone(rs.getInt("id"), rs.getString("code"), rs.getString("name"), rs.getInt("capacity"),
-                rs.getBoolean("seated"));
+                rs.getBoolean("seated"), rs.getString("map_slot"));
     }
 
     private static Gate gate(ResultSet rs, int n) throws SQLException {

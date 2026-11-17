@@ -2,6 +2,7 @@ package ma.jomhor.catalog.application;
 
 import java.math.BigDecimal;
 import java.time.ZoneId;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -13,7 +14,9 @@ import java.util.stream.Collectors;
 import ma.jomhor.catalog.domain.Venue;
 import ma.jomhor.catalog.domain.Venue.Detail;
 import ma.jomhor.catalog.domain.Venue.Gate;
+import ma.jomhor.catalog.domain.Venue.MapEntry;
 import ma.jomhor.catalog.domain.Venue.Zone;
+import ma.jomhor.catalog.domain.VenueLayouts;
 import ma.jomhor.common.web.ApiException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
@@ -48,8 +51,8 @@ public class VenueService {
 
     public Detail get(UUID org, UUID venueId) {
         Venue v = venues.findVenue(org, venueId).orElseThrow(notFound("Venue"));
-        return new Detail(v.id(), v.name(), v.city(), v.capacity(), v.timezone(), venues.zones(org, venueId),
-                venues.gates(org, venueId));
+        return new Detail(v.id(), v.name(), v.city(), v.capacity(), v.timezone(), v.layout(),
+                venues.zones(org, venueId), venues.gates(org, venueId));
     }
 
     /** The venue's gates with their zone ids, by code (empty for an unknown venue or another organizer's). */
@@ -213,6 +216,56 @@ public class VenueService {
         return venues.findGate(org, venueId, gateId).orElseThrow();
     }
 
+    /**
+     * PUT /org/venues/{id}/map, after the controller's shape checks: the content checks in docs/04-api.md's order (the
+     * first failure is the 422, nothing written), then the whole map replaced. The venue row lock makes concurrent PUTs
+     * on one venue serial; clearing every slot before setting the new ones means a swap never meets
+     * unique (venue_id, map_slot). A zone deleted after the check fails its update: 422 on its zone_id, rolled back.
+     * Display only: no manifest version, no audit row (plan venue-map Q243).
+     */
+    @Transactional
+    public Detail replaceMap(UUID org, UUID venueId, String layout, List<MapEntry> entries) {
+        venues.lockVenue(org, venueId).orElseThrow(notFound("Venue"));
+        if (layout != null && !VenueLayouts.isLayout(layout)) {
+            throw invalid("layout", "must be a layout of docs/venue-layouts.json");
+        }
+        if (layout == null && !entries.isEmpty()) {
+            throw invalid("zones", "must be empty when layout is null");
+        }
+        Set<Long> ofVenue = venues.zones(org, venueId).stream().map(z -> (long) z.id()).collect(Collectors.toSet());
+        Set<Long> zones = new HashSet<>();
+        Set<String> slots = new HashSet<>();
+        for (int i = 0; i < entries.size(); i++) {
+            MapEntry e = entries.get(i);
+            if (!ofVenue.contains(e.zoneId())) {
+                throw invalid(entryField(i, "zone_id"), "must be a zone of this venue");
+            }
+            if (!zones.add(e.zoneId())) {
+                throw invalid(entryField(i, "zone_id"), "is already listed");
+            }
+            if (!VenueLayouts.hasSlot(layout, e.mapSlot())) {
+                throw invalid(entryField(i, "map_slot"), "must be a slot of " + layout);
+            }
+            if (!slots.add(e.mapSlot())) {
+                throw invalid(entryField(i, "map_slot"), "is already listed");
+            }
+        }
+        venues.clearMapSlots(org, venueId);
+        for (int i = 0; i < entries.size(); i++) {
+            MapEntry e = entries.get(i);
+            if (!venues.setMapSlot(org, venueId, (int) e.zoneId(), e.mapSlot())) {
+                throw invalid(entryField(i, "zone_id"), "must be a zone of this venue");
+            }
+        }
+        venues.setLayout(org, venueId, layout);
+        return get(org, venueId);
+    }
+
+    /** {@code zones[i].field}, the 04 field path of a map entry. */
+    public static String entryField(int i, String field) {
+        return "zones[" + i + "]." + field;
+    }
+
     /** unique (venue_id, code) is the only unique key a zone or gate write can hit besides the PK. */
     private static <T> T codeUnique(Supplier<T> write) {
         try {
@@ -222,7 +275,7 @@ public class VenueService {
         }
     }
 
-    private static ApiException invalid(String field, String message) {
+    public static ApiException invalid(String field, String message) {
         return new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
                 Map.of("fields", Map.of(field, message)));
     }
