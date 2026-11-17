@@ -11,22 +11,29 @@ import ma.jomhor.finance.application.SettlementService.Export;
 import ma.jomhor.finance.application.SettlementService.Line;
 import ma.jomhor.finance.application.SettlementService.Listing;
 import ma.jomhor.finance.application.SettlementService.Row;
+import ma.jomhor.finance.adapters.pdf.InvoicePdf;
+import ma.jomhor.finance.domain.Invoice;
 import ma.jomhor.finance.domain.Settlement;
 import ma.jomhor.payments.application.CashReport;
 import ma.jomhor.tenancy.domain.FinanceSettings;
 import ma.jomhor.tenancy.domain.OrgContext;
 import ma.jomhor.tenancy.domain.StaffRole;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * GET /org/finance/settlements, /org/finance/settlements/{id} and /org/finance/settlements.csv (docs/04-api.md
- * §Organizer, §Finance Statement): ADMIN, FINANCE; OPS 403 here, CASHIER, GATE and SUPERVISOR from the interceptor.
+ * GET /org/finance/settlements, /org/finance/settlements/{id}, /org/finance/settlements.csv, POST
+ * /org/finance/settlements/{id}/paid and GET /org/finance/invoices/{id}.pdf (docs/04-api.md §Organizer, §Finance):
+ * ADMIN, FINANCE; OPS 403 here, CASHIER, GATE and SUPERVISOR from the interceptor.
  * Money in centimes in JSON, DH with a comma in the CSV. Only the RIB's last 4 digits leave the server.
  */
 @RestController
@@ -79,6 +86,8 @@ class OrgFinanceSettlementController {
     /** The row + its lines. */
     record DetailDto(@JsonUnwrapped RowDto row, List<LineDto> lines) {}
 
+    record PaidBody(String reference) {}
+
     private final SettlementService settlements;
 
     OrgFinanceSettlementController(SettlementService settlements) {
@@ -112,6 +121,24 @@ class OrgFinanceSettlementController {
         Export e = settlements.export(org.organizerId(), from, to);
         return ResponseEntity.ok().contentType(Csv.MEDIA_TYPE).header(HttpHeaders.CONTENT_DISPOSITION,
                 "attachment; filename=\"releves-" + e.from() + "-" + e.to() + ".csv\"").body(Csv.withBom(csv(e)));
+    }
+
+    /** "Versement reçu" (04 POST /org/finance/settlements/{id}/paid): ADMIN, FINANCE. */
+    @PostMapping("/org/finance/settlements/{id}/paid")
+    RowDto paid(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id,
+                @RequestBody PaidBody body) {
+        org.only(StaffRole.ADMIN, StaffRole.FINANCE);
+        return RowDto.of(settlements.paid(org.organizerId(), org.userId(), id, body.reference()));
+    }
+
+    /** The invoice PDF, drawn from the stored row (04 GET /org/finance/invoices/{id}.pdf): ADMIN, FINANCE. */
+    @GetMapping("/org/finance/invoices/{id}.pdf")
+    ResponseEntity<byte[]> invoice(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id) {
+        org.only(StaffRole.ADMIN, StaffRole.FINANCE);
+        Invoice i = settlements.invoice(org.organizerId(), id);
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"facture-" + i.number() + ".pdf\"")
+                .body(InvoicePdf.render(i));
     }
 
     /** Per statement (newest day first): its releve row, then its ligne rows; CRLF. */

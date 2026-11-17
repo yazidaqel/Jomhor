@@ -50,7 +50,7 @@ class JdbcSettlements implements Settlements {
 
     @Override
     public Instant now() {
-        return jdbc.sql("select now()").query(OffsetDateTime.class).single().toInstant();
+        return jdbc.sql("select clock_timestamp()").query(OffsetDateTime.class).single().toInstant();
     }
 
     @Override
@@ -86,9 +86,13 @@ class JdbcSettlements implements Settlements {
     }
 
     @Override
-    public int nextInvoiceSeq(int year) {
+    public void lockInvoiceYear(int year) {
         jdbc.sql("select 1 from pg_advisory_xact_lock(?)").param((INVOICE_LOCK << 32) | year).query(Integer.class)
                 .single();
+    }
+
+    @Override
+    public int nextInvoiceSeq(int year) {
         return jdbc.sql("select coalesce(max(seq), 0) + 1 from invoices where year = ?").param(year)
                 .query(Integer.class).single();
     }
@@ -119,6 +123,38 @@ class JdbcSettlements implements Settlements {
     public Optional<Settlement> get(UUID org, UUID id) {
         return jdbc.sql(SELECT + " and s.id = :id").param("org", org).param("id", id)
                 .query(JdbcSettlements::settlement).optional();
+    }
+
+    @Override
+    public Optional<String> lockStatus(UUID org, UUID id) {
+        return jdbc.sql("select status::text from settlements where organizer_id = ? and id = ? for update")
+                .params(org, id).query(String.class).optional();
+    }
+
+    @Override
+    public void markPaid(UUID org, UUID userId, UUID id, String reference) {
+        jdbc.sql("""
+                        update settlements set status = 'PAID', paid_at = now(), payout_reference = :ref,
+                               paid_by = (select s.id from staff s where s.organizer_id = :org and s.user_id = :user)
+                        where organizer_id = :org and id = :id and status = 'DUE'""")
+                .param("org", org).param("user", userId).param("id", id).param("ref", reference).update();
+    }
+
+    @Override
+    public Optional<StoredInvoice> invoice(UUID org, UUID invoiceId) {
+        return jdbc.sql("""
+                        select i.id, i.number, i.issued_on, i.issuer::text as issuer, i.customer::text as customer,
+                               s.day, s.collected_mad + s.till_mad as base_mad, s.fee_rate_bp, i.amount_ht_mad,
+                               i.vat_rate_bp, i.vat_mad, i.amount_ttc_mad
+                        from invoices i join settlements s on s.id = i.settlement_id and s.organizer_id = i.organizer_id
+                        where i.organizer_id = ? and i.id = ?""")
+                .params(org, invoiceId)
+                .query((rs, n) -> new StoredInvoice(rs.getObject("id", UUID.class), rs.getString("number"),
+                        rs.getObject("issued_on", LocalDate.class), rs.getString("issuer"), rs.getString("customer"),
+                        rs.getObject("day", LocalDate.class), rs.getLong("base_mad"), rs.getInt("fee_rate_bp"),
+                        rs.getLong("amount_ht_mad"), rs.getInt("vat_rate_bp"), rs.getLong("vat_mad"),
+                        rs.getLong("amount_ttc_mad")))
+                .optional();
     }
 
     @Override

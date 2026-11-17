@@ -81,6 +81,12 @@ public interface Payments {
     /** The earliest completed_at of a SUCCEEDED payment in [from, to); empty if none. */
     Optional<Instant> firstSucceeded(UUID org, Instant from, Instant to);
 
+    /**
+     * SUCCEEDED payments with completed_at at or after {@code since}: {Σ held by Jomhor (provider not POS), Σ at club
+     * tills (POS), count}, in one aggregate.
+     */
+    long[] succeededSince(UUID org, Instant since);
+
     /** {@code provider}: who holds the cash ('POS' = a club till). */
     record SettledPayment(UUID orderId, PaymentMethod method, String provider, long amountMad, Instant completedAt) {}
 }

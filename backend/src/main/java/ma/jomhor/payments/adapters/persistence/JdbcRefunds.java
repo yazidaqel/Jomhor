@@ -73,6 +73,13 @@ class JdbcRefunds implements Refunds {
     }
 
     @Override
+    public long[] requiredTotals(UUID org) {
+        return jdbc.sql("select count(*), coalesce(sum(amount_mad), 0) from refunds where organizer_id = ? "
+                        + "and status = 'REQUIRED'")
+                .param(org).query((rs, n) -> new long[] {rs.getLong(1), rs.getLong(2)}).single();
+    }
+
+    @Override
     public Optional<Refund> get(UUID org, UUID refundId) {
         return jdbc.sql(SELECT + " and r.id = :id").param("org", org).param("id", refundId).query(REFUND).optional();
     }

@@ -13,19 +13,22 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import ma.jomhor.common.AuditLog;
 import ma.jomhor.common.web.ApiException;
+import ma.jomhor.finance.domain.Invoice;
 import ma.jomhor.finance.domain.Payout;
 import ma.jomhor.finance.domain.Settlement;
 import ma.jomhor.finance.domain.Statement;
 import ma.jomhor.payments.application.CashReport;
 import ma.jomhor.payments.application.Payments.SettledPayment;
 import ma.jomhor.payments.application.RefundService;
-import ma.jomhor.payments.domain.Refund;
 import ma.jomhor.sales.application.Orders.Subject;
 import ma.jomhor.sales.application.SalesReport;
 import ma.jomhor.tenancy.application.OrganizerService;
 import ma.jomhor.tenancy.domain.FinanceSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Isolation;
@@ -46,6 +49,9 @@ import tools.jackson.databind.json.JsonMapper;
 public class SettlementService {
 
     private static final Logger log = LoggerFactory.getLogger(SettlementService.class);
+
+    /** collector_name of card and wallet lines: the gateway's name, for the simulated FAKE too (04). */
+    static final String CARD_GATEWAY = "Payzone";
 
     /** Read model of GET /org/finance/settlements. {@code settings} and {@code open} null when not activated. */
     public record Listing(LocalDate from, LocalDate to, String timezone, FinanceSettings settings, Open open,
@@ -83,7 +89,10 @@ public class SettlementService {
 
     SettlementService(Settlements settlements, OrganizerService organizers, CashReport payments, SalesReport sales,
                       RefundService refunds, AuditLog audit, JsonMapper json, FinanceProperties config,
-                      PlatformTransactionManager transactions) {
+                      PlatformTransactionManager transactions, Environment env) {
+        if (env.acceptsProfiles(Profiles.of("prod"))) {
+            config.checkIssuer();
+        }
         this.settlements = settlements;
         this.organizers = organizers;
         this.payments = payments;
@@ -98,7 +107,7 @@ public class SettlementService {
 
     // ---------- the job ----------
 
-    /** The job, on the database clock, read again in each statement's transaction. */
+    /** The job, on the database's wall clock, read in each statement's transaction and after the invoice lock. */
     public void run() {
         runEach(settlements::now);
     }
@@ -110,17 +119,19 @@ public class SettlementService {
 
     /**
      * Every activated organizer, statement after statement while one was built. An organizer that fails is logged
-     * (exception class and SQL state only) and the others still run.
+     * (exception class and SQL state; the message only for this class's own IllegalStateException, which names ids,
+     * never data) and the others still run.
      */
     private void runEach(Supplier<Instant> clock) {
         organizers.withFinance().forEach((org, settings) -> {
             try {
-                while (Boolean.TRUE.equals(tx.execute(s -> buildNext(org, settings, clock.get())))) {
+                while (Boolean.TRUE.equals(tx.execute(s -> buildNext(org, settings, clock)))) {
                     // one statement issued: the next day
                 }
             } catch (RuntimeException ex) {
-                log.error("Settlement statement failed for organizer {}: {} (SQL state {})", org,
-                        ex.getClass().getName(), sqlState(ex));
+                log.error("Settlement statement failed for organizer {}: {} (SQL state {}){}", org,
+                        ex.getClass().getName(), sqlState(ex),
+                        ex instanceof IllegalStateException ? ": " + ex.getMessage() : "");
             }
         });
     }
@@ -130,10 +141,11 @@ public class SettlementService {
      * (or start_on) with a SUCCEEDED payment, once {@code now} ≥ start of d + 1 + issue-delay. False when none is due
      * or another instance holds the organizer's lock.
      */
-    private boolean buildNext(UUID org, FinanceSettings settings, Instant now) {
+    private boolean buildNext(UUID org, FinanceSettings settings, Supplier<Instant> clock) {
         if (!settlements.tryLock(org)) {
             return false;
         }
+        Instant now = clock.get();
         Optional<Settlement> last = settlements.latest(org);
         LocalDate from = since(last, settings);
         LocalDate until = now.minus(config.issueDelay()).atZone(zone).toLocalDate(); // days before it are due
@@ -150,7 +162,8 @@ public class SettlementService {
         List<Statement.Payment> rows = paid.stream().map(p -> {
             Subject s = subjects.get(p.orderId());
             if (s == null || (s.eventId() == null) == (s.productId() == null)) {
-                throw new IllegalStateException("No subject for an order of a payment");
+                throw new IllegalStateException("No event or product for order " + p.orderId() + " of organizer "
+                        + org);
             }
             return new Statement.Payment(s.eventId(), s.productId(), p.method().name(), p.provider(), p.amountMad());
         }).toList();
@@ -158,7 +171,7 @@ public class SettlementService {
                 .orElse(0L);
         Statement st = Statement.build(rows, settings.feeRateBp(), config.vatRateBp(), carriedIn);
         UUID id = settlements.insert(org, day, st, Payout.dueOn(day, config.payoutDays()), now);
-        String number = st.feeHtMad() > 0 ? invoice(org, id, settings, st, now) : null;
+        String number = st.feeHtMad() > 0 ? invoice(org, id, settings, st, clock) : null;
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("day", day.toString());
         payload.put("payout_mad", st.payoutMad());
@@ -167,10 +180,21 @@ public class SettlementService {
         return true;
     }
 
-    /** The invoice of a statement with a fee: numbered in this transaction, details copied in. Returns its number. */
-    private String invoice(UUID org, UUID settlementId, FinanceSettings settings, Statement st, Instant now) {
-        LocalDate issuedOn = now.atZone(zone).toLocalDate();
+    /**
+     * The invoice of a statement with a fee: numbered in this transaction, details copied in. The issue date is read
+     * after the year's lock is held, so two instances crossing midnight never give a later number an earlier date; if
+     * that read crosses New Year, the new year's lock is taken too (years in increasing order: no deadlock). Returns
+     * its number.
+     */
+    private String invoice(UUID org, UUID settlementId, FinanceSettings settings, Statement st,
+                           Supplier<Instant> clock) {
+        int locked = clock.get().atZone(zone).getYear();
+        settlements.lockInvoiceYear(locked);
+        LocalDate issuedOn = clock.get().atZone(zone).toLocalDate();
         int year = issuedOn.getYear();
+        if (year != locked) {
+            settlements.lockInvoiceYear(year);
+        }
         int seq = settlements.nextInvoiceSeq(year);
         String number = "JMH-%d-%06d".formatted(year, seq);
         Map<String, Object> customer = new LinkedHashMap<>();
@@ -202,6 +226,55 @@ public class SettlementService {
         return null;
     }
 
+    // ---------- payout and invoice (04 POST /org/finance/settlements/{id}/paid, GET /org/finance/invoices/{id}.pdf) ----------
+
+    /**
+     * "Versement reçu": {@code reference} trimmed, 1–100 (else 422). Under the row lock: DUE → PAID now by the caller's
+     * staff row, audit settlement.paid {reference}; PAID → unchanged, nothing audited; NONE → 409 SETTLEMENT_STATUS.
+     * Unknown or another organizer's → 404. Returns the row.
+     */
+    @Transactional
+    public Row paid(UUID org, UUID userId, UUID id, String reference) {
+        String ref = reference == null ? "" : reference.strip();
+        if (ref.isEmpty() || ref.length() > 100) {
+            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                    Map.of("fields", Map.of("reference", "1 to 100 characters")));
+        }
+        String status = settlements.lockStatus(org, id).orElseThrow(() -> ApiException.notFound("Settlement not found"));
+        switch (status) {
+            case "NONE" -> throw new ApiException("SETTLEMENT_STATUS", HttpStatus.CONFLICT, "Nothing to pay out",
+                    Map.of("status", status));
+            case "DUE" -> {
+                settlements.markPaid(org, userId, id, ref);
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("reference", ref);
+                audit.staff(org, userId, "settlement.paid", id.toString(), json.writeValueAsString(payload));
+            }
+            default -> { } // PAID: a replay, unchanged
+        }
+        return row(settlements.get(org, id).orElseThrow(), today());
+    }
+
+    /** The invoice as stored, for its PDF; unknown or another organizer's → 404. */
+    @Transactional(readOnly = true)
+    public Invoice invoice(UUID org, UUID invoiceId) {
+        Settlements.StoredInvoice i = settlements.invoice(org, invoiceId)
+                .orElseThrow(() -> ApiException.notFound("Invoice not found"));
+        return new Invoice(i.id(), i.number(), i.issuedOn(), strings(i.issuerJson()), strings(i.customerJson()), i.day(),
+                i.baseMad(), i.feeRateBp(), i.amountHtMad(), i.vatRateBp(), i.vatMad(), i.amountTtcMad());
+    }
+
+    /** A stored snapshot's string fields (other values are left out). */
+    private Map<String, String> strings(String jsonObject) {
+        Map<String, String> out = new LinkedHashMap<>();
+        json.readTree(jsonObject).properties().forEach(e -> {
+            if (e.getValue().isString()) {
+                out.put(e.getKey(), e.getValue().asString());
+            }
+        });
+        return out;
+    }
+
     // ---------- reads (04 /org/finance/settlements*) ----------
 
     /** GET /org/finance/settlements: the range as /finance/cash (both days included, ≤ 92, else 422). One snapshot. */
@@ -212,16 +285,13 @@ public class SettlementService {
         Open open = null;
         if (settings != null) {
             Instant since = start(since(settlements.latest(org), settings));
-            Instant now = settlements.now();
-            List<SettledPayment> p = payments.succeeded(org, since, now.plusSeconds(86_400));
-            long till = p.stream().filter(x -> x.provider().equals(Statement.TILL)).mapToLong(SettledPayment::amountMad)
-                    .sum();
-            open = new Open(since, p.stream().mapToLong(SettledPayment::amountMad).sum() - till, till, p.size());
+            long[] t = payments.succeededSince(org, since);
+            open = new Open(since, t[0], t[1], t[2]);
         }
-        List<Refund> required = refunds.list(org, Refund.Status.REQUIRED, null);
+        long[] required = refunds.requiredTotals(org);
         long[] due = settlements.due(org, today());
         return new Listing(days.from(), days.to(), config.timezone(), settings, open,
-                new RefundsRequired(required.size(), required.stream().mapToLong(Refund::amountMad).sum()),
+                new RefundsRequired(required[0], required[1]),
                 new Due(due[0], due[1], due[2]), config.vatRateBp(), rows(org, days));
     }
 
@@ -250,7 +320,13 @@ public class SettlementService {
 
     private List<Line> lines(UUID org, List<UUID> ids) {
         return ids.isEmpty() ? List.of() : settlements.lines(org, ids).stream()
-                .map(l -> new Line(l, payments.collectorName(l.collector()))).toList();
+                .map(l -> new Line(l, collectorName(l))).toList();
+    }
+
+    /** 04: tills "Guichet" and networks by display name (as /finance/cash); card and wallet "Payzone" (FAKE too). */
+    private String collectorName(Settlement.Line l) {
+        return l.method().equals("CARD") || l.method().equals("WALLET") ? CARD_GATEWAY
+                : payments.collectorName(l.collector());
     }
 
     private static Row row(Settlement s, LocalDate today) {

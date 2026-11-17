@@ -173,6 +173,8 @@ finance:
   timezone: ${FINANCE_TIMEZONE:Africa/Casablanca}
   # The statement job runs this long after the previous run ends, on every instance (organizer try-lock).
   tick: ${FINANCE_TICK:10m}
+  # The first run after startup: soon, so a restart catches up on due days without waiting a whole tick.
+  initial-delay: ${FINANCE_INITIAL_DELAY:1m}
   # A day is issued once the next one has begun + this, so payment callbacks in flight at midnight commit first.
   issue-delay: ${FINANCE_ISSUE_DELAY:1h}
   # due_on = day + this; a Saturday or Sunday moves to Monday.

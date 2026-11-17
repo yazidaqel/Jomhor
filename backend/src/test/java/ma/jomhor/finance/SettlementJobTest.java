@@ -254,6 +254,20 @@ class SettlementJobTest extends IntegrationTest {
     }
 
     @Test
+    void anOrderWithoutSubjectStopsItsOrganizerAndIsNamedInTheLog(CapturedOutput output) {
+        Club c = club(500, "2026-11-01");
+        UUID order = jdbc.sql("""
+                        insert into orders (organizer_id, channel, status, total_mad, reserved_until)
+                        values (?, 'APP', 'PAID', 0, now()) returning id""")
+                .param(c.org()).query(UUID.class).single(); // a product order with no item: no subject
+        Ledger.pay(jdbc, c.org(), order, "CARD", "FAKE", 100_00, local("2026-11-10T20:00"));
+        service.runAt(local("2026-11-11T01:00"));
+        assertThat(statements(c.org())).isEmpty();
+        assertThat(output.getAll()).contains("Settlement statement failed for organizer " + c.org(),
+                "No event or product for order " + order + " of organizer " + c.org());
+    }
+
+    @Test
     void settingsAreStrictlyValidated() {
         String valid = """
                 {"legal_name": "Club", "address": "Rue", "ice": "001234567000089", "rib": "011780000012345678901234",
@@ -269,6 +283,8 @@ class SettlementJobTest extends IntegrationTest {
             assertThat(parse(valid.replace(bad[0], bad[1]))).as(bad[1]).isNull();
         }
         assertThat(parse("[]")).isNull();
+        // the RIB never reaches a log in full through the record's toString
+        assertThat(parse(valid).toString()).contains("rib=****1234").doesNotContain("011780000012345678901234");
     }
 
     private FinanceSettings parse(String raw) {

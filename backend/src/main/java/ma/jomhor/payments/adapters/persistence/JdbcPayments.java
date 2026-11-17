@@ -279,6 +279,18 @@ class JdbcPayments implements Payments, PendingPayments {
     }
 
     @Override
+    public long[] succeededSince(UUID org, Instant since) {
+        return jdbc.sql("""
+                        select coalesce(sum(amount_mad) filter (where provider <> 'POS'), 0),
+                               coalesce(sum(amount_mad) filter (where provider = 'POS'), 0), count(*)
+                        from payments
+                        where organizer_id = :org and status = 'SUCCEEDED' and completed_at >= :since
+                        """)
+                .param("org", org).param("since", OffsetDateTime.ofInstant(since, ZoneOffset.UTC))
+                .query((rs, n) -> new long[] {rs.getLong(1), rs.getLong(2), rs.getLong(3)}).single();
+    }
+
+    @Override
     public Optional<Instant> firstSucceeded(UUID org, Instant from, Instant to) {
         return jdbc.sql("""
                         select completed_at from payments

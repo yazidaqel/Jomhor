@@ -12,6 +12,13 @@ import tools.jackson.databind.JsonNode;
 public record FinanceSettings(String legalName, String address, String ice, String taxId, String rc, String rib,
                               int feeRateBp, LocalDate startOn) {
 
+    /** The RIB masked to its last 4 digits: settings may reach a log through this. */
+    @Override
+    public String toString() {
+        return "FinanceSettings[legalName=" + legalName + ", address=" + address + ", ice=" + ice + ", taxId=" + taxId
+                + ", rc=" + rc + ", rib=****" + ribLast4() + ", feeRateBp=" + feeRateBp + ", startOn=" + startOn + "]";
+    }
+
     public String ribLast4() {
         return rib.substring(rib.length() - 4);
     }

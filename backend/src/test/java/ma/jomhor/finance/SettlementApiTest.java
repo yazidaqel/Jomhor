@@ -189,7 +189,7 @@ class SettlementApiTest extends OrgApiTest {
         assertThat(JsonPath.<List<String>>read(json, "$.lines[*].method")).containsExactly("WALLET", "CARD",
                 "POS_CASH");
         assertThat(JsonPath.<List<String>>read(json, "$.lines[*].collector")).containsExactly("FAKE", "FAKE", "POS");
-        assertThat(JsonPath.<List<String>>read(json, "$.lines[*].collector_name")).containsExactly("FAKE", "FAKE",
+        assertThat(JsonPath.<List<String>>read(json, "$.lines[*].collector_name")).containsExactly("Payzone", "Payzone",
                 "Guichet");
         assertThat(JsonPath.<List<Integer>>read(json, "$.lines[*].amount_mad")).containsExactly(200_00, 1_000_00,
                 500_00);
@@ -226,8 +226,8 @@ class SettlementApiTest extends OrgApiTest {
                 "ligne;" + d2 + ";Match A;POS_CASH;Guichet;1;300,00;;;;;;;;;;",
                 "releve;" + d3 + ";;;;;;1200,00;500,00;85,00;17,00;0,00;1098,00;" + Payout.dueOn(s.d3(), 2) + ";DUE;"
                         + invoiceNumber(s.id3()) + ";",
-                "ligne;" + d3 + ";Adhésion;WALLET;FAKE;1;200,00;;;;;;;;;;",
-                "ligne;" + d3 + ";Match A;CARD;FAKE;1;1000,00;;;;;;;;;;",
+                "ligne;" + d3 + ";Adhésion;WALLET;Payzone;1;200,00;;;;;;;;;;",
+                "ligne;" + d3 + ";Match A;CARD;Payzone;1;1000,00;;;;;;;;;;",
                 "ligne;" + d3 + ";Match A;POS_CASH;Guichet;1;500,00;;;;;;;;;;") + "\r\n");
     }
 

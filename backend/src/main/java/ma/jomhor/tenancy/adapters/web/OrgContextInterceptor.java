@@ -18,7 +18,7 @@ import org.springframework.web.servlet.HandlerMapping;
  * token subject → {@link OrgContext} request attribute. Lot 0 roles: ADMIN, OPS read and write;
  * FINANCE read only; GATE, SUPERVISOR 403. Lot 3: /org/pos/** is ADMIN, OPS, CASHIER; CASHIER may call nothing else
  * but GET /org/events, /org/events/{id} and /org/events/{id}/prices. FINANCE may also POST the ticket lookup, mark
- * a refund done and record a bank deposit (Lot 5 step 5); the controllers narrow the roles further.
+ * a refund done, record a bank deposit and a payout received (Lot 5 step 5); the controllers narrow the roles further.
  */
 class OrgContextInterceptor implements HandlerInterceptor {
 
@@ -29,7 +29,8 @@ class OrgContextInterceptor implements HandlerInterceptor {
 
     /** Handler patterns FINANCE may POST: a lookup (a read with the phone in the body) and its writes. */
     private static final Set<String> FINANCE_WRITES =
-            Set.of("/org/events/{id}/tickets/search", "/org/refunds/{id}/done", "/org/finance/deposits");
+            Set.of("/org/events/{id}/tickets/search", "/org/refunds/{id}/done", "/org/finance/deposits",
+                    "/org/finance/settlements/{id}/paid");
 
     private final AuthService auth;
 

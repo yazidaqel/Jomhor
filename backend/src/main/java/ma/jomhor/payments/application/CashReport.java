@@ -116,6 +116,11 @@ public class CashReport {
         return payments.succeeded(org, from, to);
     }
 
+    /** The open window of the statements: {Σ not POS, Σ POS, count} of SUCCEEDED payments since {@code since}. */
+    public long[] succeededSince(UUID org, Instant since) {
+        return payments.succeededSince(org, since);
+    }
+
     /** The earliest completed_at of a SUCCEEDED payment in [from, to); empty if none. */
     public Optional<Instant> firstSucceeded(UUID org, Instant from, Instant to) {
         return payments.firstSucceeded(org, from, to);
