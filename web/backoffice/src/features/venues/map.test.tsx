@@ -56,7 +56,7 @@ const venue = (): VenueDetail => ({
 type Call = { method: string; path: string; org: string | null; body: unknown }
 
 /** Fake API: /org/me, the venue (kept in `state`) and PUT …/map; `reply` answers the PUT when given. */
-function stubApi(role: Role = 'ADMIN', state: VenueDetail = venue(), reply?: Response) {
+function stubApi(role: Role = 'ADMIN', state: VenueDetail = venue(), reply?: (state: VenueDetail) => Response) {
   const calls: Call[] = []
   vi.stubGlobal(
     'fetch',
@@ -71,7 +71,7 @@ function stubApi(role: Role = 'ADMIN', state: VenueDetail = venue(), reply?: Res
       if (call.path === '/org/me') return Response.json(me(role))
       if (call.method === 'GET' && call.path === '/org/venues/v-1') return Response.json(state)
       if (call.method === 'PUT' && call.path === '/org/venues/v-1/map') {
-        if (reply) return reply
+        if (reply) return reply(state)
         const body = call.body as { layout: string | null; zones: { zone_id: number; map_slot: string }[] }
         state.layout = body.layout
         state.zones = state.zones.map((z) => ({ ...z, map_slot: body.zones.find((p) => p.zone_id === z.id)?.map_slot ?? null }))
@@ -231,10 +231,9 @@ it('Stade → Théâtre → Stade without saving restores the saved placements; 
 it.each([
   ['layout', () => template(), fr.venues.map.layoutInvalid],
   ['zones[1].map_slot', () => slotOf('HONNEUR'), fr.venues.map.slotInvalid],
-  ['zones[2].zone_id', () => slotOf('NORD'), fr.venues.map.zoneGone],
 ])('a 422 on %s lands on its Select', async (key, trigger, message) => {
   const user = userEvent.setup()
-  stubApi('ADMIN', venue(), Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { [key]: 'invalid' } } }, { status: 422 }))
+  stubApi('ADMIN', venue(), () => Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { [key]: 'invalid' } } }, { status: 422 }))
   await renderVenue()
   await pick(user, slotOf('EST'), 'Sud-Est')
   await user.click(saveButton())
@@ -243,9 +242,24 @@ it.each([
   expect(within(preview().closest<HTMLElement>('[data-slot=card]')!).getAllByRole('combobox').filter((c) => c.getAttribute('aria-invalid') === 'true')).toHaveLength(1)
 })
 
+it('a 422 on zones[i].zone_id (zone deleted meanwhile) shows as a toast; the refetch drops the zone', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi('ADMIN', venue(), (state) => {
+    state.zones = state.zones.filter((z) => z.id !== 2) // NORD, body index 2, deleted by someone else
+    return Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { 'zones[2].zone_id': 'invalid' } } }, { status: 422 })
+  })
+  await renderVenue()
+  await pick(user, slotOf('EST'), 'Sud-Est')
+  await user.click(saveButton())
+  expect(await screen.findByText(fr.venues.map.zoneGone)).toBeTruthy()
+  await waitFor(() => expect(screen.queryByRole('combobox', { name: i18n.t('venues.map.slotLabel', { code: 'NORD' }) })).toBeNull())
+  expect(slotOf('EST').textContent).toBe('Est') // the editor restarted from the refetched map
+  expect(puts(calls)).toHaveLength(1)
+})
+
 it('a 422 on `zones` (no Select of its own) shows as the form error', async () => {
   const user = userEvent.setup()
-  stubApi('ADMIN', venue(), Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { zones: 'invalid' } } }, { status: 422 }))
+  stubApi('ADMIN', venue(), () => Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { fields: { zones: 'invalid' } } }, { status: 422 }))
   await renderVenue()
   await pick(user, slotOf('EST'), 'Sud-Est')
   await user.click(saveButton())

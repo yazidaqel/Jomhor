@@ -79,7 +79,9 @@ function MapEditor({ venue, initial }: { venue: VenueDetail; initial: MapForm })
       onSuccess: () => toast.success(t('venues.map.saved')),
       onError: (e) => {
         const field = mapErrorField(e, form.getValues(), body)
-        if (field) form.setError(field.name, { message: t(field.key) }, { shouldFocus: true })
+        // A deleted zone: the refetch (every write refetches) remounts the editor without it, so a toast, not a field error.
+        if (field?.key === 'venues.map.zoneGone') toast.error(t(field.key))
+        else if (field) form.setError(field.name, { message: t(field.key) }, { shouldFocus: true })
         else form.setError('root', { message: t(venueErrorKey(e)) })
       },
     })
