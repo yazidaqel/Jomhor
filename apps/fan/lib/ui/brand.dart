@@ -290,7 +290,8 @@ final _firstLetter = RegExp(r'\p{L}', unicode: true);
 String crestInitial(String name) => (_firstLetter.firstMatch(name)?[0] ?? '').toUpperCase();
 
 /// The club line of event cards and tickets (DESIGN.md §Multi-club adjustments): crest 20 + the club name in
-/// caption, in a bidi isolate of its own direction; [trailing] at the end ("Suivre" on Accueil).
+/// caption, in a bidi isolate of its own direction; [trailing] at the end ("Suivre" on Accueil), at most half the
+/// line, so a longer label (EN "Following", a larger text size) ellipsises instead of overflowing.
 class ClubLine extends StatelessWidget {
   const new({required this.name, this.crestUrl, this.trailing, this.color = JomhorColors.textSecondary, super.key});
 
@@ -300,21 +301,35 @@ class ClubLine extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Crest(name: name, url: crestUrl, size: 20),
-      const SizedBox(width: JomhorSpace.s),
-      Flexible(
-        child: Text(
-          AppLocalizations.of(context).isolate(name),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: JomhorType.caption.copyWith(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+  Widget build(BuildContext context) {
+    Widget line([Widget? end]) => Row(
+      children: [
+        Crest(name: name, url: crestUrl, size: 20),
+        const SizedBox(width: JomhorSpace.s),
+        Flexible(
+          child: Text(
+            AppLocalizations.of(context).isolate(name),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: JomhorType.caption.copyWith(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+        ?end,
+      ],
+    );
+    // Only a line with a trailing measures itself (tickets and the inbox keep a plain Row).
+    return switch (trailing) {
+      null => line(),
+      final t => LayoutBuilder(
+        builder: (_, box) => line(
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: box.maxWidth / 2),
+            child: t,
+          ),
         ),
       ),
-      ?trailing,
-    ],
-  );
+    };
+  }
 }
 
 /// A soft accent light, for the corner of a hero surface (the 12 % disc of the mockups, blurred).
