@@ -105,6 +105,7 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
   const { t, i18n } = useTranslation()
   const n = (count: number) => count.toLocaleString(i18n.language)
   const dh = (centimes: number) => t('sales.amount', { amount: formatDh(centimes, i18n.language) })
+  const discount = sales.discount_mad ?? 0 // absent from a backend before BE-65
   const reason = (code: string) => (Object.hasOwn(fr.sales.refunds.reasons, code) ? t(`sales.refunds.reasons.${code as Reason}`) : code)
 
   return (
@@ -130,7 +131,7 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
           <span className="font-medium text-foreground">{t('sales.kpi.net', { amount: formatDh(netMad(sales), i18n.language) })}</span>
         </Kpi>
         {/* Lot 5 step 4: promo codes, Σ over PAID orders; the revenue above stays at list prices. */}
-        <Kpi index={4} icon={TicketPercent} label={t('sales.kpi.discount')} value={sales.discount_mad > 0 ? t('sales.kpi.discountValue', { amount: formatDh(sales.discount_mad, i18n.language) }) : dh(0)}>
+        <Kpi index={4} icon={TicketPercent} label={t('sales.kpi.discount')} value={discount > 0 ? t('sales.kpi.discountValue', { amount: formatDh(discount, i18n.language) }) : dh(0)}>
           {t('sales.kpi.discountHint')}
         </Kpi>
       </div>

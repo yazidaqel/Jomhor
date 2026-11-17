@@ -217,7 +217,7 @@ it('B3 shows "Remises accordées" from discount_mad, and the net = revenue − d
   expect(within(revenue).getByText(spaced(i18n.t('sales.kpi.net', { amount: formatDh(2_377_000, 'fr') })))).toBeTruthy()
 })
 
-it('the net stays exact past 2^53 centimes (bigint), and no discount reads 0,00 DH', async () => {
+it('the net subtracts without float rounding (bigint), and no discount reads 0,00 DH', async () => {
   stubApi('ADMIN', () => Response.json({ ...SALES, discount_mad: 1 }))
   renderApp('/events/1/sales')
   // (2^53 − 1) − 1 − 45 150 centimes = 90 071 992 547 409,91 − 0,01 − 451,50 DH.
@@ -229,6 +229,15 @@ it('the net stays exact past 2^53 centimes (bigint), and no discount reads 0,00 
   renderApp('/events/1/sales')
   const kpi = (await screen.findByText(fr.sales.kpi.discount, { selector: 'span' })).closest('[data-slot="card"]') as HTMLElement
   expect(within(kpi).getByText(spaced(dh(0)), { selector: '.text-2xl' })).toBeTruthy()
+})
+
+it('a /sales without discount_mad (a backend before BE-65) still renders B3: discount 0, net = revenue − refunds', async () => {
+  stubApi('FINANCE', () => Response.json({ ...SALES, discount_mad: undefined })) // JSON drops the key
+  renderApp('/events/1/sales')
+
+  const kpi = (await screen.findByText(fr.sales.kpi.discount, { selector: 'span' })).closest('[data-slot="card"]') as HTMLElement
+  expect(within(kpi).getByText(spaced(dh(0)), { selector: '.text-2xl' })).toBeTruthy()
+  expect(screen.getByText(spaced(i18n.t('sales.kpi.net', { amount: formatDh(9_007_199_254_695_841n, 'fr') })))).toBeTruthy()
 })
 
 it('a 403 shows the FORBIDDEN copy, no figures, and is not retried', async () => {
