@@ -1222,3 +1222,49 @@ it('série: `pass_tickets` from the server → the select starts disabled with i
   expect((await screen.findByRole('tooltip')).textContent).toBe(fr.events.series.locked)
   expect(writes(calls)).toEqual([])
 })
+
+// Lot 5 step 4 (BO-25): the real API took this body (201, audience INVITE) and answered the two 422s below.
+it('prices: "Accès · Invitations" fixes the price at 0 with its helper and sends audience INVITE, price_mad 0', async () => {
+  const user = userEvent.setup()
+  const calls = stubB2()
+  renderApp('/events/1')
+  const panel = await openTab(user, fr.events.tabs.prices)
+  await user.click(await within(panel).findByRole('button', { name: fr.events.prices.add }))
+  await pick(user, fr.events.prices.zone, 'Tribune Nord')
+  await user.type(within(panel).getByLabelText(fr.events.prices.name), 'Presse')
+  await user.type(within(panel).getByLabelText(fr.events.prices.price), '80')
+  await pick(user, fr.events.prices.audience, fr.events.prices.audiences.INVITE)
+  const price = within(panel).getByLabelText(fr.events.prices.price) as HTMLInputElement
+  expect(price.value).toBe('0')
+  expect(price.readOnly).toBe(true)
+  expect(within(panel).getByText(fr.events.prices.inviteHint)).toBeTruthy()
+  await user.type(within(panel).getByLabelText(fr.events.prices.quota), '40')
+  await user.click(within(panel).getByRole('button', { name: fr.common.create }))
+  await waitFor(() => expect(writes(calls)).toHaveLength(1))
+  expect(writes(calls)[0]).toEqual({
+    method: 'POST',
+    path: '/org/events/1/prices',
+    org: 'org-a',
+    body: { zone_id: 2, name: 'Presse', price_mad: 0, quota: 40, audience: 'INVITE' },
+  })
+})
+
+it.each([
+  ['INVITE_SOLD', 'audience', "can't move to or from INVITE once places are sold", fr.events.prices.inviteSold],
+  ['INVITE_PRICE', 'price_mad', 'must be 0 for INVITE places', fr.events.prices.invitePrice],
+] as const)('prices: %s lands on its field with its copy', async (reason, fieldName, real, copy) => {
+  const user = userEvent.setup()
+  stubB2('ADMIN', (c) =>
+    c.method === 'PATCH'
+      ? Response.json({ code: 'VALIDATION_FAILED', message: 'Invalid request body', details: { reason, fields: { [fieldName]: real } } }, { status: 422 })
+      : undefined,
+  )
+  renderApp('/events/1')
+  const panel = await openTab(user, fr.events.tabs.prices)
+  await user.click(await within(panel).findByRole('button', { name: i18n.t('events.prices.editLabel', { name: 'Plein tarif' }) }))
+  await pick(user, fr.events.prices.audience, fr.events.prices.audiences.INVITE)
+  await user.click(within(panel).getByRole('button', { name: fr.common.save }))
+  expect(await within(panel).findByText(copy)).toBeTruthy()
+  const input = fieldName === 'audience' ? within(panel).getByRole('combobox', { name: fr.events.prices.audience }) : within(panel).getByLabelText(fr.events.prices.price)
+  expect(input.getAttribute('aria-invalid')).toBe('true')
+})

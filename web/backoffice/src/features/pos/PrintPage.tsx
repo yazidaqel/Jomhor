@@ -9,6 +9,8 @@ import { formatDh } from '@/lib/money'
 import { formatTime } from '@/lib/time'
 import { shortNo, usePrintData, type PrintData, type PrintTicket } from './api'
 
+type PrintQuery = typeof usePrintData
+
 // Q48: 80 mm thermal roll printed from Chrome (`--kiosk-printing` skips the dialog). Scoped to this page: rendered
 // only while it is mounted, so no other page prints at 80 mm. Not `size: 80mm auto` (the plan's wording): that is not
 // valid CSS and Chrome drops the whole descriptor. One fixed page per slip instead, the slip clipped to it.
@@ -16,19 +18,22 @@ import { shortNo, usePrintData, type PrintData, type PrintTicket } from './api'
 const SLIP_HEIGHT = '140mm'
 const PAGE_CSS = `@page { size: 80mm ${SLIP_HEIGHT}; margin: 0 }`
 
-/** POS print view `/pos/print/:orderId`, outside the shell chrome: one slip per ticket (DESIGN §POS slip). */
-export function PrintPage() {
+/**
+ * Print view outside the shell chrome: one slip per ticket (DESIGN §POS slip). The till's `/pos/print/:orderId` by
+ * default; B7 passes its own data hook (`/org/invitations/{id}/tickets`, same shape) and its way back.
+ */
+export function PrintPage({ useData = usePrintData, back = { to: '/pos' } }: { useData?: PrintQuery; back?: { to: string; label?: string } }) {
   const { t } = useTranslation()
   const orderId = useParams().orderId ?? ''
-  const query = usePrintData(orderId)
+  const query = useData(orderId)
   return (
     <div className="min-h-screen bg-muted/40 print:min-h-0 print:bg-white">
       <style>{PAGE_CSS}</style>
       <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b bg-background/90 px-4 py-3 backdrop-blur print:hidden">
         <Button variant="ghost" asChild>
-          <Link to="/pos">
+          <Link to={back.to}>
             <ArrowLeft />
-            {t('pos.print.back')}
+            {back.label ?? t('pos.print.back')}
           </Link>
         </Button>
         <div className="min-w-0">
@@ -110,9 +115,14 @@ function Slip({ data, ticket }: { data: PrintData; ticket: PrintTicket }) {
       </div>
       <div className="my-[3mm] border-t border-dashed border-black" />
       <div className="flex items-baseline justify-between gap-2 text-[9pt]">
-        <span>
-          {t('pos.print.price')} <b className="text-[11pt]">{t('pos.amount', { amount: formatDh(ticket.unit_price_mad, i18n.language) })}</b>
-        </span>
+        {/* A 0 DH place (an invitation, an accreditation) shows its kind, not "Prix 0,00 DH" (04 print data). */}
+        {ticket.unit_price_mad === 0 ? (
+          <b className="text-[11pt]">{ticket.category.name}</b>
+        ) : (
+          <span>
+            {t('pos.print.price')} <b className="text-[11pt]">{t('pos.amount', { amount: formatDh(ticket.unit_price_mad, i18n.language) })}</b>
+          </span>
+        )}
         <span>{t('pos.print.order', { no: shortNo(data.order_id) })}</span>
       </div>
       <div className="mt-auto pt-[2mm] text-center text-[8pt]">{t('pos.print.footer')}</div>

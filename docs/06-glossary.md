@@ -50,6 +50,8 @@
 | sale phase | phase de vente | مرحلة البيع | — |
 | general sale | vente générale | البيع العام | — |
 | members price | tarif membres | سعر الأعضاء | for members who joined before the sale opened |
+| accreditation | accréditation | اعتماد | a free named ticket for press, staff or partners |
+| invitation | invitation | دعوة | — |
 
 ## Scan result codes
 

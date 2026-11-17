@@ -248,7 +248,7 @@ public class EventService {
      * DRAFT or unknown → 404. sold_out and from_price_mad are taken again from the price rows of the response,
      * so they can't contradict zones[].prices[].remaining (two statements, two READ COMMITTED snapshots).
      * from_price_mad: ALL categories only, so the public "dès" is a price anyone can pay (plan lot-5 Q172). PASS
-     * categories are left out of the rows, and a zone with only those is left out (04 §Passes).
+     * and INVITE categories are left out of the rows, and a zone with only those is left out (04 §Passes, §Invitations).
      */
     public PublicEvent publicEvent(int eventId) {
         EventZones all = eventZones(eventId);
@@ -305,7 +305,7 @@ public class EventService {
     public PriceCategory createPrice(UUID org, int eventId, int zoneId, String name, long priceMad, int quota,
                                      Event.Audience audience) {
         Event e = lockForPrices(org, eventId);
-        checkPassPrice(audience, priceMad);
+        checkFreePrice(audience, priceMad);
         int capacity = events.zoneCapacity(org, e.venueId(), zoneId)
                 .orElseThrow(() -> invalid("zone_id", "must be a zone of the event's venue"));
         checkCapacity(capacity, events.quotaOnZone(org, eventId, zoneId, null) + quota);
@@ -317,19 +317,24 @@ public class EventService {
     public PriceCategory updatePrice(UUID org, int eventId, UUID priceId, Integer zoneId, String name, Long priceMad,
                                      Integer quota, Event.Audience audience) {
         Event e = lockForPrices(org, eventId);
-        // Locked: a sale's take waits, so sold can't grow between the PASS_SOLD check and the write.
+        // Locked: a sale's take waits, so sold can't grow between the PASS_SOLD/INVITE_SOLD check and the write.
         PriceCategory p = events.lockPrice(org, eventId, priceId).orElseThrow(notFound("Price category"));
         if (zoneId != null && zoneId != p.zoneId()) {
             throw invalid("zone_id", "is fixed after create");
         }
-        if (audience != null && (audience == Event.Audience.PASS) != (p.audience() == Event.Audience.PASS)
-                && p.sold() > 0) {
-            Map<String, Object> details = new LinkedHashMap<>();
-            details.put("reason", "PASS_SOLD");
-            details.put("fields", Map.of("audience", "can't move to or from PASS once places are sold"));
-            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
+        if (audience != null && p.sold() > 0) {
+            // PASS first: a move between PASS and INVITE breaks both rules and answers PASS_SOLD.
+            for (Event.Audience free : List.of(Event.Audience.PASS, Event.Audience.INVITE)) {
+                if ((audience == free) != (p.audience() == free)) {
+                    Map<String, Object> details = new LinkedHashMap<>();
+                    details.put("reason", free + "_SOLD");
+                    details.put("fields", Map.of("audience", "can't move to or from " + free + " once places are sold"));
+                    throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                            details);
+                }
+            }
         }
-        checkPassPrice(or(audience, p.audience()), or(priceMad, p.priceMad()));
+        checkFreePrice(or(audience, p.audience()), or(priceMad, p.priceMad()));
         if (quota != null) {
             // The zone can't be gone: the category's FK keeps it.
             int capacity = events.zoneCapacity(org, e.venueId(), p.zoneId()).orElseThrow();
@@ -470,12 +475,15 @@ public class EventService {
         }
     }
 
-    /** 04 §Passes: a PASS category costs 0 (422 on price_mad, details.reason PASS_PRICE). */
-    private static void checkPassPrice(Event.Audience audience, long priceMad) {
-        if (audience == Event.Audience.PASS && priceMad != 0) {
+    /**
+     * 04 prices: a PASS or INVITE category costs 0 (422 on price_mad, details.reason PASS_PRICE or INVITE_PRICE), as the
+     * price_categories_free check.
+     */
+    private static void checkFreePrice(Event.Audience audience, long priceMad) {
+        if (audience != null && !audience.sellable() && priceMad != 0) {
             Map<String, Object> details = new LinkedHashMap<>();
-            details.put("reason", "PASS_PRICE");
-            details.put("fields", Map.of("price_mad", "must be 0 for PASS places"));
+            details.put("reason", audience + "_PRICE");
+            details.put("fields", Map.of("price_mad", "must be 0 for " + audience + " places"));
             throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
         }
     }

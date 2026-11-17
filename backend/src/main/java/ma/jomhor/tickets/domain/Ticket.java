@@ -23,8 +23,12 @@ public record Ticket(UUID id, UUID organizerId, int eventId, int zoneId, Status 
         }
     }
 
-    /** A ticket of an order as a till prints it: {@code holderName} goes on paper as its label only. */
-    public record OfOrder(UUID id, int eventId, int zoneId, UUID priceCategoryId, Status status, String holderName) {
+    /**
+     * A ticket of an order as a till prints it: {@code holderName} goes on paper as its label only.
+     * {@code holderUserId}: the holding account, null for a paper-only ticket.
+     */
+    public record OfOrder(UUID id, int eventId, int zoneId, UUID priceCategoryId, Status status, String holderName,
+                          UUID holderUserId) {
         /** Without the holder's name: it stays out of logs. */
         @Override
         public String toString() {

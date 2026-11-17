@@ -180,16 +180,70 @@ class JdbcOrders implements Orders {
 
     @Override
     public Optional<Order> insertPos(UUID id, UUID org, int eventId, long totalMad, List<Order.Item> items) {
+        return insertStaffOrder(id, org, eventId, totalMad, "POS_CASH", null, items);
+    }
+
+    @Override
+    public Optional<Order> insertInvitation(UUID id, UUID org, int eventId, UUID staffUserId, List<Order.Item> items) {
+        return insertStaffOrder(id, org, eventId, 0, "FREE", staffUserId, items);
+    }
+
+    // A PAID POS order with no buyer; invited_by = the caller's staff row (null staffUserId: a till sale). An invitation
+    // whose caller has no staff row here is a bug: it fails rather than read as a till order.
+    private Optional<Order> insertStaffOrder(UUID id, UUID org, int eventId, long totalMad, String method,
+                                             UUID staffUserId, List<Order.Item> items) {
+        UUID invitedBy = staffUserId == null ? null
+                : jdbc.sql("select id from staff where organizer_id = :org and user_id = :user")
+                        .param("org", org).param("user", staffUserId).query(UUID.class).optional()
+                        .orElseThrow(() -> new IllegalStateException("no staff row for the invitation's caller"));
         Optional<Order> order = jdbc.sql("""
                         insert into orders (id, organizer_id, event_id, user_id, channel, status, total_mad, payment_method,
-                                            reserved_until, paid_at)
-                        values (:id, :org, :event, null, 'POS', 'PAID', :total, 'POS_CASH', now(), now())
+                                            reserved_until, paid_at, invited_by)
+                        values (:id, :org, :event, null, 'POS', 'PAID', :total, cast(:method as payment_method), now(),
+                                now(), :invitedBy)
                         on conflict (id) do nothing
                         returning\s""" + ORDER_COLUMNS)
                 .param("id", id).param("org", org).param("event", eventId).param("total", totalMad)
+                .param("method", method).param("invitedBy", invitedBy)
                 .query((rs, n) -> order(rs, items)).optional();
         order.ifPresent(o -> insertItems(org, o.id(), items));
         return order;
+    }
+
+    // Single-bigint advisory key (9 << 32) | hashtext(id): common.EventLock lists the classes.
+    private static final long INVITATION_LOCK = 9;
+
+    @Override
+    public void lockInvitationId(UUID id) {
+        jdbc.sql("select 1 from pg_advisory_xact_lock((cast(:class as bigint) << 32) | (hashtext(:id) & 4294967295))")
+                .param("class", INVITATION_LOCK).param("id", id.toString()).query(Integer.class).single();
+    }
+
+    @Override
+    public Optional<Integer> invitationEvent(UUID org, UUID orderId) {
+        return jdbc.sql("select event_id from orders where organizer_id = :org and id = :id and invited_by is not null")
+                .param("org", org).param("id", orderId).query(Integer.class).optional();
+    }
+
+    // ponytail: items read per order (at most 200 small reads); one query over order_id = any(...) if the list is slow.
+    @Override
+    public List<Invitation> invitations(UUID org, int eventId, int limit) {
+        return jdbc.sql("""
+                        select o.id, o.organizer_id, o.event_id, o.user_id, o.channel, o.status, o.total_mad,
+                               o.reserved_until, o.paid_at, o.group_order_id, o.pass_id, o.created_at,
+                               s.id as staff_id, s.name as staff_name
+                        from orders o join staff s on s.id = o.invited_by and s.organizer_id = o.organizer_id
+                        where o.organizer_id = :org and o.event_id = :event and o.invited_by is not null
+                        order by o.created_at desc, o.id
+                        limit :limit
+                        """)
+                .param("org", org).param("event", eventId).param("limit", limit)
+                .query((rs, n) -> new Invitation(order(rs, null), instant(rs, "created_at"),
+                        rs.getObject("staff_id", UUID.class), rs.getString("staff_name")))
+                .list().stream()
+                .map(i -> new Invitation(i.order().withItems(items(org, i.order().id())), i.createdAt(), i.invitedById(),
+                        i.invitedByName()))
+                .toList();
     }
 
     @Override

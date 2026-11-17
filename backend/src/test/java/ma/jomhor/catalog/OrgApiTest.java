@@ -5,7 +5,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import ma.jomhor.IntegrationTest;
@@ -95,5 +98,36 @@ public abstract class OrgApiTest extends IntegrationTest {
 
     protected void setSold(String priceId, int sold) {
         jdbc.sql("update price_categories set sold = ? where id = ?::uuid").params(sold, priceId).update();
+    }
+
+    /**
+     * loadtest/check.sql scoped to one event: the file is one statement, and the shared test database holds other
+     * classes' deliberate breaches.
+     */
+    protected List<Map<String, Object>> breaches(int eventId) throws Exception {
+        return jdbc.sql("select * from (" + checkSql() + "\n) c where event_id = ?").param(eventId).query()
+                .listOfRows();
+    }
+
+    /**
+     * loadtest/check.sql scoped to one organizer: its events' rows, and the rows with no event (product orders:
+     * PRODUCT_SOLD names a product, CHARGED_NO_ORDER a payment, the others an order) whose ref is the organizer's.
+     */
+    protected List<Map<String, Object>> breaches(UUID organizer) throws Exception {
+        return jdbc.sql("select * from (" + checkSql() + """
+
+                        ) c where c.event_id in (select id from events where organizer_id = ?)
+                           or (c.event_id is null
+                               and c.ref in (select id::text from products where organizer_id = ?
+                                             union all select id::text from orders where organizer_id = ?
+                                             union all select id::text from payments where organizer_id = ?))""")
+                .params(organizer, organizer, organizer, organizer).query().listOfRows();
+    }
+
+    /** loadtest/check.sql without its final ';' (the file is one statement). */
+    private static String checkSql() throws Exception {
+        String check = Files.readString(Path.of("loadtest/check.sql")).strip();
+        assertThat(check).endsWith(";");
+        return check.substring(0, check.length() - 1);
     }
 }

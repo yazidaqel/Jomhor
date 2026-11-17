@@ -163,7 +163,7 @@ create table events (
 );
 create index on events (organizer_id, starts_at);
 
-create type price_audience as enum ('ALL','MEMBERS','PASS');
+create type price_audience as enum ('ALL','MEMBERS','PASS','INVITE');
 
 create table price_categories (
   id            uuid primary key default gen_random_uuid(),
@@ -180,8 +180,11 @@ create table price_categories (
                                                          -- before events.sale_starts_at (docs/04-api.md POST /fan/orders)
                                                          -- PASS: places for season-pass holders of the event's series (docs/04-api.md §Passes);
                                                          -- issued by the pass job only, never sold to fans or at a till; price_mad = 0
+                                                         -- INVITE: places for invitations and accreditations (docs/04-api.md §Invitations);
+                                                         -- issued from the back-office only, never sold to fans or at a till; price_mad = 0.
+                                                         -- The category name is the kind ('Presse', 'Invités').
   unique (event_id, zone_id, name),
-  constraint price_categories_pass check (audience <> 'PASS' or price_mad = 0)
+  constraint price_categories_free check (audience not in ('PASS','INVITE') or price_mad = 0)
 );
 
 -- ---------- sales ----------
@@ -252,7 +255,11 @@ create table orders (
   paid_at         timestamptz,
   created_at      timestamptz not null default now(),
   group_order_id  uuid references orders(id),  -- split pay: set on a member order, = the initiator's order (docs/04-api.md §Split pay)
-  constraint orders_product check (event_id is not null or (channel in ('APP','WEB') and group_order_id is null))
+  invited_by      uuid references staff(id),   -- an invitation (docs/04-api.md §Invitations): the staff who issued it;
+                                               -- PAID, channel POS, user_id null, payment_method FREE, total 0
+  constraint orders_product check (event_id is not null or (channel in ('APP','WEB') and group_order_id is null)),
+  constraint orders_invited check (invited_by is null
+                                   or (event_id is not null and channel = 'POS' and user_id is null and pass_id is null))
 );
 -- AWAITING_CASH: a cash code was issued; reserved_until = least(issue + 24 h, events.refund_cutoff_at).
 -- POS sale: channel POS, user_id null, created PAID. Ticket refunds leave the order PAID
@@ -262,6 +269,7 @@ create index on orders (user_id, created_at desc);
 create index on orders (group_order_id) where group_order_id is not null;
 create unique index on orders (pass_id, event_id) where pass_id is not null and event_id is not null;  -- one ticket order per pass per event
 create index on orders (pass_id) where pass_id is not null;
+create index on orders (event_id, created_at desc) where invited_by is not null;
 
 create table order_items (
   id                uuid primary key default gen_random_uuid(),
@@ -443,7 +451,8 @@ create table refunds (                                 -- money owed back for a 
   ticket_id     uuid not null unique references tickets(id),
   order_id      uuid not null references orders(id),
   payment_id    uuid references payments(id),           -- the order's succeeding payment (its method says how to pay back)
-  amount_mad    bigint not null check (amount_mad >= 0),  -- the item's unit_price_mad snapshot
+  amount_mad    bigint not null check (amount_mad >= 0),  -- see docs/04-api.md refund; never 0 since Lot 5 step 4
+                                                          -- (a FREE place's refund writes no row)
   reason        text not null,                          -- 1-200 chars
   status        refund_status not null default 'REQUIRED',
   requested_by  uuid not null references staff(id),

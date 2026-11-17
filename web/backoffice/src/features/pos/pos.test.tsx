@@ -99,12 +99,13 @@ const PRODUCT_LOOKUP: CodeLookup = {
   holders: ['Yazid A.'],
 }
 // `holder_name` is not in the print shape; a server sending it anyway must not get it on paper.
+// `category` (Lot 5 step 4): present on the real print data (BO-25 run, a POS order and an invitation).
 const PRINT = {
   order_id: '0192f0aa-0000-7000-8000-00004d5c6b7a',
   event: { id: 1, title: 'Atlas FC vs Rapid Oued', starts_at: '2026-11-14T19:00:00Z', timezone: CASA, venue: { name: 'Grand Stade' } },
   tickets: [
-    { id: 't-1', ticket_no: '4D5C 6B7A', status: 'VALID', zone: { code: 'NORD', name: 'Virage Nord' }, gate_codes: ['A', 'B'], holder_label: 'Yazid A.', holder_name: 'Yazid Aqel', unit_price_mad: 5_050, qr: 'AQAAAAHxyz-token_one' },
-    { id: 't-2', ticket_no: '9E8F 7A6B', status: 'VALID', zone: { code: 'NORD', name: 'Virage Nord' }, gate_codes: ['A'], holder_label: 'Salma B.', holder_name: 'Salma Bennani', unit_price_mad: 5_050, qr: 'AQAAAAHxyz-token_two' },
+    { id: 't-1', ticket_no: '4D5C 6B7A', status: 'VALID', zone: { code: 'NORD', name: 'Virage Nord' }, gate_codes: ['A', 'B'], holder_label: 'Yazid A.', holder_name: 'Yazid Aqel', unit_price_mad: 5_050, category: { name: 'Plein tarif' }, qr: 'AQAAAAHxyz-token_one' },
+    { id: 't-2', ticket_no: '9E8F 7A6B', status: 'VALID', zone: { code: 'NORD', name: 'Virage Nord' }, gate_codes: ['A'], holder_label: 'Salma B.', holder_name: 'Salma Bennani', unit_price_mad: 5_050, category: { name: 'Plein tarif' }, qr: 'AQAAAAHxyz-token_two' },
   ],
 } satisfies PrintData & { tickets: { holder_name: string }[] }
 const PRINT_PATH = `/org/pos/orders/${PRINT.order_id}/tickets`
@@ -350,6 +351,10 @@ it('print view: one slip per ticket, one 80 mm page each, QR value = `qr` exactl
     expect(slip.getByText(ticket.holder_label)).toBeTruthy()
     expect(slip.getByText('Atlas FC')).toBeTruthy() // club name
     expect(slip.getByText(spaced(i18n.t('pos.print.order', { no: '4D5C 6B7A' })))).toBeTruthy()
+    // A paid slip keeps its price; the category name is for 0 DH slips only (Lot 5 step 4).
+    expect(slips[i]!.textContent).toContain(fr.pos.print.price)
+    expect(slip.getByText(dh(ticket.unit_price_mad))).toBeTruthy()
+    expect(slip.queryByText(ticket.category.name)).toBeNull()
   })
   const other = render(<QRCode value={PRINT.tickets[1]!.qr} size={256} level="M" />)
   expect(qrPaths(slips[0]!.querySelector('svg')!)).not.toEqual(qrPaths(other.container))
@@ -627,7 +632,6 @@ it('CASHIER: lands on the Guichet, the sidebar shows only "Guichet", every other
   expect(router.state.location.pathname).toBe('/pos')
   const nav = within(screen.getByRole('navigation', { name: fr.nav.label }))
   expect(nav.getAllByRole('link').map((l) => l.textContent)).toEqual([fr.nav.pos])
-  expect(nav.queryByText(fr.nav.soon)).toBeNull()
   expect(screen.getAllByText(fr.roles.CASHIER).length).toBeGreaterThan(0)
 
   for (const path of ['/events', '/events/1/sales', '/settings/venues', '/devices', '/live', '/nowhere']) {
@@ -807,9 +811,10 @@ it('B11 close: only the gap value is a live region', async () => {
   expect(live[0]!.textContent).toBe(fr.pos.close.noGap)
 })
 
-it('B11 Vente: a PASS category (season-pass places, 0 DH) is never offered or sent at the till', async () => {
+// PASS: season-pass places (Lot 5 step 3); INVITE: invitation places (step 4; real prices carry `audience: 'INVITE'`). Both 0 DH, never sold.
+it.each(['PASS', 'INVITE'] as const)('B11 Vente: a %s category is never offered or sent at the till', async (audience) => {
   const user = userEvent.setup()
-  const pass: Price = { id: 'p-pass', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Abonnés', price_mad: 0, quota: 50, sold: 0, audience: 'PASS' }
+  const pass: Price = { id: 'p-pass', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Abonnés', price_mad: 0, quota: 50, sold: 0, audience }
   const calls = stubApi({
     '/org/events/1/prices': () => Response.json([...PRICES, pass]),
     '/org/pos/orders': () => Response.json(SALE_ORDER, { status: 201 }),

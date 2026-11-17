@@ -19,7 +19,7 @@ import { errorKey } from '@/lib/errors'
 import { integerInput, showFormError } from '@/lib/forms'
 import { dhInput, formatDh, parseDh } from '@/lib/money'
 import { cn } from '@/lib/utils'
-import { PRICE_AUDIENCES, useEventMutation, usePrices, type EventDetail, type Price, type PriceAudience } from './api'
+import { isFree, PRICE_AUDIENCES, useEventMutation, usePrices, type EventDetail, type Price, type PriceAudience } from './api'
 
 /**
  * B2 Tarifs & quotas: the event's price categories, edited inline one row at a time. `onEditingChange` tells the page
@@ -150,15 +150,15 @@ export function PricesTab({ event, editable, onEditingChange }: { event: EventDe
 const usage = (prices: Price[]) => prices.reduce((m, p) => m.set(p.zone_id, (m.get(p.zone_id) ?? 0) + p.quota), new Map<number, number>())
 const zoneName = (zones: Zone[], id: number) => zones.find((z) => z.id === id)?.name ?? String(id)
 
-/** The helper under "Accès" (DESIGN B2, Lot 1 and Lot 5 step 3). */
-const HINT = { ALL: 'events.prices.audienceHint', MEMBERS: 'events.prices.audienceHint', PASS: 'events.prices.passHint' } as const
+/** The helper under "Accès" (DESIGN B2, Lot 1 and Lot 5 steps 3 and 4). */
+const HINT = { ALL: 'events.prices.audienceHint', MEMBERS: 'events.prices.audienceHint', PASS: 'events.prices.passHint', INVITE: 'events.prices.inviteHint' } as const
 
-/** "Membres" and "Abonnés" stand out as chips (DESIGN B2); "Tous", the default, stays quiet. */
+/** "Membres", "Abonnés" and "Invitations" stand out as chips (DESIGN B2); "Tous", the default, stays quiet. */
 function AudienceTag({ audience }: { audience: PriceAudience }) {
   const { t } = useTranslation()
   if (audience === 'ALL') return <span className="text-muted-foreground">{t('events.prices.audiences.ALL')}</span>
   return (
-    <Badge variant="secondary" className={audience === 'PASS' ? 'rounded-full border-primary/20 bg-primary/10 text-foreground' : 'rounded-full'}>
+    <Badge variant="secondary" className={isFree(audience) ? 'rounded-full border-primary/20 bg-primary/10 text-foreground' : 'rounded-full'}>
       {t(`events.prices.audiences.${audience}`)}
       <span className="sr-only">{t('events.prices.audienceHintSr', { hint: t(HINT[audience]) })}</span>
     </Badge>
@@ -223,6 +223,11 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
     // Step 3: the access can't move to or from Abonnés once places of the category are sold (reason PASS_SOLD).
     if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'PASS_SOLD')
       form.setError('audience', { message: t('events.prices.passSold') })
+    // Step 4: the same two rules for Invitations (INVITE_PRICE, INVITE_SOLD).
+    if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'INVITE_PRICE')
+      form.setError('price_mad', { message: t('events.prices.invitePrice') })
+    if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'INVITE_SOLD')
+      form.setError('audience', { message: t('events.prices.inviteSold') })
     // A name already used for this zone: 422 on `name` with `details.reason` NAME_TAKEN (04-api). Any other 422 on
     // `name` keeps the generic field copy.
     if (e instanceof ApiError && e.code === 'VALIDATION_FAILED' && e.details.reason === 'NAME_TAKEN')
@@ -286,8 +291,8 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
                   value={field.value}
                   onValueChange={(a) => {
                     field.onChange(a)
-                    // Pass places are never sold: their price is 0, fixed (04 PASS_PRICE).
-                    if (a === 'PASS') form.setValue('price_mad', '0', { shouldValidate: form.formState.isSubmitted })
+                    // Pass and invitation places are never sold: their price is 0, fixed (04 PASS_PRICE, INVITE_PRICE).
+                    if (isFree(a as PriceAudience)) form.setValue('price_mad', '0', { shouldValidate: form.formState.isSubmitted })
                   }}
                   disabled={save.isPending}
                 >
@@ -327,7 +332,7 @@ function PriceRowForm({ eventId, venue, used, price, onDone }: { eventId: string
             form={formId}
             label={t('events.prices.price')}
             numeric="decimal"
-            readOnly={audience === 'PASS'}
+            readOnly={isFree(audience)}
             error={errors.price_mad?.message}
             registration={form.register('price_mad')}
           />

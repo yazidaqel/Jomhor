@@ -34,7 +34,7 @@ flowchart TB
 
 | Component | Responsibility | Holds |
 | --- | --- | --- |
-| Ticketing API | Tenancy, catalog (venues, zones, gates, events, pricing), sales (orders, tickets, products, season passes, paid membership), on-sale waiting room (rooms, queue, admission), payments, manifests, scan ingestion and duplicate resolution, finance, notifications | Master key, per-event keys (encrypted at rest), all records |
+| Ticketing API | Tenancy, catalog (venues, zones, gates, events, pricing), sales (orders, tickets, products, season passes, paid membership, invitations and accreditations), on-sale waiting room (rooms, queue, admission), payments, manifests, scan ingestion and duplicate resolution, finance, notifications | Master key, per-event keys (encrypted at rest), all records |
 | Fan app | Discover, buy, hold tickets, rotating QR offline, transfer, split pay, membership, matchday companion, push | Per-ticket keys K_t for the user's own tickets |
 | Web shop | Same purchase flow, PDF with static QR | Nothing after issue |
 | Scanner app | Enrolment, manifest download, offline validation, local log, background sync, supervisor override | K_e in Keystore, manifest + scans in SQLite |

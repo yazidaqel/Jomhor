@@ -34,7 +34,8 @@ const STATUS_STYLE: Record<TicketStatus, { badge: string; dot: string }> = {
   CANCELLED: { badge: 'border-border bg-background text-muted-foreground', dot: 'bg-destructive' },
 }
 
-function TicketStatusBadge({ row }: { row: TicketRow }) {
+/** Also on B7's invitation tickets (no pass there: `pass` null). */
+export function TicketStatusBadge({ row }: { row: Pick<TicketRow, 'status' | 'pass'> }) {
   const { t } = useTranslation()
   const { status } = row
   return (

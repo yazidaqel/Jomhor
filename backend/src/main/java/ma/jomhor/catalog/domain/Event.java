@@ -35,17 +35,19 @@ public record Event(int id, UUID venueId, String timezone, UUID seriesId, Type e
 
     /**
      * price_categories.audience: MEMBERS = each place held by a member who joined before the sale (04 POST /fan/orders);
-     * PASS = places for the season-pass holders of the event's series (04 §Passes), price 0.
+     * PASS = places for the season-pass holders of the event's series (04 §Passes), price 0;
+     * INVITE = places for invitations and accreditations (04 §Invitations), price 0.
      */
     public enum Audience {
-        ALL, MEMBERS, PASS;
+        ALL, MEMBERS, PASS, INVITE;
 
         /**
-         * Sold to fans and at a till. PASS places are issued by the pass job only: every fan and POS read and check
-         * (rows, from_price_mad, sold_out, a room's sold_out, the waitlist's R, an order's items) leaves them out.
+         * Sold to fans and at a till. PASS places are issued by the pass job only, INVITE ones from the back-office only:
+         * every fan and POS read and check (rows, from_price_mad, sold_out, a room's sold_out, the waitlist's R, an
+         * order's items) leaves them out. The SQL twin is {@code audience in ('ALL','MEMBERS')} in JdbcEvents.
          */
         public boolean sellable() {
-            return this != PASS;
+            return this == ALL || this == MEMBERS;
         }
     }
 

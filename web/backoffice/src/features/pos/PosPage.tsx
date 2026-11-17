@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useEvent, useEvents, usePrices, type EventSummary, type Price } from '@/features/events/api'
+import { sellable as isSellable, useEvent, useEvents, usePrices, type EventSummary, type Price } from '@/features/events/api'
 import { ApiError } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { formatDh } from '@/lib/money'
@@ -45,8 +45,8 @@ import { CloseSessionDialog, OpenSessionDialog } from './SessionDialogs'
 // B11 Guichet (DESIGN §Lot 3 adjustments): the till session, a walk-up sale and a cash code's collect, each paid
 // order then opened in the print view. Sale and collect need the caller's open till (else 409 POS_SESSION_REQUIRED).
 
-/** Lot 5 step 3 (Q187): PASS places are issued by the pass job, never sold at a till (422 on the item). */
-const sellable = (prices: Price[]) => prices.filter((p) => p.audience !== 'PASS')
+/** PASS (Lot 5 step 3) and INVITE (step 4) places are never sold at a till (422 on the item). */
+const sellable = (prices: Price[]) => prices.filter(isSellable)
 
 /** Copy for a sale or collect error; PER_ACCOUNT_LIMIT says the cap. */
 function useErrorMessage() {

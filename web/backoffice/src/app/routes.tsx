@@ -6,6 +6,7 @@ import { DevicesPage } from '@/features/devices/DevicesPage'
 import { EventPage } from '@/features/events/EventPage'
 import { EventsPage } from '@/features/events/EventsPage'
 import { CashPage } from '@/features/finance/CashPage'
+import { InvitationPrintPage, InvitationsIndexPage, InvitationsPage } from '@/features/invitations/InvitationsPage'
 import { LiveIndexPage, LivePage } from '@/features/live/LivePage'
 import { RoomPage } from '@/features/room/RoomPage'
 import { ReconciliationPage } from '@/features/reconciliation/ReconciliationPage'
@@ -21,8 +22,14 @@ import { VenuesPage } from '@/features/venues/VenuesPage'
 
 export const routes: RouteObject[] = [
   { path: 'login', element: <LoginPage /> },
-  // POS slips print without the shell chrome. Both shells send a role to its landing page off its routes (CASHIER: /pos).
-  { element: <Shell bare />, children: [{ path: 'pos/print/:orderId', element: <PrintPage /> }] },
+  // POS and invitation slips print without the shell chrome. Both shells send a role to its landing page off its routes (CASHIER: /pos).
+  {
+    element: <Shell bare />,
+    children: [
+      { path: 'pos/print/:orderId', element: <PrintPage /> },
+      { path: 'events/:id/invitations/:orderId/print', element: <InvitationPrintPage /> },
+    ],
+  },
   {
     element: <Shell />,
     children: [
@@ -35,8 +42,10 @@ export const routes: RouteObject[] = [
       { path: 'events/:id/live', element: <LivePage /> },
       { path: 'events/:id/reconciliation', element: <ReconciliationPage /> },
       { path: 'events/:id/room', element: <RoomPage /> },
+      { path: 'events/:id/invitations', element: <InvitationsPage /> },
       { path: 'sales', element: <SalesIndexPage /> },
       { path: 'live', element: <LiveIndexPage /> },
+      { path: 'invitations', element: <InvitationsIndexPage /> },
       { path: 'products', element: <ProductsPage /> },
       { path: 'products/:id', element: <ProductPage /> },
       { path: 'devices', element: <DevicesPage /> },

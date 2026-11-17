@@ -1,0 +1,258 @@
+### Lot 5 step 4a demo, accreditations and invitations (IntelliJ HTTP client): plan lot-5 §12.1 Exit 4a (1)-(7) on one
+### instance; Lot5InvitationsFlowTest runs the same flow in CI.
+#
+# Start the backend with the dev profile on port 8080 (dev seed: ATLAS FC, Admin Dev +212600000001, Ops Dev
+# +212600000003, Finance Dev +212600000004, Grand Stade with Nord, Est, Honneur, Sud and gates P1-P7, P1 serving
+# Honneur; the manifest job runs every minute; WhatsApp goes to the log):
+#   docker compose up -d && SERVER_PORT=8080 GATE_MANIFEST_LEAD=2400h SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# GATE_MANIFEST_LEAD: a scanner gets an event's manifest only from starts_at minus this lead (default 3h). The demo
+# match is in January 2027, so 2400h (100 days) lets the scanner load it today (step 4); it changes nothing else.
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The press phones are made up.
+#
+# Step 1.4 creates the zone PRESSE once: on a re-run it answers 409/422 and 1.3 has already found it. 1.5 makes P1 serve
+# Honneur and PRESSE (P2-P7 don't: a press QR there scans MAUVAISE ZONE). Each run makes a new match, so the quotas
+# start afresh. At the end, backend/loadtest/check.sql must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@p1 = a7a5fc00-0000-4000-8000-000000000401
+@adminPhone = +212600000001
+@opsPhone = +212600000003
+@financePhone = +212600000004
+@nadiaPhone = +212611155001
+@salmaPhone = +212611155002
+@code = 123456
+
+### ---------- (0) logins ----------
+
+### 0.1 OPS (Ops Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 0.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 0.3 ADMIN (Admin Dev): ask for a code (revoke, step 6)
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 0.4 ADMIN: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("adminToken", response.body.token); %}
+
+### ---------- (1) B10 + B2: PRESSE (60) served by P1; "Presse" and "Invités" (Accès: Invitations) ----------
+
+### 1.1 OPS: the Grand Stade zones (Honneur, and PRESSE from an earlier run)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("honneurId", response.body.zones.find(z => z.code === "HONNEUR").id);
+     const presse = response.body.zones.find(z => z.code === "PRESSE");
+     if (presse) client.global.set("presseId", presse.id); %}
+
+### 1.2 OPS: zone PRESSE, capacity 60 -> 201 (first run only)
+POST {{base}}/org/venues/{{venue}}/zones
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"code": "PRESSE", "name": "Tribune de presse", "capacity": 60, "seated": true}
+
+> {% if (response.status === 201) client.global.set("presseId", response.body.id); %}
+
+### 1.3 OPS: P1 serves Honneur and PRESSE -> 200
+PUT {{base}}/org/gates/{{p1}}/zones
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_ids": [{{honneurId}}, {{presseId}}]}
+
+### 1.4 OPS: the match (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo invitations",
+ "starts_at": "2027-01-17T19:00:00Z", "metadata": {"opponent": "Démo"}}
+
+> {% client.global.set("match", response.body.id); %}
+
+### 1.5 OPS: "Presse" in PRESSE (Invitations, 0 DH, quota 40)
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{presseId}}, "name": "Presse", "price_mad": 0, "quota": 40, "audience": "INVITE"}
+
+> {% client.global.set("presseCat", response.body.id); %}
+
+### 1.6 OPS: "Invités" in Honneur (Invitations, quota 50)
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{honneurId}}, "name": "Invités", "price_mad": 0, "quota": 50, "audience": "INVITE"}
+
+> {% client.global.set("invitesCat", response.body.id); %}
+
+### 1.7 OPS: an INVITE price at 50 DH -> 422 VALIDATION_FAILED, reason INVITE_PRICE
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{honneurId}}, "name": "Invités payants", "price_mad": 5000, "quota": 5, "audience": "INVITE"}
+
+### 1.8 OPS: "Plein tarif" in Honneur (ALL, 300 DH), so fans have something to buy
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{honneurId}}, "name": "Plein tarif", "price_mad": 30000, "quota": 100}
+
+### 1.9 OPS: publish (DRAFT -> ON_SALE)
+POST {{base}}/org/events/{{match}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (2) B7: issue ----------
+
+### 2.1 OPS: 3 press accreditations, two on WhatsApp, one on paper -> 201 {status PAID, channel POS, total_mad 0}
+POST {{base}}/org/events/{{match}}/invitations
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"invitation_id": "{{$random.uuid}}", "items": [{"price_category_id": "{{presseCat}}", "qty": 3, "holders": [
+  {"name": "Nadia Berrada", "phone": "{{nadiaPhone}}"},
+  {"name": "Salma Tazi", "phone": "{{salmaPhone}}"},
+  {"name": "Karim El Idrissi"}]}]}
+
+> {% client.global.set("pressId", response.body.id); %}
+
+# 2.2 Idempotency: re-send 2.1 with "invitation_id": "{{pressId}}" -> 200, the same order, nothing new.
+
+### 2.3 OPS: 10 "Invités" for a partner, one name, no phone -> 201
+POST {{base}}/org/events/{{match}}/invitations
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"invitation_id": "{{$random.uuid}}", "items": [{"price_category_id": "{{invitesCat}}", "qty": 10, "holders": [
+  {"name": "Atlas Assurances"}, {"name": "Atlas Assurances"}, {"name": "Atlas Assurances"},
+  {"name": "Atlas Assurances"}, {"name": "Atlas Assurances"}, {"name": "Atlas Assurances"},
+  {"name": "Atlas Assurances"}, {"name": "Atlas Assurances"}, {"name": "Atlas Assurances"},
+  {"name": "Atlas Assurances"}]}]}
+
+> {% client.global.set("partnerId", response.body.id); %}
+
+### 2.4 OPS: B7 batches -> newest first; press tickets WHATSAPP, WHATSAPP, PAPER; partner tickets all PAPER; no phone
+GET {{base}}/org/events/{{match}}/invitations
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 2.5 OPS: "Imprimer" the partner slips -> 10 tickets with qr, category {name: "Invités"}, Cache-Control no-store
+GET {{base}}/org/invitations/{{partnerId}}/tickets
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 2.6 OPS: print the press batch -> 3 slips with qr, category "Presse" (Karim's is the paper one)
+GET {{base}}/org/invitations/{{pressId}}/tickets
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("karimTicket", response.body.tickets.find(t => t.holder_label === "Karim I.").id); %}
+
+### ---------- (3) Delivery ----------
+
+### 3.1 Nadia (journalist): code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{nadiaPhone}}"}
+
+### 3.2 Nadia: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{nadiaPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("nadiaToken", response.body.token); %}
+
+### 3.3 Nadia's Billets -> the press ticket in PRESSE with k_t. Salma downloads her PDF on W5 the same way. The backend
+### log shows both WhatsApp deliveries (simulated provider).
+GET {{base}}/fan/tickets?with_keys=true
+Authorization: Bearer {{nadiaToken}}
+
+### ---------- (4) Gate (offline scanner, by hand) ----------
+# Assign a scanner to P1 in B6 for this match. Nadia's QR at P1 -> VALIDÉ; at P3 -> MAUVAISE ZONE. A printed partner
+# slip at P1 -> VALIDÉ once, then DÉJÀ ENTRÉ. After the sync, B5 shows PRESSE entered 1.
+
+### 4.1 B5: reconciliation -> zones PRESSE {sold 3, entered 1 after Nadia's scan}
+GET {{base}}/org/events/{{match}}/reconciliation
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (5) Quota ----------
+
+### 5.1 OPS: 38 more press places would make 41 -> 409 SOLD_OUT ("Plus de places Presse"), nothing written
+POST {{base}}/org/events/{{match}}/invitations
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"invitation_id": "{{$random.uuid}}", "items": [{"price_category_id": "{{presseCat}}", "qty": 38, "holders": [
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"}, {"name": "Presse Locale"},
+  {"name": "Presse Locale"}, {"name": "Presse Locale"}]}]}
+
+### 5.2 W2 / screen 2: the fan event -> zones show "Plein tarif" only; from_price_mad 30000; no INVITE category
+GET {{base}}/fan/events/{{match}}
+
+### ---------- (6) Revoke ----------
+
+### 6.1 ADMIN: revoke Karim's paper accreditation -> 200 REFUNDED, refund null; the place goes back to "Presse"
+POST {{base}}/org/tickets/{{karimTicket}}/refund
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "Accréditation annulée"}
+
+### 6.2 B12 "Remboursements à faire" -> no line for this match (the next manifest delta makes the slip ANNULÉ)
+GET {{base}}/org/refunds?event_id={{match}}
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+
+### 6.3 B3: /sales -> paid 13 (methods FREE 13), refunded 1, refunded_mad 0. Then (7): run check.sql (header): no rows.
+GET {{base}}/org/events/{{match}}/sales
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}

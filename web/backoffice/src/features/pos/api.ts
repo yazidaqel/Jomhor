@@ -31,6 +31,8 @@ export type PrintTicket = {
   gate_codes: string[]
   holder_label: string | null
   unit_price_mad: number
+  /** Lot 5 step 4: the price category ("Presse"), printed in place of the price on a 0 DH slip (an invitation). */
+  category: { name: string }
   /** The static v1 token, as on the PDF; null unless VALID. Rendered as is, never decoded. */
   qr: string | null
 }
@@ -178,6 +180,18 @@ export function holderField(key: string, items: readonly { qty: number }[], same
 
 type Messages = (k: 'pos.sale.nameInvalid' | 'pos.sale.phoneInvalid') => string
 
+/**
+ * Holder rows as B11 (and B7) check them: with "même nom" only the first row is shown and sent for every place
+ * (saleItems), so only it is checked. 04-api §Holder names (Latin or Arabic, one script, 2-60): the same rule as the
+ * server, which has the last word; a phone is optional.
+ */
+export function checkHolders(holders: Holder[], sameName: boolean, ctx: z.RefinementCtx, t: Messages) {
+  ;(sameName ? holders.slice(0, 1) : holders).forEach((h, i) => {
+    if (normalizeHolderName(h.name) === null) ctx.addIssue({ code: 'custom', path: ['holders', i, 'name'], message: t('pos.sale.nameInvalid') })
+    if (h.phone.trim() !== '' && normalizePhone(h.phone) === null) ctx.addIssue({ code: 'custom', path: ['holders', i, 'phone'], message: t('pos.sale.phoneInvalid') })
+  })
+}
+
 /** The Vente form (B11); `t` gives the two messages. */
 export function saleSchema(t: Messages) {
   const holder = z.object({ name: z.string(), phone: z.string() })
@@ -189,14 +203,6 @@ export function saleSchema(t: Messages) {
       holders: z.array(holder),
       received: z.string(),
     })
-    .superRefine((v, ctx) => {
-      // With "même nom" only the first row is shown and sent for every place (saleItems): only it is checked.
-      const rows = v.same_name ? v.holders.slice(0, 1) : v.holders
-      rows.forEach((h, i) => {
-        // 04-api §Holder names (Latin or Arabic, one script, 2-60): the same rule as the server, which has the last word.
-        if (normalizeHolderName(h.name) === null) ctx.addIssue({ code: 'custom', path: ['holders', i, 'name'], message: t('pos.sale.nameInvalid') })
-        if (h.phone.trim() !== '' && normalizePhone(h.phone) === null) ctx.addIssue({ code: 'custom', path: ['holders', i, 'phone'], message: t('pos.sale.phoneInvalid') })
-      })
-    })
+    .superRefine((v, ctx) => checkHolders(v.holders, v.same_name, ctx, t))
 }
 export type SaleValues = z.input<ReturnType<typeof saleSchema>>

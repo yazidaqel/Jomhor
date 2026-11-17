@@ -1,6 +1,7 @@
 package ma.jomhor.tickets.application;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -85,8 +86,8 @@ public class TicketAdminService {
 
     /**
      * 04 POST /org/tickets/{id}/refund: VALID or BLOCKED → REFUNDED, its place released (sold − 1) and a REQUIRED
-     * refund of the item's unit price, in one transaction. The order stays PAID, and the place no longer counts in its
-     * buyer's per_account_limit (plan lot-5 Q175, sales' Orders.held).
+     * refund of the item's unit price (none when that is 0), in one transaction. The order stays PAID, and the place
+     * no longer counts in its buyer's per_account_limit (plan lot-5 Q175, sales' Orders.held).
      */
     @Transactional
     public Tickets.Row refund(UUID org, UUID user, UUID ticketId, String reason) {
@@ -95,9 +96,14 @@ public class TicketAdminService {
         tickets.setStatus(org, ticketId, Ticket.Status.REFUNDED);
         inventory.release(List.of(new Inventory.Hold(org, t.eventId(), t.priceCategoryId(), 1)));
         long amountMad = tickets.row(org, ticketId).orElseThrow().unitPriceMad();
-        UUID refundId = refunds.request(org, user, t.eventId(), ticketId, t.orderId(), amountMad, r);
-        audit.staff(org, user, "ticket.refund", ticketId.toString(), json.writeValueAsString(
-                Map.of("reason", r, "refund_id", refundId.toString(), "amount_mad", amountMad)));
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("reason", r);
+        if (amountMad > 0) { // 04 Lot 5 step 4: a FREE place (pass ticket, invitation) owes nothing, so no refunds row
+            UUID refundId = refunds.request(org, user, t.eventId(), ticketId, t.orderId(), amountMad, r);
+            details.put("refund_id", refundId.toString());
+        }
+        details.put("amount_mad", amountMad);
+        audit.staff(org, user, "ticket.refund", ticketId.toString(), json.writeValueAsString(details));
         return tickets.row(org, ticketId).orElseThrow();
     }
 

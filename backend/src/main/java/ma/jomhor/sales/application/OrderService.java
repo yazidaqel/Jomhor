@@ -50,9 +50,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>Lock order on one order, everywhere: the payment row (payments' callback) → the order row → its member order
  * rows (a split, 04 §Split pay) → the buyer lock → price categories in UUID order. Placing an order (online or at a
- * till) takes the holders' users rows (sorted phones) → the per-account locks (online: the buyer, split members and
- * every holder account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till) → categories;
- * the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
+ * till, or an invitation, which first takes its invitation_id lock, {@link Orders#lockInvitationId}) takes the
+ * holders' users rows (sorted phones) → the per-account locks (online: the buyer, split members and every holder
+ * account, in the order of their lock keys, {@link Orders#lockAccounts}; none at a till or for an invitation) →
+ * categories; the expiry claims order rows with skip locked (it never waits for one) → categories. A transfer (tickets) takes the
  * ticket row → the recipient's users row → the recipient's per-account lock ({@link HolderLimit}) and no category.
  * A product order (04 §Products) takes no per-account order lock and no category; settling a MEMBERSHIP one takes the
  * organizer's membership lock after the order row. A PASS purchase takes the account's series lock → the product row
@@ -73,6 +74,8 @@ public class OrderService {
     static final Duration PAYMENT_GRACE = Duration.ofMinutes(20);
     /** docs/04-api.md GET /fan/orders: at most 20. */
     static final int FAN_LIST_MAX = 20;
+    /** docs/04-api.md POST /org/events/{id}/invitations: at most 500 places per request. */
+    static final int INVITATION_MAX = 500;
 
     /** {@code holders} as sent: validated and resolved by {@link #place}. */
     public record ItemRequest(UUID priceCategoryId, int qty, List<HolderRequest> holders) {}
@@ -286,6 +289,41 @@ public class OrderService {
         Map<UUID, SalePrice> taken = inventory.reserve(org, eventId, checked.qty());
         List<Order.Item> lines = lines(items, checked.holders(), taken, byPhone, null, h -> true);
         return orders.insertPos(orderId, org, eventId, total(lines), lines)
+                .map(o -> {
+                    issue(o, taken);
+                    return new View(o, taken, tickets.ofOrder(org, o.id()), null, null, null, null);
+                });
+    }
+
+    /**
+     * Steps 3 to 5 and the writes of an invitation (04 POST /org/events/{id}/invitations), in the caller's transaction
+     * (invitations checked the event and its window): the {@link #placePos} skeleton with INVITE categories only (each
+     * at most once, 422 on items[i].price_category_id), at most {@link #INVITATION_MAX} places (422 on items), holders
+     * as a till's with no {@code pays} (422), no limit of any kind, then holder accounts (sorted phones) → INVITE
+     * categories ({@link Inventory#takeInvite}, 409 SOLD_OUT) → the PAID FREE order invited by {@code staffUserId},
+     * its tickets and a delivery per holder with an account. Empty if {@code orderId} is already an order id.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Optional<View> placeInvitation(UUID org, UUID staffUserId, UUID orderId, int eventId,
+                                          List<ItemRequest> items) {
+        Map<UUID, SalePrice> invite = byId(inventory.prices(org, eventId).stream()
+                .filter(p -> p.audience() == Event.Audience.INVITE).toList());
+        Map<UUID, Integer> qty = categories(invite, items);
+        if (qty.values().stream().mapToLong(Integer::longValue).sum() > INVITATION_MAX) {
+            throw invalid("items", "at most " + INVITATION_MAX + " places");
+        }
+        List<List<HolderRequest>> holders = validHolders(items, null);
+        for (int i = 0; i < holders.size(); i++) {
+            for (int j = 0; j < holders.get(i).size(); j++) {
+                if (holders.get(i).get(j).pays()) {
+                    throw invalid("items[%d].holders[%d].pays".formatted(i, j), "no split pay on an invitation");
+                }
+            }
+        }
+        Map<String, UUID> byPhone = phones(holders); // users rows before categories (lock order)
+        Map<UUID, SalePrice> taken = inventory.takeInvite(org, eventId, qty);
+        List<Order.Item> lines = lines(items, holders, taken, byPhone, null, h -> true);
+        return orders.insertInvitation(orderId, org, eventId, staffUserId, lines)
                 .map(o -> {
                     issue(o, taken);
                     return new View(o, taken, tickets.ofOrder(org, o.id()), null, null, null, null);
@@ -748,8 +786,18 @@ public class OrderService {
      * one place without {@code pays} (422 on items, NO_BUYER_PLACE). {@code buyerPhone}: null at a till.
      */
     private static Checked check(Map<UUID, SalePrice> ofEvent, List<ItemRequest> items, String buyerPhone) {
+        Map<UUID, Integer> qty = categories(ofEvent, items);
+        long places = qty.values().stream().mapToLong(Integer::longValue).sum();
+        List<List<HolderRequest>> holders = validHolders(items, buyerPhone);
+        if (holders.stream().flatMap(List::stream).allMatch(HolderRequest::pays)) {
+            throw invalid("items", "at least one place the buyer pays for", "NO_BUYER_PLACE");
+        }
+        return new Checked(qty, places, holders);
+    }
+
+    /** qty per category: each one of {@code ofEvent}, at most once (422 on items[i].price_category_id). */
+    private static Map<UUID, Integer> categories(Map<UUID, SalePrice> ofEvent, List<ItemRequest> items) {
         Map<UUID, Integer> qty = new LinkedHashMap<>();
-        long places = 0;
         for (int i = 0; i < items.size(); i++) {
             ItemRequest item = items.get(i);
             if (!ofEvent.containsKey(item.priceCategoryId())) {
@@ -758,13 +806,8 @@ public class OrderService {
             if (qty.put(item.priceCategoryId(), item.qty()) != null) {
                 throw invalid("items[%d].price_category_id".formatted(i), "duplicate price category");
             }
-            places += item.qty();
         }
-        List<List<HolderRequest>> holders = validHolders(items, buyerPhone);
-        if (holders.stream().flatMap(List::stream).allMatch(HolderRequest::pays)) {
-            throw invalid("items", "at least one place the buyer pays for", "NO_BUYER_PLACE");
-        }
-        return new Checked(qty, places, holders);
+        return qty;
     }
 
     private static long total(List<Order.Item> lines) {

@@ -47,8 +47,13 @@ export type EventWrite = Omit<EventDetail, 'pass_tickets'>
 /**
  * Lot 5 step 2: MEMBERS = each place held by a live member who joined before the sale opened (04 POST /fan/orders).
  * Lot 5 step 3: PASS = places of the series' season-pass holders, issued by the pass job, never sold; price 0.
+ * Lot 5 step 4: INVITE = places issued from Accréditations (04 §Invitations), never sold; price 0.
  */
-export const PRICE_AUDIENCES = ['ALL', 'MEMBERS', 'PASS'] as const
+export const PRICE_AUDIENCES = ['ALL', 'MEMBERS', 'PASS', 'INVITE'] as const
+/** Sold to fans and at a till (04 §Invitations: PASS and INVITE never are). */
+export const sellable = (p: Pick<Price, 'audience'>) => p.audience === 'ALL' || p.audience === 'MEMBERS'
+/** Always 0 DH, price fixed (04 PASS_PRICE, INVITE_PRICE). */
+export const isFree = (a: PriceAudience) => a === 'PASS' || a === 'INVITE'
 export type PriceAudience = (typeof PRICE_AUDIENCES)[number]
 /** `zone`: read-only (Lot 3), so a till can tell two zones' "Plein tarif" apart without the venue (CASHIER can't read it). */
 export type Price = {

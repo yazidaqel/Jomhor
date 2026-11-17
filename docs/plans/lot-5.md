@@ -1,6 +1,6 @@
 # Lot 5 · Organizer platform: implementation plan
 
-As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 3, §11): BE-61, FL-32, WS-17, BO-25, Q202, P142; next migration V29 (step 3 takes V29–V32). Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
+As of 2026-11-13 · owner: tech-lead · status: **agreed 2026-11-13** by the founder, with three amendments: no dependency on AWS or any hosting provider for now; Lot 5 stays one lot (steps 1–5); the capacity test is deferred (step 1 is proven locally and in CI). §4 as amended here is applied to `docs/` and `design/`. V22 is the latest migration (`V22__campaigns.sql`), so Lot 5 starts at V23. Next ids (after step 4, §12): BE-67, FL-33, WS-18, BO-27, Q222, P155; next migration V36. Only step 1 is detailed here; steps 2 to 5 are an outline (§9).
 
 ## 1. Lot
 
@@ -1893,3 +1893,4 @@ None. The 500-place limit is a 04 rule, not a knob.
 | Multi-zone / re-entry accreditations | post-V1 (scanner and manifest change) | Q203 |
 | CSV paste for bulk invitations, generated single-use codes, codes at the till | when the club asks | §12.8 |
 | Plan header line 3 says "next migration V29" | W0-1 | P154 |
+| B7 "Imprimer" prints every ticket of a batch (WhatsApp ones and revoked ones too, the latter as "non valable"); print only `PAPER` tickets if clubs ask (add `delivery` to the print data) | when a club asks | BO-25 real run |

@@ -40,7 +40,6 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -64,13 +63,12 @@ const POS_ROLES: readonly Role[] = ['ADMIN', 'OPS', 'CASHIER']
 const home = (role: Role) => (role === 'CASHIER' ? '/pos' : '/')
 const allowed = (role: Role, pathname: string) => (/^\/pos(\/|$)/.test(pathname) ? POS_ROLES.includes(role) : role !== 'CASHIER')
 
-type Section = 'overview' | 'events' | 'sales' | 'products' | 'liveGates' | 'venues' | 'devices' | 'pos' | 'finance' | 'crm'
-type NavKey = Section | 'invitations'
-// no `to`: lit up in a later lot; `roles`: shown to these roles only (the API answers 403 to the others); no `roles`:
-// every role but CASHIER.
-type NavItem = { key: NavKey; icon: LucideIcon; to?: string; roles?: readonly Role[] }
+type Section = 'overview' | 'events' | 'sales' | 'products' | 'liveGates' | 'venues' | 'devices' | 'pos' | 'invitations' | 'finance' | 'crm'
+// `roles`: shown to these roles only (the API answers 403 to the others); no `roles`: every role but CASHIER.
+type NavItem = { key: Section; icon: LucideIcon; to: string; roles?: readonly Role[] }
 // Lit up lot by lot: Événements and Paramètres › Lieux in Lot 0, Ventes in Lot 1, Portes en direct and Appareils in Lot 2,
-// Guichet and Finance (its Encaissements page) in Lot 3, Fans · CRM in Lot 4, Abonnements in Lot 5 step 3.
+// Guichet and Finance (its Encaissements page) in Lot 3, Fans · CRM in Lot 4, Abonnements in Lot 5 step 3,
+// Accréditations in step 4.
 const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: NavItem[] }[] = [
   {
     group: 'manage',
@@ -93,7 +91,7 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
   {
     group: 'relations',
     items: [
-      { key: 'invitations', icon: IdCard },
+      { key: 'invitations', icon: IdCard, to: '/invitations', roles: ['ADMIN', 'OPS', 'FINANCE'] },
       { key: 'finance', icon: Landmark, to: '/finance/cash', roles: ['ADMIN', 'OPS', 'FINANCE'] },
       { key: 'crm', icon: Users, to: '/crm', roles: ['ADMIN', 'OPS', 'FINANCE'] },
     ],
@@ -101,7 +99,10 @@ const NAV: { group: 'manage' | 'matchday' | 'relations' | 'settings'; items: Nav
   { group: 'settings', items: [{ key: 'venues', icon: MapPin, to: '/settings/venues' }] },
 ]
 
-/** `/events/:id/sales` and `/events/:id/live` live under Événements in the URL but under Ventes / Portes en direct in the sidebar. */
+/**
+ * `/events/:id/sales`, `/events/:id/live` and `/events/:id/invitations` live under Événements in the URL but under
+ * Ventes / Portes en direct / Accréditations in the sidebar.
+ */
 const section = (pathname: string): Section | null =>
   pathname === '/'
     ? 'overview'
@@ -109,7 +110,9 @@ const section = (pathname: string): Section | null =>
       ? 'sales'
       : /^\/(live|events\/[^/]+\/live)\/?$/.test(pathname)
         ? 'liveGates'
-        : pathname.startsWith('/events')
+        : /^\/(invitations|events\/[^/]+\/invitations)(\/|$)/.test(pathname)
+          ? 'invitations'
+          : pathname.startsWith('/events')
           ? 'events'
           : pathname.startsWith('/settings/venues')
             ? 'venues'
@@ -208,32 +211,17 @@ function AppSidebar({ active, role }: { active: Section | null; role: Role }) {
                 <SidebarMenu>
                   {items.map(({ key, icon: Icon, to }) => (
                     <SidebarMenuItem key={key}>
-                      {to ? (
-                        <SidebarMenuButton
-                          asChild
-                          isActive={active === key}
-                          tooltip={iconMode ? t(`nav.${key}`) : undefined}
-                          className="transition-[background-color,box-shadow,width,height,padding] duration-[220ms] data-[active=true]:font-semibold data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
-                        >
-                          <Link to={to} aria-current={active === key ? 'page' : undefined} onClick={closeSheet}>
-                            <Icon />
-                            <span>{t(`nav.${key}`)}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      ) : (
-                        <>
-                          {/* aria-disabled, not disabled: stays focusable, so icon mode can still say what it is and that it comes later. */}
-                          <SidebarMenuButton
-                            aria-disabled="true"
-                            tooltip={iconMode ? t('nav.soonLabel', { label: t(`nav.${key}`) }) : undefined}
-                            className="aria-disabled:pointer-events-auto aria-disabled:cursor-default aria-disabled:hover:bg-transparent"
-                          >
-                            <Icon />
-                            <span>{t(`nav.${key}`)}</span>
-                          </SidebarMenuButton>
-                          <SidebarMenuBadge className="text-[10px] font-medium text-muted-foreground">{t('nav.soon')}</SidebarMenuBadge>
-                        </>
-                      )}
+                      <SidebarMenuButton
+                        asChild
+                        isActive={active === key}
+                        tooltip={iconMode ? t(`nav.${key}`) : undefined}
+                        className="transition-[background-color,box-shadow,width,height,padding] duration-[220ms] data-[active=true]:font-semibold data-[active=true]:shadow-[inset_2px_0_0_var(--sidebar-primary)]"
+                      >
+                        <Link to={to} aria-current={active === key ? 'page' : undefined} onClick={closeSheet}>
+                          <Icon />
+                          <span>{t(`nav.${key}`)}</span>
+                        </Link>
+                      </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
                 </SidebarMenu>
