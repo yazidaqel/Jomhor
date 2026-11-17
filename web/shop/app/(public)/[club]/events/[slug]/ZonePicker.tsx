@@ -7,7 +7,9 @@ import { fmt, type Dict } from '@/lib/i18n'
 import { formatDh } from '@/lib/money'
 import { mmss } from '@/lib/queue'
 import { useAdmission, useHeldPlace, useServerClock } from '@/lib/queue-hooks'
+import { firstOpen } from '@/lib/venue-map'
 import { ArrowIcon, CheckIcon } from '../../../../icons'
+import { StageMap } from './StageMap'
 import { WaitlistPanel, type WaitlistView } from './Waitlist'
 
 type Copy = Pick<Dict, 'event' | 'order' | 'meta' | 'room' | 'waitlist' | 'errors'>
@@ -46,10 +48,13 @@ const BARS = ['bg-zone-a', 'bg-zone-b', 'bg-zone-c']
  * ("Accès par la file") and the summary becomes the room panel, which flips to "Rejoindre la file" at `opens_at`.
  * A `MEMBERS` price shows the "Membres" chip and `membersNote`; nothing is pre-blocked (the server decides, Lot 5 step 2).
  * `waitlist` (Lot 5 step 2) = sold out, on sale, no room: the summary becomes the waitlist panel.
+ * `layout` (venue map) = the venue's template: the map sits between the title and the grid, and a block tap selects the
+ * zone's first open price card (cheapest `ALL`, else cheapest `MEMBERS`). The group copy sits under the stepper.
  */
 export function ZonePicker({
   eventId,
   zones,
+  layout = null,
   limit,
   closed,
   room = null,
@@ -60,6 +65,7 @@ export function ZonePicker({
 }: {
   eventId: number
   zones: Zone[]
+  layout?: string | null
   limit: number
   closed: string | null
   room?: RoomView | null
@@ -78,6 +84,7 @@ export function ZonePicker({
     z.prices.map((p) => ({
       ...p,
       zone: z.name,
+      zi: i,
       detail: [z.prices.length > 1 ? p.name : null, z.seated ? copy.event.seated : copy.event.standing, gates(z, copy)]
         .filter(Boolean)
         .join(' · '),
@@ -98,6 +105,14 @@ export function ZonePicker({
         <h2 id="zones-title" className="font-display text-[32px] font-bold uppercase leading-none">
           {copy.event.zonesTitle}
         </h2>
+        <StageMap
+          layout={layout}
+          zones={zones}
+          selected={opt?.zi ?? null}
+          disabled={!!closed || gated}
+          onPick={(i) => setSelected(firstOpen(zones[i]?.prices ?? [])?.price_category_id ?? null)}
+          copy={copy.event}
+        />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {options.map((o, i) => {
             const soldOut = o.remaining === 0
@@ -182,6 +197,9 @@ export function ZonePicker({
                   <Step label={copy.order.more} disabled={n >= max} onClick={() => setQty(n + 1)} path="M5 12h14M12 5v14" />
                 </div>
               </div>
+              <p data-group className="text-xs text-text-muted">
+                {copy.order.group}
+              </p>
               <Line left={fmt(copy.order.line, { qty: n, price: formatDh(opt.price_mad) })} right={formatDh(total)} />
               <Line left={copy.order.fee} right={formatDh(0)} />
               <hr className="border-border" />

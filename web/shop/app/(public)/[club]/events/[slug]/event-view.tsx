@@ -121,6 +121,7 @@ export function EventView({ e, now, d, signedIn = false }: { e: ShopEventDetail;
       <ZonePicker
         eventId={e.id}
         zones={e.zones}
+        layout={e.layout}
         limit={e.per_account_limit}
         closed={state === 'ON_SALE' ? null : saleLabel(d, e, state)}
         room={roomView(e, now, d, signedIn)}

@@ -112,6 +112,13 @@ export const fr = {
     members: 'Membres',
     membersNote: 'Tarif membres · inscrits avant le {date}',
     membersNoteAny: 'Tarif membres · réservé aux membres du club',
+    map: 'Plan du lieu',
+    mapField: 'Terrain',
+    mapStage: 'Scène',
+    mapFrom: 'dès {price}',
+    mapBlock: '{zone}, dès {price}',
+    mapSoldOut: '{zone}, complet',
+    mapMembers: ', membres',
   },
   steps: {
     label: 'Étapes de ta commande',
@@ -134,6 +141,7 @@ export const fr = {
     total: 'Total',
     cta: 'Continuer',
     hold: 'Places réservées 8 minutes après cette étape',
+    group: "Toutes les places d'un achat sont dans la même zone, en placement libre : arrivez ensemble pour être côte à côte. Chaque ami reçoit son propre QR.",
   },
   room: {
     metaTitle: "File d'attente",
