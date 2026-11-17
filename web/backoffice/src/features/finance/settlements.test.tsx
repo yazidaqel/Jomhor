@@ -80,6 +80,9 @@ const LIST: Settlements = {
   settings: { legal_name: 'Atlas Football Club SA', ice: '001234567000089', rib_last4: '4821', fee_rate_bp: 500, start_on: '2026-11-01' },
   open: { since: '2026-11-29T00:00:00Z', collected_mad: 25_000, till_mad: 0, payments: 1 },
   refunds_required: { count: 2, amount_mad: 30_000 },
+  // Every DUE statement, whatever the range: the three below plus one older (250 DH), outside the shown range.
+  due: { count: 4, amount_mad: 14_000 + 370_000 + 94_000 + 25_000 },
+  vat_rate_bp: 2000,
   settlements: [SAT, FRI, THU, LATE, PAID],
 }
 const line = (l: Partial<SettlementDetail['lines'][number]> & Pick<SettlementDetail['lines'][number], 'title' | 'method' | 'collector' | 'payments' | 'amount_mad'>) => ({
@@ -211,7 +214,7 @@ it('settings null: the "pas encore activés" empty state, no KPI, no table', asy
   expect(screen.queryByRole('button', { name: fr.finance.settlements.export })).toBeNull()
 })
 
-it('KPIs: open from `open`, À recevoir = Σ DUE payouts with the late count, refunds from `refunds_required` linking to Ventes', async () => {
+it('KPIs: open from `open`, À recevoir from `due`, refunds from `refunds_required` linking to Ventes', async () => {
   stubApi('FINANCE')
   renderApp('/finance/settlements')
   await screen.findByRole('heading', { name: fr.finance.settlements.list.title })
@@ -223,9 +226,8 @@ it('KPIs: open from `open`, À recevoir = Σ DUE payouts with the late count, re
   expect(open.getByText(spaced(i18n.t('finance.settlements.kpi.openSince', { count: 1, date: day('2026-11-29') })))).toBeTruthy()
 
   const due = kpi(fr.finance.settlements.kpi.due)
-  expect(due.getByText(spaced(dh(14_000 + 370_000 + 94_000)))).toBeTruthy() // the three DUE rows; NONE and PAID left out
-  expect(due.getByText(spaced(i18n.t('finance.settlements.kpi.dueHint', { count: 3 })))).toBeTruthy()
-  expect(due.getByText(spaced(i18n.t('finance.settlements.kpi.dueLate', { count: 1 }))).className).toContain('text-destructive')
+  expect(due.getByText(spaced(dh(503_000)))).toBeTruthy()
+  expect(due.getByText(spaced(i18n.t('finance.settlements.kpi.dueHint', { count: 4 })))).toBeTruthy()
 
   const refunds = kpi(fr.finance.settlements.kpi.refunds)
   expect(refunds.getByText(spaced(i18n.t('finance.settlements.kpi.refundsValue', { count: 2, amount: dh(30_000) })))).toBeTruthy()
@@ -262,7 +264,7 @@ it('row → sheet: the lines grouped by event or product; the formula shows the 
   expect(pairs).toEqual([
     [fr.finance.settlements.formula.collected, dh(400_000)],
     [i18n.t('finance.settlements.formula.feeHt', { rate: '5' }), i18n.t('finance.settlements.formula.minus', { amount: dh(25_000) })],
-    [fr.finance.settlements.formula.vat, i18n.t('finance.settlements.formula.minus', { amount: dh(5000) })],
+    [i18n.t('finance.settlements.formula.vat', { rate: '20' }), i18n.t('finance.settlements.formula.minus', { amount: dh(5000) })],
     [fr.finance.settlements.formula.carried, dh(0)],
     [fr.finance.settlements.formula.payout, dh(123_456)],
   ])
@@ -410,4 +412,22 @@ it('OPS: no Relevés tab, /finance opens Encaissements, /finance/settlements red
   await router.navigate('/finance/settlements')
   await waitFor(() => expect(router.state.location.pathname).toBe('/finance/cash'))
   expect(calls.filter((c) => c.path.startsWith('/org/finance/settlements'))).toEqual([])
+})
+
+it('À recevoir is `due` as sent, not a sum of the shown rows: a range with no DUE row still shows every DUE statement', async () => {
+  stubApi('FINANCE', (c) => (c.path.startsWith('/org/finance/settlements?') ? Response.json({ ...LIST, settlements: [FRI, PAID], due: { count: 1, amount_mad: 25_000 } }) : undefined))
+  renderApp('/finance/settlements')
+  await screen.findByRole('heading', { name: fr.finance.settlements.list.title })
+  const due = within(screen.getByText(fr.finance.settlements.kpi.due).closest('[data-slot="card"]') as HTMLElement)
+  expect(due.getByText(spaced(dh(25_000)))).toBeTruthy()
+  expect(due.getByText(spaced(i18n.t('finance.settlements.kpi.dueHint', { count: 1 })))).toBeTruthy()
+})
+
+it('the VAT line reads the rate from `vat_rate_bp`', async () => {
+  const user = userEvent.setup()
+  stubApi('FINANCE', (c) => (c.path.startsWith('/org/finance/settlements?') ? Response.json({ ...LIST, vat_rate_bp: 1050 }) : undefined))
+  renderApp('/finance/settlements')
+  const sheet = await openSheet(user, '2026-11-26')
+  expect(await sheet.findByText(i18n.t('finance.settlements.formula.vat', { rate: '10,5' }))).toBeTruthy()
+  expect(sheet.queryByText(/TVA \(20/u)).toBeNull()
 })

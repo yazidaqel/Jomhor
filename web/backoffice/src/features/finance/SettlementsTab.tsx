@@ -18,7 +18,7 @@ import { invoicePdfPath, settlementsCsvPath, useOrgDownload, useSettlements, typ
 /**
  * B8 Finance › Relevés (Lot 5 step 5b, 04 §Finance): the contract card, what is not yet in a statement, what Jomhor
  * still owes, and the daily statements of the range. ADMIN and FINANCE only (`FinancePage` keeps OPS out). Every amount
- * is the server's; the only client sums are integer additions of server centimes (frais TTC, À recevoir).
+ * is the server's; the only client sum is frais TTC, an integer addition of the server's HT and VAT centimes.
  */
 export function SettlementsTab({ zone }: { zone: string }) {
   const { t } = useTranslation()
@@ -76,6 +76,7 @@ export function SettlementsTab({ zone }: { zone: string }) {
           key={sheet.n}
           id={sheet.id}
           zone={data.timezone}
+          vatRateBp={data.vat_rate_bp}
           open={sheet.open}
           onOpenChange={(open) => setSheet((s) => s && { ...s, open })}
           onInvoice={invoice}
@@ -124,9 +125,7 @@ function ContractCard({ settings }: { settings: NonNullable<Settlements['setting
 function Kpis({ data }: { data: Settlements }) {
   const { t, i18n } = useTranslation()
   const dh = (centimes: number) => t('sales.amount', { amount: formatDh(centimes, i18n.language) })
-  const due = data.settlements.filter((s) => s.status === 'DUE')
-  const late = due.filter((s) => s.overdue).length
-  const { open, refunds_required: refunds } = data
+  const { open, due, refunds_required: refunds } = data
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {open && (
@@ -138,9 +137,8 @@ function Kpis({ data }: { data: Settlements }) {
           </span>
         </Kpi>
       )}
-      <Kpi index={1} icon={HandCoins} label={t('finance.settlements.kpi.due')} value={dh(due.reduce((a, s) => a + s.payout_mad, 0))}>
-        <span>{t('finance.settlements.kpi.dueHint', { count: due.length })}</span>
-        {late > 0 && <span className="font-medium text-destructive">{t('finance.settlements.kpi.dueLate', { count: late })}</span>}
+      <Kpi index={1} icon={HandCoins} label={t('finance.settlements.kpi.due')} value={dh(due.amount_mad)}>
+        <span>{t('finance.settlements.kpi.dueHint', { count: due.count })}</span>
       </Kpi>
       <Kpi index={2} icon={Undo2} label={t('finance.settlements.kpi.refunds')} value={t('finance.settlements.kpi.refundsValue', { count: refunds.count, amount: dh(refunds.amount_mad) })}>
         <span>{t('finance.settlements.kpi.refundsHint')}</span>

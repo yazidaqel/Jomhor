@@ -53,6 +53,8 @@ export function StatusBadge({ settlement: s, zone }: { settlement: Settlement; z
 export function SettlementSheet(props: {
   id: string
   zone: string
+  /** The list's `vat_rate_bp` (the statement row does not carry it). */
+  vatRateBp: number
   open: boolean
   onOpenChange: (open: boolean) => void
   onInvoice: (inv: { id: string; number: string }) => void
@@ -83,7 +85,7 @@ export function SettlementSheet(props: {
             <ErrorNotice error={detail.error} onRetry={() => void detail.refetch()} className="px-0" />
           ) : (
             <>
-              <Formula s={detail.data} />
+              <Formula s={detail.data} vatRateBp={props.vatRateBp} />
               <Payout s={detail.data} zone={props.zone} onInvoice={props.onInvoice} busy={props.busy} />
               <Lines lines={detail.data.lines} />
             </>
@@ -108,13 +110,13 @@ export function SettlementSheet(props: {
 }
 
 /** "En ligne − Frais HT − TVA + Report = À verser", each figure as the server stored it: no money maths here. */
-function Formula({ s }: { s: SettlementDetail }) {
+function Formula({ s, vatRateBp }: { s: SettlementDetail; vatRateBp: number }) {
   const { t, i18n } = useTranslation()
   const dh = (centimes: number) => t('sales.amount', { amount: formatDh(centimes, i18n.language) })
   const rows: [string, string, string?][] = [
     [t('finance.settlements.formula.collected'), dh(s.collected_mad)],
     [t('finance.settlements.formula.feeHt', { rate: formatBp(s.fee_rate_bp, i18n.language) }), t('finance.settlements.formula.minus', { amount: dh(s.fee_ht_mad) })],
-    [t('finance.settlements.formula.vat'), t('finance.settlements.formula.minus', { amount: dh(s.fee_vat_mad) })],
+    [t('finance.settlements.formula.vat', { rate: formatBp(vatRateBp, i18n.language) }), t('finance.settlements.formula.minus', { amount: dh(s.fee_vat_mad) })],
     [t('finance.settlements.formula.carried'), dh(s.carried_in_mad), s.carried_in_mad < 0 ? 'text-destructive' : undefined],
   ]
   return (

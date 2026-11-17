@@ -153,6 +153,10 @@ export type Settlements = {
   /** `SUCCEEDED` payments not yet in a statement, since `since` (an instant: the start of a local day). */
   open: { since: string; collected_mad: number; till_mad: number; payments: number } | null
   refunds_required: { count: number; amount_mad: number }
+  /** Every `DUE` statement of the organizer, whatever the range ("À recevoir"). */
+  due: { count: number; amount_mad: number }
+  /** Config `finance.vat-rate-bp`: the VAT rate on the fee. */
+  vat_rate_bp: number
   /** Newest `day` first. */
   settlements: Settlement[]
 }
