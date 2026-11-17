@@ -121,7 +121,11 @@ export default async function CheckoutPage({ searchParams }: Props) {
         <hr className="border-border" />
         <p className="flex items-baseline justify-between">
           <span className="font-semibold">{d.checkout.total}</span>
-          <span data-list-total className="font-display text-[34px] font-extrabold leading-none group-has-[[data-promo]]:line-through group-has-[[data-promo]]:text-text-muted">{formatDh(total)}</span>
+          <span data-list-total className="font-display text-[34px] font-extrabold leading-none group-has-[[data-promo]]:line-through group-has-[[data-promo]]:text-text-muted">
+            {/* line-through isn't announced: once a code is held, a screen reader hears "prix catalogue" before it. */}
+            <span data-list-total-label className="sr-only hidden group-has-[[data-promo]]:inline">{`${d.checkout.listPrice} `}</span>
+            {formatDh(total)}
+          </span>
         </p>
         {back && (
           <Link href={back} className="flex min-h-touch-min items-center text-body-small font-semibold text-accent hover:underline">

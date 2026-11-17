@@ -229,6 +229,7 @@ export const ar: Dict = {
     line: '{qty} × {zone}',
     fee: 'مصاريف الخدمة',
     total: 'المجموع',
+    listPrice: 'الثمن العادي',
     methodTitle: 'طريقة الخلاص',
     CARD: 'الكارط البنكية',
     WALLET: 'الواليت',

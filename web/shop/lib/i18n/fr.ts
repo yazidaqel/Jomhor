@@ -231,6 +231,7 @@ export const fr = {
     line: '{qty} × {zone}',
     fee: 'Frais de service',
     total: 'Total',
+    listPrice: 'prix catalogue', // Lot 5 step 4: read before the struck list total once a code is held
     methodTitle: 'Moyen de paiement',
     CARD: 'Carte bancaire',
     WALLET: 'Wallet mobile',

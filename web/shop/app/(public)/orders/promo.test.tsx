@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // WS-17 (plan lot-5 §12.5, 4b): the promo code on W3 and the discount line on W4. No amount is computed by the shop:
 // every discount and total below is the server's, shown as sent.
-import { act } from 'react'
+import { act, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,8 +19,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSIsImF1ZCI6ImZhbiJ9.c2lnbmF0dXJl'
-const ORDER_ID = '0190f3a2-7c1e-7b55-9a1e-3f1f6b2c9d10'
-const RENDERED = Date.parse('2026-02-01T12:00:00Z')
+const RENDERED = Date.parse('2026-11-17T14:27:12Z')
 
 let session: string | undefined
 let locale: string | undefined
@@ -36,31 +35,85 @@ vi.mock('next/headers', () => ({
 const { push } = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock('next/navigation', async (actual) => ({ ...(await actual<object>()), useRouter: () => ({ push, replace: () => {}, refresh: () => {} }) }))
 
-// source: contract (docs/04-api.md POST /fan/orders and GET /fan/orders/{id} "Lot 5 step 4", §Promo codes, PROMO_REFUSED;
-// numbers from plan lot-5 BE-65 (a): 20 % on 2 × 15 000 → total_mad 24 000, discount_mad 6 000).
-const CREATED = { id: 'o1', status: 'RESERVED', reserved_until: '2026-02-01T12:09:00Z', total_mad: 24000, promo_code: 'BIENVENUE20', discount_mad: 6000 }
-const ORDER = (over: Record<string, unknown> = {}) => ({
-  id: ORDER_ID,
-  event_id: 12,
-  channel: 'WEB',
+// source: real run WS-17 (dev stack, 2026-11-17, event 56, run 43), as received: the backend's POST /fan/orders 201 and
+// the shop route's answer for 20 % on 2 x 150 DH, GET /fan/orders/{id} once PAID by card and while AWAITING_CASH (50 DH
+// off), the PROMO_REFUSED and 422 bodies. The test clock (RENDERED) is the run's: the hold was taken at 14:27:12Z.
+const CODE = 'WS17PCT20R43'
+const ITEMS = [
+  {
+    price_category_id: 'dc898d0b-6a28-4692-9e01-1aa7251c4960',
+    zone_id: 2,
+    zone_name: 'Est',
+    name: 'Plein tarif',
+    qty: 2,
+    unit_price_mad: 15000,
+    holders: [{ label: 'Fan T.' }, { label: 'Fan T.' }],
+  },
+]
+const RAW_CREATED = {
+  id: '696edaed-2c5a-4f42-9062-87df502ea15f',
   status: 'RESERVED',
+  reserved_until: '2026-11-17T14:36:17.817244Z',
   total_mad: 24000,
-  promo_code: 'BIENVENUE20',
+  items: ITEMS,
+  group: null,
+  promo_code: CODE,
   discount_mad: 6000,
-  reserved_until: '2026-02-01T12:08:00Z',
-  paid_at: null,
-  items: [{ price_category_id: 'pc-virage', zone_id: 3, name: 'Plein tarif', qty: 2, unit_price_mad: 15000, holders: [{ label: 'Yazid A.' }, { label: 'Salma B.' }] }],
-  ticket_ids: [],
+}
+const CREATED = {
+  id: '82c8676c-e44b-49ec-80e4-89f04511cd9c',
+  status: 'RESERVED',
+  reserved_until: '2026-11-17T14:35:12.581753Z',
+  total_mad: 24000,
+  promo_code: CODE,
+  discount_mad: 6000,
+}
+const ORDER = (over: Record<string, unknown> = {}) => ({
+  id: '82c8676c-e44b-49ec-80e4-89f04511cd9c',
+  event_id: 56,
+  channel: 'WEB',
+  status: 'PAID',
+  payment_status: 'SUCCEEDED',
+  total_mad: 24000,
+  reserved_until: '2026-11-17T14:35:12.581753Z',
+  paid_at: '2026-11-17T14:27:13.699844Z',
+  items: ITEMS,
+  ticket_ids: ['0dd7246a-2e5d-4e41-9ad6-451237d71a82', '200b9eb5-6175-43c9-bacb-102fc76eb852'],
+  payment_method: 'CARD',
+  cash: null,
+  group: null,
+  product: null,
+  installment: null,
+  pass_id: null,
+  promo_code: CODE,
+  discount_mad: 6000,
   ...over,
 })
-const CASH = {
+const CASH_ORDER = {
+  ...ORDER(),
+  id: '8baa5b09-1f21-405a-8c44-701955833490',
   status: 'AWAITING_CASH',
   payment_status: 'PENDING',
+  total_mad: 25000,
+  reserved_until: '2026-11-18T14:27:25.243515Z',
+  paid_at: null,
+  ticket_ids: [],
   payment_method: 'CASH_AGENCY',
-  reserved_until: '2026-02-02T12:00:00Z',
-  cash: { pay_code: '4F7K29', amount_mad: 24000, points: [], networks: ['Wafacash'] },
+  cash: {
+    pay_code: '5ACWNY',
+    amount_mad: 25000,
+    points: [
+      { name: 'Guichet Grand Stade', address: 'Porte 1', hours: 'Lun-Sam 10:00-19:00' },
+      { name: 'Boutique du club', address: 'Centre-ville', hours: 'Lun-Sam 09:00-18:00' },
+    ],
+    networks: ['Réseau cash simulé'],
+  },
+  promo_code: 'WS17AMT50R43',
+  discount_mad: 5000,
 }
-const refused = (reason: string) => json(409, { code: 'PROMO_REFUSED', message: '', details: { field: 'promo_code', reason } })
+const REFUSED = (reason: string) => ({ code: 'PROMO_REFUSED', message: "This promo code can't be used", details: { field: 'promo_code', reason } })
+const refused = (reason: string) => json(409, REFUSED(reason))
+const BAD_FORMAT = { code: 'VALIDATION_FAILED', message: 'Invalid request body', details: { fields: { promo_code: '4-20 letters A-Z or digits' } } }
 
 const fetchMock = vi.fn<typeof fetch>()
 beforeEach(() => {
@@ -90,18 +143,18 @@ describe('route /api/orders', () => {
   const VALID = { event_id: 12, items: [{ price_category_id: 'pc-virage', qty: 2, holders: [{ name: 'Yazid Aqel' }, { name: 'Salma Benali' }] }] }
 
   it('forwards the code trimmed (the backend normalizes it) and answers the server discount and total', async () => {
-    fetchMock.mockResolvedValue(json(201, { ...ORDER(), id: 'o1', token: 'SECRET' }))
-    const res = await createOrder(req({ ...VALID, promo_code: '  bienvenue20 ' }))
+    fetchMock.mockResolvedValue(json(201, { ...RAW_CREATED, token: 'SECRET' }))
+    const res = await createOrder(req({ ...VALID, promo_code: '  ws17pct20r43 ' }))
     expect(res.status).toBe(201)
-    expect(bodyOf(0).promo_code).toBe('bienvenue20')
+    expect(bodyOf(0).promo_code).toBe('ws17pct20r43')
     const text = await res.text()
-    expect(JSON.parse(text)).toEqual({ id: 'o1', status: 'RESERVED', reserved_until: '2026-02-01T12:08:00Z', total_mad: 24000, promo_code: 'BIENVENUE20', discount_mad: 6000 })
+    expect(JSON.parse(text)).toEqual({ id: RAW_CREATED.id, status: 'RESERVED', reserved_until: RAW_CREATED.reserved_until, total_mad: 24000, promo_code: CODE, discount_mad: 6000 })
     expect(text).not.toContain(TOKEN)
     expect(text).not.toContain('SECRET')
   })
 
   it.each([[''], ['   '], [null]])('an empty code (%j) is left out of the backend body', async (promo_code) => {
-    fetchMock.mockResolvedValue(json(201, ORDER({ promo_code: null, discount_mad: 0 })))
+    fetchMock.mockResolvedValue(json(201, { ...RAW_CREATED, total_mad: 30000, promo_code: null, discount_mad: 0 }))
     await createOrder(req({ ...VALID, promo_code }))
     expect(bodyOf(0)).not.toHaveProperty('promo_code')
   })
@@ -113,9 +166,9 @@ describe('route /api/orders', () => {
 
   it('PROMO_REFUSED passes through in the 04 shape', async () => {
     fetchMock.mockResolvedValue(refused('USED_UP'))
-    const res = await createOrder(req({ ...VALID, promo_code: 'BIENVENUE20' }))
+    const res = await createOrder(req({ ...VALID, promo_code: CODE }))
     expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({ code: 'PROMO_REFUSED', message: '', details: { field: 'promo_code', reason: 'USED_UP' } })
+    expect(await res.json()).toEqual(REFUSED('USED_UP'))
   })
 })
 
@@ -134,10 +187,12 @@ describe('W3 promo code', () => {
     el.remove()
   })
 
-  const render = (loc: Locale = 'fr') => {
+  const render = (loc: Locale = 'fr', strict = false) => {
     const d = getDictionary(loc)
+    const Wrap = strict ? StrictMode : 'div'
     return act(async () =>
       root.render(
+        <Wrap>
         <CheckoutForm
           eventId={12}
           priceCategoryId="pc-virage"
@@ -150,7 +205,8 @@ describe('W3 promo code', () => {
           now={RENDERED}
           timezone="Africa/Casablanca"
           copy={{ checkout: d.checkout, errors: d.errors, meta: d.meta }}
-        />,
+        />
+        </Wrap>,
       ),
     )
   }
@@ -176,29 +232,29 @@ describe('W3 promo code', () => {
       .mockResolvedValueOnce(json(201, { ...CREATED, total_mad: 15000, promo_code: null, discount_mad: 0 }))
       .mockResolvedValueOnce(json(200, { redirect_url: 'https://api.test/v1/payments/card/p1/redirect' }))
     await submit()
-    expect(fetchMock.mock.calls.map(([u]) => u)).toEqual(['/api/orders', '/api/orders/o1/pay'])
+    expect(fetchMock.mock.calls.map(([u]) => u)).toEqual(['/api/orders', `/api/orders/${CREATED.id}/pay`])
     expect(bodyOf(0)).not.toHaveProperty('promo_code')
     expect(assign).toHaveBeenCalledWith('https://api.test/v1/payments/card/p1/redirect')
   })
 
   it('with a code: the body carries promo_code, it stops before /pay, shows the server discount and total, then pays that total', async () => {
     await render()
-    await typeCode('bienvenue20')
+    await typeCode(CODE.toLowerCase())
     expect(document.activeElement).toBe(promoInput()) // autoFocus when "J'ai un code promo" opens it
-    expect(promoInput().value).toBe('BIENVENUE20')
+    expect(promoInput().value).toBe(CODE)
     expect(cta().textContent).toBe(d.checkout.promoReserve)
     fetchMock.mockResolvedValueOnce(json(201, CREATED))
     await submit()
 
     expect(fetchMock).toHaveBeenCalledTimes(1) // no /pay yet
     expect(fetchMock.mock.calls[0]![0]).toBe('/api/orders')
-    expect(bodyOf(0).promo_code).toBe('BIENVENUE20')
+    expect(bodyOf(0).promo_code).toBe(CODE)
     expect(push).not.toHaveBeenCalled()
     expect(el.querySelector('[data-promo]')!.textContent).toBe(
-      fmt(d.checkout.promoLine, { code: ltr('BIENVENUE20'), discount: formatDiscount(6000) }) + d.checkout.total + formatDh(24000),
+      fmt(d.checkout.promoLine, { code: ltr(CODE), discount: formatDiscount(6000) }) + d.checkout.total + formatDh(24000),
     )
     expect(el.querySelector('[data-total]')!.textContent).toBe(formatDh(24000))
-    expect(el.querySelector('[data-held]')!.textContent).toBe('Places réservées jusqu’à 13:09 · encore 9 min 0 s')
+    expect(el.querySelector('[data-held]')!.textContent).toBe('Places réservées jusqu’à 14:35 · encore 8 min 0 s') // Africa/Casablanca is +00 that day (tzdata 2026c)
     expect(el.querySelector('#promo')).toBeNull() // the code is in the order now
     expect(el.querySelector<HTMLFieldSetElement>('fieldset')!.disabled).toBe(true)
     expect(cta().textContent).toBe(fmt(d.checkout.pay, { amount: formatDh(24000) }))
@@ -207,13 +263,22 @@ describe('W3 promo code', () => {
     vi.stubGlobal('location', { ...window.location, assign })
     fetchMock.mockResolvedValueOnce(json(200, { redirect_url: 'https://api.test/v1/payments/card/p2/redirect' }))
     await submit()
-    expect(fetchMock.mock.calls.slice(1).map(([u, init]) => [u, init!.body])).toEqual([['/api/orders/o1/pay', JSON.stringify({ method: 'CARD' })]])
+    expect(fetchMock.mock.calls.slice(1).map(([u, init]) => [u, init!.body])).toEqual([[`/api/orders/${CREATED.id}/pay`, JSON.stringify({ method: 'CARD' })]])
     expect(assign).toHaveBeenCalledWith('https://api.test/v1/payments/card/p2/redirect')
+  })
+
+  it('under StrictMode (next dev mounts, unmounts, mounts again) the hold still shows its line and pay CTA (real run)', async () => {
+    await render('fr', true)
+    await typeCode(CODE)
+    fetchMock.mockResolvedValueOnce(json(201, CREATED))
+    await submit()
+    expect(el.querySelector('[data-promo]')).not.toBeNull()
+    expect(cta().textContent).toBe(fmt(d.checkout.pay, { amount: formatDh(24000) }))
   })
 
   it('with a code and cash: the code card opens on the order page after the hold', async () => {
     await render()
-    await typeCode('BIENVENUE20')
+    await typeCode(CODE)
     await act(async () => el.querySelector<HTMLInputElement>('input[name="method"][value="CASH_AGENCY"]')!.click())
     expect(cta().textContent).toBe(d.checkout.promoReserve)
     fetchMock.mockResolvedValueOnce(json(201, CREATED))
@@ -221,8 +286,8 @@ describe('W3 promo code', () => {
     expect(cta().textContent).toBe(d.checkout.payCash)
     fetchMock.mockResolvedValueOnce(json(200, { pay_code: '4F7K29' }))
     await submit()
-    expect(fetchMock.mock.calls[1]![0]).toBe('/api/orders/o1/pay')
-    expect(push).toHaveBeenCalledWith('/orders/o1')
+    expect(fetchMock.mock.calls[1]![0]).toBe(`/api/orders/${CREATED.id}/pay`)
+    expect(push).toHaveBeenCalledWith(`/orders/${CREATED.id}`)
   })
 
   it.each([
@@ -230,10 +295,10 @@ describe('W3 promo code', () => {
     ['NOT_APPLICABLE', refused('NOT_APPLICABLE'), d.checkout.promoRefused.NOT_APPLICABLE],
     ['USED_UP', refused('USED_UP'), d.checkout.promoRefused.USED_UP],
     ['ACCOUNT_LIMIT', refused('ACCOUNT_LIMIT'), d.checkout.promoRefused.ACCOUNT_LIMIT],
-    ['422 on promo_code', json(422, { code: 'VALIDATION_FAILED', message: '', details: { fields: { promo_code: 'invalid' } } }), d.checkout.promoRefused.UNKNOWN],
+    ['422 on promo_code', json(422, BAD_FORMAT), d.checkout.promoRefused.UNKNOWN],
   ])('refusal %s: its copy on the field, no order, no /pay, the fan can retry', async (_, answer, copy) => {
     await render()
-    await typeCode('BIENVENUE20')
+    await typeCode(CODE)
     fetchMock.mockResolvedValueOnce(answer)
     await submit()
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -250,7 +315,7 @@ describe('W3 promo code', () => {
 
   it('a hold answer without an integer total_mad is a failure: nothing to show or pay, no /pay', async () => {
     await render()
-    await typeCode('BIENVENUE20')
+    await typeCode(CODE)
     fetchMock.mockResolvedValueOnce(json(201, { ...CREATED, total_mad: '240' }))
     await submit()
     expect(fetchMock).toHaveBeenCalledTimes(1)
@@ -261,7 +326,7 @@ describe('W3 promo code', () => {
 
   it('"Retirer" clears the code before the hold: the flow is the one without a code', async () => {
     await render()
-    await typeCode('BIENVENUE20')
+    await typeCode(CODE)
     await act(async () => button(d.checkout.promoRemove).click())
     expect(el.querySelector('#promo')).toBeNull()
     expect(cta().textContent).toBe(fmt(d.checkout.pay, { amount: formatDh(15000) }))
@@ -277,7 +342,7 @@ describe('W3 promo code', () => {
   it('renders in ar: the field, the CTA, the server line and a refusal', async () => {
     const ar = getDictionary('ar')
     await render('ar')
-    await typeCode('BIENVENUE20', ar)
+    await typeCode(CODE, ar)
     expect(el.querySelector('label[for="promo"]')!.textContent).toBe(ar.checkout.promoLabel)
     expect(promoInput().getAttribute('dir')).toBe('ltr')
     expect(cta().textContent).toBe(ar.checkout.promoReserve)
@@ -286,7 +351,7 @@ describe('W3 promo code', () => {
     expect(el.querySelector('#promo-error')!.textContent).toBe(ar.checkout.promoRefused.ACCOUNT_LIMIT)
     fetchMock.mockResolvedValueOnce(json(201, CREATED))
     await submit()
-    expect(el.querySelector('[data-promo] p')!.textContent).toBe(fmt(ar.checkout.promoLine, { code: ltr('BIENVENUE20'), discount: formatDiscount(6000) }))
+    expect(el.querySelector('[data-promo] p')!.textContent).toBe(fmt(ar.checkout.promoLine, { code: ltr(CODE), discount: formatDiscount(6000) }))
   })
 })
 
@@ -295,16 +360,18 @@ describe('W4 discount line', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(RENDERED)
   })
+  let shown = ORDER().id
   function backend(order: Record<string, unknown>) {
+    shown = String(order.id)
     fetchMock.mockImplementation(async (url) => {
       const path = String(url).replace('http://backend.test/v1', '')
-      if (path === `/fan/orders/${ORDER_ID}`) return json(200, order)
-      if (path === '/fan/events/12') return json(200, rawEvent())
+      if (path === `/fan/orders/${order.id}`) return json(200, order)
+      if (path === '/fan/events/56') return json(200, rawEvent({ id: 56 }))
       return json(404, { code: 'NOT_FOUND', message: '', details: {} })
     })
   }
-  const page = async () => renderToString(await OrderPage({ params: Promise.resolve({ id: ORDER_ID }) }))
-  const line = (loc: Locale) => fmt(getDictionary(loc).orderPage.promoLine, { code: ltr('BIENVENUE20'), discount: formatDiscount(6000) })
+  const page = async () => renderToString(await OrderPage({ params: Promise.resolve({ id: shown }) }))
+  const line = (loc: Locale) => fmt(getDictionary(loc).orderPage.promoLine, { code: ltr(CODE), discount: formatDiscount(6000) })
 
   it('renders "Code X · −Y" from the server, list prices per line and the total after the discount; no JWT or K_t', async () => {
     backend(ORDER())
@@ -323,10 +390,10 @@ describe('W4 discount line', () => {
   })
 
   it('the cash code card shows total_mad (the code amount the server set)', async () => {
-    backend(ORDER(CASH))
+    backend(CASH_ORDER)
     const h = await page()
-    expect(h).toMatch(new RegExp(`data-amount="true"[^>]*>${formatDh(24000)}<`))
-    expect(h).toContain(line('fr'))
+    expect(h).toMatch(new RegExp(`data-amount="true"[^>]*>${formatDh(25000)}<`))
+    expect(h).toContain(fmt(getDictionary('fr').orderPage.promoLine, { code: ltr('WS17AMT50R43'), discount: formatDiscount(5000) }))
   })
 
   it('renders in ar', async () => {
@@ -341,7 +408,8 @@ describe('W4 discount line', () => {
 describe('W3 side summary once a code is held', () => {
   const STRIKE = ['group-has-[[data-promo]]:line-through', 'group-has-[[data-promo]]:text-text-muted']
 
-  it('strikes the list price line and total when the form holds [data-promo], and only then', async () => {
+  it.each(['fr', 'ar'] as const)('%s: strikes the list price line and total when the form holds [data-promo], and only then; the total gets an sr-only "prix catalogue"', async (loc) => {
+    locale = loc
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(Date.parse('2026-02-01T12:00:00Z'))
     fetchMock.mockImplementation(async (url) => {
@@ -356,9 +424,15 @@ describe('W3 side summary once a code is held', () => {
     try {
       const main = host.querySelector('main')!
       const total = host.querySelector('[data-list-total]')!
-      const line = [...host.querySelectorAll('aside p > span')].find((s) => s.textContent === total.textContent && s !== total)!
+      const struck = [...host.querySelectorAll('aside span')].filter((s) => s.classList.contains(STRIKE[0]!))
+      expect(struck).toHaveLength(2) // the line amount and the total
+      expect(struck).toContain(total)
       expect(main.classList).toContain('group')
-      for (const el of [total, line]) for (const c of STRIKE) expect(el.classList).toContain(c)
+      for (const el of struck) for (const c of STRIKE) expect(el.classList).toContain(c)
+      // line-through isn't announced: a label, display:none until the hold, then read (still visually hidden).
+      const label = total.querySelector('[data-list-total-label]')!
+      expect(label.textContent).toBe(`${getDictionary(loc).checkout.listPrice} `)
+      expect([...label.classList]).toEqual(['sr-only', 'hidden', 'group-has-[[data-promo]]:inline'])
       expect(main.matches(':has([data-promo])')).toBe(false) // before the hold: the variant doesn't apply
       const held = document.createElement('div') // what CheckoutForm renders once the code is held
       held.setAttribute('data-promo', '')

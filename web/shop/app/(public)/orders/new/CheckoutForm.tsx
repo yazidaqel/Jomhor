@@ -97,6 +97,7 @@ export function CheckoutForm(props: {
   const abort = useRef<AbortController | null>(null)
   const leaving = useRef(false) // unmounting: the fan went elsewhere, don't navigate them back
   useEffect(() => {
+    leaving.current = false // a remount (React StrictMode in dev runs mount, unmount, mount) is on the page again
     clock.current = pageClock()
     return () => {
       leaving.current = true

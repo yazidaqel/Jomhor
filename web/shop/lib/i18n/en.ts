@@ -227,6 +227,7 @@ export const en: Dict = {
     line: '{qty} × {zone}',
     fee: 'Service fee',
     total: 'Total',
+    listPrice: 'list price',
     methodTitle: 'Payment method',
     CARD: 'Bank card',
     WALLET: 'Mobile wallet',
