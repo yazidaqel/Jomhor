@@ -20,9 +20,16 @@ public class StatementCounter implements BeanPostProcessor {
     private static final Set<String> STATEMENTS = Set.of("createStatement", "prepareStatement", "prepareCall");
 
     private final AtomicLong count = new AtomicLong();
+    /** Per thread: MockMvc runs a request on the test's thread, so scheduled jobs on their own threads don't count. */
+    private final ThreadLocal<long[]> mine = ThreadLocal.withInitial(() -> new long[1]);
 
     public long count() {
         return count.get();
+    }
+
+    /** The statements created on the calling thread only (a MockMvc request's, without the background jobs'). */
+    public long countOnThisThread() {
+        return mine.get()[0];
     }
 
     @Override
@@ -36,6 +43,7 @@ public class StatementCounter implements BeanPostProcessor {
             return result instanceof Connection c ? proxy(new Class<?>[] {Connection.class}, c, (cp, cm, cargs) -> {
                 if (STATEMENTS.contains(cm.getName())) {
                     count.incrementAndGet();
+                    mine.get()[0]++;
                 }
                 return call(cm, c, cargs);
             }) : result;

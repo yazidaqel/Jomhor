@@ -201,6 +201,17 @@ class CrmExportApiTest extends CrmTest {
         assertThat(exports(c.org())).containsExactly("null {\"rows\": 3, \"with_phone\": 2}");
     }
 
+    @Test
+    void aStoredPhoneThatIsNotE164IsFormulaGuarded() throws Exception {
+        Club c = club();
+        UUID bad = named("Malformé", "fr");
+        member(c, bad, false, true, false);
+        String stored = "=1+" + UUID.randomUUID().toString().substring(0, 8); // unique: phone_e164 is
+        jdbc.sql("update users set phone_e164 = ? where id = ?").params(stored, bad).update();
+        assertThat(lines(caller(c.org(), "ADMIN"))).singleElement()
+                .satisfies(l -> assertThat(l).startsWith("1;Malformé;'" + stored + ";fr;"));
+    }
+
     // ---------- headers, roles, statements ----------
 
     @Test
@@ -243,9 +254,9 @@ class CrmExportApiTest extends CrmTest {
             }
         }
         Caller admin = caller(c.org(), "ADMIN");
-        long before = statements.count();
+        long before = statements.countOnThisThread(); // the request's own: a job firing meanwhile isn't counted
         int rows = lines(admin).size();
-        long used = statements.count() - before;
+        long used = statements.countOnThisThread() - before;
         assertThat(rows).isPositive();
         return used;
     }

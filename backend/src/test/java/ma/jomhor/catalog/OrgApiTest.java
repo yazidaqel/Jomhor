@@ -111,7 +111,8 @@ public abstract class OrgApiTest extends IntegrationTest {
 
     /**
      * loadtest/check.sql scoped to one organizer: its events' rows, and the rows with no event (product orders:
-     * PRODUCT_SOLD names a product, CHARGED_NO_ORDER a payment, the others an order) whose ref is the organizer's.
+     * PRODUCT_SOLD names a product, CHARGED_NO_ORDER a payment, the others an order; DEPOSIT_* a till session) whose
+     * ref is the organizer's.
      */
     protected List<Map<String, Object>> breaches(UUID organizer) throws Exception {
         return jdbc.sql("select * from (" + checkSql() + """
@@ -120,8 +121,9 @@ public abstract class OrgApiTest extends IntegrationTest {
                            or (c.event_id is null
                                and c.ref in (select id::text from products where organizer_id = ?
                                              union all select id::text from orders where organizer_id = ?
-                                             union all select id::text from payments where organizer_id = ?))""")
-                .params(organizer, organizer, organizer, organizer).query().listOfRows();
+                                             union all select id::text from payments where organizer_id = ?
+                                             union all select id::text from pos_sessions where organizer_id = ?))""")
+                .params(organizer, organizer, organizer, organizer, organizer).query().listOfRows();
     }
 
     /** loadtest/check.sql without its final ';' (the file is one statement). */

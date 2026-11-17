@@ -49,16 +49,23 @@ class OrgMembersController {
     }
 
     /**
-     * By number; CRLF. {@code nom} is typed by the fan: the text guard. {@code telephone} is E.164 (digits after a +,
-     * validated on write), so it is written as it is.
+     * By number; CRLF. {@code nom} is typed by the fan: the text guard. {@code telephone} as it is when it is E.164
+     * (digits after a +); users.phone_e164 has no DB check, so anything else goes through the text guard too.
      */
     static String csv(List<ExportRow> rows) {
         StringBuilder out = new StringBuilder(CSV_HEADER).append("\r\n");
         rows.forEach(r -> out.append(String.join(";", Integer.toString(r.number()),
-                Csv.text(r.name() == null ? "" : r.name()), r.phone() == null ? "" : r.phone(), r.locale(),
+                Csv.text(r.name() == null ? "" : r.name()), phone(r.phone()), r.locale(),
                 day(r.joinedAt()), yes(r.marketingPush()), yes(r.marketingWhatsapp()), day(r.paidUntil()),
                 yes(r.passHolder()), Long.toString(r.eventsAttended()))).append("\r\n"));
         return out.toString();
+    }
+
+    private static String phone(String phone) {
+        if (phone == null) {
+            return "";
+        }
+        return phone.matches("\\+[1-9][0-9]{7,14}") ? phone : Csv.text(phone);
     }
 
     private static String day(Instant at) {
