@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
@@ -211,7 +212,11 @@ describe('W2 with the map (server render)', () => {
     const canvas = /<div[^>]* data-map="true"[^>]*>/.exec(h)![0]
     expect(canvas).toContain('dir="ltr"')
     expect(canvas).toContain(`aria-label="${ar.event.map}"`)
-    expect(h).toContain(ar.event.mapField)
+    // The AR label rule skips LTR islands, so the canvas has its own (globals.css): hook + class on the label.
+    expect(h).toContain(`<span class="relative text-label uppercase text-text-muted">${ar.event.mapField}</span>`)
+    expect(readFileSync('app/globals.css', 'utf8')).toMatch(
+      /html:lang\(ar\) \[data-map\] \.text-label \{\s*letter-spacing: 0 !important;\s*text-transform: none !important;\s*font-weight: 700 !important;/,
+    )
     expect(h.indexOf('data-map')).toBeLessThan(h.indexOf(ar.event.seated)) // the first card's detail line
     expect(h).toContain(`aria-label="${ar.event.mapSoldOut.replace('{zone}', 'Tribune Sud')}"`)
   })
