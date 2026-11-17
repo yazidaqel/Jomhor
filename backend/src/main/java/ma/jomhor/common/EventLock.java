@@ -14,9 +14,13 @@ import org.springframework.stereotype.Component;
  * try-lock, so one instance sends per tick), 7 the waitlist notice (JdbcWaitlist, (7 << 32) | event id: the waitlist
  * job's try-lock, so one instance notifies an event per run), 8 the pass tickets (JdbcPasses, (8 << 32) | event id:
  * the pass job's try-lock, so one instance issues an event's batch), 9 an invitation_id (JdbcOrders, (9 << 32) |
- * hashtext(id): two POST /org/events/{id}/invitations with one id run one after the other, so the retry replays).
- * Two-int, a key space Postgres keeps apart from
+ * hashtext(id): two POST /org/events/{id}/invitations with one id run one after the other, so the retry replays),
+ * 11 an invoice year (JdbcSettlements, (11 << 32) | year: invoice numbers are max + 1 under it, in the issuing
+ * transaction, so they have no gap). Two-int, a key space Postgres keeps apart from
  * the bigint one:
+ * (10, hashtext(organizer id)) the settlement statement (JdbcSettlements: the statement job's try-lock, so one
+ * instance issues an organizer's statements per run; it can meet an order or pass series key only on a user hash of
+ * 10: the organizer then waits for the next run),
  * (4, hashtext(organizer id)) the organizer's membership lock (JdbcMemberships, PUT/DELETE /fan/me/membership), and
  * (hashtext(user id), event id) the per-account order lock (JdbcOrders), which can meet a membership key only when
  * a user hash is 4: a short wait, never a wrong result. (hashtext(user id), hashtext(series id)) the account's pass

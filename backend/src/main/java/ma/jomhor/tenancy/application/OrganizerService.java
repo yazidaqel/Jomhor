@@ -1,14 +1,19 @@
 package ma.jomhor.tenancy.application;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.common.web.ApiException;
 import ma.jomhor.tenancy.domain.CashPoint;
+import ma.jomhor.tenancy.domain.FinanceSettings;
 import ma.jomhor.tenancy.domain.LoyaltyTier;
 import ma.jomhor.tenancy.domain.Organizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Organizer settings for other modules, and the public club directory (docs/04-api.md §Club directory). */
 @Service
@@ -17,9 +22,34 @@ public class OrganizerService {
     private static final Logger log = LoggerFactory.getLogger(OrganizerService.class);
 
     private final Accounts accounts;
+    private final JsonMapper json;
 
-    public OrganizerService(Accounts accounts) {
+    public OrganizerService(Accounts accounts, JsonMapper json) {
         this.accounts = accounts;
+        this.json = json;
+    }
+
+    /**
+     * organizers.settings.finance (plan lot-5 Q231); empty when absent, and when malformed with one WARN (no
+     * statements then, never a 500).
+     */
+    public Optional<FinanceSettings> finance(UUID org) {
+        return accounts.finance(org).flatMap(raw -> parsed(org, raw));
+    }
+
+    /** The organizers with valid finance settings (the statement job's), by id; one WARN per malformed one. */
+    public Map<UUID, FinanceSettings> withFinance() {
+        Map<UUID, FinanceSettings> valid = new LinkedHashMap<>();
+        accounts.financeAll().forEach((org, raw) -> parsed(org, raw).ifPresent(f -> valid.put(org, f)));
+        return valid;
+    }
+
+    private Optional<FinanceSettings> parsed(UUID org, String raw) {
+        Optional<FinanceSettings> f = FinanceSettings.parse(json.readTree(raw));
+        if (f.isEmpty()) {
+            log.warn("Malformed settings.finance of organizer {}: no settlement statements", org);
+        }
+        return f;
     }
 
     /** organizers.settings.cash_points in their order; empty when unset (set by ops via SQL until Lot 5, plan Q54). */

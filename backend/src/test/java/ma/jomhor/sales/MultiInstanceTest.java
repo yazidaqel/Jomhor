@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -19,6 +21,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 import ma.jomhor.crm.application.CampaignService;
+import ma.jomhor.finance.Ledger;
+import ma.jomhor.finance.application.SettlementService;
 import ma.jomhor.gate.application.ManifestService;
 import ma.jomhor.notifications.application.FanMessageService;
 import ma.jomhor.notifications.application.TicketMessenger;
@@ -58,6 +62,9 @@ class MultiInstanceTest extends QueueFixture {
 
     @Autowired
     PassTicketService passTickets;
+
+    @Autowired
+    SettlementService settlements;
 
     @BeforeAll
     static void startB() {
@@ -409,5 +416,51 @@ class MultiInstanceTest extends QueueFixture {
     private int sold(String priceId) {
         return jdbc.sql("select sold from price_categories where id = ?::uuid").param(priceId).query(Integer.class)
                 .single();
+    }
+
+    /**
+     * BE-70: both instances run the statement job at once, twice, over 4 activated organizers with 5 days of payments
+     * each: every day is issued once (the organizer try-lock, unique (organizer_id, day)), with one invoice and one
+     * audit, and invoice numbers have no gap in their year.
+     */
+    @Test
+    void eachStatementIsIssuedOnceAndInvoiceNumbersHaveNoGap() throws Exception {
+        ZoneId zone = ZoneId.of("Africa/Casablanca");
+        List<UUID> orgs = IntStream.range(0, 4).mapToObj(i -> {
+            UUID org = organizer("Club " + UUID.randomUUID());
+            Ledger.activate(jdbc, org, 500, "2026-10-01");
+            int event = Ledger.event(jdbc, org, "Match");
+            for (int d = 0; d < 5; d++) {
+                Instant at = LocalDate.parse("2026-10-01").plusDays(d).atTime(15, 0).atZone(zone).toInstant();
+                Ledger.pay(jdbc, org, Ledger.eventOrder(jdbc, org, event, "PAID"), "CARD", "FAKE", 1_000_00, at);
+                Ledger.pay(jdbc, org, Ledger.eventOrder(jdbc, org, event, "PAID"), "POS_CASH", "POS", 200_00, at);
+            }
+            return org;
+        }).toList();
+
+        SettlementService onB = b.getBean(SettlementService.class);
+        Instant now = LocalDate.parse("2026-10-10").atTime(2, 0).atZone(zone).toInstant();
+        for (int run = 0; run < 2; run++) {
+            both(() -> {
+                settlements.runAt(now);
+                return 0;
+            }, () -> {
+                onB.runAt(now);
+                return 0;
+            });
+        }
+        UUID[] ids = orgs.toArray(UUID[]::new);
+        assertThat(jdbc.sql("""
+                        select count(*) || '/' || count(distinct (s.organizer_id, s.day)) || '/' || count(i.id)
+                        from settlements s left join invoices i on i.settlement_id = s.id
+                        where s.organizer_id = any(?)""")
+                .param(ids).query(String.class).single()).isEqualTo("20/20/20");
+        assertThat(jdbc.sql("select count(*) from audit_log where action = 'settlement.issue' and organizer_id = any(?)")
+                .param(ids).query(Integer.class).single()).isEqualTo(20);
+        assertThat(jdbc.sql("""
+                        select count(*) from (select seq, row_number() over (partition by year order by seq) as n
+                                              from invoices) i
+                        where seq <> n""")
+                .query(Integer.class).single()).isZero();
     }
 }

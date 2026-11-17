@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import ma.jomhor.catalog.application.Inventory.Hold;
@@ -213,4 +214,13 @@ public interface Orders {
 
     /** amountMad is what the gateway charged; reason SOLD_OUT, PER_ACCOUNT_LIMIT, NOT_PAYABLE or AMOUNT_MISMATCH. */
     record RefundRequired(UUID paymentId, UUID orderId, long amountMad, String reason, Instant at) {}
+
+    /**
+     * What each of these orders of the organizer sells (04 §Finance Statement lines): its event, else its product item.
+     * Orders of another organizer or unknown are left out.
+     */
+    Map<UUID, Subject> subjects(UUID org, Collection<UUID> orderIds);
+
+    /** Exactly one of eventId and productId is set. */
+    record Subject(Integer eventId, UUID productId) {}
 }

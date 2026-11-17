@@ -72,4 +72,15 @@ public interface Payments {
     List<CashPayment> cashPayments(UUID org, Instant from, Instant to);
 
     record CashPayment(Instant completedAt, String collector, PaymentMethod method, long amountMad) {}
+
+    // ---------- settlement statements (04 §Finance Statement) ----------
+
+    /** SUCCEEDED payments with completed_at in [from, to), one row each, money in centimes. */
+    List<SettledPayment> succeeded(UUID org, Instant from, Instant to);
+
+    /** The earliest completed_at of a SUCCEEDED payment in [from, to); empty if none. */
+    Optional<Instant> firstSucceeded(UUID org, Instant from, Instant to);
+
+    /** {@code provider}: who holds the cash ('POS' = a club till). */
+    record SettledPayment(UUID orderId, PaymentMethod method, String provider, long amountMad, Instant completedAt) {}
 }

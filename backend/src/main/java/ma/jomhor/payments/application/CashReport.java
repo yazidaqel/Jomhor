@@ -8,6 +8,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -105,6 +106,21 @@ public class CashReport {
         return new Days(first, last);
     }
 
+    /** collector_name of a payments.provider: "Guichet" for POS, a network's display name, else the provider itself. */
+    public String collectorName(String provider) {
+        return provider.equals("POS") ? TILL : networkNames.getOrDefault(provider, provider);
+    }
+
+    /** For settlement statements (04 §Finance Statement): SUCCEEDED payments with completed_at in [from, to). */
+    public List<Payments.SettledPayment> succeeded(UUID org, Instant from, Instant to) {
+        return payments.succeeded(org, from, to);
+    }
+
+    /** The earliest completed_at of a SUCCEEDED payment in [from, to); empty if none. */
+    public Optional<Instant> firstSucceeded(UUID org, Instant from, Instant to) {
+        return payments.firstSucceeded(org, from, to);
+    }
+
     /** Centimes as DH with a comma and two decimals, by integer maths: 125050 → 1250,50; -1000 → -10,00. */
     public static String dh(long centimes) {
         long abs = Math.abs(centimes);
@@ -123,8 +139,7 @@ public class CashReport {
     }
 
     private Day day(Key k, List<CashPayment> rows) {
-        String name = k.collector().equals("POS") ? TILL : networkNames.getOrDefault(k.collector(), k.collector());
-        return new Day(k.day(), k.collector(), name, k.method(), rows.size(),
+        return new Day(k.day(), k.collector(), collectorName(k.collector()), k.method(), rows.size(),
                 rows.stream().mapToLong(CashPayment::amountMad).sum());
     }
 

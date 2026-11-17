@@ -1,6 +1,7 @@
 package ma.jomhor.sales.application;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -91,6 +92,11 @@ public class SalesReport {
                 refunded.values().stream().mapToLong(Long::longValue).sum(), sum(lines, SalesLine::revenueMad),
                 orders.discountMad(org, eventId), payments.refundedMad(org, eventId), zones, channels, methods,
                 new Free(free(lines, "PASS"), free(lines, "INVITE")), orders.refundsRequired(org, eventId));
+    }
+
+    /** For settlement lines (04 §Finance Statement): each order's event, else its product item. */
+    public Map<UUID, Orders.Subject> subjects(UUID org, Collection<UUID> orderIds) {
+        return orders.subjects(org, orderIds);
     }
 
     private static long free(List<SalesLine> lines, String kind) {
