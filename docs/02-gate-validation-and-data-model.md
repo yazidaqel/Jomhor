@@ -123,7 +123,7 @@ Server (PostgreSQL):
 | event\_series | Season, festival edition, tour | id, organizer\_id, name, starts\_on, ends\_on |
 | events | One ticketed occurrence | id, organizer\_id, venue\_id, series\_id (nullable), event\_type (FOOTBALL\_MATCH, CONCERT, FESTIVAL\_DAY, CONFERENCE, OTHER), title, starts\_at, doors\_open\_at, status (DRAFT, ON\_SALE, GATES\_OPEN, CLOSED), event\_key\_enc, refund\_cutoff\_at, sale\_starts\_at, reentry\_policy, metadata jsonb (opponent, competition, headliner…) |
 | price\_categories | Price per zone per event | id, organizer\_id, event\_id, zone\_id, name, price\_mad, quota, sold, audience (ALL, MEMBERS, PASS, INVITE) |
-| orders | Purchase | id, organizer\_id, event\_id (nullable: product orders), pass\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status, group\_order\_id (split pay: a member order → the initiator's order), invited\_by (an invitation: the staff who issued it) |
+| orders | Purchase | id, organizer\_id, event\_id (nullable: product orders), pass\_id, user\_id, channel (APP, WEB, POS), total\_mad, payment\_ref, status, group\_order\_id (split pay: a member order → the initiator's order), invited\_by (an invitation: the staff who issued it), promo\_code\_id, discount\_mad |
 | order\_items | Lines of an order | id, organizer\_id, order\_id, price\_category\_id, product\_id, qty, unit\_price\_mad, holders jsonb (name, user\_id per place) |
 | payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref, pay\_code (cash code), pos\_session\_id, redirected\_at |
 | pos\_sessions | Club till sessions (one cashier's shift) | id, organizer\_id, staff\_id, label, opened\_at, closed\_at, expected\_mad, declared\_mad |
@@ -133,6 +133,7 @@ Server (PostgreSQL):
 | products | What an order sells besides event places | id, organizer\_id, kind (PASS, MEMBERSHIP), name, price\_mad, on\_sale, sales\_close\_at, quota, sold, series\_id, zone\_id, valid\_until, max\_installments |
 | passes | Season pass: one ticket per published event of its series, through a pass ticket order | id, organizer\_id, product\_id, series\_id, user\_id, holder\_name, status (PENDING, ACTIVE, SUSPENDED, CANCELLED), suspended\_at |
 | pass\_installments | A pass's payment schedule, one row per installment | id, organizer\_id, pass\_id, seq, amount\_mad, due\_at, order\_id, paid\_at, reminded\_at |
+| promo\_codes | Promo code of one event (04 §Promo codes) | id, organizer\_id, event\_id, price\_category\_id, code, kind (PERCENT, AMOUNT), percent, amount\_mad, max\_uses, per\_account\_max, active |
 | devices | Enrolled scanners | id, organizer\_id, label, public\_key (ECDSA P-256 SPKI DER), status (PENDING, ACTIVE, REVOKED), enrolled\_at, approved\_at, revoked\_at, last\_seen\_at |
 | device\_assignments | Device ↔ event ↔ gate | organizer\_id, device\_id, event\_id, gate\_id, manifest\_version, closed\_ack\_at |
 | manifests | Signed snapshots | id, organizer\_id, event\_id, version, built\_at, row\_count, signature (Ed25519 over the text payload), body (gzip) |
@@ -196,6 +197,7 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | Fan phone clock tampered | Server time offset pushed to the app; ±1 slot tolerance | None practical |
 | Replay of an old static QR at the next event | event\_id in the token and a new K\_e per event | None |
 | Bots on on-sale day | Waiting room (04 §Waiting room): login to join, one entry per account, random draw for early arrivals, admission token checked before the database, per-event eligibility (account age, membership, attendance), per-device cap, in-app per-IP limits (OTP sends, joins) and a per-entry poll limit, per-account limits, a holder cap (no account holds more than `per_account_limit` places of an event, transfers included), members presale phases, payment-first reservation | Farms of real phone numbers verified before the eligibility date; narrowed by membership/attendance rules, named tickets and the transfer audit |
+| Promo code shared publicly | Per-code and per-account caps, exact; deactivate live | A code without a cap is a lower price for anyone who finds it |
 
 ## Capacity sizing & match-day runbook
 
