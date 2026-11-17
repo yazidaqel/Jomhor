@@ -20,13 +20,21 @@ import { invoicePdfPath, settlementsCsvPath, useOrgDownload, useSettlements, typ
  * still owes, and the daily statements of the range. ADMIN and FINANCE only (`FinancePage` keeps OPS out). Every amount
  * is the server's; the only client sum is frais TTC, an integer addition of the server's HT and VAT centimes.
  */
+/** The last 30 local days in `zone`, today included. */
+const lastDays = (zone: string): Days => {
+  const today = todayIn(zone)
+  return { from: addDays(today, -29), to: today }
+}
+
 export function SettlementsTab({ zone }: { zone: string }) {
   const { t } = useTranslation()
-  const [days, setDays] = useState<Days>(() => {
-    const today = todayIn(zone)
-    return { from: addDays(today, -29), to: today }
-  })
+  // Statement days are in the finance timezone, which only the first answer tells: until a range is picked, the default
+  // follows it (one refetch when it differs from the venue zone).
+  const [range, setRange] = useState(() => ({ zone, days: lastDays(zone), picked: false }))
+  const { days } = range
   const list = useSettlements(days)
+  const timezone = list.data?.timezone
+  if (timezone && !range.picked && timezone !== range.zone) setRange({ zone: timezone, days: lastDays(timezone), picked: false })
   const file = useOrgDownload()
   // `n` counts openings: the sheet's key, so each opening starts fresh (and its dialog with an empty form).
   const [sheet, setSheet] = useState<{ id: string; open: boolean; n: number } | null>(null)
@@ -57,7 +65,7 @@ export function SettlementsTab({ zone }: { zone: string }) {
       {(data.settings || data.settlements.length > 0) && (
         <>
           <div className="flex flex-wrap items-end justify-between gap-4">
-            <RangeForm id="settlements" initial={days} onSubmit={setDays} />
+            <RangeForm key={range.zone} id="settlements" initial={days} onSubmit={(d) => setRange((r) => ({ ...r, days: d, picked: true }))} />
             <Button variant="outline" disabled={file.isPending} onClick={() => file.mutate({ path: settlementsCsvPath(days), fallback: `releves-${days.from}-${days.to}.csv` })}>
               <Download />
               {t('finance.settlements.export')}
