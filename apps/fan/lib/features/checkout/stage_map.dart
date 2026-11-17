@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:jomhor_fan/features/checkout/layouts.g.dart';
@@ -10,7 +12,8 @@ import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
 /// Screen 3's venue map, "the stage" (DESIGN.md §Venue map adjustments): a 4:3 canvas, as wide as the content and
-/// never narrower than 320 px (narrower content: edge to edge), so a 55-unit slot is at least 44 px. Slots sit at
+/// never narrower than 320 px (narrower content: edge to edge; a screen under 320 px scrolls it sideways), so a
+/// 55-unit slot is at least 44 px. Slots sit at
 /// `left`/`top` from the left in every locale: the venue is never mirrored, only its text follows the locale.
 class StageMap extends StatelessWidget {
   const new({required this.view, required this.onTap, super.key});
@@ -27,38 +30,42 @@ class StageMap extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return LayoutBuilder(
       builder: (context, c) {
-        final width = c.maxWidth >= minWidth ? c.maxWidth : MediaQuery.sizeOf(context).width;
+        final visible = c.maxWidth >= minWidth ? c.maxWidth : MediaQuery.sizeOf(context).width;
+        final width = math.max(visible, minWidth);
+        final height = width * VenueLayouts.canvasH / VenueLayouts.canvasW;
         final scale = width / VenueLayouts.canvasW;
         Positioned at(MapRect r, Widget child) =>
             Positioned(left: r.$1 * scale, top: r.$2 * scale, width: r.$3 * scale, height: r.$4 * scale, child: child);
-        return SizedBox(
-          height: width * VenueLayouts.canvasH / VenueLayouts.canvasW,
-          child: OverflowBox(
-            minWidth: width,
-            maxWidth: width,
-            child: Semantics(
-              key: const Key('map'),
-              container: true,
-              explicitChildNodes: true,
-              label: l.venueMap,
-              // Focus follows the JSON's slot order, not the reading direction.
-              child: FocusTraversalGroup(
-                policy: WidgetOrderTraversalPolicy(),
-                child: Stack(
-                  children: [
-                    at(view.layout.centerRect, _Centre(kind: view.layout.center)),
-                    for (final (i, b) in view.blocks.indexed)
-                      at(
-                        b.rect,
-                        b.zone == null
-                            ? const _Inert()
-                            : _Block(key: Key('map.${b.slot}'), block: b, order: i, onTap: onTap),
-                      ),
-                  ],
-                ),
+        Widget canvas = SizedBox(
+          width: width,
+          height: height,
+          child: Semantics(
+            key: const Key('map'),
+            container: true,
+            explicitChildNodes: true,
+            label: l.venueMap,
+            // Focus follows the JSON's slot order, not the reading direction.
+            child: FocusTraversalGroup(
+              policy: WidgetOrderTraversalPolicy(),
+              child: Stack(
+                children: [
+                  at(view.layout.centerRect, _Centre(kind: view.layout.center)),
+                  for (final (i, b) in view.blocks.indexed)
+                    at(
+                      b.rect,
+                      b.zone == null
+                          ? const _Inert()
+                          : _Block(key: Key('map.${b.slot}'), block: b, order: i, onTap: onTap),
+                    ),
+                ],
               ),
             ),
           ),
+        );
+        if (width > visible) canvas = SingleChildScrollView(scrollDirection: Axis.horizontal, child: canvas);
+        return SizedBox(
+          height: height,
+          child: OverflowBox(minWidth: visible, maxWidth: visible, child: canvas),
         );
       },
     );
@@ -78,7 +85,7 @@ class _Centre extends StatelessWidget {
       child: DecoratedBox(
         decoration: const BoxDecoration(
           color: JomhorColors.surface2,
-          borderRadius: BorderRadius.all(Radius.circular(12)),
+          borderRadius: BorderRadius.all(Radius.circular(JomhorRadius.chip)),
         ),
         child: LayoutBuilder(
           builder: (context, c) => Stack(

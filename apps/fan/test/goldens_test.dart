@@ -871,7 +871,7 @@ void main() {
     testWidgets('$locale · screen 3 with the venue map', (tester) async {
       await room(tester, '/events/1/zones', (sale) {
         sale
-          ..detail = realAnswer('event_stadium', dir: 'venue_map').body
+          ..detail = realAnswer('event_stadium', dir: 'goldens').body
           ..room = null;
       });
       await tester.pumpAndSettle();

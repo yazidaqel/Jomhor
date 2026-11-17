@@ -22,7 +22,7 @@ void main() {
 
   /// Contract-first fixture: STADIUM, Nord on NORTH (a members price), Sud on SOUTH (sold out), Est on EAST, Honneur
   /// on WEST, the corners free.
-  Map<String, Object?> stadium() => realAnswer('event_stadium', dir: 'venue_map').body;
+  Map<String, Object?> stadium() => realAnswer('event_stadium', dir: 'goldens').body;
   EventDetail detail([void Function(Map<String, Object?> body)? change]) {
     final body = stadium();
     change?.call(body);
@@ -35,6 +35,44 @@ void main() {
   Map<String, BlockState> states(({VenueLayout layout, List<MapBlock> blocks})? view) => {
     for (final b in view!.blocks) b.slot: b.state,
   };
+
+  group('real run (FL-34, dev API)', () {
+    Map<String, Object?> real(String name) => realAnswer(name, dir: 'venue_map').body;
+    // The captures' `Date`.
+    final captured = DateTime.utc(2026, 11, 17, 20, 29, 27);
+
+    test('the golden fixture has the shape of the captured answers', () {
+      expect(keyPaths(stadium()), keyPaths(real('event_mapped')));
+      expect(keyPaths(real('event_unmapped')), keyPaths(real('event_mapped')));
+    });
+
+    test('ATLAS FC (dev seed STADIUM): the four stands on their slots, the corners inert', () {
+      final d = EventDetail.fromJson(real('event_mapped'), fetchedAt: captured);
+      expect(d.layout, 'STADIUM');
+      final view = mapView(d, selectedZoneId: null, now: captured)!;
+      expect(
+        {for (final b in view.blocks) b.slot: b.zone?.code},
+        {
+          'NORTH_WEST': null,
+          'NORTH': 'NORD',
+          'NORTH_EAST': null,
+          'WEST': 'HONNEUR',
+          'EAST': 'EST',
+          'SOUTH_WEST': null,
+          'SOUTH': 'SUD',
+          'SOUTH_EAST': null,
+        },
+      );
+      expect(states(view).values.where((s) => s == BlockState.open), hasLength(4));
+    });
+
+    test('Olympique Tensift (unmapped): layout and every map_slot null, the list only', () {
+      final d = EventDetail.fromJson(real('event_unmapped'), fetchedAt: captured);
+      expect(d.layout, isNull);
+      expect(d.zones.map((z) => z.mapSlot), everyElement(isNull));
+      expect(mapView(d, selectedZoneId: null, now: captured), isNull);
+    });
+  });
 
   group('mapView', () {
     test('states: selectable, selected, sold out, inert; slots in the JSON order with the list colour index', () {
@@ -255,55 +293,70 @@ void main() {
   });
 
   // Every layout at 320 px in AR, inside screen 3's 20 px padding (so edge to edge): no overflow, x counted from the
-  // left (never mirrored), every block at least 44 x 44, three lines asked of each.
+  // left (never mirrored), every block at least 44 x 44, three lines asked of each. Under 320 px the canvas stays
+  // 320 wide and scrolls sideways. The centre label follows the Arabic label rule (no tracking, weight 700).
   for (final MapEntry(key: id, value: layout) in VenueLayouts.all.entries) {
-    testWidgets('$id at 320 px in ar: no overflow, not mirrored, blocks >= 44 x 44', (tester) async {
-      tester.view
-        ..physicalSize = const Size(320, 700)
-        ..devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final d = EventDetail.fromJson({
-        ...stadium(),
-        'layout': id,
-        'zones': [
-          for (final (i, (slot, _)) in layout.slots.indexed)
-            {
-              ...zoneJson(i + 1, 'المدرجة رقم ${i + 1} الكبيرة', [(12000, 10)]),
-              'map_slot': slot,
-              'prices': [
-                {'price_category_id': 'pc-$i', 'name': 'x', 'price_mad': 12000, 'remaining': 10, 'audience': 'ALL'},
-                {'price_category_id': 'pm-$i', 'name': 'y', 'price_mad': 9000, 'remaining': 10, 'audience': 'MEMBERS'},
-              ],
-            },
-        ],
-      }, fetchedAt: now);
-      final view = mapView(d, selectedZoneId: 1, now: now)!;
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('ar'),
-          supportedLocales: AppLocalizations.supportedLocales,
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          home: Scaffold(
-            body: ListView(
-              padding: const EdgeInsets.all(JomhorSpace.xl),
-              children: [StageMap(view: view, onTap: (_) {})],
+    for (final screen in [320.0, 300.0]) {
+      testWidgets('$id at ${screen.toInt()} px in ar: no overflow, not mirrored, blocks >= 44 x 44', (tester) async {
+        tester.view
+          ..physicalSize = Size(screen, 700)
+          ..devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final d = EventDetail.fromJson({
+          ...stadium(),
+          'layout': id,
+          'zones': [
+            for (final (i, (slot, _)) in layout.slots.indexed)
+              {
+                ...zoneJson(i + 1, 'المدرجة رقم ${i + 1} الكبيرة', [(12000, 10)]),
+                'map_slot': slot,
+                'prices': [
+                  {'price_category_id': 'pc-$i', 'name': 'x', 'price_mad': 12000, 'remaining': 10, 'audience': 'ALL'},
+                  {
+                    'price_category_id': 'pm-$i',
+                    'name': 'y',
+                    'price_mad': 9000,
+                    'remaining': 10,
+                    'audience': 'MEMBERS',
+                  },
+                ],
+              },
+          ],
+        }, fetchedAt: now);
+        final view = mapView(d, selectedZoneId: 1, now: now)!;
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('ar'),
+            supportedLocales: AppLocalizations.supportedLocales,
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            home: Scaffold(
+              body: ListView(
+                padding: const EdgeInsets.all(JomhorSpace.xl),
+                children: [StageMap(view: view, onTap: (_) {})],
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(Directionality.of(tester.element(find.byType(StageMap))), TextDirection.rtl);
-      final canvas = tester.getRect(find.byKey(const Key('map')));
-      expect((canvas.left, canvas.width), (0, 320), reason: 'edge to edge under 360 px');
-      const scale = 320 / VenueLayouts.canvasW;
-      for (final (slot, (x, y, _, _)) in layout.slots) {
-        final r = tester.getRect(find.byKey(Key('map.$slot')));
-        expect(r.left - canvas.left, closeTo(x * scale, 0.01), reason: '$slot from the left');
-        expect(r.top - canvas.top, closeTo(y * scale, 0.01), reason: slot);
-        expect(r.width, greaterThanOrEqualTo(JomhorSize.touchMin), reason: slot);
-        expect(r.height, greaterThanOrEqualTo(JomhorSize.touchMin), reason: slot);
-      }
-    });
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(Directionality.of(tester.element(find.byType(StageMap))), TextDirection.rtl);
+        final canvas = tester.getRect(find.byKey(const Key('map')));
+        expect(canvas.width, 320, reason: 'edge to edge under 360 px, never narrower than 320');
+        if (screen == 320) expect(canvas.left, 0);
+        expect(find.byType(SingleChildScrollView), screen < 320 ? findsOneWidget : findsNothing);
+        final ar = lookupAppLocalizations(const Locale('ar'));
+        final label = layout.center == MapCenter.field ? ar.mapField : ar.mapStage;
+        final centre = tester.widget<Text>(find.text(label));
+        expect((centre.style!.letterSpacing, centre.style!.fontWeight), (0.0, FontWeight.w700));
+        const scale = 320 / VenueLayouts.canvasW;
+        for (final (slot, (x, y, _, _)) in layout.slots) {
+          final r = tester.getRect(find.byKey(Key('map.$slot')));
+          expect(r.left - canvas.left, closeTo(x * scale, 0.01), reason: '$slot from the left');
+          expect(r.top - canvas.top, closeTo(y * scale, 0.01), reason: slot);
+          expect(r.width, greaterThanOrEqualTo(JomhorSize.touchMin), reason: slot);
+          expect(r.height, greaterThanOrEqualTo(JomhorSize.touchMin), reason: slot);
+        }
+      });
+    }
   }
 }

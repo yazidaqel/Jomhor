@@ -1,5 +1,5 @@
 {
- "source": "contract: docs/04-api.md §Fan GET /fan/events/{id} with §Venue map (layout, zones[].map_slot), in the shape of test/fixtures/goldens/event_room_presale_next.json; design content until the BE-75 real run",
+ "source": "design content for the goldens, in the shape of the FL-34 real run's test/fixtures/venue_map/event_mapped.json (stage_map_test checks the shapes match)",
  "status": 200,
  "body": {
   "id": 15,
