@@ -42,7 +42,7 @@ create table organizers (
 --               "fee_rate_bp": 500, "start_on": "2026-12-01"}
 --   Jomhor's fee contract and the organizer's legal and bank details (docs/04-api.md §Finance). Set by Jomhor ops from
 --   the signed contract and a RIB certificate; never writable through /org. ice 15 digits, rib 24 digits,
---   fee_rate_bp 0–10 000. Absent or malformed: no settlement statements (WARN).
+--   fee_rate_bp 0–10 000. Absent: no settlement statements; malformed: none either, with a WARN.
 
 create table users (
   id            uuid primary key default gen_random_uuid(),
