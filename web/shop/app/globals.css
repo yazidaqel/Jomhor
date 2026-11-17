@@ -95,6 +95,12 @@
   html:lang(ar) :is(.text-label, .uppercase[class*='tracking-']):not([dir='ltr'], [dir='ltr'] *) {
     font-weight: 700 !important;
   }
+  /* The venue map is one LTR island so it never mirrors (StageMap.tsx), but its centre label is AR text: same rule. */
+  html:lang(ar) [data-map] .text-label {
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    font-weight: 700 !important;
+  }
   /* Figures in the display face line up (countdowns, prices). */
   .font-display {
     font-variant-numeric: tabular-nums;

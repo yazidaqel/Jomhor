@@ -13,6 +13,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Stream;
 import ma.jomhor.finance.application.SettlementService;
 import ma.jomhor.tenancy.domain.Pins;
@@ -28,6 +29,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * admitted at seven) and Olympique Tensift's one, the demo fan's tickets of
  * both clubs, a second run (a restart) adds nothing and moves the on-sale events with the clock, GET /fan/events lists
  * both clubs, the scanner staff PINs match, and the fixed OTP logs in a fan and a cashier (a wrong code still fails).
+ * ATLAS FC's venue gets the STADIUM map while it has no layout (plan venue-map Q242); Tensift's stays unmapped.
  */
 class DevSeederTest {
 
@@ -43,10 +45,15 @@ class DevSeederTest {
                     "--spring.datasource.password=" + pg.getPassword(),
                     "--jomhor.dev.fixed-otp=123456")) {
                 var jdbc = ctx.getBean(JdbcClient.class);
+                // plan venue-map Q242: ATLAS FC's venue on STADIUM, the corners free; Tensift's venue unmapped
+                String seededMap = "STADIUM EST=EAST HONNEUR=WEST NORD=NORTH SUD=SOUTH";
+                assertThat(venueMap(jdbc, DevSeeder.VENUE)).isEqualTo(seededMap);
+                assertThat(venueMap(jdbc, DevSeeder.TENSIFT_VENUE)).matches("null( [A-Z0-9_]+=null)+");
                 // the clock moved on: the restart puts the Tensift event back at now + 6 days
                 jdbc.sql("update events set starts_at = starts_at + interval '30 days' where organizer_id = ?")
                         .param(DevSeeder.TENSIFT).update();
                 ctx.getBean(DevSeeder.class).run(null); // a restart
+                assertThat(venueMap(jdbc, DevSeeder.VENUE)).isEqualTo(seededMap); // a re-run is a no-op
 
                 // BE-72: ATLAS FC's finance settings and till money on the two previous local days (once, the restart
                 // adds none); the statement job issues each due day once, with its invoice. One instant for the job
@@ -111,8 +118,29 @@ class DevSeederTest {
                         .statusCode()).isEqualTo(401);
                 assertThat(post(api + "/org/auth/verify", "{\"phone\": \"+212600000002\", \"code\": \"123456\"}")
                         .body()).contains("CASHIER");
+
+                // a map edited in the back-office (EST on the south-east corner) survives a restart; so does a layout
+                // with no zone on it; only a venue with no layout gets the seeded map again
+                jdbc.sql("update zones set map_slot = 'SOUTH_EAST' where venue_id = ? and code = 'EST'")
+                        .param(DevSeeder.VENUE).update();
+                ctx.getBean(DevSeeder.class).run(null);
+                assertThat(venueMap(jdbc, DevSeeder.VENUE)).isEqualTo("STADIUM EST=SOUTH_EAST HONNEUR=WEST NORD=NORTH SUD=SOUTH");
+                jdbc.sql("update zones set map_slot = null where venue_id = ?").param(DevSeeder.VENUE).update();
+                ctx.getBean(DevSeeder.class).run(null);
+                assertThat(venueMap(jdbc, DevSeeder.VENUE)).isEqualTo("STADIUM EST=null HONNEUR=null NORD=null SUD=null");
+                jdbc.sql("update venues set layout = null where id = ?").param(DevSeeder.VENUE).update();
+                ctx.getBean(DevSeeder.class).run(null);
+                assertThat(venueMap(jdbc, DevSeeder.VENUE)).isEqualTo(seededMap);
             }
         }
+    }
+
+    /** "layout CODE=slot ..." of a venue, zones by code. */
+    private static String venueMap(JdbcClient jdbc, UUID venue) {
+        String layout = jdbc.sql("select layout from venues where id = ?").param(venue).query(String.class)
+                .optional().orElse(null);
+        return layout + jdbc.sql("select ' ' || string_agg(code || '=' || coalesce(map_slot, 'null'), ' ' order by code) "
+                + "from zones where venue_id = ?").param(venue).query(String.class).single();
     }
 
     private static HttpResponse<String> post(String url, String json) throws Exception {

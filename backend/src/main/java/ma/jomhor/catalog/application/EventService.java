@@ -254,7 +254,7 @@ public class EventService {
         EventZones all = eventZones(eventId);
         Event.Listing e = all.event();
         List<Event.ZoneListing> zones = all.zones().stream()
-                .map(z -> new Event.ZoneListing(z.id(), z.code(), z.name(), z.seated(), z.gates(),
+                .map(z -> new Event.ZoneListing(z.id(), z.code(), z.name(), z.seated(), z.mapSlot(), z.gates(),
                         z.prices().stream().filter(p -> p.audience().sellable()).toList()))
                 .filter(z -> !z.prices().isEmpty())
                 .toList();

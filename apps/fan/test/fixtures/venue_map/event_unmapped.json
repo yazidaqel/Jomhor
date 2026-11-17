@@ -1,0 +1,101 @@
+{
+ "source": "real run FL-34, 2026-11-17: GET /v1/fan/events/4 on the dev API (public, no token), Olympique Tensift (dev seed: no map, layout null)",
+ "status": 200,
+ "body": {
+  "id": 4,
+  "organizer_id": "a7a5fc00-0000-4000-8000-000000000002",
+  "organizer": {
+   "slug": "olympique-tensift",
+   "name": "Olympique Tensift",
+   "crest_url": null
+  },
+  "status": "ON_SALE",
+  "event_type": "FOOTBALL_MATCH",
+  "title": "Olympique Tensift vs Union Rif",
+  "starts_at": "2026-11-23T20:16:00Z",
+  "doors_open_at": "2026-11-23T18:16:00Z",
+  "timezone": "Africa/Casablanca",
+  "venue": {
+   "name": "Stade Tensift",
+   "city": "Marrakech"
+  },
+  "metadata": {
+   "matchday": 12,
+   "opponent": "Union Rif",
+   "competition": "Championnat"
+  },
+  "sale_starts_at": null,
+  "sales_close_at": "2026-11-23T19:16:00Z",
+  "on_sale": true,
+  "sold_out": false,
+  "from_price_mad": 5000,
+  "per_account_limit": 4,
+  "room": null,
+  "layout": null,
+  "zones": [
+   {
+    "id": 9,
+    "code": "NORD",
+    "name": "Nord",
+    "seated": false,
+    "gate_codes": [
+     "P2"
+    ],
+    "prices": [
+     {
+      "price_category_id": "909f4e6b-cd40-411c-bb9b-e16a5c5e7cce",
+      "name": "Plein tarif",
+      "price_mad": 5000,
+      "remaining": 1997,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": null
+   },
+   {
+    "id": 10,
+    "code": "SUD",
+    "name": "Sud",
+    "seated": false,
+    "gate_codes": [
+     "P3"
+    ],
+    "prices": [
+     {
+      "price_category_id": "45cdac8d-efba-4b64-b55c-0b837cea2a14",
+      "name": "Plein tarif",
+      "price_mad": 5000,
+      "remaining": 1999,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": null
+   },
+   {
+    "id": 11,
+    "code": "HONNEUR",
+    "name": "Honneur",
+    "seated": true,
+    "gate_codes": [
+     "P1"
+    ],
+    "prices": [
+     {
+      "price_category_id": "1f623688-0be7-483a-a02a-fd68bbdcb29f",
+      "name": "Plein tarif",
+      "price_mad": 25000,
+      "remaining": 498,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": null
+   }
+  ],
+  "payment_methods": [
+   "CARD",
+   "WALLET",
+   "CASH_AGENCY"
+  ],
+  "cash_until": "2026-11-23T17:16:00Z"
+ }
+}

@@ -1,0 +1,167 @@
+### Venue map demo (IntelliJ HTTP client): plan venue-map §1 Exit (1), (4), (5) on the API; VenueMapApiTest and
+### FanEventApiTest run the same rules in CI.
+#
+# Start the backend with the dev profile on port 8080 (dev seed: ATLAS FC's Grand Stade mapped on STADIUM with
+# NORD->NORTH, SUD->SOUTH, EST->EAST, HONNEUR->WEST and the corners free; Olympique Tensift's venue unmapped; Ops Dev
+# +212600000003, Finance Dev +212600000004):
+#   docker compose up -d && SERVER_PORT=8080 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Every phone logs in with the dev OTP 123456. Run top to bottom: the last step puts the seeded map back.
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@tensift = a7a5fc00-0000-4000-8000-000000000002
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@opsPhone = +212600000003
+@financePhone = +212600000004
+@code = 123456
+
+### ---------- (0) staff logins ----------
+
+### 0.1 OPS (Ops Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 0.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 0.3 FINANCE (Finance Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{financePhone}}"}
+
+### 0.4 FINANCE: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{financePhone}}", "code": "{{code}}"}
+
+> {% client.global.set("financeToken", response.body.token); %}
+
+### ---------- (1) the seeded map ----------
+
+### 1.1 The venue: layout STADIUM, each zone with its map_slot (keeps the zone ids for the PUTs)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {%
+    const id = code => response.body.zones.find(z => z.code === code).id;
+    client.global.set("nord", id("NORD"));
+    client.global.set("sud", id("SUD"));
+    client.global.set("est", id("EST"));
+    client.global.set("honneur", id("HONNEUR"));
+    client.test("STADIUM", () => client.assert(response.body.layout === "STADIUM"));
+%}
+
+### 1.2 FINANCE reads the map (200) ...
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+
+### 1.3 ... and can't change it (403 FORBIDDEN)
+PUT {{base}}/org/venues/{{venue}}/map
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"layout": null, "zones": []}
+
+### 1.4 The upcoming match on the fan side: layout + each zone's map_slot (keeps its id)
+GET {{base}}/fan/events?organizer={{org}}
+
+> {% client.global.set("eventId", response.body.find(e => e.title === "ATLAS FC vs Rapid Oued").id); %}
+
+### 1.5 Detail: "layout": "STADIUM", Est on "EAST"
+GET {{base}}/fan/events/{{eventId}}
+
+### ---------- (4) OPS moves EST to the south-east corner ----------
+
+### 4.1 Est -> SOUTH_EAST (the shop shows it within 15 s, the app at its next read)
+PUT {{base}}/org/venues/{{venue}}/map
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"layout": "STADIUM", "zones": [
+  {"zone_id": {{nord}}, "map_slot": "NORTH"},
+  {"zone_id": {{sud}}, "map_slot": "SOUTH"},
+  {"zone_id": {{est}}, "map_slot": "SOUTH_EAST"},
+  {"zone_id": {{honneur}}, "map_slot": "WEST"}
+]}
+
+### 4.2 Nord and Sud swap in one PUT (no unique-key error)
+PUT {{base}}/org/venues/{{venue}}/map
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"layout": "STADIUM", "zones": [
+  {"zone_id": {{nord}}, "map_slot": "SOUTH"},
+  {"zone_id": {{sud}}, "map_slot": "NORTH"},
+  {"zone_id": {{est}}, "map_slot": "SOUTH_EAST"},
+  {"zone_id": {{honneur}}, "map_slot": "WEST"}
+]}
+
+### 4.3 A slot twice: 422 VALIDATION_FAILED on zones[1].map_slot, nothing written
+PUT {{base}}/org/venues/{{venue}}/map
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"layout": "STADIUM", "zones": [
+  {"zone_id": {{nord}}, "map_slot": "NORTH"},
+  {"zone_id": {{sud}}, "map_slot": "NORTH"}
+]}
+
+### 4.4 A slot of another layout: 422 on zones[0].map_slot
+PUT {{base}}/org/venues/{{venue}}/map
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"layout": "STADIUM", "zones": [{"zone_id": {{nord}}, "map_slot": "ORCHESTRA"}]}
+
+### 4.5 "Aucun plan (liste)": no map, the screens show the list (until the next dev restart: DevSeeder maps a venue with
+### no layout to STADIUM again)
+PUT {{base}}/org/venues/{{venue}}/map
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"layout": null, "zones": []}
+
+### 4.6 Detail: "layout": null, every map_slot null
+GET {{base}}/fan/events/{{eventId}}
+
+### ---------- (5) the unmapped venue ----------
+
+### 5.1 Olympique Tensift's event: open its detail from this list; "layout": null (the list only)
+GET {{base}}/fan/events?organizer={{tensift}}
+
+> {% client.global.set("tensiftEvent", response.body[0].id); %}
+
+### 5.2 Detail: "layout": null
+GET {{base}}/fan/events/{{tensiftEvent}}
+
+### ---------- back to the seeded map ----------
+
+### 6.1 The dev seed's map again (a restart would also restore it, since the layout is null after 4.5)
+PUT {{base}}/org/venues/{{venue}}/map
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"layout": "STADIUM", "zones": [
+  {"zone_id": {{nord}}, "map_slot": "NORTH"},
+  {"zone_id": {{sud}}, "map_slot": "SOUTH"},
+  {"zone_id": {{est}}, "map_slot": "EAST"},
+  {"zone_id": {{honneur}}, "map_slot": "WEST"}
+]}

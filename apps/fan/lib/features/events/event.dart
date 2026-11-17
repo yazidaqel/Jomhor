@@ -204,7 +204,13 @@ class Eligibility {
 }
 
 class EventDetail {
-  new({required this.event, required this.zones, this.paymentMethods = const [PayMethod.card], this.cashUntil});
+  new({
+    required this.event,
+    required this.zones,
+    this.paymentMethods = const [PayMethod.card],
+    this.cashUntil,
+    this.layout,
+  });
 
   factory fromJson(Map<String, Object?> j, {required DateTime fetchedAt}) => EventDetail(
     event: FanEvent.fromJson(j, fetchedAt: fetchedAt),
@@ -217,10 +223,14 @@ class EventDetail {
       final String t => DateTime.parse(t).toUtc(),
       _ => null,
     },
+    layout: j['layout'] as String?,
   );
 
   final FanEvent event;
   final List<Zone> zones;
+
+  /// The venue map's layout id (docs/04-api.md §Venue map), as sent: an id this build doesn't know means no map.
+  final String? layout;
 
   /// What `/pay` takes for this event now, in the API's order (CARD, WALLET, CASH_AGENCY).
   final List<PayMethod> paymentMethods;
@@ -238,6 +248,7 @@ class Zone {
     required this.seated,
     required this.gateCodes,
     required this.prices,
+    this.mapSlot,
   });
 
   factory fromJson(Map<String, Object?> j) => Zone(
@@ -247,6 +258,7 @@ class Zone {
     seated: j['seated']! as bool,
     gateCodes: [for (final g in j['gate_codes']! as List<Object?>) g! as String],
     prices: [for (final p in j['prices']! as List<Object?>) Price.fromJson(p! as Map<String, Object?>)],
+    mapSlot: j['map_slot'] as String?,
   );
 
   /// DESIGN.md Lot 1 adjustments, screen 2.
@@ -258,6 +270,9 @@ class Zone {
   final bool seated;
   final List<String> gateCodes;
   final List<Price> prices;
+
+  /// Its slot on the venue map, as sent; null, or a slot the layout doesn't have, = only in the list.
+  final String? mapSlot;
 
   int get remaining => prices.fold(0, (sum, p) => sum + p.remaining);
   bool get soldOut => remaining == 0;

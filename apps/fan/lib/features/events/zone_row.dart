@@ -5,7 +5,8 @@ import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/motion.dart';
 
-const List<Color> _zonePalette = [JomhorColors.zoneA, JomhorColors.zoneB, JomhorColors.zoneC];
+/// A zone's colour by its position among the event's zones (DESIGN.md: list and venue map alike).
+const List<Color> zonePalette = [JomhorColors.zoneA, JomhorColors.zoneB, JomhorColors.zoneC];
 
 /// A zone card (screens 2 and 3): colour bar, name, seating and gates, price, places left.
 /// On screen 3 it is tappable ([onTap]) and shows [selected] with the accent border.
@@ -44,7 +45,7 @@ class ZoneRow extends StatelessWidget {
                 width: 10,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: z.soldOut ? JomhorColors.zoneDisabled : _zonePalette[index % _zonePalette.length],
+                  color: z.soldOut ? JomhorColors.zoneDisabled : zonePalette[index % zonePalette.length],
                   borderRadius: const BorderRadius.all(Radius.circular(JomhorRadius.pill)),
                 ),
               ),

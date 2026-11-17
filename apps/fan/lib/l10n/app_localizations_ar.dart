@@ -255,7 +255,22 @@ class AppLocalizationsAr extends AppLocalizations {
   String get morePlaces => 'زيد تذكرة';
 
   @override
-  String get groupHint => 'البلايص اللي كتشريهم مرة وحدة كيكونو حدا بعضياتهم. كل صاحب كيوصلو QR ديالو.';
+  String get groupHint =>
+      'كاع البلايص ديال نفس الشرية كيكونو فنفس المنطقة، والبلاصة حرة: جيو مجموعين باش تكونو حدا بعضياتكم. كل صاحب كيوصلو QR ديالو.';
+
+  @override
+  String get venueMap => 'خريطة المكان';
+
+  @override
+  String get mapField => 'التيران';
+
+  @override
+  String get mapStage => 'المنصة';
+
+  @override
+  String mapBlock(String zone, String detail) {
+    return '$zone، $detail';
+  }
 
   @override
   String get total => 'المجموع';

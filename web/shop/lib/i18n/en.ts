@@ -108,6 +108,13 @@ export const en: Dict = {
     members: 'Members',
     membersNote: 'Members price · joined before {date}',
     membersNoteAny: 'Members price · for club members only',
+    map: 'Venue map',
+    mapField: 'Pitch',
+    mapStage: 'Stage',
+    mapFrom: 'from {price}',
+    mapBlock: '{zone}, from {price}',
+    mapSoldOut: '{zone}, sold out',
+    mapMembers: ', members',
   },
   steps: {
     label: 'Your order steps',
@@ -130,6 +137,7 @@ export const en: Dict = {
     total: 'Total',
     cta: 'Continue',
     hold: 'Seats held for 8 minutes after this step',
+    group: 'All places in one purchase are in the same zone, with free placement: arrive together to sit side by side. Each friend gets their own QR.',
   },
   room: {
     metaTitle: 'Waiting room',

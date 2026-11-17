@@ -68,15 +68,18 @@ class FanEventController {
 
     record PriceDto(UUID priceCategoryId, String name, long priceMad, int remaining, Event.Audience audience) {}
 
-    record ZoneDto(int id, String code, String name, boolean seated, List<String> gateCodes, List<PriceDto> prices) {
+    /** {@code mapSlot}: detail only, as {@link EventDetailDto#layout()}. */
+    record ZoneDto(int id, String code, String name, boolean seated, List<String> gateCodes, List<PriceDto> prices,
+                   String mapSlot) {
         static ZoneDto of(Event.ZoneListing z) {
             return new ZoneDto(z.id(), z.code(), z.name(), z.seated(), z.gateCodes(), z.prices().stream()
                     .map(p -> new PriceDto(p.priceCategoryId(), p.name(), p.priceMad(), p.remaining(),
-                            p.audience())).toList());
+                            p.audience())).toList(), z.mapSlot());
         }
     }
 
-    record EventDetailDto(@JsonUnwrapped EventDto event, List<ZoneDto> zones, List<String> paymentMethods,
+    /** {@code layout}: the venue map template, read live (04 §Venue map); the list's EventDto doesn't carry it. */
+    record EventDetailDto(@JsonUnwrapped EventDto event, String layout, List<ZoneDto> zones, List<String> paymentMethods,
                           Instant cashUntil) {}
 
     @GetMapping("/fan/events")
@@ -94,7 +97,8 @@ class FanEventController {
     @GetMapping("/fan/events/{id}")
     EventDetailDto get(@PathVariable int id) {
         EventService.PublicEvent e = events.publicEvent(id);
-        return new EventDetailDto(EventDto.of(e.event(), rooms), e.zones().stream().map(ZoneDto::of).toList(),
+        return new EventDetailDto(EventDto.of(e.event(), rooms), e.event().venueLayout(),
+                e.zones().stream().map(ZoneDto::of).toList(),
                 e.payment().methods(), e.payment().cashUntil());
     }
 }

@@ -23,12 +23,40 @@ class MigrationsTest extends IntegrationTest {
     JdbcTemplate jdbcTemplate;
 
     @Test
-    void v1ToV37Apply() {
+    void v1ToV38Apply() {
         assertThat(jdbcTemplate.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class))
                 .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
                         "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32",
-                        "33", "34", "35", "36", "37");
+                        "33", "34", "35", "36", "37", "38");
+    }
+
+    /**
+     * V38: venues.layout and zones.map_slot are nullable (existing rows read null); one zone per slot in a venue, the
+     * same slot in two venues, and any number of unmapped zones.
+     */
+    @Test
+    void venueMapColumnsAndOneZonePerSlot() {
+        var org = jdbcTemplate.queryForObject("insert into organizers (name) values ('Club') returning id", UUID.class);
+        String venue = "insert into venues (organizer_id, name, capacity) values (?, 'Stade', 1000) returning id";
+        var a = jdbcTemplate.queryForObject(venue, UUID.class, org);
+        var b = jdbcTemplate.queryForObject(venue, UUID.class, org);
+        assertThat(jdbcTemplate.queryForObject("select layout from venues where id = ?", String.class, a)).isNull();
+        assertThat(jdbcTemplate.queryForList("select table_name || '.' || column_name || ' ' || is_nullable "
+                + "from information_schema.columns where (table_name, column_name) in "
+                + "(('venues', 'layout'), ('zones', 'map_slot')) order by 1", String.class))
+                .containsExactly("venues.layout YES", "zones.map_slot YES");
+        String zone = "insert into zones (organizer_id, venue_id, code, name, capacity, map_slot) "
+                + "values (?, ?, ?, 'Zone', 10, ?)";
+        jdbcTemplate.update("update venues set layout = 'STADIUM' where id in (?, ?)", a, b);
+        jdbcTemplate.update(zone, org, a, "NORD", "NORTH");
+        assertThatThrownBy(() -> jdbcTemplate.update(zone, org, a, "SUD", "NORTH"))
+                .isInstanceOf(DuplicateKeyException.class).hasMessageContaining("zones_venue_id_map_slot_key");
+        jdbcTemplate.update(zone, org, b, "NORD", "NORTH");
+        jdbcTemplate.update(zone, org, a, "EST", null);
+        jdbcTemplate.update(zone, org, a, "OUEST", null);
+        assertThat(jdbcTemplate.queryForObject("select count(*) from zones where venue_id = ? and map_slot is null",
+                Integer.class, a)).isEqualTo(2);
     }
 
     /**

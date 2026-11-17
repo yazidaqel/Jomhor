@@ -350,14 +350,15 @@ class FanEventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.zones[?(@.id == %d)].gate_codes[*]".formatted(est)).value(contains("P10", "P2")))
                 .andExpect(jsonPath("$.zones[?(@.id == %d)].prices[*].name".formatted(nord)).value(contains("Tribune", "Virage")))
                 .andExpect(jsonPath("$.zones[?(@.id == %d)].prices[*].remaining".formatted(nord)).value(contains(1, 2))));
-        String[] detailKeys = new String[EVENT_KEYS.length + 3];
+        String[] detailKeys = new String[EVENT_KEYS.length + 4];
         System.arraycopy(EVENT_KEYS, 0, detailKeys, 0, EVENT_KEYS.length);
         detailKeys[EVENT_KEYS.length] = "zones";
         detailKeys[EVENT_KEYS.length + 1] = "payment_methods";
         detailKeys[EVENT_KEYS.length + 2] = "cash_until";
+        detailKeys[EVENT_KEYS.length + 3] = "layout";
         assertKeys(json, "$", detailKeys);
         assertKeys(json, "$.venue", "name", "city");
-        assertKeys(json, "$.zones[0]", "id", "code", "name", "seated", "gate_codes", "prices");
+        assertKeys(json, "$.zones[0]", "id", "code", "name", "seated", "gate_codes", "prices", "map_slot");
         assertKeys(json, "$.zones[0].prices[0]", "price_category_id", "name", "price_mad", "remaining", "audience");
         assertNoSecretOrCount(json);
 
@@ -375,6 +376,49 @@ class FanEventApiTest extends OrgApiTest {
                 .andExpect(jsonPath("$.on_sale").value(true));
         list(a.org().toString(), null).andExpect(jsonPath("$[0].sold_out").value(true))
                 .andExpect(jsonPath("$[0].from_price_mad").isEmpty());
+    }
+
+    /**
+     * 04 §Venue map: the detail carries the venue's layout and each listed zone's map_slot, read live (a PUT shows on
+     * the next read); a mapped zone with no price isn't listed; the list rows carry neither.
+     */
+    @Test
+    void detailCarriesTheLiveVenueMapAndTheListDoesNot() throws Exception {
+        Caller a = admin();
+        String venueId = venue(a, "Stade");
+        int nord = zone(a, venueId, "NORD");
+        int est = zone(a, venueId, "EST");
+        int sud = zone(a, venueId, "SUD"); // no price for this event: not listed, mapped or not
+        int id = event(a, venueId);
+        priced(a, id, nord, "Virage", 5000, 2);
+        priced(a, id, est, "Est", 8000, 1);
+        publish(a, id);
+
+        mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.layout").value((Object) null))
+                .andExpect(jsonPath("$.zones[*].map_slot").value(contains((Object) null, (Object) null)));
+
+        call(a, put("/org/venues/" + venueId + "/map"), """
+                {"layout": "STADIUM", "zones": [{"zone_id": %d, "map_slot": "NORTH"}, {"zone_id": %d, "map_slot": "SOUTH"}]}
+                """.formatted(nord, sud)).andExpect(status().isOk());
+        String json = body(mvc.perform(get("/fan/events/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.layout").value("STADIUM"))
+                .andExpect(jsonPath("$.zones[*].id").value(contains(Math.min(nord, est), Math.max(nord, est))))
+                .andExpect(jsonPath("$.zones[?(@.id == %d)].map_slot".formatted(nord)).value(contains("NORTH")))
+                .andExpect(jsonPath("$.zones[?(@.id == %d)].map_slot".formatted(est)).value(contains((Object) null))));
+        assertThat(json).doesNotContain("SOUTH");
+
+        call(a, put("/org/venues/" + venueId + "/map"), "{\"layout\": null, \"zones\": []}").andExpect(status().isOk());
+        mvc.perform(get("/fan/events/" + id)).andExpect(jsonPath("$.layout").value((Object) null))
+                .andExpect(jsonPath("$.zones[*].map_slot").value(contains((Object) null, (Object) null)));
+
+        call(a, put("/org/venues/" + venueId + "/map"), """
+                {"layout": "STADIUM", "zones": [{"zone_id": %d, "map_slot": "NORTH"}]}""".formatted(nord))
+                .andExpect(status().isOk());
+        String rows = body(list(a.org().toString(), null).andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].id").value(contains(id))));
+        assertKeys(rows, "$[0]", EVENT_KEYS);
+        assertThat(rows).doesNotContain("layout").doesNotContain("map_slot").doesNotContain("NORTH");
     }
 
     @Test

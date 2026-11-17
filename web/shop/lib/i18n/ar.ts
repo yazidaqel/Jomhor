@@ -110,6 +110,13 @@ export const ar: Dict = {
     members: 'الأعضاء',
     membersNote: 'ثمن الأعضاء · اللي تسجلو قبل {date}',
     membersNoteAny: 'ثمن الأعضاء · غير لأعضاء النادي',
+    map: 'خريطة المكان',
+    mapField: 'التيران',
+    mapStage: 'المنصة',
+    mapFrom: 'من {price}',
+    mapBlock: '{zone}، من {price}',
+    mapSoldOut: '{zone}، كومبلي',
+    mapMembers: '، الأعضاء',
   },
   steps: {
     label: 'مراحل الطلب ديالك',
@@ -132,6 +139,7 @@ export const ar: Dict = {
     total: 'المجموع',
     cta: 'كمل',
     hold: 'البلايص كيتحجزو 8 دقايق من بعد هاد المرحلة',
+    group: 'كاع البلايص ديال نفس الشرية كيكونو فنفس المنطقة، والبلاصة حرة: جيو مجموعين باش تكونو حدا بعضياتكم. كل صاحب كيوصلو QR ديالو.',
   },
   room: {
     metaTitle: 'صف الانتظار',

@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "canvas": {"w": 400, "h": 300},
+  "layouts": {
+    "STADIUM": {
+      "center": {"kind": "FIELD", "rect": [86, 74, 228, 152]},
+      "slots": [
+        {"id": "NORTH_WEST", "rect": [0, 0, 74, 62]},
+        {"id": "NORTH", "rect": [80, 0, 240, 62]},
+        {"id": "NORTH_EAST", "rect": [326, 0, 74, 62]},
+        {"id": "WEST", "rect": [0, 68, 74, 164]},
+        {"id": "EAST", "rect": [326, 68, 74, 164]},
+        {"id": "SOUTH_WEST", "rect": [0, 238, 74, 62]},
+        {"id": "SOUTH", "rect": [80, 238, 240, 62]},
+        {"id": "SOUTH_EAST", "rect": [326, 238, 74, 62]}
+      ]
+    },
+    "END_STAGE": {
+      "center": {"kind": "STAGE", "rect": [110, 0, 180, 44]},
+      "slots": [
+        {"id": "FLOOR_FRONT", "rect": [96, 56, 208, 72]},
+        {"id": "LEFT", "rect": [0, 20, 84, 190]},
+        {"id": "RIGHT", "rect": [316, 20, 84, 190]},
+        {"id": "FLOOR_BACK", "rect": [96, 134, 208, 76]},
+        {"id": "TIER_A", "rect": [0, 222, 197, 78]},
+        {"id": "TIER_B", "rect": [203, 222, 197, 78]}
+      ]
+    },
+    "CENTER_STAGE": {
+      "center": {"kind": "STAGE", "rect": [72, 136, 256, 28]},
+      "slots": [
+        {"id": "NORTH", "rect": [72, 0, 256, 60]},
+        {"id": "FLOOR_NORTH", "rect": [72, 72, 256, 58]},
+        {"id": "WEST", "rect": [0, 30, 60, 240]},
+        {"id": "EAST", "rect": [340, 30, 60, 240]},
+        {"id": "FLOOR_SOUTH", "rect": [72, 170, 256, 58]},
+        {"id": "SOUTH", "rect": [72, 240, 256, 60]}
+      ]
+    },
+    "THEATRE": {
+      "center": {"kind": "STAGE", "rect": [90, 0, 220, 40]},
+      "slots": [
+        {"id": "ORCHESTRA", "rect": [78, 50, 244, 120]},
+        {"id": "BOX_LEFT", "rect": [0, 50, 66, 120]},
+        {"id": "BOX_RIGHT", "rect": [334, 50, 66, 120]},
+        {"id": "BALCONY", "rect": [20, 178, 360, 56]},
+        {"id": "GALLERY", "rect": [0, 242, 400, 58]}
+      ]
+    }
+  }
+}

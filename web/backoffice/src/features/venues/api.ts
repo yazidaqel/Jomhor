@@ -1,14 +1,17 @@
 import type { TFunction } from 'i18next'
 import type { FieldValues, Path, UseFormReturn } from 'react-hook-form'
 import { z } from 'zod'
+import venueLayouts from '../../../../../docs/venue-layouts.json'
 import { useOrgMutation, useOrgQuery, type Send } from '@/features/auth/organizer'
 import { ApiError, path } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { showFormError } from '@/lib/forms'
+import { fr } from '@/i18n/fr'
 
 // docs/04-api.md §Organizer /org/venues*, /org/gates/{id}/zones.
 export type Venue = { id: string; name: string; city: string | null; capacity: number; timezone: string }
-export type Zone = { id: number; code: string; name: string; capacity: number; seated: boolean }
+/** `map_slot`: venue map, set only by PUT /org/venues/{id}/map. */
+export type Zone = { id: number; code: string; name: string; capacity: number; seated: boolean; map_slot: string | null }
 /** `directions`, `latitude`, `longitude`: Lot 4, fan app only (never in the manifest). */
 export type Gate = {
   id: string
@@ -19,7 +22,8 @@ export type Gate = {
   latitude: number | null
   longitude: number | null
 }
-export type VenueDetail = Venue & { zones: Zone[]; gates: Gate[] }
+/** `layout`: venue map (also on the list, not read there). */
+export type VenueDetail = Venue & { layout: string | null; zones: Zone[]; gates: Gate[] }
 
 export const useVenues = () => useOrgQuery<Venue[]>(['venues'], '/org/venues')
 export const useVenue = (id: string) => useOrgQuery<VenueDetail>(['venues', id], path('org', 'venues', id))
@@ -83,3 +87,83 @@ export const gateSchema = (t: TFunction, gate?: Gate) =>
 /** Google Maps search URL for a point (opens the app on phones); coordinates are a gate's, never personal data. */
 export const mapUrl = (latitude: number, longitude: number) =>
   `https://www.google.com/maps/search/?${new URLSearchParams({ api: '1', query: `${latitude},${longitude}` })}`
+
+// ---- Venue map (docs/04-api.md §Venue map, PUT /org/venues/{id}/map) ----
+
+type Rect = [x: number, y: number, w: number, h: number]
+export type LayoutId = keyof typeof venueLayouts.layouts
+/** Slot ids are the keys of their French labels; the map tests check every slot of the JSON has one. */
+export type SlotId = keyof typeof fr.venues.map.slots
+export type Layout = { center: { kind: 'FIELD' | 'STAGE'; rect: Rect }; slots: { id: SlotId; rect: Rect }[] }
+/** The templates, built in from docs/venue-layouts.json (never fetched), in the file's order. */
+export const LAYOUTS = venueLayouts.layouts as unknown as Record<LayoutId, Layout>
+export const LAYOUT_IDS = Object.keys(LAYOUTS) as LayoutId[]
+export const CANVAS = venueLayouts.canvas
+/** Select values for "Aucun plan (liste)" and "Pas sur le plan": lowercase, so never a layout or slot id. */
+export const NO_LAYOUT = 'none'
+export const OFF_MAP = 'off'
+
+type Placement = { zone_id: number; map_slot: SlotId }
+export type MapForm = { layout: LayoutId | typeof NO_LAYOUT; zones: { zone_id: number; map_slot: SlotId | typeof OFF_MAP }[] }
+export type MapBody = { layout: LayoutId | null; zones: Placement[] }
+
+const isLayout = (id: string | null): id is LayoutId => id != null && Object.hasOwn(LAYOUTS, id)
+const slotIds = (layout: MapForm['layout']): string[] => (layout === NO_LAYOUT ? [] : LAYOUTS[layout].slots.map((s) => s.id))
+
+/** Server map → form, one row per zone in the API order. Unknown layout or slot = unmapped (04 §Venue map). */
+export function toMapForm(venue: VenueDetail): MapForm {
+  const layout = isLayout(venue.layout) ? venue.layout : NO_LAYOUT
+  const slots = slotIds(layout)
+  return {
+    layout,
+    zones: venue.zones.map((z) => ({ zone_id: z.id, map_slot: z.map_slot != null && slots.includes(z.map_slot) ? (z.map_slot as SlotId) : OFF_MAP })),
+  }
+}
+
+/** Form → PUT body: the zones placed on a slot, in the form order; no layout = `{layout: null, zones: []}`. */
+export const mapBody = ({ layout, zones }: MapForm): MapBody =>
+  layout === NO_LAYOUT ? { layout: null, zones: [] } : { layout, zones: zones.filter((z): z is Placement => z.map_slot !== OFF_MAP) }
+
+/** The saved map in a new layout: keeps the slots that exist there, takes the others off the map. */
+export function switchLayout(saved: MapForm, layout: MapForm['layout']): MapForm {
+  const slots = slotIds(layout)
+  return { layout, zones: saved.zones.map((z) => ({ ...z, map_slot: slots.includes(z.map_slot) ? z.map_slot : OFF_MAP })) }
+}
+
+export const mapSchema = (t: TFunction) =>
+  z
+    .object({
+      layout: z.enum([NO_LAYOUT, ...LAYOUT_IDS]),
+      zones: z.array(z.object({ zone_id: z.number(), map_slot: z.enum([OFF_MAP, ...(Object.keys(fr.venues.map.slots) as SlotId[])]) })),
+    })
+    .superRefine(({ zones }, ctx) => {
+      const seen = new Set<string>()
+      zones.forEach(({ map_slot }, i) => {
+        if (map_slot === OFF_MAP) return
+        if (seen.has(map_slot)) ctx.addIssue({ code: 'custom', path: ['zones', i, 'map_slot'], message: t('venues.map.slotTaken') })
+        seen.add(map_slot)
+      })
+    })
+
+/**
+ * The form field a 422 of the PUT lands on: `layout` on the template Select, `zones[i].*` on that zone's Select (i
+ * indexes the body, the form has every zone). `zones` itself, or anything else: null (root error).
+ */
+export function mapErrorField(
+  e: unknown,
+  form: MapForm,
+  body: MapBody,
+): { name: 'layout' | `zones.${number}.map_slot`; key: 'venues.map.layoutInvalid' | 'venues.map.zoneGone' | 'venues.map.slotInvalid' } | null {
+  if (!(e instanceof ApiError) || e.code !== 'VALIDATION_FAILED') return null
+  for (const key of Object.keys(Object(e.details.fields))) {
+    if (key === 'layout') return { name: 'layout', key: 'venues.map.layoutInvalid' }
+    const m = /^zones\[(\d+)\]\.(zone_id|map_slot)$/.exec(key)
+    const row = m ? form.zones.findIndex((z) => z.zone_id === body.zones[Number(m[1])]?.zone_id) : -1
+    if (row >= 0) return { name: `zones.${row}.map_slot`, key: m![2] === 'zone_id' ? 'venues.map.zoneGone' : 'venues.map.slotInvalid' }
+  }
+  return null
+}
+
+/** PUT the whole map (answers the venue detail); then this organizer's venue queries are refetched. */
+export const useSaveMap = (venueId: string) =>
+  useVenueMutation((body: MapBody, send) => send<VenueDetail>({ method: 'PUT', path: `${path('org', 'venues', venueId)}/map`, body }))

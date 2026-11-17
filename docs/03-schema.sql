@@ -103,7 +103,8 @@ create table venues (
   name          text not null,
   city          text,
   capacity      integer not null check (capacity > 0),
-  timezone      text not null default 'Africa/Casablanca'  -- IANA zone; every wall time for this venue's events
+  timezone      text not null default 'Africa/Casablanca', -- IANA zone; every wall time for this venue's events
+  layout        text                                  -- venue map template id from docs/venue-layouts.json (STADIUM, END_STAGE, CENTER_STAGE, THEATRE); null = no map, zones shown as a list. No check here: the set grows in the JSON and the backend validates (04 PUT /org/venues/{id}/map)
 );
 
 create table zones (
@@ -114,7 +115,9 @@ create table zones (
   name          text not null,
   capacity      integer not null check (capacity >= 0),
   seated        boolean not null default false,
-  unique (venue_id, code)
+  map_slot      text,                                 -- slot id in the venue's layout (docs/venue-layouts.json); null = not on the map. Display only: never copied into orders or tickets, never in the QR or the manifest. Set only by PUT /org/venues/{id}/map
+  unique (venue_id, code),
+  unique (venue_id, map_slot)                         -- one zone per slot; nulls never collide
 );
 
 create table gates (

@@ -1,0 +1,125 @@
+{
+ "source": "real run FL-34, 2026-11-17: GET /v1/fan/events/1 on the dev API (public, no token), ATLAS FC (dev seed: STADIUM, NORD->NORTH, SUD->SOUTH, EST->EAST, HONNEUR->WEST)",
+ "status": 200,
+ "body": {
+  "id": 1,
+  "organizer_id": "a7a5fc00-0000-4000-8000-000000000001",
+  "organizer": {
+   "slug": "atlas-fc",
+   "name": "ATLAS FC",
+   "crest_url": null
+  },
+  "status": "ON_SALE",
+  "event_type": "FOOTBALL_MATCH",
+  "title": "ATLAS FC vs Rapid Oued",
+  "starts_at": "2026-11-27T20:16:00Z",
+  "doors_open_at": "2026-11-27T18:16:00Z",
+  "timezone": "Africa/Casablanca",
+  "venue": {
+   "name": "Grand Stade",
+   "city": "Casablanca"
+  },
+  "metadata": {
+   "matchday": 12,
+   "opponent": "Rapid Oued",
+   "competition": "Championnat"
+  },
+  "sale_starts_at": null,
+  "sales_close_at": "2026-11-27T19:16:00Z",
+  "on_sale": true,
+  "sold_out": false,
+  "from_price_mad": 5000,
+  "per_account_limit": 4,
+  "room": null,
+  "layout": "STADIUM",
+  "zones": [
+   {
+    "id": 1,
+    "code": "NORD",
+    "name": "Nord",
+    "seated": false,
+    "gate_codes": [
+     "P3",
+     "P4",
+     "P5"
+    ],
+    "prices": [
+     {
+      "price_category_id": "e1c78348-3b47-4893-85bd-bae9297c3b17",
+      "name": "Plein tarif",
+      "price_mad": 5000,
+      "remaining": 1998,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": "NORTH"
+   },
+   {
+    "id": 2,
+    "code": "EST",
+    "name": "Est",
+    "seated": false,
+    "gate_codes": [
+     "P3",
+     "P5",
+     "P6"
+    ],
+    "prices": [
+     {
+      "price_category_id": "a5a687bd-cfd9-485d-a106-367cf55bdfe7",
+      "name": "Plein tarif",
+      "price_mad": 8000,
+      "remaining": 2995,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": "EAST"
+   },
+   {
+    "id": 3,
+    "code": "HONNEUR",
+    "name": "Honneur",
+    "seated": true,
+    "gate_codes": [
+     "P1",
+     "P2"
+    ],
+    "prices": [
+     {
+      "price_category_id": "8121f8db-9a12-49c3-9de8-d8792871d7d0",
+      "name": "Plein tarif",
+      "price_mad": 25000,
+      "remaining": 494,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": "WEST"
+   },
+   {
+    "id": 4,
+    "code": "SUD",
+    "name": "Sud",
+    "seated": false,
+    "gate_codes": [
+     "P7"
+    ],
+    "prices": [
+     {
+      "price_category_id": "ea76c71f-5a6f-418f-a8bf-4dc2fa8e6edd",
+      "name": "Plein tarif",
+      "price_mad": 5000,
+      "remaining": 2000,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": "SOUTH"
+   }
+  ],
+  "payment_methods": [
+   "CARD",
+   "WALLET",
+   "CASH_AGENCY"
+  ],
+  "cash_until": "2026-11-27T17:16:00Z"
+ }
+}

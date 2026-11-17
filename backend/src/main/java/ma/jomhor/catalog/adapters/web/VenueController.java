@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import ma.jomhor.catalog.application.VenueService;
 import ma.jomhor.catalog.domain.Venue;
 import ma.jomhor.catalog.domain.Venue.Detail;
 import ma.jomhor.catalog.domain.Venue.Gate;
+import ma.jomhor.catalog.domain.Venue.MapEntry;
 import ma.jomhor.catalog.domain.Venue.Zone;
 import ma.jomhor.tenancy.domain.OrgContext;
 import org.springframework.http.HttpStatus;
@@ -30,11 +32,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.core.JsonParser;
 import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ValueDeserializer;
 import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
- * docs/04-api.md §Organizer: /org/venues*, /org/gates/{id}/zones. PATCH bodies are partial: an absent or
+ * docs/04-api.md §Organizer: /org/venues*, /org/venues/{id}/map, /org/gates/{id}/zones. PATCH bodies are partial: an absent or
  * null field is left unchanged; venue {@code city: ""} and gate {@code directions: ""} clear the field; a gate PATCH
  * with both {@code latitude: null} and {@code longitude: null} clears its location.
  */
@@ -176,6 +179,40 @@ class VenueController {
     void deleteGate(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id,
                     @PathVariable UUID gateId) {
         venues.deleteGate(org.organizerId(), id, gateId);
+    }
+
+    private static final int MAX_MAP_ENTRIES = 64;
+
+    /**
+     * The body is read as a tree: the 04 shape checks run in its order (layout, zones, then each entry's zone_id and
+     * map_slot) and name the exact field, before the venue is looked up. A non-object body has neither key.
+     */
+    @PutMapping("/org/venues/{id}/map")
+    Detail replaceMap(@RequestAttribute(OrgContext.ATTRIBUTE) OrgContext org, @PathVariable UUID id,
+                      @RequestBody JsonNode body) {
+        JsonNode layout = body.get("layout");
+        if (layout != null && !layout.isNull() && !layout.isString()) {
+            throw VenueService.invalid("layout", "must be a string or null");
+        }
+        JsonNode zones = body.get("zones");
+        if (zones == null || !zones.isArray() || zones.size() > MAX_MAP_ENTRIES) {
+            throw VenueService.invalid("zones", "must be an array of at most " + MAX_MAP_ENTRIES + " entries");
+        }
+        List<MapEntry> entries = new ArrayList<>();
+        for (int i = 0; i < zones.size(); i++) {
+            JsonNode zoneId = zones.get(i).get("zone_id");
+            if (zoneId == null || !zoneId.isIntegralNumber()) {
+                throw VenueService.invalid(VenueService.entryField(i, "zone_id"), "must be an integer");
+            }
+            JsonNode mapSlot = zones.get(i).get("map_slot");
+            if (mapSlot == null || !mapSlot.isString()) {
+                throw VenueService.invalid(VenueService.entryField(i, "map_slot"), "must be a string");
+            }
+            // -1 is no zone id (smallserial ids are positive): an integer beyond long fails the content check.
+            entries.add(new MapEntry(zoneId.canConvertToLong() ? zoneId.longValue() : -1, mapSlot.stringValue()));
+        }
+        return venues.replaceMap(org.organizerId(), id, layout == null || layout.isNull() ? null : layout.stringValue(),
+                entries);
     }
 
     @PutMapping("/org/gates/{id}/zones")

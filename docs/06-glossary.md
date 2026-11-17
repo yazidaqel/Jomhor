@@ -8,6 +8,10 @@
 | event_series | série | سلسلة | A season, a tour, a festival edition; groups events; passes attach here |
 | zone | tribune / zone | المدرج | Sector of a venue; `zone_id` travels in the QR |
 | gate | porte | البوابة | Physical entrance; serves one or more zones |
+| venue map | plan | خريطة المكان | The drawn plan fans tap to pick a zone (app screen 3, shop W2). Display only: never in the QR, the manifest or a ticket |
+| layout | modèle de plan | نموذج الخريطة | `venues.layout`: a template of `docs/venue-layouts.json` (STADIUM, END_STAGE, CENTER_STAGE, THEATRE) |
+| slot | emplacement | الموقع | `zones.map_slot`: one rectangle of the layout; one zone per slot |
+| seating mode | placement | طريقة الجلوس | Lot 7, per zone and per event: pick your seat, automatic (groups kept together), or no seats (free placement, today) |
 | pass | abonnement | اشتراك الموسم | Season pass: every match of the season in one zone, materialised as one ticket per event |
 | pass seats | places abonnés | مقاعد المشتركين | A zone's places for pass holders (price category audience `PASS`) |
 | installment | échéance | قسط | One payment of a pass bought in several (`pass_installments`); every 30 days |

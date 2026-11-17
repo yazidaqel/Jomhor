@@ -285,7 +285,7 @@ class GateDirectionsApiTest extends OrgApiTest {
         assertThat(JsonPath.<List<List<Object>>>read(json, s + ".gates")).containsExactly(List.of());
 
         String event = body(mvc.perform(get("/fan/events/" + eventId)).andExpect(status().isOk()));
-        assertKeys(event, "$.zones[0]", "id", "code", "name", "seated", "gate_codes", "prices");
+        assertKeys(event, "$.zones[0]", "id", "code", "name", "seated", "gate_codes", "prices", "map_slot");
         assertThat(event).doesNotContain("directions").doesNotContain("latitude").doesNotContain("Palmiers");
     }
 

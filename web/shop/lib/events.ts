@@ -13,7 +13,8 @@ import { PAY_METHODS, type PayMethod } from './order-client'
 export type Organizer = { slug: string | null; name: string; crest_url: string | null }
 /** Lot 5 step 2 `audience`: MEMBERS = each place held by a member who joined before `sale_starts_at` (server-checked). */
 export type Price = { price_category_id: string; name: string; price_mad: number; remaining: number; audience: 'ALL' | 'MEMBERS' }
-export type Zone = { id: number; code: string; name: string; seated: boolean; gate_codes: string[]; prices: Price[] }
+/** Venue map: `map_slot` = the zone's slot on the venue's `layout` (lib/venue-map.ts treats an unknown one as null). */
+export type Zone = { id: number; code: string; name: string; seated: boolean; gate_codes: string[]; prices: Price[]; map_slot: string | null }
 export type ShopEvent = {
   id: number
   organizer_id: string
@@ -38,7 +39,7 @@ export type ShopEvent = {
  * Lot 3: `payment_methods` = known methods in the 04 order (absent, a Lot 1 backend → card only); `cash_until` = when
  * cash stops being offered (refund cutoff − min window), null when the organizer has no cash set up.
  */
-export type ShopEventDetail = ShopEvent & { zones: Zone[]; payment_methods: PayMethod[]; cash_until: string | null; room: Room | null }
+export type ShopEventDetail = ShopEvent & { zones: Zone[]; payment_methods: PayMethod[]; cash_until: string | null; room: Room | null; layout: string | null }
 
 /**
  * Lot 5 `room` (04 GET /fan/events): the event's **current sale phase** while one is live, else null (no phase, or
@@ -142,6 +143,7 @@ function toZone(z: Raw): Zone {
       remaining: int(p.remaining) ?? 0,
       audience: p.audience === 'MEMBERS' ? 'MEMBERS' : 'ALL',
     })),
+    map_slot: str(z.map_slot),
   }
 }
 
@@ -206,7 +208,7 @@ export const getEvent = cache(async (id: number, now = Date.now()): Promise<Shop
   let raw = await read(false)
   if (raw && (windowContradicts(toEvent(raw), now) || phaseOver(toRoom(raw.room), now))) raw = await read(true)
   if (!raw) return null
-  return { ...toEvent(raw), zones: (Array.isArray(raw.zones) ? (raw.zones as Raw[]) : []).map(toZone), payment_methods: methodsOf(raw.payment_methods), cash_until: str(raw.cash_until), room: toRoom(raw.room) }
+  return { ...toEvent(raw), zones: (Array.isArray(raw.zones) ? (raw.zones as Raw[]) : []).map(toZone), payment_methods: methodsOf(raw.payment_methods), cash_until: str(raw.cash_until), room: toRoom(raw.room), layout: str(raw.layout) }
 })
 
 /** `ATLAS FC vs Rapid Oued` → `atlas-fc-vs-rapid-oued` (accents folded, at most 80 chars). */

@@ -234,7 +234,22 @@ class AppLocalizationsFr extends AppLocalizations {
   String get morePlaces => 'Un billet de plus';
 
   @override
-  String get groupHint => 'Les places d\'un même achat sont côte à côte. Chaque ami reçoit son propre QR.';
+  String get groupHint =>
+      'Toutes les places d\'un achat sont dans la même zone, en placement libre : arrivez ensemble pour être côte à côte. Chaque ami reçoit son propre QR.';
+
+  @override
+  String get venueMap => 'Plan du lieu';
+
+  @override
+  String get mapField => 'Terrain';
+
+  @override
+  String get mapStage => 'Scène';
+
+  @override
+  String mapBlock(String zone, String detail) {
+    return '$zone, $detail';
+  }
 
   @override
   String get total => 'Total';

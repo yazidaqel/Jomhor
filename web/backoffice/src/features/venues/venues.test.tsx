@@ -43,11 +43,12 @@ const venue = (): VenueDetail => ({
   city: 'Casablanca',
   capacity: 45000,
   timezone: 'Africa/Casablanca',
+  layout: null,
   zones: [
-    { id: 3, code: 'EST', name: 'Tribune Est', capacity: 12000, seated: false },
-    { id: 1, code: 'HONNEUR', name: 'Tribune d’honneur', capacity: 3000, seated: true },
-    { id: 2, code: 'NORD', name: 'Virage Nord', capacity: 15000, seated: false },
-    { id: 4, code: 'SUD', name: 'Virage Sud', capacity: 15000, seated: false },
+    { id: 3, code: 'EST', name: 'Tribune Est', capacity: 12000, seated: false, map_slot: null },
+    { id: 1, code: 'HONNEUR', name: 'Tribune d’honneur', capacity: 3000, seated: true, map_slot: null },
+    { id: 2, code: 'NORD', name: 'Virage Nord', capacity: 15000, seated: false, map_slot: null },
+    { id: 4, code: 'SUD', name: 'Virage Sud', capacity: 15000, seated: false, map_slot: null },
   ],
   gates: [
     { id: 'g-1', code: 'P1', name: 'Porte 1', zone_ids: [1], directions: 'Boulevard Sidi Abderrahmane', latitude: 33.582811, longitude: -7.646848 },

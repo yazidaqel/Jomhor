@@ -39,7 +39,8 @@ import 'waitlist_test.dart' show WaitlistSale;
 /// and screen 2 with a room. FL-28: the waitlist on screen 1's hero (to join, on the list) and screen 2 sold out.
 /// FL-29: screen 13 (buy, owned with one ticket issued and one to come) and screen 4's product variant. FL-30:
 /// screen 7 with the cotisation (unpaid, paid) and the Abonnements cards. FL-32: screen 4 with a promo code applied
-/// (held, the server's discount and total) and the cash order with its discount line.
+/// (held, the server's discount and total) and the cash order with its discount line. FL-34: screen 3 with the venue
+/// map.
 /// Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
@@ -864,6 +865,34 @@ void main() {
       expect(find.byKey(const Key('zones.price.pc-1-1')), findsOneWidget);
       if (locale == 'ar') expectArabicRules(tester);
       await snap('$locale-3-tarif-membres');
+    });
+
+    // FL-34: the venue map on screen 3 (STADIUM; Est selected, Sud sold out, Nord with a members price), never mirrored.
+    testWidgets('$locale · screen 3 with the venue map', (tester) async {
+      await room(tester, '/events/1/zones', (sale) {
+        sale
+          ..detail = realAnswer('event_stadium', dir: 'goldens').body
+          ..room = null;
+      });
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('map.EAST')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(const Key('map.WEST'))).left,
+        lessThan(tester.getRect(find.byKey(const Key('map.EAST'))).left),
+      );
+      // The centre label: tracked caps in FR; in AR no uppercase, letter-spacing 0, weight 700 (Arabic joining).
+      final field = lookupAppLocalizations(Locale(locale)).mapField;
+      final centre = tester.widget<Text>(find.text(locale == 'ar' ? field : field.toUpperCase()));
+      expect(
+        (centre.data, centre.style!.letterSpacing, centre.style!.fontWeight),
+        switch (locale) {
+          'ar' => ('التيران', 0.0, FontWeight.w700),
+          _ => ('TERRAIN', 1.5, FontWeight.w600),
+        },
+      );
+      if (locale == 'ar') expectArabicRules(tester);
+      await snap('$locale-3-plan');
     });
 
     for (final (name, fixture, row) in [

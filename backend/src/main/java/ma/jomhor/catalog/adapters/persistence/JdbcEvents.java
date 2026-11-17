@@ -270,7 +270,8 @@ class JdbcEvents implements Events {
     private static final String LISTING = """
             select e.id, e.organizer_id, o.slug as organizer_slug, o.name as organizer_name,
                    o.settings ->> 'crest_url' as organizer_crest_url, e.status, e.event_type, e.title, e.starts_at,
-                   e.doors_open_at, v.timezone, v.name as venue_name, v.city as venue_city, e.metadata::text as metadata, e.sale_starts_at,
+                   e.doors_open_at, v.timezone, v.name as venue_name, v.city as venue_city, v.layout as venue_layout,
+                   e.metadata::text as metadata, e.sale_starts_at,
                    e.refund_cutoff_at, e.per_account_limit,
                    coalesce(e.status = 'ON_SALE' and now() >= coalesce(e.sale_starts_at, '-infinity')
                             and now() < e.refund_cutoff_at, false) as on_sale,
@@ -331,13 +332,13 @@ class JdbcEvents implements Events {
                         .add(new Event.GateListing(rs.getString("code"), rs.getString("name"), rs.getString("directions"),
                                 rs.getBigDecimal("latitude"), rs.getBigDecimal("longitude"))));
         return jdbc.sql("""
-                        select z.id, z.code, z.name, z.seated from zones z
+                        select z.id, z.code, z.name, z.seated, z.map_slot from zones z
                         where z.organizer_id = :org and z.id = any(cast(:zones as smallint[]))
                         order by z.id
                         """)
                 .param("org", org).param("zones", zoneIds)
                 .query((rs, n) -> new Event.ZoneListing(rs.getInt("id"), rs.getString("code"), rs.getString("name"),
-                        rs.getBoolean("seated"), gates.getOrDefault(rs.getInt("id"), List.of()),
+                        rs.getBoolean("seated"), rs.getString("map_slot"), gates.getOrDefault(rs.getInt("id"), List.of()),
                         prices.get(rs.getInt("id"))))
                 .list();
     }
@@ -506,7 +507,7 @@ class JdbcEvents implements Events {
                 instant(rs, "doors_open_at"), rs.getString("timezone"), rs.getString("venue_name"),
                 rs.getString("venue_city"), rs.getString("metadata"), instant(rs, "sale_starts_at"),
                 instant(rs, "refund_cutoff_at"), rs.getBoolean("on_sale"), rs.getBoolean("sold_out"),
-                rs.getObject("from_price_mad", Long.class), rs.getInt("per_account_limit"));
+                rs.getObject("from_price_mad", Long.class), rs.getInt("per_account_limit"), rs.getString("venue_layout"));
     }
 
     private static PriceCategory price(ResultSet rs, int n) throws SQLException {
