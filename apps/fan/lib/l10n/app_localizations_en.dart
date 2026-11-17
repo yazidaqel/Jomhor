@@ -234,7 +234,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get morePlaces => 'One more ticket';
 
   @override
-  String get groupHint => 'Seats bought together are side by side. Each friend gets their own QR.';
+  String get groupHint =>
+      'All places in one purchase are in the same zone, with free placement: arrive together to sit side by side. Each friend gets their own QR.';
+
+  @override
+  String get venueMap => 'Venue map';
+
+  @override
+  String get mapField => 'Pitch';
+
+  @override
+  String get mapStage => 'Stage';
+
+  @override
+  String mapBlock(String zone, String detail) {
+    return '$zone, $detail';
+  }
 
   @override
   String get total => 'Total';

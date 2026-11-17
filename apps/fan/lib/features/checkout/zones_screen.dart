@@ -5,17 +5,19 @@ import 'package:jomhor_fan/app/error_panel.dart';
 import 'package:jomhor_fan/core/clock.dart';
 import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/checkout_controller.dart';
+import 'package:jomhor_fan/features/checkout/stage_map.dart';
 import 'package:jomhor_fan/features/checkout/zone_pick.dart';
 import 'package:jomhor_fan/features/events/event.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/features/events/zone_row.dart';
 import 'package:jomhor_fan/features/queue/queue_screen.dart';
+import 'package:jomhor_fan/features/queue/queue_store.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:jomhor_fan/ui/bidi.dart';
 import 'package:jomhor_fan/ui/skeleton.dart';
 
-/// Screen 3 · Choix de zone. Lot 1: zone list + stepper (Q22: no stadium map yet).
+/// Screen 3 · Choix de zone: the venue map when the event has one, the zone rows, the stepper.
 class ZonesScreen extends ConsumerWidget {
   const new({required this.eventId, super.key});
 
@@ -69,6 +71,12 @@ class _Body extends ConsumerWidget {
     final picker = ref.read(zonePickProvider(e.id).notifier);
     final limit = e.perAccountLimit;
     final allSoldOut = detail.zones.every((z) => z.soldOut);
+    final map = mapView(
+      detail,
+      selectedZoneId: pick.zone?.id,
+      now: now,
+      pass: ref.watch(queuePassesProvider).value?[e.id],
+    );
 
     return ListView(
       padding: const EdgeInsets.all(JomhorSpace.xl),
@@ -83,6 +91,13 @@ class _Body extends ConsumerWidget {
         else
           Text(l.pickZoneHint, style: JomhorType.bodySmall.copyWith(color: JomhorColors.textSecondary)),
         const SizedBox(height: JomhorSpace.m),
+        if (map != null) ...[
+          StageMap(
+            view: map,
+            onTap: (z) => picker.selectZone(z, perAccountLimit: limit),
+          ),
+          const SizedBox(height: JomhorSpace.l),
+        ],
         for (final (i, z) in detail.zones.indexed)
           ZoneRow(
             zone: z,

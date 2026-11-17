@@ -1,0 +1,129 @@
+{
+ "source": "contract: docs/04-api.md §Fan GET /fan/events/{id} with §Venue map (layout, zones[].map_slot), in the shape of test/fixtures/goldens/event_room_presale_next.json; design content until the BE-75 real run",
+ "status": 200,
+ "body": {
+  "id": 15,
+  "organizer_id": "a7a5fc00-0000-4000-8000-000000000001",
+  "organizer": {
+   "slug": "atlas-fc",
+   "name": "ATLAS FC",
+   "crest_url": null
+  },
+  "status": "ON_SALE",
+  "event_type": "FOOTBALL_MATCH",
+  "title": "Atlas FC vs Rapid Oued",
+  "starts_at": "2027-03-13T19:00:00Z",
+  "doors_open_at": null,
+  "timezone": "Africa/Casablanca",
+  "venue": {
+   "name": "Grand Stade",
+   "city": "Casablanca"
+  },
+  "metadata": {
+   "opponent": "Rapid Oued",
+   "competition": "Championnat",
+   "matchday": 11
+  },
+  "sale_starts_at": "2027-02-01T10:00:00Z",
+  "sales_close_at": "2027-03-13T18:00:00Z",
+  "on_sale": true,
+  "sold_out": false,
+  "from_price_mad": 8000,
+  "per_account_limit": 4,
+  "room": null,
+  "zones": [
+   {
+    "id": 1,
+    "code": "NORD",
+    "name": "Tribune Nord",
+    "seated": true,
+    "gate_codes": [
+     "P1",
+     "P2"
+    ],
+    "prices": [
+     {
+      "price_category_id": "pc-1-0",
+      "name": "Plein tarif",
+      "price_mad": 8000,
+      "remaining": 300,
+      "audience": "ALL"
+     },
+     {
+      "price_category_id": "pc-1-1",
+      "name": "Tarif membres",
+      "price_mad": 5000,
+      "remaining": 120,
+      "audience": "MEMBERS"
+     }
+    ],
+    "map_slot": "NORTH"
+   },
+   {
+    "id": 2,
+    "code": "SUD",
+    "name": "Virage Sud",
+    "seated": false,
+    "gate_codes": [
+     "P5"
+    ],
+    "prices": [
+     {
+      "price_category_id": "pc-2-0",
+      "name": "Plein tarif",
+      "price_mad": 3000,
+      "remaining": 0,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": "SOUTH"
+   },
+   {
+    "id": 3,
+    "code": "EST",
+    "name": "Tribune Est",
+    "seated": true,
+    "gate_codes": [
+     "P3",
+     "P4"
+    ],
+    "prices": [
+     {
+      "price_category_id": "pc-3-0",
+      "name": "Plein tarif",
+      "price_mad": 12000,
+      "remaining": 800,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": "EAST"
+   },
+   {
+    "id": 4,
+    "code": "HONNEUR",
+    "name": "Tribune d'honneur",
+    "seated": true,
+    "gate_codes": [
+     "P1"
+    ],
+    "prices": [
+     {
+      "price_category_id": "pc-4-0",
+      "name": "Plein tarif",
+      "price_mad": 30000,
+      "remaining": 40,
+      "audience": "ALL"
+     }
+    ],
+    "map_slot": "WEST"
+   }
+  ],
+  "payment_methods": [
+   "CARD",
+   "WALLET",
+   "CASH_AGENCY"
+  ],
+  "cash_until": "2027-03-13T16:00:00Z",
+  "layout": "STADIUM"
+ }
+}

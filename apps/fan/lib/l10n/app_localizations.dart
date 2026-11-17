@@ -471,11 +471,35 @@ abstract class AppLocalizations {
   /// **'Un billet de plus'**
   String get morePlaces;
 
-  /// No description provided for @groupHint.
+  /// Screen 3 under the selection card (DESIGN.md §Venue map adjustments, group copy): same zone, free placement, no side-by-side promise.
   ///
   /// In fr, this message translates to:
-  /// **'Les places d\'un même achat sont côte à côte. Chaque ami reçoit son propre QR.'**
+  /// **'Toutes les places d\'un achat sont dans la même zone, en placement libre : arrivez ensemble pour être côte à côte. Chaque ami reçoit son propre QR.'**
   String get groupHint;
+
+  /// Screen 3: the venue map's semantics group label.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plan du lieu'**
+  String get venueMap;
+
+  /// Venue map: the FIELD centre's label (shown uppercase).
+  ///
+  /// In fr, this message translates to:
+  /// **'Terrain'**
+  String get mapField;
+
+  /// Venue map: the STAGE centre's label (shown uppercase).
+  ///
+  /// In fr, this message translates to:
+  /// **'Scène'**
+  String get mapStage;
+
+  /// Venue map block semantics: zone name, then "dès 50 DH" / "complet" / "membres".
+  ///
+  /// In fr, this message translates to:
+  /// **'{zone}, {detail}'**
+  String mapBlock(String zone, String detail);
 
   /// No description provided for @total.
   ///
