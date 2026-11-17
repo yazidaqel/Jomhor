@@ -122,7 +122,7 @@ public class SettlementService {
      * (exception class and SQL state; the message only for this class's own IllegalStateException, which names ids,
      * never data) and the others still run.
      */
-    private void runEach(Supplier<Instant> clock) {
+    void runEach(Supplier<Instant> clock) { // package-private: a test drives the clock call by call
         organizers.withFinance().forEach((org, settings) -> {
             try {
                 while (Boolean.TRUE.equals(tx.execute(s -> buildNext(org, settings, clock)))) {

@@ -6,9 +6,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
+import ma.jomhor.finance.application.SettlementService;
 import ma.jomhor.tenancy.domain.Pins;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
@@ -41,6 +47,23 @@ class DevSeederTest {
                 jdbc.sql("update events set starts_at = starts_at + interval '30 days' where organizer_id = ?")
                         .param(DevSeeder.TENSIFT).update();
                 ctx.getBean(DevSeeder.class).run(null); // a restart
+
+                // BE-72: ATLAS FC's finance settings and till money on the two previous local days (once, the restart
+                // adds none); the statement job issues each due day once, with its invoice
+                var job = ctx.getBean(SettlementService.class);
+                job.run();
+                job.run();
+                ZoneId zone = DevSeeder.FINANCE_ZONE;
+                LocalDate today = LocalDate.now(zone);
+                List<String> days = new ArrayList<>(List.of(today.minusDays(2) + " 100000 NONE"));
+                if (!Instant.now().isBefore(today.atStartOfDay(zone).toInstant().plus(Duration.ofHours(1)))) {
+                    days.add(today.minusDays(1) + " 32000 NONE"); // yesterday is due from 01:00
+                }
+                assertThat(jdbc.sql("select day::text || ' ' || till_mad || ' ' || status::text from settlements "
+                        + "where organizer_id = ? order by day").param(DevSeeder.ORG).query(String.class).list())
+                        .containsExactlyElementsOf(days);
+                assertThat(jdbc.sql("select count(*) from invoices where organizer_id = ?").param(DevSeeder.ORG)
+                        .query(Integer.class).single()).isEqualTo(days.size());
 
                 assertThat(jdbc.sql("""
                                 select status::text || ' ' || (starts_at > now() + interval '9 days')::text

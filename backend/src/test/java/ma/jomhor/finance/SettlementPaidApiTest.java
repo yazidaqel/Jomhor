@@ -6,9 +6,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import ma.jomhor.catalog.OrgApiTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.ResultActions;
@@ -74,6 +78,42 @@ class SettlementPaidApiTest extends OrgApiTest {
         assertThat(JsonPath.<String>read(again, "$.paid_at")).isEqualTo(JsonPath.read(json, "$.paid_at"));
         assertThat(JsonPath.<String>read(again, "$.paid_by.id")).isEqualTo(staffId(org, "FINANCE").toString());
         assertThat(audits(org)).hasSize(1);
+    }
+
+    @Test
+    void parallelVersementsRecordOnePayerAndOneAudit() throws Exception {
+        Caller admin = admin();
+        UUID org = admin.org();
+        String id = statement(org, 6, 500_00);
+        List<Caller> callers = List.of(admin, caller(org, "FINANCE"), admin, caller(org, "FINANCE"));
+        List<String> bodies = new ArrayList<>();
+        try (var pool = Executors.newFixedThreadPool(callers.size())) {
+            var start = new CountDownLatch(1);
+            List<Future<String>> results = new ArrayList<>();
+            for (int i = 0; i < callers.size(); i++) {
+                Caller c = callers.get(i);
+                String ref = "VIR " + i;
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return body(paid(c, id, ref).andExpect(status().isOk()));
+                }));
+            }
+            start.countDown();
+            for (Future<String> r : results) {
+                bodies.add(r.get());
+            }
+        }
+        assertThat(audits(org)).hasSize(1);
+        Map<String, Object> row = jdbc.sql("select paid_by::text as paid_by, payout_reference from settlements "
+                + "where id = ?::uuid").param(id).query().singleRow();
+        assertThat(row.get("paid_by")).isNotNull();
+        // every answer is the one recorded payout: same payer, same reference
+        for (String b : bodies) {
+            assertThat(JsonPath.<String>read(b, "$.paid_by.id")).isEqualTo(row.get("paid_by"));
+            assertThat(JsonPath.<String>read(b, "$.payout_reference")).isEqualTo(row.get("payout_reference"));
+        }
+        assertThat(JsonPath.<Map<String, Object>>read((String) audits(org).getFirst().get("payload"), "$"))
+                .isEqualTo(Map.of("reference", row.get("payout_reference")));
     }
 
     @Test

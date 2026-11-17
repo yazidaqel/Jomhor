@@ -1,24 +1,28 @@
-package ma.jomhor.finance;
+package ma.jomhor.finance.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import ma.jomhor.IntegrationTest;
-import ma.jomhor.finance.application.SettlementService;
+import ma.jomhor.finance.Ledger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * BE-71: invoice numbers (docs/04-api.md §Finance Invoice, plan lot-5 Q229) are taken in the issuing transaction, so a
- * failure after numbering leaves no gap, and the year is the issue date's. The job serves every activated organizer:
- * earlier test classes' organizers lose their finance settings first (as MultiInstanceTest pushes leftovers away), and
- * the years used here (2040 to 2043) are this class's alone.
+ * failure after numbering leaves no gap, and the year is the issue date's, read after the year's lock. The job serves
+ * every activated organizer: earlier test classes' organizers lose their finance settings first (as MultiInstanceTest
+ * pushes leftovers away), and the years used here (2040 to 2047) are this class's alone. In this package for the
+ * package-private {@code runEach} clock hook.
  */
 class InvoiceNumberTest extends IntegrationTest {
 
@@ -31,6 +35,8 @@ class InvoiceNumberTest extends IntegrationTest {
         return LocalDateTime.parse(at).atZone(CASABLANCA).toInstant();
     }
 
+    // Clears settings.finance on every organizer, not only this class's: the other classes make fresh organizers per test
+    // and never read old ones again, and test classes don't run in parallel (no junit-platform parallel config).
     @BeforeEach
     void onlyThisClassIsActivated() {
         jdbc.sql("update organizers set settings = settings - 'finance' where settings -> 'finance' is not null")
@@ -89,6 +95,24 @@ class InvoiceNumberTest extends IntegrationTest {
         assertThat(invoices(org)).singleElement().satisfies(r -> assertThat(r)
                 .containsEntry("seq", start + 1).containsEntry("number", "JMH-2040-%06d".formatted(start + 1))
                 .containsEntry("day", "2040-03-10"));
+    }
+
+    /**
+     * The year's lock is taken on the clock read before it (31 Dec 23:59:59.999); the issue date, read after it, is
+     * already 1 Jan: the new year's lock is taken too (increasing years: no deadlock) and the number opens that year.
+     */
+    @Test
+    void anIssueDateThatCrossesNewYearUnderTheLockTakesTheNewYearsLockAndNumber() {
+        UUID org = club("2046-12-01", "2046-12-30T12:00");
+        Instant lastMilli = local("2046-12-31T23:59:59.999");
+        Iterator<Instant> reads = List.of(lastMilli, lastMilli).iterator(); // the statement's now, then the year to lock
+        Instant newYear = local("2047-01-01T00:00");
+        assertTimeoutPreemptively(Duration.ofSeconds(30),
+                () -> service.runEach(() -> reads.hasNext() ? reads.next() : newYear));
+        assertThat(invoices(org)).singleElement().satisfies(r -> assertThat(r)
+                .containsEntry("number", "JMH-2047-000001").containsEntry("issued_on", "2047-01-01")
+                .containsEntry("day", "2046-12-30"));
+        assertThat(maxSeq(2046)).isZero();
     }
 
     @Test

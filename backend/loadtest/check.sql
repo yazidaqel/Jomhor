@@ -1,4 +1,4 @@
--- Lot 5 on-sale invariants (plan lot-5 §5 BE-44, §5.5). Every row is a breach: no rows = clean.
+-- Lot 5 on-sale and settlement invariants (plan lot-5 §5 BE-44, §5.5, §13.4.5). Every row is a breach: no rows = clean.
 --   psql "$DATABASE_URL" -f backend/loadtest/check.sql
 -- One statement, so a test can scope it to its own event: select * from (<this file, no ';'>) c where event_id = ?
 -- Places: price_categories.sold = held (RESERVED, AWAITING_CASH) + paid (PAID) places, less one per REFUNDED ticket
@@ -193,6 +193,82 @@ select 'DEPOSIT_VOIDED', null::integer, p.id::text, format('session still in voi
 from pos_sessions p
 join cash_deposits d on d.id = p.deposit_id and d.organizer_id = p.organizer_id
 where d.voided_at is not null
+
+union all
+
+-- Settlement statements (docs/04-api.md §Finance Statement and Invoice, plan lot-5 §13.4.5). Local days in
+-- Africa/Casablanca, finance.timezone's default: change it here too if that is ever set otherwise. No event: ref = the
+-- statement id. Collected (held by Jomhor) and till (provider POS) money = the day's SUCCEEDED payments recomputed.
+select 'SETTLEMENT_PAYMENTS', null::integer, s.id::text,
+       format('collected %s, till %s; the day''s payments %s, %s', s.collected_mad, s.till_mad,
+              coalesce(p.collected, 0), coalesce(p.till, 0))
+from settlements s
+left join lateral (select sum(amount_mad) filter (where provider <> 'POS') as collected,
+                          sum(amount_mad) filter (where provider = 'POS') as till
+                   from payments
+                   where organizer_id = s.organizer_id and status = 'SUCCEEDED'
+                     and completed_at >= s.day::timestamp at time zone 'Africa/Casablanca'
+                     and completed_at < (s.day + 1)::timestamp at time zone 'Africa/Casablanca') p on true
+where s.collected_mad <> coalesce(p.collected, 0) or s.till_mad <> coalesce(p.till, 0)
+
+union all
+
+-- Collected and till money = the sum of the statement's lines (collector POS = till).
+select 'SETTLEMENT_LINES', null::integer, s.id::text,
+       format('collected %s, till %s; lines %s, %s', s.collected_mad, s.till_mad, coalesce(l.collected, 0),
+              coalesce(l.till, 0))
+from settlements s
+left join (select organizer_id, settlement_id, sum(amount_mad) filter (where collector <> 'POS') as collected,
+                  sum(amount_mad) filter (where collector = 'POS') as till
+           from settlement_lines group by organizer_id, settlement_id) l
+  on l.settlement_id = s.id and l.organizer_id = s.organizer_id
+where s.collected_mad <> coalesce(l.collected, 0) or s.till_mad <> coalesce(l.till, 0)
+
+union all
+
+-- The 04 formulas: fee_ht = floor((collected + till) × rate / 10 000); fee_vat = floor((fee_ht × vat + 5 000) / 10 000)
+-- with the invoice's VAT rate (no invoice: fee_ht is 0, so fee_vat is 0); carried_in = least(0, x of the previous
+-- statement), x = collected − fee_ht − fee_vat + carried_in; payout = greatest(0, x).
+select 'SETTLEMENT_FORMULA', null::integer, s.id::text,
+       format('fee_ht %s, fee_vat %s, carried_in %s, payout %s', s.fee_ht_mad, s.fee_vat_mad, s.carried_in_mad,
+              s.payout_mad)
+from (select s.*, lag(s.collected_mad - s.fee_ht_mad - s.fee_vat_mad + s.carried_in_mad)
+                      over (partition by s.organizer_id order by s.day) as previous_x
+      from settlements s) s
+left join invoices i on i.settlement_id = s.id and i.organizer_id = s.organizer_id
+where s.fee_ht_mad <> (s.collected_mad + s.till_mad) * s.fee_rate_bp / 10000
+   or ((i.id is not null or s.fee_ht_mad = 0)
+       and s.fee_vat_mad <> (s.fee_ht_mad * coalesce(i.vat_rate_bp, 0) + 5000) / 10000)
+   or s.carried_in_mad <> least(0, coalesce(s.previous_x, 0))
+   or s.payout_mad <> greatest(0, s.collected_mad - s.fee_ht_mad - s.fee_vat_mad + s.carried_in_mad)
+
+union all
+
+-- A fee with no invoice.
+select 'SETTLEMENT_NO_INVOICE', null::integer, s.id::text, format('fee_ht %s, no invoice', s.fee_ht_mad)
+from settlements s
+where s.fee_ht_mad > 0
+  and not exists (select 1 from invoices i where i.settlement_id = s.id and i.organizer_id = s.organizer_id)
+
+union all
+
+-- An invoice whose amounts aren't its statement's fee. ref = the statement id.
+select 'INVOICE_AMOUNTS', null::integer, s.id::text,
+       format('%s: HT %s, VAT %s; statement fee_ht %s, fee_vat %s', i.number, i.amount_ht_mad, i.vat_mad, s.fee_ht_mad,
+              s.fee_vat_mad)
+from invoices i
+join settlements s on s.id = i.settlement_id and s.organizer_id = i.organizer_id
+where i.amount_ht_mad <> s.fee_ht_mad or i.vat_mad <> s.fee_vat_mad
+
+union all
+
+-- A gap in a year's invoice numbers: seq is not its row number within the year (one sequence for every organizer).
+-- ref = the invoice's statement id.
+select 'INVOICE_SEQ', null::integer, i.settlement_id::text,
+       format('%s: seq %s is invoice %s of %s', i.number, i.seq, i.n, i.year)
+from (select settlement_id, number, seq, year, row_number() over (partition by year order by seq) as n
+      from invoices) i
+where i.seq <> i.n
 
 union all
 
