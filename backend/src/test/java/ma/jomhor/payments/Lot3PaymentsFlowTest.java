@@ -176,7 +176,7 @@ class Lot3PaymentsFlowTest extends PaymentTest {
         assertThat(JsonPath.<Integer>read(report, "$.sessions[0].declared_mad")).isEqualTo(14000);
         assertThat(JsonPath.<Integer>read(report, "$.sessions[0].variance_mad")).isEqualTo(-1000);
         assertThat(JsonPath.<Map<String, Object>>read(report, "$.totals")).isEqualTo(Map.of("collected_mad", 20000,
-                "declared_mad", 14000, "variance_mad", -1000, "open_sessions", 0));
+                "declared_mad", 14000, "variance_mad", -1000, "open_sessions", 0, "undeposited_mad", 14000));
         assertThat(JsonPath.<List<String>>read(report, "$.days[*].collector_name"))
                 .containsExactlyInAnyOrder("Réseau cash simulé", "Guichet", "Guichet");
         String csv = call(caller(org.org(), "FINANCE"), get("/org/finance/cash.csv?from=" + today.minusDays(1)
@@ -184,9 +184,10 @@ class Lot3PaymentsFlowTest extends PaymentTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         List<String> lines = csv.substring(1).lines().toList(); // after the BOM
         assertThat(lines.getFirst())
-                .isEqualTo("kind;jour;encaisseur;moyen;paiements;montant;caisse;caissier;ouverture;cloture;attendu;declare;ecart");
-        assertThat(lines).anyMatch(l -> l.matches("jour;\\d{4}-\\d{2}-\\d{2};Guichet;POS_CASH;1;100,00;;;;;;;"))
-                .anyMatch(l -> l.startsWith("caisse;;;;;;Guichet Nord;") && l.endsWith(";150,00;140,00;-10,00"));
+                .isEqualTo(
+                        "kind;jour;encaisseur;moyen;paiements;montant;caisse;caissier;ouverture;cloture;attendu;declare;ecart;depot;depose_le");
+        assertThat(lines).anyMatch(l -> l.matches("jour;\\d{4}-\\d{2}-\\d{2};Guichet;POS_CASH;1;100,00;;;;;;;;;"))
+                .anyMatch(l -> l.startsWith("caisse;;;;;;Guichet Nord;") && l.endsWith(";150,00;140,00;-10,00;;"));
 
         // B3: nothing awaiting cash; paid places by method (gross, C's refunded place included); 1 refunded.
         String sales = body(call(org, get("/org/events/" + s.eventId() + "/sales")).andExpect(status().isOk()));

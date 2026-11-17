@@ -37,8 +37,14 @@ public class CashReport {
     public record Day(LocalDate day, String collector, String collectorName, String method, long payments,
                       long amountMad) {}
 
-    /** declaredMad and varianceMad cover closed sessions only; openSessions counts the open ones of the range. */
-    public record Totals(long collectedMad, long declaredMad, long varianceMad, long openSessions) {}
+    /**
+     * declaredMad and varianceMad cover closed sessions only; openSessions counts the open ones of the range;
+     * undepositedMad = Σ declared of the closed ones with no live deposit (Lot 5 step 5).
+     */
+    public record Totals(long collectedMad, long declaredMad, long varianceMad, long openSessions, long undepositedMad) {}
+
+    /** A range of local days, both included. */
+    public record Days(LocalDate from, LocalDate to) {}
 
     /** {@code from} and {@code to}: the local days asked for, both included. */
     public record Report(LocalDate from, LocalDate to, String timezone, List<Day> days, List<PosSession> sessions,
@@ -66,14 +72,9 @@ public class CashReport {
     public Report of(UUID org, String from, String to, String timezone) {
         String tz = timezone == null || timezone.isBlank() ? Venue.DEFAULT_TIMEZONE : VenueService.checkTimezone(timezone);
         ZoneId zone = ZoneId.of(tz);
-        LocalDate first = date("from", from);
-        LocalDate last = date("to", to);
-        if (last.isBefore(first)) {
-            throw invalid("to", "must not be before from");
-        }
-        if (ChronoUnit.DAYS.between(first, last) + 1 > MAX_DAYS) {
-            throw invalid("to", "at most " + MAX_DAYS + " days after from");
-        }
+        Days range = days(from, to);
+        LocalDate first = range.from();
+        LocalDate last = range.to();
         Instant start = first.atStartOfDay(zone).toInstant();
         Instant end = last.plusDays(1).atStartOfDay(zone).toInstant();
         // ponytail: grouped in memory, one row per cash payment of <= 92 days (a few 10,000s for a club); a SQL
@@ -86,8 +87,22 @@ public class CashReport {
         List<PosSession> closed = opened.stream().filter(s -> s.closedAt() != null).toList();
         Totals totals = new Totals(days.stream().mapToLong(Day::amountMad).sum(),
                 closed.stream().mapToLong(PosSession::declaredMad).sum(),
-                closed.stream().mapToLong(PosSession::varianceMad).sum(), opened.size() - closed.size());
+                closed.stream().mapToLong(PosSession::varianceMad).sum(), opened.size() - closed.size(),
+                closed.stream().filter(p -> p.deposit() == null).mapToLong(PosSession::declaredMad).sum());
         return new Report(first, last, tz, days, opened, totals);
+    }
+
+    /** {@code from} ≤ {@code to}, both YYYY-MM-DD, at most 92 days; else 422 VALIDATION_FAILED on the field. */
+    public static Days days(String from, String to) {
+        LocalDate first = date("from", from);
+        LocalDate last = date("to", to);
+        if (last.isBefore(first)) {
+            throw invalid("to", "must not be before from");
+        }
+        if (ChronoUnit.DAYS.between(first, last) + 1 > MAX_DAYS) {
+            throw invalid("to", "at most " + MAX_DAYS + " days after from");
+        }
+        return new Days(first, last);
     }
 
     /** Centimes as DH with a comma and two decimals, by integer maths: 125050 → 1250,50; -1000 → -10,00. */

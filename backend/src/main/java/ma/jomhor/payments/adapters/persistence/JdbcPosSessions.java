@@ -3,6 +3,7 @@ package ma.jomhor.payments.adapters.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -35,8 +36,10 @@ class JdbcPosSessions implements PosSessions {
                    (select count(*) from audit_log a where a.organizer_id = p.organizer_id and a.action = 'pos.print'
                       and a.target = p.id::text) as prints,
                    (select coalesce(sum(pm.amount_mad), 0)\s""" + PAID + """
-            ) as collected_mad
+            ) as collected_mad,
+                   d.id as deposit_id, d.reference as deposit_reference, d.deposited_on
             from pos_sessions p join staff s on s.id = p.staff_id and s.organizer_id = p.organizer_id
+              left join cash_deposits d on d.id = p.deposit_id and d.organizer_id = p.organizer_id
             """;
 
     private final JdbcClient jdbc;
@@ -124,7 +127,9 @@ class JdbcPosSessions implements PosSessions {
         return new PosSession(rs.getObject("id", UUID.class), rs.getString("label"), rs.getObject("staff_id", UUID.class),
                 rs.getString("staff_name"), instant(rs, "opened_at"), instant(rs, "closed_at"), rs.getLong("orders"),
                 rs.getLong("tickets"), rs.getLong("prints"), rs.getLong("collected_mad"),
-                rs.getObject("expected_mad", Long.class), rs.getObject("declared_mad", Long.class));
+                rs.getObject("expected_mad", Long.class), rs.getObject("declared_mad", Long.class),
+                rs.getObject("deposit_id") == null ? null : new PosSession.Deposit(rs.getObject("deposit_id", UUID.class),
+                        rs.getString("deposit_reference"), rs.getObject("deposited_on", LocalDate.class)));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
