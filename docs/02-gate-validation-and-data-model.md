@@ -128,6 +128,9 @@ Server (PostgreSQL):
 | payments | Payment attempts | id, organizer\_id, order\_id, method, provider, amount\_mad, status, provider\_ref, pay\_code (cash code), pos\_session\_id, redirected\_at |
 | pos\_sessions | Club till sessions (one cashier's shift) | id, organizer\_id, staff\_id, label, opened\_at, closed\_at, expected\_mad, declared\_mad, deposit\_id |
 | cash\_deposits | Till cash taken to the bank, matched to closed till sessions (04 §Finance Deposits) | id, organizer\_id, deposited\_on, amount\_mad, reference, recorded\_by, voided\_at |
+| settlements | Daily settlement statement of an organizer (04 §Finance Statement) | organizer\_id, day, collected\_mad, till\_mad, fee\_rate\_bp, fee\_ht\_mad, fee\_vat\_mad, carried\_in\_mad, payout\_mad, due\_on, status (DUE, PAID, NONE), payout\_reference |
+| settlement\_lines | A statement's payments by subject × method × collector | settlement\_id, event\_id \| product\_id, method, collector, payments, amount\_mad |
+| invoices | Jomhor's fee invoice to the organizer, one per statement with a fee (04 §Finance Invoice) | settlement\_id, year, seq, number, issuer, customer, HT, VAT, TTC; immutable |
 | refunds | Money owed back for a refunded ticket, paid back by hand | id, organizer\_id, event\_id, ticket\_id, order\_id, payment\_id, amount\_mad, reason, status (REQUIRED, DONE), requested\_by, done\_by, reference |
 | tickets | One seat / admission | id (UUID), order\_id, event\_id, zone\_id, seat\_label, status (VALID, CANCELLED, REFUNDED, BLOCKED), holder\_user\_id, holder\_name (never in a manifest), holder\_initials, issued\_at |
 | ticket\_transfers | Transfer or re-issue: the old ticket goes CANCELLED, a new one (new K\_t) is issued | id, organizer\_id, ticket\_id (unique), new\_ticket\_id (unique), from\_user\_id, to\_user\_id (= from\_user\_id for a re-issue), transferred\_at |
@@ -199,6 +202,8 @@ The design accepts one bounded risk (a cancelled ticket passing at a stale scann
 | Replay of an old static QR at the next event | event\_id in the token and a new K\_e per event | None |
 | Bots on on-sale day | Waiting room (04 §Waiting room): login to join, one entry per account, random draw for early arrivals, admission token checked before the database, per-event eligibility (account age, membership, attendance), per-device cap, in-app per-IP limits (OTP sends, joins) and a per-entry poll limit, per-account limits, a holder cap (no account holds more than `per_account_limit` places of an event, transfers included), members presale phases, payment-first reservation | Farms of real phone numbers verified before the eligibility date; narrowed by membership/attendance rules, named tickets and the transfer audit |
 | Promo code shared publicly | Per-code and per-account caps, exact; deactivate live | A code without a cap is a lower price for anyone who finds it |
+| Payout redirected to another account | The RIB is set by Jomhor ops from a bank certificate, never through `/org`; only its last 4 digits are shown | A Jomhor ops insider |
+| Invoice number reused or edited | Numbers taken under a lock in the issuing transaction, rows immutable (trigger), details copied in at issue | None in the app; database superuser |
 | Fan file leaks from the CRM export | ADMIN only, minimised (phone only with WhatsApp consent), audited, `no-store` | The file leaves the platform: the club's responsibility under its CNDP declaration |
 
 ## Capacity sizing & match-day runbook

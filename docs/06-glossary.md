@@ -25,6 +25,12 @@
 | guichet | guichet | الشباك | club point of sale (back-office POS page) |
 | collector | encaisseur | — | who took the cash: POS or a network |
 | bank deposit | dépôt | إيداع بنكي | — |
+| settlement statement | relevé | كشف التسوية | — |
+| payout | versement | تحويل المستحقات | — |
+| service fee | frais de service | رسوم الخدمة | — |
+| invoice | facture | فاتورة | — |
+| carried balance | report | رصيد مُرحَّل | — |
+| ICE | ICE | المعرف الموحد للمقاولة | — |
 | refund | remboursement | استرجاع | — |
 | transfer | transfert | تحويل | The ticket is cancelled and a new one is issued to the recipient (new QR) |
 | re-issue | réémission | إعادة الإصدار | A new ticket for the same holder after a lost phone |

@@ -47,7 +47,7 @@ Lot 1: `order.paid` → WhatsApp delivery goes through a DB outbox (`ticket_deli
 ## Backend modules (modular monolith)
 
 `tenancy` · `catalog` · `sales` · `payments` · `tickets` · `gate` · `finance` ·
-`notifications` · `crm`. Modules talk through application services or domain events,
+`notifications` · `crm`. `finance` = settlements, invoices, the statement job. Modules talk through application services or domain events,
 never through each other's repositories. One exception: a read-only report query may join another
 module's tables (tenant-filtered, no writes) when one SQL statement is what keeps it fast, e.g. the gate
 reports joining `tickets` for zone and status.
@@ -60,10 +60,10 @@ reports joining `tickets` for zone and status.
 2. Gate: device enrol → event assignment → manifest + K_e download at T0 − 3 h → offline
    validate → background sync → server resolves first-scan-wins → dashboard.
 3. Close: event closed → devices wipe → reconciliation report (sold / scanned / rejected /
-   overrides per zone and gate; computed on read, final once every device acked) → settlement.
+   overrides per zone and gate; computed on read, final once every device acked) → daily statement (payments-based) → payout.
 
 Details: `02-gate-validation-and-data-model.md`.
 
 ## Deployment
 
-The API runs as N identical, stateless instances behind any HTTP load balancer; no hosting provider is assumed. Instances coordinate only through Postgres: row locks with `skip locked` (expiry, deliveries, fan messages, campaigns, room tick), advisory locks (orders, scans, manifest build, the fan-message claim, the waitlist notice per event: class 7; pass tickets: try-lock class 8 per event), and row-guarded statements (pass suspension, guarded by the pass status; installment reminders, guarded by `reminded_at`). Per-instance memory is a cache or a limiter, never a source of truth: gate load 15 s, room state 1 s, last poll per queue entry 60 s. Secrets (`JWT_SECRET`, `OTP_SECRET`, `ROOMS_TOKEN_SECRET`, the master key) are identical on every instance and come from the environment. Per-IP limits live in the app and count in Postgres (OTP sends, queue joins), so they hold across instances; the queue poll limit is per entry and per instance (at most N polls/s per entry with N instances). A CDN or WAF can sit in front later without an API change; its addresses join `TRUSTED_PROXIES_REGEX`. Lost on an instance's death and accepted: OTP codes still queued (the fan asks again) and the simulated gateway's delayed callbacks (non-prod only). Health: `/v1/actuator/health/{liveness,readiness}`; graceful shutdown drains in-flight requests.
+The API runs as N identical, stateless instances behind any HTTP load balancer; no hosting provider is assumed. Instances coordinate only through Postgres: row locks with `skip locked` (expiry, deliveries, fan messages, campaigns, room tick), advisory locks (orders, scans, manifest build, the fan-message claim, the waitlist notice per event: class 7; pass tickets: try-lock class 8 per event; the settlement statement per organizer: try-lock (10, hashtext(organizer)); invoice numbers: `(11 << 32) | year`), and row-guarded statements (pass suspension, guarded by the pass status; installment reminders, guarded by `reminded_at`). Per-instance memory is a cache or a limiter, never a source of truth: gate load 15 s, room state 1 s, last poll per queue entry 60 s. Secrets (`JWT_SECRET`, `OTP_SECRET`, `ROOMS_TOKEN_SECRET`, the master key) are identical on every instance and come from the environment. Per-IP limits live in the app and count in Postgres (OTP sends, queue joins), so they hold across instances; the queue poll limit is per entry and per instance (at most N polls/s per entry with N instances). A CDN or WAF can sit in front later without an API change; its addresses join `TRUSTED_PROXIES_REGEX`. Lost on an instance's death and accepted: OTP codes still queued (the fan asks again) and the simulated gateway's delayed callbacks (non-prod only). Health: `/v1/actuator/health/{liveness,readiness}`; graceful shutdown drains in-flight requests.
