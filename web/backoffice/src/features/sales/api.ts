@@ -17,16 +17,21 @@ export type EventSales = {
   paid: number
   held: number
   awaiting_cash: number
-  /** `paid` and `revenue_mad` still count refunded tickets (gross); net = `revenue_mad − refunded_mad`. */
+  /** `paid` and `revenue_mad` still count refunded tickets (gross); net = `revenue_mad − discount_mad − refunded_mad`. */
   refunded: number
   /** Σ refunds of the event, any status. */
   refunded_mad: number
   revenue_mad: number
+  /** Lot 5 step 4: Σ `discount_mad` of PAID orders (promo codes). `revenue_mad` stays at list prices. */
+  discount_mad: number
   zones: ZoneSales[]
   channels: ChannelSales[]
   methods: MethodSales[]
   refunds_required: RefundRequired[]
 }
+
+/** Net = revenue − discounts − refunds (04 /sales, Lot 5 step 4), in bigint: `revenue_mad` can pass 2^53. */
+export const netMad = (s: Pick<EventSales, 'revenue_mad' | 'discount_mad' | 'refunded_mad'>) => BigInt(s.revenue_mad) - BigInt(s.discount_mad) - BigInt(s.refunded_mad)
 
 export const useSales = (eventId: string, options?: { refetchInterval?: number }) =>
   useOrgQuery<EventSales>(['events', eventId, 'sales'], path('org', 'events', eventId, 'sales'), options)

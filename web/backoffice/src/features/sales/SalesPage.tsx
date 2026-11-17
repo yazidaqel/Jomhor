@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Banknote, Hourglass, Store, Ticket } from 'lucide-react'
+import { Banknote, Hourglass, Store, Ticket, TicketPercent } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useParams } from 'react-router'
 import { ErrorNotice, PageHeader } from '@/components/page'
@@ -16,7 +16,7 @@ import { ApiError } from '@/lib/api'
 import { formatDh } from '@/lib/money'
 import { percent } from '@/lib/percent'
 import { formatDateTime } from '@/lib/time'
-import { useSales, type EventSales } from './api'
+import { netMad, useSales, type EventSales } from './api'
 import { RefundsTodo } from './RefundsTodo'
 
 type Reason = keyof typeof fr.sales.refunds.reasons
@@ -49,17 +49,20 @@ export function SalesPage() {
   return <EventSalesPage id={String(Number(id))} />
 }
 
+/** Five KPI cards: 2 per row, then 3, then all five. */
+const KPI_GRID = 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5'
+
 const isNotFound = (e: unknown) => e instanceof ApiError && ['NOT_FOUND', 'BAD_REQUEST'].includes(e.code)
 
-/** Same rhythm as the loaded page (header, four KPI cards, a table), so nothing jumps when data lands. */
+/** Same rhythm as the loaded page (header, five KPI cards, a table), so nothing jumps when data lands. */
 function SalesSkeleton({ header = true }: { header?: boolean }) {
   const { t } = useTranslation()
   return (
     <div aria-busy="true" className="flex flex-col gap-6">
       <span className="sr-only">{t('common.loading')}</span>
       {header && <Skeleton className="h-16 w-80" />}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
+      <div className={KPI_GRID}>
+        {[0, 1, 2, 3, 4].map((i) => (
           <Skeleton key={i} className="h-36 rounded-xl" />
         ))}
       </div>
@@ -106,7 +109,7 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={KPI_GRID}>
         <Kpi index={0} icon={Ticket} label={t('sales.kpi.paid')} value={t('events.soldOfQuota', { sold: sales.paid, quota: sales.quota })}>
           <div className="flex items-center gap-3">
             <FillBar paid={sales.paid} held={sales.held + sales.awaiting_cash} quota={sales.quota} />
@@ -124,6 +127,11 @@ function SalesBody({ eventId, sales, zone }: { eventId: string; sales: EventSale
         <Kpi index={3} icon={Banknote} label={t('sales.kpi.revenue')} value={dh(sales.revenue_mad)}>
           <span>{t('sales.kpi.revenueHint')}</span>
           <span>{t('sales.kpi.refunded', { count: sales.refunded, amount: formatDh(sales.refunded_mad, i18n.language) })}</span>
+          <span className="font-medium text-foreground">{t('sales.kpi.net', { amount: formatDh(netMad(sales), i18n.language) })}</span>
+        </Kpi>
+        {/* Lot 5 step 4: promo codes, Σ over PAID orders; the revenue above stays at list prices. */}
+        <Kpi index={4} icon={TicketPercent} label={t('sales.kpi.discount')} value={sales.discount_mad > 0 ? t('sales.kpi.discountValue', { amount: formatDh(sales.discount_mad, i18n.language) }) : dh(0)}>
+          {t('sales.kpi.discountHint')}
         </Kpi>
       </div>
 
