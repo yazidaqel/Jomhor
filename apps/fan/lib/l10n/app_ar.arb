@@ -302,7 +302,7 @@
   "clubPushTitle": "إشعارات النادي",
   "clubPushBody": "الماتشات، التذاكر والأخبار ديال النادي، فهاد التيليفون.",
   "clubWhatsappTitle": "ميساجات الواتساب ديال النادي",
-  "clubWhatsappBody": "الأخبار ديال النادي فالواتساب ديالك.",
+  "clubWhatsappBody": "الأخبار ديال النادي فالواتساب ديالك. النادي كيوصلو الرقم ديالك باش يصيفطهم ليك.",
   "clubSeason": "الموسم ديالك",
   "clubSeasonNext": "الجاي · {date}",
   "clubSeasonLabel": "{attended} من {total}",

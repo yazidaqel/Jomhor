@@ -420,7 +420,7 @@
   "clubPushBody": "Matchs, billetterie et nouvelles du club, sur ce téléphone.",
   "clubWhatsappTitle": "Messages WhatsApp du club",
   "@clubWhatsappTitle": {"description": "Opt-in switch (marketing_whatsapp), default off."},
-  "clubWhatsappBody": "Les nouvelles du club sur ton WhatsApp.",
+  "clubWhatsappBody": "Les nouvelles du club sur ton WhatsApp. Le club reçoit ton numéro pour te les envoyer.",
   "clubSeason": "Ta saison",
   "@clubSeason": {"description": "Section over the 12-dot row."},
   "clubSeasonNext": "Prochain · {date}",

@@ -13,6 +13,7 @@ import 'package:jomhor_fan/features/club/join_sheet.dart';
 import 'package:jomhor_fan/features/club/membership.dart';
 import 'package:jomhor_fan/features/clubs/club.dart';
 import 'package:jomhor_fan/features/clubs/follows.dart';
+import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -303,6 +304,33 @@ void main() {
     expect(find.byKey(const Key('club.joinCard.$testOrganizer')), findsNothing);
     expect(find.byKey(const Key('club.leave')), findsOneWidget);
     expect(tester.widget<SwitchListTile>(find.byKey(const Key('club.optin.push'))).value, isTrue);
+  });
+
+  // FL-33 (CNDP): the WhatsApp opt-in says the club receives the fan's number. FR and AR in the sheet itself (the
+  // goldened locales), EN from its strings (the EN club screen has an unrelated overflow under test).
+  testWidgets('join sheet: the WhatsApp opt-in says the club gets the number (fr, ar, en)', (tester) async {
+    const en = 'The club receives your number to send them to you.';
+    expect(lookupAppLocalizations(const Locale('en')).clubWhatsappBody, endsWith(en));
+    for (final (locale, sentence) in [
+      ('fr', 'Le club reçoit ton numéro pour te les envoyer.'),
+      ('ar', 'النادي كيوصلو الرقم ديالك باش يصيفطهم ليك.'),
+    ]) {
+      tallView(tester);
+      final c = await pumpJomhor(
+        tester,
+        backend: ClubBackend().handle,
+        tokens: MemoryTokenStore('jwt'),
+        follows: (ids: const [testOrganizer], seen: true, chip: chipAll),
+        locale: Locale(locale),
+      );
+      c.read(routerProvider).go('/club');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('club.join.$testOrganizer')));
+      await tester.pumpAndSettle();
+      final body = find.descendant(of: find.byKey(const Key('club.optin.whatsapp')), matching: find.byType(Text)).last;
+      expect(tester.widget<Text>(body).data, endsWith(sentence), reason: locale);
+      await tester.pumpWidget(const SizedBox());
+    }
   });
 
   testWidgets('the number is padded to 6 and rolls once: not on reopen, not after a relaunch', (tester) async {

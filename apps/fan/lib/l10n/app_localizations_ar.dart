@@ -1048,7 +1048,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get clubWhatsappTitle => 'ميساجات الواتساب ديال النادي';
 
   @override
-  String get clubWhatsappBody => 'الأخبار ديال النادي فالواتساب ديالك.';
+  String get clubWhatsappBody => 'الأخبار ديال النادي فالواتساب ديالك. النادي كيوصلو الرقم ديالك باش يصيفطهم ليك.';
 
   @override
   String get clubSeason => 'الموسم ديالك';
