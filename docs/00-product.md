@@ -41,7 +41,7 @@ promoters and venues (same tables, no schema change).
 
 ## V1 in lots
 
-One V1 covers the whole platform; it ships in seven lots, each usable at a real match.
+One V1 covers the whole platform; it ships in eight lots (0–7), each usable at a real match.
 Team assumption: 3 developers (backend, Flutter, React) + founder. Estimates to re-cut
 after Lot 0.
 
@@ -54,10 +54,21 @@ after Lot 0.
 | 4 · Fan platform | Group buying with split pay, ticket transfer, membership + loyalty, matchday companion, push and WhatsApp campaigns, Darija/AR/FR with RTL | The app people open between matches | 4 wk |
 | 5 · Organizer platform | **Step 1, high-demand on-sale (first, before the rest):** ranked virtual waiting room (random order for early arrivals, then first come first served; position and wait shown; admission token required to reserve), admission control before the database, the popular-zone hot spot, bot and per-device limits, verified-fan access per event, multi-instance backend, and derby capacity targets, proven at reduced scale locally and in CI (the full capacity run waits for a hosting choice). **Then (steps 2–5):** accreditations and invitations, promo codes, season passes with installments, paid membership, finance module (settlement, VAT invoices, payouts), CRM export | The club runs the whole season alone, derby on-sales included | ≈ 10 wk (steps 1–5) |
 | 6 · Hardening & launch | Full derby load test at launch scale on the production setup (the on-sale mechanism itself is Lot 5 step 1), pen test on QR and sync, device fleet and runbooks, monitoring, second organizer on config only | Public launch, second customer | 2 wk |
+| 7 · Seating | Seating mode per zone, per event (below): seat inventory per zone (row, number), per-event seat state with holds tied to order expiry, a seat picker on the zone's seat map for "pick", `seat_label` written at issue and shown on the PDF, app and shop, transfers keep the seat and refunds release it. QR, manifest and gate unchanged (the gate checks the zone; `seat_label` is not in the QR). Builds on the venue map | A concert mixes a free pit with seated tiers; fans pick or get their seats and groups sit together | — |
 
 Lots 0–2 are the pilot match (≈10 weeks). Lots 3–5 can partly run in parallel once
 Lot 2 is in production. Lot 6 gates the public launch. First post-V1 item: official
 resale with a price cap.
+
+**Venue map (after Lot 5, not part of Lot 6).** Fans pick their zone by tapping a drawn plan of the venue in the app (screen 3) and the shop (W2), above the zone list. The organizer picks a template per venue (stadium, end stage, central stage, theatre) and puts each zone on one block (B10 Lieux). Zones only and display only: every zone stays "no seats", and tickets, QR, manifest and gate don't change. Plan: `docs/plans/venue-map.md`.
+
+**Seating mode per zone, per event (Lot 7).** The organizer chooses one mode for each zone when setting up the event, so a concert can mix a free pit with seated tiers.
+
+| Mode | What the fan gets |
+| --- | --- |
+| Pick your seat | The fan chooses exact seats on the zone's seat map. |
+| Automatic | Seats in the zone are assigned at purchase, best available, keeping a group side by side; it falls back clearly when no block fits. |
+| No seats | Free placement, first come first served. Today's behaviour and the default. |
 
 ## Out of scope for V1
 
