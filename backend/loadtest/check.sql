@@ -174,10 +174,18 @@ where r.amount_mad = 0
 union all
 
 -- Till deposits (docs/04-api.md §Finance Deposits): only a closed session goes into a deposit (pos_sessions_deposit
--- refuses it too), and a voided deposit holds no session (its void freed them). No event: ref = the session id.
+-- refuses it too), a session is in a deposit of its own organizer (the foreign key is on the id only), and a voided
+-- deposit holds no session (its void freed them). No event: ref = the session id.
 select 'DEPOSIT_OPEN_SESSION', null::integer, p.id::text, format('open session in deposit %s', p.deposit_id)
 from pos_sessions p
 where p.deposit_id is not null and p.closed_at is null
+
+union all
+
+select 'DEPOSIT_TENANT', null::integer, p.id::text, format('session in deposit %s of organizer %s', d.id, d.organizer_id)
+from pos_sessions p
+join cash_deposits d on d.id = p.deposit_id
+where d.organizer_id <> p.organizer_id
 
 union all
 

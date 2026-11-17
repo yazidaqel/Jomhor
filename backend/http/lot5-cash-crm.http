@@ -28,7 +28,10 @@
 @aminePhone = +212611177004
 @saraPhone = +212611177005
 @code = 123456
-# Today, in the venue's zone (Africa/Casablanca): the deposits' slip date and the report ranges. Set it before a run.
+# SET @today BEFORE A RUN: today's date (YYYY-MM-DD) in Africa/Casablanca, the venue's zone. It is the deposits' slip
+# date (a later day is refused as FUTURE) and the range of the Encaissements and Dépôts reads; the value below is only
+# the day this file was written. (Not computed in a pre-request script: the client's JavaScript has no reliable
+# time-zone support, and the server's local day must match.)
 @today = 2026-11-17
 
 ### ---------- (0) staff logins ----------

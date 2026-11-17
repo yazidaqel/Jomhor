@@ -248,8 +248,9 @@ class CheckSqlTest extends QueueFixture {
 
     /**
      * BE-69: a deposited closed session and a voided deposit's freed one are clean; a session still linked to a voided
-     * deposit is DEPOSIT_VOIDED, and an open one in a deposit DEPOSIT_OPEN_SESSION (pos_sessions_deposit refuses that
-     * row, so the check is shown with the constraint dropped in a transaction that rolls back).
+     * deposit is DEPOSIT_VOIDED, an open one in a deposit DEPOSIT_OPEN_SESSION (pos_sessions_deposit refuses that
+     * row, so the check is shown with the constraint dropped in a transaction that rolls back), and a session in another
+     * organizer's deposit DEPOSIT_TENANT.
      */
     @Test
     void tillSessionsInDepositsFollowTheRules() throws Exception {
@@ -292,6 +293,22 @@ class CheckSqlTest extends QueueFixture {
         assertThat(foundFor(session)).isEmpty(); // rolled back: closed, in the live deposit
         assertThat(jdbc.sql("select deposit_id from pos_sessions where id = ?::uuid").param(session).query(UUID.class)
                 .single()).hasToString(live);
+        assertThat(jdbc.sql("select conname from pg_constraint where conrelid = 'pos_sessions'::regclass "
+                + "and conname in ('pos_sessions_deposit', 'pos_sessions_close')").query(String.class).list())
+                .containsExactlyInAnyOrder("pos_sessions_deposit", "pos_sessions_close");
+
+        // Another organizer's deposit: the foreign key is on the id only, so only check.sql sees it.
+        Caller other = caller(admin().org(), "FINANCE");
+        String foreignSession = jdbc.sql("""
+                        insert into pos_sessions (organizer_id, staff_id, label, closed_at, expected_mad, declared_mad)
+                        select ?, id, 'Ailleurs', now(), 500, 500 from staff where organizer_id = ? and role = 'FINANCE'
+                        returning id""")
+                .params(other.org(), other.org()).query(UUID.class).single().toString();
+        assertThat(foundFor(foreignSession)).isEmpty();
+        sql("update pos_sessions set deposit_id = ?::uuid where id = ?::uuid", live, foreignSession);
+        assertThat(foundFor(foreignSession)).containsExactly("DEPOSIT_TENANT");
+        sql("update pos_sessions set deposit_id = null where id = ?::uuid", foreignSession);
+        assertThat(foundFor(foreignSession)).isEmpty();
     }
 
     @Test
