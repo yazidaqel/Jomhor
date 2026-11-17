@@ -128,15 +128,12 @@ public class PromoCodeService {
         if (!fields.isEmpty()) {
             throw invalid(fields, null);
         }
-        // Only the fields that change are written (null = keep the column), so concurrent PATCHes of different fields
-        // both survive; nothing changed → no write and no audit.
-        Boolean active = changed(in.active(), p.active());
-        Integer maxUses = changed(in.maxUses(), p.maxUses());
-        Integer perAccount = changed(in.perAccountMax(), p.perAccountMax());
-        if (active == null && maxUses == null && perAccount == null) {
+        // Every field sent is written as sent (null = keep the column), never compared with this unlocked read, so
+        // concurrent PATCHes of different fields both survive; a body with none of them → no write and no audit.
+        if (in.active() == null && in.maxUses() == null && in.perAccountMax() == null) {
             return view(promos.find(org, eventId, promoId).orElseThrow(), categories);
         }
-        promos.update(org, eventId, promoId, active, maxUses, perAccount);
+        promos.update(org, eventId, promoId, in.active(), in.maxUses(), in.perAccountMax());
         PromoCodes.Listed updated = promos.find(org, eventId, promoId).orElseThrow();
         audit.staff(org, user, "promo.update", p.id().toString(), json.writeValueAsString(mutable(updated.promo())));
         return view(updated, categories);
@@ -242,8 +239,4 @@ public class PromoCodeService {
         return new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body", details);
     }
 
-    /** {@code sent} when it differs from {@code current}, else null (unchanged). */
-    private static <T> T changed(T sent, T current) {
-        return sent == null || sent.equals(current) ? null : sent;
-    }
 }

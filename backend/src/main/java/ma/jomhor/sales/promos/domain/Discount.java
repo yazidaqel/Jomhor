@@ -23,6 +23,8 @@ public final class Discount {
      * What refunding one place of an order pays back: ⌊unit × total ÷ (total + discount)⌋, the unit price without a
      * discount, 0 on a FREE order. The refunds of one order never sum above its total.
      */
+    // ponytail: u × t must fit a long (about 9.2e18 centimes², e.g. a 1,000,000 DH place on a 1e9 DH order); past it
+    // multiplyExact throws (a 500, never a wrong amount). BigInteger or Math.multiplyHigh if orders ever get that big.
     public static long refund(long unitPriceMad, long totalMad, long discountMad) {
         long gross = totalMad + discountMad;
         return gross == 0 ? 0 : Math.multiplyExact(unitPriceMad, totalMad) / gross;

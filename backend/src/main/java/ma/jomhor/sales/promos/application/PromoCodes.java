@@ -9,7 +9,7 @@ import ma.jomhor.sales.promos.domain.PromoCode;
 public interface PromoCodes {
 
     /**
-     * A code with its figures, read from orders: {@code held} = its RESERVED/AWAITING_CASH orders still held,
+     * A code with its figures, read from orders: {@code held} = its RESERVED/AWAITING_CASH orders (by status, as the cap),
      * {@code paid} = its PAID orders, {@code discountMad} = Σ discount_mad of those PAID orders.
      */
     record Listed(PromoCode promo, long held, long paid, long discountMad) {}

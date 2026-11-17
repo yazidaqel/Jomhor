@@ -190,7 +190,8 @@ class PromoCodeOrgApiTest extends OrgApiTest {
         json = body(update(a, e, id, "{\"max_uses\": null, \"active\": true}").andExpect(status().isOk()));
         assertThat(JsonPath.<Integer>read(json, "$.max_uses")).isEqualTo(5);
         assertThat(JsonPath.<Boolean>read(json, "$.active")).isTrue();
-        // The fixed fields and a value sent unchanged are accepted, with no write and no audit.
+        // The fixed fields sent unchanged are accepted: no changeable field, so no write and no audit. A changeable
+        // field is written as sent, even with its current value (audited).
         update(a, e, id, """
                 {"code": "abonnes20", "kind": "PERCENT", "percent": 20, "price_category_id": "%s"}"""
                 .formatted(s.plein())).andExpect(status().isOk());
@@ -212,7 +213,7 @@ class PromoCodeOrgApiTest extends OrgApiTest {
 
         List<String> audits = jdbc.sql("select payload::text from audit_log where action = 'promo.update' and target = ?"
                 + " order by id").param(id).query(String.class).list();
-        assertThat(audits).hasSize(3);
+        assertThat(audits).hasSize(4);
         assertKeys(audits.get(0), "$", "max_uses", "per_account_max", "active");
     }
 
@@ -274,12 +275,11 @@ class PromoCodeOrgApiTest extends OrgApiTest {
                 .formatted(s.plein())).andExpect(status().isCreated())), "$.id");
         create(a, e, "{\"code\": \"B0B0\", \"kind\": \"PERCENT\", \"percent\": 10}").andExpect(status().isCreated());
 
-        // ALPHA2: 2 held (RESERVED, AWAITING_CASH), a RESERVED past its hold and an EXPIRED (neither counts), 2 PAID.
+        // ALPHA2: 2 held (RESERVED, AWAITING_CASH: by status, as the cap), an EXPIRED (not counted), 2 PAID.
         UUID user = jdbc.sql("insert into users (phone_e164) values (?) returning id").param(randomPhone())
                 .query(UUID.class).single();
         seed(a.org(), e, user, alpha, "RESERVED", "now() + interval '8 minutes'", 1000);
         seed(a.org(), e, user, alpha, "AWAITING_CASH", "now() + interval '1 day'", 1000);
-        seed(a.org(), e, user, alpha, "RESERVED", "now() - interval '1 minute'", 1000);
         seed(a.org(), e, user, alpha, "EXPIRED", "now() - interval '1 minute'", 1000);
         seed(a.org(), e, user, alpha, "PAID", "now()", 6000);
         seed(a.org(), e, user, alpha, "PAID", "now()", 3000);
@@ -308,8 +308,8 @@ class PromoCodeOrgApiTest extends OrgApiTest {
     }
 
     /**
-     * An order of the code with no items: only its status, hold and discount matter to the figures. EXPIRED, PAID and
-     * holds in the future are never touched by the expiry job; a past RESERVED may be, and counts nowhere either way.
+     * An order of the code with no items: only its status and discount matter to the figures. EXPIRED, PAID and holds in
+     * the future are never touched by the expiry job.
      */
     private void seed(UUID org, int event, UUID user, String promo, String status, String until, long discount) {
         jdbc.sql("""

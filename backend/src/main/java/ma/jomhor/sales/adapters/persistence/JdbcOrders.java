@@ -22,10 +22,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcOrders implements Orders {
 
-    // promo_code: the code's text (promo_codes.id is the key; the order's organizer wrote it from its own codes).
+    // promo_code: the code's text, in the order's organizer. Every user of ORDER_COLUMNS reads orders unaliased.
     private static final String ORDER_COLUMNS = """
             id, organizer_id, event_id, user_id, channel, status, total_mad, reserved_until, paid_at, group_order_id,
-            pass_id, discount_mad, (select p.code from promo_codes p where p.id = promo_code_id) as promo_code""";
+            pass_id, discount_mad,
+            (select p.code from promo_codes p
+             where p.organizer_id = orders.organizer_id and p.id = orders.promo_code_id) as promo_code""";
 
     private final JdbcClient jdbc;
 

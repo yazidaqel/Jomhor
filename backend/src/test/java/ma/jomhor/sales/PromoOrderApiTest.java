@@ -17,6 +17,7 @@ import ma.jomhor.sales.application.OrderService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
@@ -277,9 +278,8 @@ class PromoOrderApiTest extends QueueFixture {
                 + "\"per_account_max\": 5}");
         Fan a = fan();
         Fan b = fan();
-        List<Integer> statuses = both(() -> order(a, s, items(s.virage(), 1), "\"SOLO1\"").andReturn().getResponse()
-                .getStatus(), () -> order(b, s, items(s.virage(), 1), "\"SOLO1\"").andReturn().getResponse().getStatus());
-        assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+        oneWins(both(() -> order(a, s, items(s.virage(), 1), "\"SOLO1\"").andReturn().getResponse(),
+                () -> order(b, s, items(s.virage(), 1), "\"SOLO1\"").andReturn().getResponse()), "USED_UP");
 
         // per_account_max 1 (the default): a second order of the account is refused until the first expires.
         code(s, "{\"code\": \"ONCE1\", \"kind\": \"PERCENT\", \"percent\": 10}");
@@ -292,11 +292,18 @@ class PromoOrderApiTest extends QueueFixture {
         // Two orders of one account at once: one 201.
         code(s, "{\"code\": \"TWICE1\", \"kind\": \"PERCENT\", \"percent\": 10}");
         Fan twice = fan();
-        statuses = both(() -> order(twice, s, items(s.virage(), 1), "\"TWICE1\"").andReturn().getResponse()
-                .getStatus(), () -> order(twice, s, items(s.virage(), 1), "\"TWICE1\"").andReturn().getResponse()
-                .getStatus());
-        assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+        oneWins(both(() -> order(twice, s, items(s.virage(), 1), "\"TWICE1\"").andReturn().getResponse(),
+                () -> order(twice, s, items(s.virage(), 1), "\"TWICE1\"").andReturn().getResponse()), "ACCOUNT_LIMIT");
         assertThat(breaches(s.event())).isEmpty();
+    }
+
+    /** Of two orders at once, one is 201 and the other 409 PROMO_REFUSED {@code reason}. */
+    private static void oneWins(List<MockHttpServletResponse> responses, String reason) throws Exception {
+        assertThat(responses).extracting(MockHttpServletResponse::getStatus).containsExactlyInAnyOrder(201, 409);
+        String loser = responses.stream().filter(r -> r.getStatus() == 409).findFirst().orElseThrow()
+                .getContentAsString();
+        assertThat(JsonPath.<String>read(loser, "$.code")).isEqualTo("PROMO_REFUSED");
+        assertThat(JsonPath.<String>read(loser, "$.details.reason")).isEqualTo(reason);
     }
 
     /** (f) A late success after expiry takes the order back, discount and all, though the code's cap was re-taken. */

@@ -18,10 +18,11 @@ class JdbcPromoCodes implements PromoCodes {
     private static final String COLUMNS = """
             p.id, p.organizer_id, p.event_id, p.price_category_id, p.code, p.kind::text as kind, p.percent,
             p.amount_mad, p.max_uses, p.per_account_max, p.active, p.created_at""";
-    // Figures from orders (index on promo_code_id, status); "still held" as /sales' held.
+    // Figures from orders (index on promo_code_id, status). held by status, as the cap counts it (PromoCodeService.claim):
+    // an order past its hold counts until the expiry job flips it, so the list never shows room the cap doesn't give.
     private static final String LISTED = "select " + COLUMNS + """
             ,
-              count(o.id) filter (where o.status in ('RESERVED','AWAITING_CASH') and o.reserved_until > now()) as held,
+              count(o.id) filter (where o.status in ('RESERVED','AWAITING_CASH')) as held,
               count(o.id) filter (where o.status = 'PAID') as paid,
               coalesce(sum(o.discount_mad) filter (where o.status = 'PAID'), 0) as discount_mad
             from promo_codes p
