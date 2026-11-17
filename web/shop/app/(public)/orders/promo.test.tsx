@@ -10,6 +10,7 @@ import { fmt, getDictionary, ltr, type Locale } from '@/lib/i18n'
 import { formatDh, formatDiscount } from '@/lib/money'
 import { POST as createOrder } from '../../api/orders/route'
 import OrderPage from './[id]/page'
+import CheckoutPage from './new/page'
 import { CheckoutForm } from './new/CheckoutForm'
 
 declare global {
@@ -183,6 +184,7 @@ describe('W3 promo code', () => {
   it('with a code: the body carries promo_code, it stops before /pay, shows the server discount and total, then pays that total', async () => {
     await render()
     await typeCode('bienvenue20')
+    expect(document.activeElement).toBe(promoInput()) // autoFocus when "J'ai un code promo" opens it
     expect(promoInput().value).toBe('BIENVENUE20')
     expect(cta().textContent).toBe(d.checkout.promoReserve)
     fetchMock.mockResolvedValueOnce(json(201, CREATED))
@@ -244,6 +246,17 @@ describe('W3 promo code', () => {
     expect(push).not.toHaveBeenCalled()
     expect(cta().disabled).toBe(false)
     expect(cta().textContent).toBe(d.checkout.promoReserve)
+  })
+
+  it('a hold answer without an integer total_mad is a failure: nothing to show or pay, no /pay', async () => {
+    await render()
+    await typeCode('BIENVENUE20')
+    fetchMock.mockResolvedValueOnce(json(201, { ...CREATED, total_mad: '240' }))
+    await submit()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(el.querySelector('[data-promo]')).toBeNull()
+    expect(el.querySelector('[role="alert"]')!.textContent).toBe(d.errors.generic)
+    expect(push).not.toHaveBeenCalled()
   })
 
   it('"Retirer" clears the code before the hold: the flow is the one without a code', async () => {
@@ -322,5 +335,37 @@ describe('W4 discount line', () => {
     const h = await page()
     expect(h).toContain(line('ar'))
     expect(h).not.toContain(TOKEN)
+  })
+})
+
+describe('W3 side summary once a code is held', () => {
+  const STRIKE = ['group-has-[[data-promo]]:line-through', 'group-has-[[data-promo]]:text-text-muted']
+
+  it('strikes the list price line and total when the form holds [data-promo], and only then', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.parse('2026-02-01T12:00:00Z'))
+    fetchMock.mockImplementation(async (url) => {
+      const path = String(url).replace('http://backend.test/v1', '')
+      if (path === '/fan/events/12') return json(200, rawEvent())
+      if (path === '/fan/me') return json(200, { id: 'u1', phone: '+212600000000', display_name: 'Yazid Aqel', locale: 'fr' })
+      return json(404, { code: 'NOT_FOUND', message: '', details: {} })
+    })
+    const host = document.createElement('div')
+    host.innerHTML = renderToString(await CheckoutPage({ searchParams: Promise.resolve({ event: '12', price: 'pc-virage', qty: '2' }) }))
+    document.body.append(host)
+    try {
+      const main = host.querySelector('main')!
+      const total = host.querySelector('[data-list-total]')!
+      const line = [...host.querySelectorAll('aside p > span')].find((s) => s.textContent === total.textContent && s !== total)!
+      expect(main.classList).toContain('group')
+      for (const el of [total, line]) for (const c of STRIKE) expect(el.classList).toContain(c)
+      expect(main.matches(':has([data-promo])')).toBe(false) // before the hold: the variant doesn't apply
+      const held = document.createElement('div') // what CheckoutForm renders once the code is held
+      held.setAttribute('data-promo', '')
+      host.querySelector('form')!.append(held)
+      expect(main.matches(':has([data-promo])')).toBe(true) // after: what the group-has variant selects
+    } finally {
+      host.remove()
+    }
   })
 })

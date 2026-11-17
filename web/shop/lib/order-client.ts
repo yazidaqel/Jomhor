@@ -113,8 +113,10 @@ export async function placeOrder(
     reservedUntil = typeof created.data!.reserved_until === 'string' ? created.data!.reserved_until : null
     if (holdFirst) {
       const d = created.data!
-      const int = (v: unknown) => (Number.isSafeInteger(v) ? (v as number) : 0)
-      return { kind: 'reserved', orderId, reservedUntil, totalMad: int(d.total_mad), discountMad: int(d.discount_mad), promoCode: typeof d.promo_code === 'string' ? d.promo_code : null }
+      // No server total → nothing to show or pay (the hold expires by itself); a missing discount is 0 (04: 0 without a code).
+      if (!Number.isSafeInteger(d.total_mad)) return { kind: 'failed', result: { ...created, ok: false } }
+      const discountMad = Number.isSafeInteger(d.discount_mad) ? (d.discount_mad as number) : 0
+      return { kind: 'reserved', orderId, reservedUntil, totalMad: d.total_mad as number, discountMad, promoCode: typeof d.promo_code === 'string' ? d.promo_code : null }
     }
   }
   if (signal.aborted) return { kind: 'held', orderId }

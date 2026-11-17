@@ -384,6 +384,7 @@ export function CheckoutForm(props: {
             <div className="flex items-end gap-3">
               <input
                 id="promo"
+                autoFocus // opened by "J'ai un code promo": the fan types next
                 dir="ltr"
                 value={promo}
                 onChange={(e) => (setPromo(e.target.value.toUpperCase()), setPromoError(null))}
