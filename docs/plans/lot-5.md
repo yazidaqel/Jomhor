@@ -1897,6 +1897,8 @@ None. The 500-place limit is a 04 rule, not a knob.
 
 ## 13. Step 5 · Finance and CRM export
 
+Status: **agreed 2026-11-17** by the founder, every default: agent model, per-club fee rate + 20 % VAT taken from the payout, refunds stay the club's, no fee back on refund (Q222–Q224); manual transfer, day + 2 (weekend → Monday), the club confirms "Versement reçu" with the bank reference (Q226–Q227); invoices built now with Jomhor's legal IDs as empty settings, real invoices blocked until they are filled and an accountant confirms (Q228–Q230); CRM export as specified, phone only with WhatsApp consent, the opt-in sentence added (Q235–Q236). Waiting on the founder: the first club's fee rate, Jomhor's legal IDs, the accountant's review, the club's CNDP declaration.
+
 As of 2026-11-17 · owner: tech-lead · status: **proposed**, waiting for the founder's calls on Q222–Q224, Q227, Q228–Q230, Q235–Q236. V35 is the latest migration (step 4b, PR #26), so step 5 starts at V36. This is the **last step of Lot 5**. It ships in two sub-steps:
 - **5a** uses V36, on branch `feat/lot-5-cash-crm` from `main` (e69dcfa).
 - **5b** uses V37, on branch `feat/lot-5-settlements` from `main` once 5a is merged.
