@@ -35,6 +35,7 @@ const me = (role: Role): Me => ({
 })
 const venue = (timezone: string): Venue => ({ id: 'v-1', name: 'Grand Stade', city: 'Casablanca', capacity: 45000, timezone })
 
+// source: contract (04 /org/finance/cash; Lot 5 step 5 `deposit` per session and `totals.undeposited_mad`).
 const REPORT: CashReport = {
   from: '2026-11-01T00:00:00Z',
   to: '2026-11-08T00:00:00Z',
@@ -57,6 +58,7 @@ const REPORT: CashReport = {
       expected_mad: 100_050,
       declared_mad: 99_050,
       variance_mad: -1000,
+      deposit: { id: 'd-1', reference: 'Bordereau 448812', deposited_on: '2026-11-04' },
     },
     {
       id: 's-2',
@@ -70,6 +72,7 @@ const REPORT: CashReport = {
       expected_mad: 25_000,
       declared_mad: 25_000,
       variance_mad: 0,
+      deposit: null,
     },
     {
       id: 's-3',
@@ -83,6 +86,7 @@ const REPORT: CashReport = {
       expected_mad: 0,
       declared_mad: null,
       variance_mad: null,
+      deposit: null,
     },
     {
       id: 's-4',
@@ -96,9 +100,10 @@ const REPORT: CashReport = {
       expected_mad: 10_000,
       declared_mad: 10_500,
       variance_mad: 500,
+      deposit: null,
     },
   ],
-  totals: { collected_mad: 185_050, declared_mad: 124_050, variance_mad: -1000, open_sessions: 1 },
+  totals: { collected_mad: 185_050, declared_mad: 124_050, variance_mad: -1000, open_sessions: 1, undeposited_mad: 35_500 },
 }
 
 type Call = { path: string; org: string | null; auth: string | null }
@@ -180,14 +185,16 @@ it('FINANCE opens Finance › Encaissements: last 7 local days, per day × colle
 
   const sessions = within(section(fr.finance.cash.sessions.title)).getAllByRole('row').slice(1)
   expect(sessions.map(cells)).toEqual([
-    ['Guichet 1', 'Karim', at('2026-11-03T08:00:00Z'), at('2026-11-03T18:00:00Z'), '10', dh(100_050), dh(99_050), spaced(i18n.t('sales.amount', { amount: formatDh(-1000, 'fr', 'exceptZero') }))],
-    ['Guichet 2', 'Nadia', at('2026-11-03T08:05:00Z'), at('2026-11-03T18:10:00Z'), '2', dh(25_000), dh(25_000), fr.finance.cash.noGap],
-    ['Guichet 1', 'Karim', at('2026-11-04T08:00:00Z'), fr.finance.cash.sessions.open, '0', dh(0), fr.finance.cash.sessions.atClose, fr.finance.cash.sessions.atClose],
-    ['Guichet 3', 'Nadia', at('2026-11-04T09:00:00Z'), at('2026-11-04T17:00:00Z'), '1', dh(10_000), dh(10_500), spaced(i18n.t('sales.amount', { amount: formatDh(500, 'fr', 'exceptZero') }))],
+    ['Guichet 1', 'Karim', at('2026-11-03T08:00:00Z'), at('2026-11-03T18:00:00Z'), '10', dh(100_050), dh(99_050), spaced(i18n.t('sales.amount', { amount: formatDh(-1000, 'fr', 'exceptZero') })), `Bordereau 448812 · ${day('2026-11-04')}`],
+    ['Guichet 2', 'Nadia', at('2026-11-03T08:05:00Z'), at('2026-11-03T18:10:00Z'), '2', dh(25_000), dh(25_000), fr.finance.cash.noGap, fr.finance.cash.sessions.notDeposited],
+    ['Guichet 1', 'Karim', at('2026-11-04T08:00:00Z'), fr.finance.cash.sessions.open, '0', dh(0), fr.finance.cash.sessions.atClose, fr.finance.cash.sessions.atClose, fr.finance.cash.sessions.noDeposit],
+    ['Guichet 3', 'Nadia', at('2026-11-04T09:00:00Z'), at('2026-11-04T17:00:00Z'), '1', dh(10_000), dh(10_500), spaced(i18n.t('sales.amount', { amount: formatDh(500, 'fr', 'exceptZero') })), fr.finance.cash.sessions.notDeposited],
   ])
-  expect(cells(sessions[3]!).at(-1)).toMatch(/^\+5,00\sDH$/u) // a surplus is a gap too: signed, red
+  expect(cells(sessions[3]!).at(-2)).toMatch(/^\+5,00\sDH$/u) // a surplus is a gap too: signed, red
+  // Lot 5 step 5: a closed session with no live deposit reads amber "Non déposé".
+  expect(within(sessions[1]!).getByText(fr.finance.cash.sessions.notDeposited).className).toContain('text-warning-foreground')
   // Red only when the gap is not zero.
-  const gapCell = (row: HTMLElement) => within(row).getAllByRole('cell').at(-1)!
+  const gapCell = (row: HTMLElement) => within(row).getAllByRole('cell').at(-2)!
   expect(gapCell(sessions[0]!).className).toContain('text-destructive')
   expect(gapCell(sessions[3]!).className).toContain('text-destructive')
   expect(gapCell(sessions[1]!).className).not.toContain('text-destructive')
@@ -199,6 +206,8 @@ it('FINANCE opens Finance › Encaissements: last 7 local days, per day × colle
   expect(kpi(fr.finance.cash.kpi.declared).getByText(spaced(dh(124_050)))).toBeTruthy()
   expect(kpi(fr.finance.cash.kpi.variance).getByText(/^-10,00\sDH$/u).className).toContain('text-destructive')
   expect(kpi(fr.finance.cash.kpi.open).getByText('1')).toBeTruthy()
+  // Lot 5 step 5: "À déposer" = the server's undeposited_mad, not a client sum.
+  expect(kpi(fr.finance.cash.kpi.undeposited).getByText(spaced(dh(35_500)))).toBeTruthy()
 })
 
 it('the picked local dates are sent as they are, with the venue zone; bad ranges are not sent', async () => {
@@ -315,7 +324,7 @@ it('both dates invalid: each points at the range message, which exists', async (
 })
 
 it('empty period: both tables say so', async () => {
-  stubApi('FINANCE', { report: { ...REPORT, days: [], sessions: [], totals: { collected_mad: 0, declared_mad: 0, variance_mad: 0, open_sessions: 0 } } })
+  stubApi('FINANCE', { report: { ...REPORT, days: [], sessions: [], totals: { collected_mad: 0, declared_mad: 0, variance_mad: 0, open_sessions: 0, undeposited_mad: 0 } } })
   renderApp('/finance/cash')
   expect(await screen.findByText(fr.finance.cash.days.emptyTitle)).toBeTruthy()
   expect(screen.getByText(fr.finance.cash.days.empty)).toBeTruthy()

@@ -378,6 +378,8 @@ function Zones({ sales, className }: { sales: EventSales; className?: string }) 
 /** Paid per channel: a bar per channel (its share of paid tickets) with the count and revenue in text. */
 function Channels({ sales }: { sales: EventSales }) {
   const { t, i18n } = useTranslation()
+  // Lot 5 step 5: channels are sales only (free places are not in one), so shares are out of their own sum.
+  const sold = sales.channels.reduce((a, c) => a + c.paid, 0)
   return (
     <Card>
       <CardHeader>
@@ -387,8 +389,8 @@ function Channels({ sales }: { sales: EventSales }) {
         <CardDescription>{t('overview.channels.description')}</CardDescription>
       </CardHeader>
       <CardContent>
-        {sales.paid === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('sales.channels.empty')}</p>
+        {sold === 0 ? (
+          <p className="text-sm text-muted-foreground">{t(sales.paid === 0 ? 'sales.channels.empty' : 'sales.channels.noSales')}</p>
         ) : (
           <ul className="flex flex-col gap-4">
             {sales.channels.map((c) => (
@@ -400,7 +402,7 @@ function Channels({ sales }: { sales: EventSales }) {
                     <span className="ml-3 text-muted-foreground">{t('sales.amount', { amount: formatDh(c.revenue_mad, i18n.language) })}</span>
                   </span>
                 </div>
-                <FillBar paid={c.paid} quota={sales.paid} className="h-2" />
+                <FillBar paid={c.paid} quota={sold} className="h-2" />
               </li>
             ))}
           </ul>

@@ -11,6 +11,7 @@ import type { Me, Role } from '@/features/auth/organizer'
 import type { EventSummary } from '@/features/events/api'
 import { createQueryClient } from '@/lib/queryClient'
 import { session } from '@/lib/session'
+import { todayIn } from '@/lib/time'
 import { CAMPAIGN_REFETCH_MS, type Campaign, type CampaignRow, type MembersSummary } from './api'
 
 beforeAll(() => {
@@ -53,6 +54,7 @@ const SUMMARY: MembersSummary = {
   reachable_push: 640,
   paid: 0,
   paid_required: false,
+  exportable: 812, // Lot 5 step 5, source: contract (04 /org/members/summary `exportable`)
   tiers: [
     { code: 'MEMBRE', name: 'Membre', members: 1000 },
     { code: 'FIDELE', name: 'Fidèle', members: 200 },
@@ -230,6 +232,75 @@ it('Membres: "Cotisations à jour" only when paid_required, out of the members',
   const card = within((await within(panel).findByText(fr.crm.members.kpi.paid, { selector: 'span' })).closest('[data-slot="card"]') as HTMLElement)
   expect(card.getByText('987')).toBeTruthy()
   expect(card.getByText(i18n.t('crm.members.kpi.paidOf', { n: (1234).toLocaleString('fr') }).replace(/\s/gu, ' '))).toBeTruthy()
+})
+
+// source: contract (04 /org/crm/export.csv): `;`, UTF-8 BOM, CRLF, the exact header; demo 5a's Yazid (push only, no phone).
+const EXPORT_CSV = '\uFEFFnumero;nom;telephone;langue;membre_depuis;notifications;whatsapp;cotisation_jusqu_au;abonne;matchs\r\n1;Yazid;;fr;2026-09-01;oui;non;;non;3\r\n'
+const csvResponse = (name: string | null) =>
+  new Response(new TextEncoder().encode(EXPORT_CSV), {
+    headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store', ...(name && { 'Content-Disposition': `attachment; filename="${name}"` }) },
+  })
+
+it.each(['OPS', 'FINANCE'] as const)('%s: no "Exporter (CSV)" (ADMIN only)', async (role) => {
+  stubApi(role)
+  renderApp('/crm')
+  await screen.findByText(fr.crm.members.kpi.members, { selector: 'span' })
+  expect(screen.queryByRole('button', { name: fr.crm.export.action })).toBeNull()
+})
+
+it('ADMIN exports: the dialog counts from exportable and marketing_whatsapp; the file comes as a blob with the auth header, under the server filename, never in the query cache', async () => {
+  const user = userEvent.setup()
+  const calls = stubApi('ADMIN', { handle: (c) => (c.path === '/org/crm/export.csv' ? csvResponse('fans-2026-11-26.csv') : undefined) })
+  let blob: Blob | undefined
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: (b: Blob) => ((blob = b), 'blob:fans'), revokeObjectURL: vi.fn() }))
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  const log = vi.spyOn(console, 'log')
+  const { queryClient } = renderApp('/crm')
+
+  await user.click(await screen.findByRole('button', { name: fr.crm.export.action }))
+  const dialog = within(await screen.findByRole('dialog'))
+  expect(dialog.getByText(i18n.t('crm.export.counts', { count: 812, fans: '812', phones: '300' }))).toBeTruthy()
+  expect(dialog.getByText(fr.crm.export.notice)).toBeTruthy()
+  expect(calls.filter((c) => c.path === '/org/crm/export.csv')).toEqual([]) // nothing fetched before the click
+  await user.click(dialog.getByRole('button', { name: fr.crm.export.download }))
+
+  await waitFor(() => expect(click).toHaveBeenCalled())
+  const [, init] = vi.mocked(fetch).mock.calls.find(([input]) => String(input) === '/v1/org/crm/export.csv')!
+  const headers = new Headers(init?.headers)
+  expect(headers.get('Authorization')).toBe('Bearer tok-1')
+  expect(headers.get('X-Organizer-Id')).toBe('org-a')
+  expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe('fans-2026-11-26.csv')
+  expect([...new Uint8Array(await blob!.arrayBuffer())].slice(0, 3)).toEqual([0xef, 0xbb, 0xbf])
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  // The file is in no cache: no query for it, no mutation result holding it.
+  const cached = JSON.stringify([queryClient.getQueryCache().getAll().map((q) => [q.queryKey, q.state.data]), queryClient.getMutationCache().getAll().map((m) => m.state.data)])
+  expect(cached).not.toContain('numero;nom')
+  expect(cached).not.toContain('export.csv')
+  expect(log).not.toHaveBeenCalled()
+})
+
+it('export without Content-Disposition: saved as fans-{today}.csv', async () => {
+  const user = userEvent.setup()
+  stubApi('ADMIN', { handle: (c) => (c.path === '/org/crm/export.csv' ? csvResponse(null) : undefined) })
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:fans', revokeObjectURL: vi.fn() }))
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  renderApp('/crm')
+  await user.click(await screen.findByRole('button', { name: fr.crm.export.action }))
+  await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: fr.crm.export.download }))
+  await waitFor(() => expect(click).toHaveBeenCalled())
+  expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe(`fans-${todayIn(CASA)}.csv`)
+})
+
+it('export refused (403): the error stays in the dialog, nothing is saved', async () => {
+  const user = userEvent.setup()
+  stubApi('ADMIN', { handle: (c) => (c.path === '/org/crm/export.csv' ? Response.json({ code: 'FORBIDDEN', message: 'x', details: {} }, { status: 403 }) : undefined) })
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  renderApp('/crm')
+  await user.click(await screen.findByRole('button', { name: fr.crm.export.action }))
+  const dialog = within(await screen.findByRole('dialog'))
+  await user.click(dialog.getByRole('button', { name: fr.crm.export.download }))
+  expect(await dialog.findByText(fr.errors.FORBIDDEN)).toBeTruthy()
+  expect(click).not.toHaveBeenCalled()
 })
 
 it('Campagnes: rows with channel, audience, status, the time in the event venue zone and the counts; Annuler only while SCHEDULED', async () => {

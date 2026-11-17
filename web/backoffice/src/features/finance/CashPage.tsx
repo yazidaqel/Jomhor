@@ -1,22 +1,20 @@
 import { useState, type ReactNode } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Banknote, Download, Scale, Store, Wallet } from 'lucide-react'
+import { Banknote, Download, Landmark, Scale, Store, Wallet } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
-import { BrandEmpty, ErrorNotice, LoadingRows, PageHeader, STICKY_TABLE } from '@/components/page'
+import { BrandEmpty, ErrorNotice, LoadingRows, STICKY_TABLE } from '@/components/page'
 import { Kpi } from '@/components/kpi'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldError, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useVenues } from '@/features/venues/api'
 import { fr } from '@/i18n/fr'
 import { formatDh } from '@/lib/money'
-import { addDays, DEFAULT_ZONE, formatDateTime, formatDay, todayIn } from '@/lib/time'
+import { addDays, formatDateTime, formatDay, todayIn } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useCashCsv, useCashReport, type CashRange, type CashReport } from './api'
 
@@ -25,44 +23,12 @@ const MAX_DAYS = 92
 
 type Collector = keyof typeof fr.finance.cash.collectors
 
-/**
- * B8 Finance › Encaissements: `/finance/cash`. ADMIN, OPS, FINANCE (the sidebar shows it to them; the shell keeps
- * CASHIER out, GATE and SUPERVISOR never get in). Dates are the organizer's venue zone: the one zone its venues share,
- * else Africa/Casablanca (04: the report's default).
- */
-export function CashPage() {
-  const { t } = useTranslation()
-  const venues = useVenues()
-  if (venues.isPending)
-    return (
-      <div aria-busy="true">
-        <span className="sr-only">{t('common.loading')}</span>
-        <Skeleton className="h-16 w-80" />
-      </div>
-    )
-  // No silent fallback: without the venues the zone, so every day boundary, could be wrong.
-  if (venues.isError) return <ErrorNotice error={venues.error} onRetry={() => void venues.refetch()} />
-  const zones = [...new Set(venues.data.map((v) => v.timezone))]
-  const zone = zones.length === 1 ? zones[0]! : DEFAULT_ZONE
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        crumbs={[{ label: t('nav.finance') }, { label: t('finance.cash.title') }]}
-        title={t('finance.cash.title')}
-        description={t('finance.cash.description', { zone })}
-      />
-      {/* key: a new zone starts a new default range. */}
-      <CashReportView key={zone} zone={zone} />
-    </div>
-  )
-}
-
 /** Local dates as typed; `range` is what the report shows (the last valid submit). */
-type Days = { from: string; to: string }
+export type Days = { from: string; to: string }
 const RANGE_FIELDS: (keyof Days)[] = ['from', 'to']
-const RANGE_ERROR_ID = 'cash-range-error'
 
-function CashReportView({ zone }: { zone: string }) {
+/** B8 Finance › Encaissements: `/finance/cash`, in the venue zone (`FinancePage`). */
+export function CashTab({ zone }: { zone: string }) {
   const { t } = useTranslation()
   const [days, setDays] = useState<Days>(() => {
     const today = todayIn(zone)
@@ -76,7 +42,7 @@ function CashReportView({ zone }: { zone: string }) {
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <RangeForm initial={days} onSubmit={setDays} />
+        <RangeForm id="cash" initial={days} onSubmit={setDays} />
         <Button variant="outline" disabled={csv.isPending} onClick={() => csv.mutate({ range, fallback: `encaissements-${days.from}-${days.to}.csv` })}>
           <Download />
           {t('finance.cash.export')}
@@ -95,8 +61,10 @@ function CashReportView({ zone }: { zone: string }) {
   )
 }
 
-function RangeForm({ initial, onSubmit }: { initial: Days; onSubmit: (d: Days) => void }) {
+/** A range of local dates, both included, at most 92 days (the API's limit on both finance reports). `id` prefixes the inputs. */
+export function RangeForm({ id, initial, onSubmit }: { id: string; initial: Days; onSubmit: (d: Days) => void }) {
   const { t } = useTranslation()
+  const errorId = `${id}-range-error`
   const schema = z
     .object({ from: z.iso.date(t('finance.cash.range.invalid')), to: z.iso.date(t('finance.cash.range.invalid')) })
     .superRefine(({ from, to }, ctx) => {
@@ -108,12 +76,12 @@ function RangeForm({ initial, onSubmit }: { initial: Days; onSubmit: (d: Days) =
   const { errors } = form.formState
   const field = (name: keyof Days) => (
     <Field key={name} data-invalid={!!errors[name]} className="w-44">
-      <FieldLabel htmlFor={`cash-${name}`}>{t(`finance.cash.range.${name}`)}</FieldLabel>
+      <FieldLabel htmlFor={`${id}-${name}`}>{t(`finance.cash.range.${name}`)}</FieldLabel>
       <Input
-        id={`cash-${name}`}
+        id={`${id}-${name}`}
         type="date"
         aria-invalid={!!errors[name]}
-        aria-describedby={errors[name] ? RANGE_ERROR_ID : undefined}
+        aria-describedby={errors[name] ? errorId : undefined}
         {...form.register(name)}
       />
     </Field>
@@ -126,7 +94,7 @@ function RangeForm({ initial, onSubmit }: { initial: Days; onSubmit: (d: Days) =
         <Button type="submit">{t('finance.cash.range.submit')}</Button>
       </div>
       {/* One message for the range; every invalid date points at it. */}
-      {error && <FieldError id={RANGE_ERROR_ID}>{error}</FieldError>}
+      {error && <FieldError id={errorId}>{error}</FieldError>}
     </form>
   )
 }
@@ -159,7 +127,7 @@ function ReportBody({ report, zone }: { report: CashReport; zone: string }) {
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <Kpi index={0} icon={Banknote} label={t('finance.cash.kpi.collected')} value={dh(totals.collected_mad)}>
           {t('finance.cash.kpi.collectedHint')}
         </Kpi>
@@ -171,6 +139,10 @@ function ReportBody({ report, zone }: { report: CashReport; zone: string }) {
         </Kpi>
         <Kpi index={3} icon={Store} label={t('finance.cash.kpi.open')} value={n(totals.open_sessions)}>
           {t('finance.cash.kpi.openHint')}
+        </Kpi>
+        {/* Lot 5 step 5: till cash not yet matched to a bank deposit (B8 Dépôts). */}
+        <Kpi index={4} icon={Landmark} label={t('finance.cash.kpi.undeposited')} value={dh(totals.undeposited_mad)} valueClassName={cn(totals.undeposited_mad !== 0 && 'text-warning-foreground')}>
+          {t('finance.cash.kpi.undepositedHint')}
         </Kpi>
       </div>
 
@@ -229,6 +201,7 @@ function ReportBody({ report, zone }: { report: CashReport; zone: string }) {
                 <TableHead className="text-right">{t('finance.cash.sessions.expected')}</TableHead>
                 <TableHead className="text-right">{t('finance.cash.sessions.declared')}</TableHead>
                 <TableHead className="text-right">{t('finance.cash.sessions.variance')}</TableHead>
+                <TableHead>{t('finance.cash.sessions.deposit')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -251,6 +224,18 @@ function ReportBody({ report, zone }: { report: CashReport; zone: string }) {
                   <TableCell className="text-right tabular-nums">{s.declared_mad === null ? <Pending /> : dh(s.declared_mad)}</TableCell>
                   <TableCell className={cn('text-right tabular-nums', s.variance_mad !== null && gapClass(s.variance_mad))}>
                     {s.variance_mad === null ? <Pending /> : gap(s.variance_mad)}
+                  </TableCell>
+                  <TableCell>
+                    {s.deposit ? (
+                      <span className="tabular-nums">{t('finance.cash.sessions.depositOf', { reference: s.deposit.reference, date: formatDay(s.deposit.deposited_on, i18n.language) })}</span>
+                    ) : s.closed_at ? (
+                      <Badge variant="outline" className="rounded-full border-warning-border bg-warning-muted text-warning-foreground">
+                        {t('finance.cash.sessions.notDeposited')}
+                      </Badge>
+                    ) : (
+                      // A till still open cannot be deposited yet.
+                      <span className="text-muted-foreground">{t('finance.cash.sessions.noDeposit')}</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

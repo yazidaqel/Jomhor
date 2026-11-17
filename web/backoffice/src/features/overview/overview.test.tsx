@@ -89,7 +89,7 @@ const SALES: EventSales = {
     { channel: 'POS', paid: 0, revenue_mad: 0 },
   ],
   methods: (['CARD', 'WALLET', 'CASH_AGENCY', 'POS_CASH', 'FREE'] as const).map((method) => ({ method, paid: 0, revenue_mad: 0 })),
-  refunds_required: [],
+  refunds_required: [],  free: { passes: 0, invitations: 0 }, // Lot 5 step 5, source: contract (04 /sales `free`)
 }
 
 type Call = { path: string; org: string | null }

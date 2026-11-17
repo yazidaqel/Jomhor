@@ -1,8 +1,9 @@
 import type { TFunction } from 'i18next'
 import { z } from 'zod'
-import { useOrgMutation, useOrgQuery, type Request } from '@/features/auth/organizer'
+import { useMutation } from '@tanstack/react-query'
+import { useOrganizer, useOrgMutation, useOrgQuery, type Request } from '@/features/auth/organizer'
 import type { EventSummary } from '@/features/events/api'
-import { path } from '@/lib/api'
+import { download, path } from '@/lib/api'
 import { DEFAULT_ZONE, wallToUtc } from '@/lib/time'
 
 // docs/04-api.md §Organizer /org/members/summary, /org/campaigns*, §Campaigns. ADMIN, OPS write; FINANCE reads.
@@ -16,6 +17,8 @@ export type MembersSummary = {
   /** Lot 5 step 3: live members with `paid_until > now`; shown only when `paid_required` (the organizer sells a MEMBERSHIP). */
   paid: number
   paid_required: boolean
+  /** Lot 5 step 5: the CRM export's row count (04 §Finance CRM export). */
+  exportable: number
   tiers: { code: string; name: string; members: number }[]
 }
 
@@ -46,6 +49,16 @@ export type Campaign = CampaignRow & { body: string; audience_estimate: number }
 export const CAMPAIGN_REFETCH_MS = 10_000
 
 export const useMembersSummary = () => useOrgQuery<MembersSummary>(['members', 'summary'], '/org/members/summary')
+
+/**
+ * GET /org/crm/export.csv (ADMIN only): a file of names and phones. A mutation, never a query, so the bytes never sit
+ * in the query cache; `download` saves the blob under the server's filename and revokes its URL, and nothing is
+ * logged. `fallback`: `fans-{local date}.csv`, used only when Content-Disposition is missing.
+ */
+export function useCrmExport() {
+  const { organizer_id: organizerId } = useOrganizer()
+  return useMutation({ mutationFn: (fallback: string) => download('/org/crm/export.csv', fallback, { organizerId }) })
+}
 /**
  * How far ahead of the browser clock a SCHEDULED row still counts as due: one 30 s job period plus clock skew. A
  * send-now stores the server's now(), which a browser running behind would otherwise read as a future time.

@@ -28,7 +28,10 @@ export type EventSales = {
    */
   discount_mad?: number
   zones: ZoneSales[]
+  /** Lot 5 step 5: sales only, orders whose `payment_method` isn't FREE. `paid` = Σ `channels.paid` + `free.passes` + `free.invitations`. */
   channels: ChannelSales[]
+  /** Lot 5 step 5: places in PAID FREE orders, pass tickets (`pass_id`) and invitations (`invited_by`). `methods.FREE` is their sum. */
+  free: { passes: number; invitations: number }
   methods: MethodSales[]
   refunds_required: RefundRequired[]
 }
