@@ -139,6 +139,7 @@ function Kpis({ data }: { data: Settlements }) {
       )}
       <Kpi index={1} icon={HandCoins} label={t('finance.settlements.kpi.due')} value={dh(due.amount_mad)}>
         <span>{t('finance.settlements.kpi.dueHint', { count: due.count })}</span>
+        {due.overdue > 0 && <span className="font-medium text-destructive">{t('finance.settlements.kpi.dueLate', { count: due.overdue })}</span>}
       </Kpi>
       <Kpi index={2} icon={Undo2} label={t('finance.settlements.kpi.refunds')} value={t('finance.settlements.kpi.refundsValue', { count: refunds.count, amount: dh(refunds.amount_mad) })}>
         <span>{t('finance.settlements.kpi.refundsHint')}</span>

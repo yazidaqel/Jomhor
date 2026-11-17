@@ -506,6 +506,8 @@ export const fr = {
         due: 'À recevoir',
         dueHint_one: '{{count}} relevé à verser par Jomhor',
         dueHint_other: '{{count}} relevés à verser par Jomhor',
+        dueLate_one: 'dont {{count}} en retard',
+        dueLate_other: 'dont {{count}} en retard',
         refunds: 'Remboursements à faire',
         refundsValue: '{{count}} · {{amount}}',
         refundsHint: 'À rembourser par vous : jamais déduits de vos versements.',

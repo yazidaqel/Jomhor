@@ -81,7 +81,7 @@ const LIST: Settlements = {
   open: { since: '2026-11-29T00:00:00Z', collected_mad: 25_000, till_mad: 0, payments: 1 },
   refunds_required: { count: 2, amount_mad: 30_000 },
   // Every DUE statement, whatever the range: the three below plus one older (250 DH), outside the shown range.
-  due: { count: 4, amount_mad: 14_000 + 370_000 + 94_000 + 25_000 },
+  due: { count: 4, amount_mad: 14_000 + 370_000 + 94_000 + 25_000, overdue: 1 }, // LATE
   vat_rate_bp: 2000,
   settlements: [SAT, FRI, THU, LATE, PAID],
 }
@@ -228,6 +228,7 @@ it('KPIs: open from `open`, À recevoir from `due`, refunds from `refunds_requir
   const due = kpi(fr.finance.settlements.kpi.due)
   expect(due.getByText(spaced(dh(503_000)))).toBeTruthy()
   expect(due.getByText(spaced(i18n.t('finance.settlements.kpi.dueHint', { count: 4 })))).toBeTruthy()
+  expect(due.getByText(i18n.t('finance.settlements.kpi.dueLate', { count: 1 })).className).toContain('text-destructive')
 
   const refunds = kpi(fr.finance.settlements.kpi.refunds)
   expect(refunds.getByText(spaced(i18n.t('finance.settlements.kpi.refundsValue', { count: 2, amount: dh(30_000) })))).toBeTruthy()
@@ -415,12 +416,24 @@ it('OPS: no Relevés tab, /finance opens Encaissements, /finance/settlements red
 })
 
 it('À recevoir is `due` as sent, not a sum of the shown rows: a range with no DUE row still shows every DUE statement', async () => {
-  stubApi('FINANCE', (c) => (c.path.startsWith('/org/finance/settlements?') ? Response.json({ ...LIST, settlements: [FRI, PAID], due: { count: 1, amount_mad: 25_000 } }) : undefined))
+  stubApi('FINANCE', (c) => (c.path.startsWith('/org/finance/settlements?') ? Response.json({ ...LIST, settlements: [FRI, PAID], due: { count: 1, amount_mad: 25_000, overdue: 0 } }) : undefined))
   renderApp('/finance/settlements')
   await screen.findByRole('heading', { name: fr.finance.settlements.list.title })
   const due = within(screen.getByText(fr.finance.settlements.kpi.due).closest('[data-slot="card"]') as HTMLElement)
   expect(due.getByText(spaced(dh(25_000)))).toBeTruthy()
   expect(due.getByText(spaced(i18n.t('finance.settlements.kpi.dueHint', { count: 1 })))).toBeTruthy()
+  expect(due.queryByText(/en retard/u)).toBeNull() // overdue 0: no line
+})
+
+it('"dont N en retard" comes from `due.overdue`: an overdue statement outside the range still counts, though no row shows it', async () => {
+  stubApi('FINANCE', (c) =>
+    c.path.startsWith('/org/finance/settlements?') ? Response.json({ ...LIST, settlements: [SAT, FRI, THU], due: { count: 4, amount_mad: 503_000, overdue: 2 } }) : undefined,
+  )
+  renderApp('/finance/settlements')
+  await screen.findByRole('heading', { name: fr.finance.settlements.list.title })
+  expect(table().queryByText(fr.finance.settlements.status.overdue)).toBeNull() // no late row in the range
+  const due = within(screen.getByText(fr.finance.settlements.kpi.due).closest('[data-slot="card"]') as HTMLElement)
+  expect(due.getByText(i18n.t('finance.settlements.kpi.dueLate', { count: 2 })).className).toContain('text-destructive')
 })
 
 it('the VAT line reads the rate from `vat_rate_bp`', async () => {
