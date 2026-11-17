@@ -11,12 +11,13 @@ class CheckoutRepository {
 
   /// Holds the places for 8 min. Returns the order and the server time of the answer (`Date`), so the
   /// countdown runs on server time. [admissionToken]: the fan's turn in the event's waiting room (Lot 5), sent as
-  /// `X-Admission-Token`.
+  /// `X-Admission-Token`. [promoCode]: as typed (Lot 5 step 4); the server trims, uppercases and checks it.
   Future<(FanOrder, DateTime?)> reserve({
     required int eventId,
     required String priceCategoryId,
     required List<HolderInput> holders,
     String? admissionToken,
+    String? promoCode,
   }) async {
     final res = await _api.postResponse(
       '/fan/orders',
@@ -33,6 +34,7 @@ class CheckoutRepository {
             ],
           },
         ],
+        'promo_code': ?promoCode,
       },
     );
     return (FanOrder.fromJson(res.body! as Map<String, Object?>), res.date);

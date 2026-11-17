@@ -1885,4 +1885,35 @@ class AppLocalizationsAr extends AppLocalizations {
   String orderPaidInstallmentBody(int seq, int n) {
     return 'القسط $seq/$n تخلص. لقا الاشتراك والتذاكر ديالك ف«تذاكري».';
   }
+
+  @override
+  String get promoToggle => 'عندي كود برومو';
+
+  @override
+  String get promoLabel => 'كود البرومو';
+
+  @override
+  String get promoRemove => 'حيد';
+
+  @override
+  String get promoReserveCta => 'حجز بالكود';
+
+  @override
+  String promoLine(String code, String discount) {
+    return 'الكود $code · $discount';
+  }
+
+  @override
+  String promoRefused(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'NOT_APPLICABLE': 'هاد الكود ما كيتطبقش على هاد البلايص',
+      'USED_UP': 'هاد الكود وصل للحد ديالو',
+      'ACCOUNT_LIMIT': 'سبق ليك ستعملتي هاد الكود',
+      'other': 'كود ما معروفش ولا سالا',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get promoSplitCaption => 'الكود كيتطبق غير على البلايص ديالك';
 }

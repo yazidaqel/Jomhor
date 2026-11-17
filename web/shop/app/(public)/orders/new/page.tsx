@@ -65,7 +65,8 @@ export default async function CheckoutPage({ searchParams }: Props) {
   const { methods, cashLate, cashUntil } = cashOptions(e, now)
 
   return (
-    <main className="mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-16">
+    // `group`: once a code is held, CheckoutForm shows the server's total ([data-promo]) and the list prices here are struck.
+    <main className="group mx-auto flex w-full max-w-[1180px] flex-wrap items-start gap-8 px-6 pt-8 pb-16">
       {/* Lot 5: a live room gates the sale, so a running W8 turn shows above the content. */}
       {e.room && <TurnBar eventId={e.id} phase={e.room.phase} now={now} text={d.room.turnBar} />}
       <section aria-labelledby="checkout-title" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
@@ -111,7 +112,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
         <hr className="border-border" />
         <p className="flex justify-between gap-3 text-sm">
           <span>{fmt(d.checkout.line, { qty, zone: zoneLabel })}</span>
-          <span>{formatDh(total)}</span>
+          <span className="group-has-[[data-promo]]:line-through group-has-[[data-promo]]:text-text-muted">{formatDh(total)}</span>
         </p>
         <p className="flex justify-between gap-3 text-sm text-text-muted">
           <span>{d.checkout.fee}</span>
@@ -120,7 +121,11 @@ export default async function CheckoutPage({ searchParams }: Props) {
         <hr className="border-border" />
         <p className="flex items-baseline justify-between">
           <span className="font-semibold">{d.checkout.total}</span>
-          <span className="font-display text-[34px] font-extrabold leading-none">{formatDh(total)}</span>
+          <span data-list-total className="font-display text-[34px] font-extrabold leading-none group-has-[[data-promo]]:line-through group-has-[[data-promo]]:text-text-muted">
+            {/* line-through isn't announced: once a code is held, a screen reader hears "prix catalogue" before it. */}
+            <span data-list-total-label className="sr-only hidden group-has-[[data-promo]]:inline">{`${d.checkout.listPrice} `}</span>
+            {formatDh(total)}
+          </span>
         </p>
         {back && (
           <Link href={back} className="flex min-h-touch-min items-center text-body-small font-semibold text-accent hover:underline">

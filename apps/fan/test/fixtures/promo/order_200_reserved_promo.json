@@ -1,0 +1,41 @@
+{
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): GET /fan/orders/{id} right after the coded hold, before /pay",
+ "status": 200,
+ "body": {
+  "id": "2e2ed8c9-f4a4-43df-b78e-885373c73376",
+  "event_id": 49,
+  "channel": "APP",
+  "status": "RESERVED",
+  "payment_status": null,
+  "total_mad": 24000,
+  "reserved_until": "2026-11-17T14:29:03.023587Z",
+  "paid_at": null,
+  "items": [
+   {
+    "price_category_id": "1ab881af-819f-4b4f-ac83-c63f9030116f",
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "Plein tarif",
+    "qty": 2,
+    "unit_price_mad": 15000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     },
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "ticket_ids": [],
+  "payment_method": null,
+  "cash": null,
+  "group": null,
+  "product": null,
+  "installment": null,
+  "pass_id": null,
+  "promo_code": "FL32PCT20",
+  "discount_mad": 6000
+ }
+}

@@ -278,7 +278,26 @@ class CheckSqlTest extends QueueFixture {
         sql("update order_items set qty = 1, holders = jsonb_build_array(holders -> 0) where order_id = ?::uuid",
                 s.paid());
         sql("update order_items set qty = 2, holders = holders || holders where order_id = ?::uuid", s.held());
+        sql("update orders set total_mad = 5000 where id = ?::uuid", s.paid()); // totals follow (ORDER_TOTAL)
+        sql("update orders set total_mad = 10000 where id = ?::uuid", s.held());
         assertThat(found(s)).containsExactly("TICKETS_PLACES");
+
+        // BE-65: a total that isn't its places less its discount.
+        s = sale();
+        sql("update orders set total_mad = total_mad - 1 where id = ?::uuid", s.paid());
+        assertThat(found(s)).containsExactly("ORDER_TOTAL");
+
+        // BE-65: refunds of an order above its total (a refund through the API is clean), then a refund of 0.
+        s = sale();
+        UUID ticket = jdbc.sql("select min(id::text)::uuid from tickets where order_id = ?::uuid").param(s.paid())
+                .query(UUID.class).single();
+        call(s.room().admin(), post("/org/tickets/" + ticket + "/refund"), "{\"reason\": \"Doublon\"}")
+                .andExpect(status().isOk());
+        assertThat(found(s)).isEmpty();
+        sql("update refunds set amount_mad = 10001 where ticket_id = ?", ticket);
+        assertThat(found(s)).containsExactly("REFUNDS_OVER_TOTAL");
+        sql("update refunds set amount_mad = 0 where ticket_id = ?", ticket);
+        assertThat(found(s)).containsExactly("ZERO_REFUND");
 
         // The account holds 3 places, the limit drops to 2.
         s = sale();

@@ -768,5 +768,19 @@
   "errorPlanNotOffered": "Ce paiement en plusieurs fois n'est plus proposé. Choisis à nouveau.",
   "@errorPlanNotOffered": {"description": "422 on installments (NOT_OFFERED): the plans are read again."},
   "orderPaidInstallmentBody": "Échéance {seq}/{n} payée. Retrouve ton abonnement et tes billets dans Billets.",
-  "@orderPaidInstallmentBody": {"description": "Order screen PAID, an installment order (3b): neutral, the pass may stay SUSPENDED by another installment.", "placeholders": {"seq": {"type": "int"}, "n": {"type": "int"}}}
+  "@orderPaidInstallmentBody": {"description": "Order screen PAID, an installment order (3b): neutral, the pass may stay SUSPENDED by another installment.", "placeholders": {"seq": {"type": "int"}, "n": {"type": "int"}}},
+  "promoToggle": "J'ai un code promo",
+  "@promoToggle": {"description": "Screen 4 text button under the summary (Lot 5 step 4): opens the code field."},
+  "promoLabel": "Code promo",
+  "@promoLabel": {"description": "Screen 4 code field label."},
+  "promoRemove": "Retirer",
+  "@promoRemove": {"description": "Screen 4: clears the code before the hold."},
+  "promoReserveCta": "Réserver avec le code",
+  "@promoReserveCta": {"description": "Screen 4 CTA with a code typed: holds first, the server sends the discount and total."},
+  "promoLine": "Code {code} · {discount}",
+  "@promoLine": {"description": "Summary line on screen 4 after the hold and on the order screen when discount_mad > 0. discount is the amount with its minus sign, as sent.", "placeholders": {"code": {"type": "String"}, "discount": {"type": "String"}}},
+  "promoRefused": "{reason, select, NOT_APPLICABLE{Ce code ne s'applique pas à ces places} USED_UP{Ce code a atteint sa limite} ACCOUNT_LIMIT{Tu as déjà utilisé ce code} other{Code inconnu ou expiré}}",
+  "@promoRefused": {"description": "PROMO_REFUSED details.reason under the code field (UNKNOWN and a 422 on promo_code read other)."},
+  "promoSplitCaption": "Le code s'applique à tes places",
+  "@promoSplitCaption": {"description": "Screen 4 split summary with a code: friends who pay their own place pay full price."}
 }

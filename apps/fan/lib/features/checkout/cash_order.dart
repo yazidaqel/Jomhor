@@ -8,6 +8,7 @@ import 'package:jomhor_fan/core/venue_time.dart';
 import 'package:jomhor_fan/features/checkout/card_payment.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
+import 'package:jomhor_fan/features/checkout/promo_line.dart';
 import 'package:jomhor_fan/features/events/events_repository.dart';
 import 'package:jomhor_fan/l10n/app_localizations.dart';
 import 'package:jomhor_fan/theme/tokens.g.dart';
@@ -97,6 +98,8 @@ class CashOrder extends ConsumerWidget {
             index: 2,
             child: _CodeCard(cash: cash),
           ),
+        // Lot 5 step 4: what the code took off; the code card's amount is already `total_mad`.
+        PromoLine(order: order),
         const SizedBox(height: JomhorSpace.l),
         Entrance(
           key: const ValueKey('cash.slot.countdown'),

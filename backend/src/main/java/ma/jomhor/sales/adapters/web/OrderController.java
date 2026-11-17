@@ -24,6 +24,7 @@ import ma.jomhor.sales.domain.Order;
 import ma.jomhor.sales.products.adapters.web.ProductItemDto;
 import ma.jomhor.sales.products.application.ProductService;
 import ma.jomhor.sales.products.domain.Product;
+import ma.jomhor.sales.promos.domain.PromoCode;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,8 +51,9 @@ class OrderController {
         this.orders = orders;
     }
 
+    /** {@code promo_code}: absent, null or blank = none (04 §Promo codes). */
     record OrderCreate(@NotNull Integer eventId, @NotNull Order.Channel channel,
-                       @NotEmpty List<@NotNull @Valid ItemCreate> items) {}
+                       @NotEmpty List<@NotNull @Valid ItemCreate> items, String promoCode) {}
 
     /** holders are checked by OrderService, after the event and its sale window (04 check order). */
     record ItemCreate(@NotNull UUID priceCategoryId, @NotNull @Min(1) Integer qty, List<HolderCreate> holders) {}
@@ -67,13 +69,13 @@ class OrderController {
 
     /** {@code group}: {@link InitiatorGroupDto}, {@link MemberGroupDto} or null (04 §Fan, Lot 4). */
     record Reserved(UUID id, Order.Status status, Instant reservedUntil, long totalMad, List<ItemDto> items,
-                    Object group) {}
+                    Object group, String promoCode, long discountMad) {}
 
     /** {@code items}: {@link ItemDto}s, or {@link ProductItemDto}s on a product order (event_id null). */
     record OrderDto(UUID id, Integer eventId, Order.Channel channel, Order.Status status, AttemptStatus paymentStatus,
                     long totalMad, Instant reservedUntil, Instant paidAt, List<?> items, List<UUID> ticketIds,
                     Order.PaymentMethod paymentMethod, CashDto cash, Object group, ProductDto product,
-                    InstallmentDto installment, UUID passId) {}
+                    InstallmentDto installment, UUID passId, String promoCode, long discountMad) {}
 
     /** An installment order's place in its pass's schedule (04 GET /fan/orders/{id}, plan lot-5 3b). */
     record InstallmentDto(int seq, int of) {}
@@ -119,16 +121,28 @@ class OrderController {
     Reserved create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody OrderCreate body,
                     @RequestHeader(name = "X-Admission-Token", required = false) String admissionToken) {
         if (body.channel() == Order.Channel.POS) { // APP | WEB only: a till sale goes through /org/pos/orders
-            throw new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
-                    Map.of("fields", Map.of("channel", "APP or WEB")));
+            throw invalid("channel", "APP or WEB");
+        }
+        // The body's shape, before admission and any SQL: trimmed, uppercased, then ^[A-Z0-9]{4,20}$.
+        String promoCode = PromoCode.normalize(body.promoCode());
+        if (promoCode != null && promoCode.isEmpty()) {
+            promoCode = null;
+        } else if (promoCode != null && !PromoCode.wellFormed(promoCode)) {
+            throw invalid("promo_code", "4-20 letters A-Z or digits");
         }
         View v = orders.place(UUID.fromString(jwt.getSubject()), body.eventId(), body.channel(), admissionToken,
                 body.items().stream().map(i -> new ItemRequest(i.priceCategoryId(), i.qty(), i.holders() == null ? null
                         : i.holders().stream().map(h -> h == null ? null : new HolderRequest(h.name(), h.phone(),
                                 Boolean.TRUE.equals(h.pays()))).toList()))
-                        .toList());
+                        .toList(), promoCode);
         Order o = v.order();
-        return new Reserved(o.id(), o.status(), o.reservedUntil(), o.totalMad(), items(v), group(v.group()));
+        return new Reserved(o.id(), o.status(), o.reservedUntil(), o.totalMad(), items(v), group(v.group()),
+                o.promoCode(), o.discountMad());
+    }
+
+    private static ApiException invalid(String field, String message) {
+        return new ApiException("VALIDATION_FAILED", HttpStatus.UNPROCESSABLE_CONTENT, "Invalid request body",
+                Map.of("fields", Map.of(field, message)));
     }
 
     @GetMapping("/fan/orders/{id}")
@@ -146,7 +160,7 @@ class OrderController {
                 group(v.group()), product(v.product()),
                 v.product() == null || v.product().installment() == null ? null
                         : new InstallmentDto(v.product().installment().seq(), v.product().installment().of()),
-                o.passId());
+                o.passId(), o.promoCode(), o.discountMad());
     }
 
     private static ProductDto product(ProductService.FanView f) {

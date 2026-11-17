@@ -30,7 +30,12 @@ export type OrderView = {
   payment_method?: string | null
   /** Lot 3: the pay code and where to pay it, while AWAITING_CASH with a PENDING code; else null. */
   cash: CashView | null
+  /** After the discount (04 Lot 5 step 4). */
   total_mad: number
+  /** Lot 5 step 4: the normalized code this order used, else null. */
+  promo_code: string | null
+  /** Lot 5 step 4: integer centimes, 0 without a code (and from older backends). */
+  discount_mad: number
   reserved_until: string | null
   paid_at: string | null
   items: { price_category_id: string; name: string; qty: number; unit_price_mad: number; labels: string[] }[]
@@ -81,6 +86,8 @@ export function toOrderView(raw: unknown): OrderView {
     ...('payment_status' in r && { payment_status: strOrNull(r.payment_status) }),
     ...('payment_method' in r && { payment_method: strOrNull(r.payment_method) }),
     total_mad: Number(r.total_mad),
+    promo_code: strOrNull(r.promo_code),
+    discount_mad: Number.isSafeInteger(r.discount_mad) ? (r.discount_mad as number) : 0,
     reserved_until: strOrNull(r.reserved_until),
     paid_at: strOrNull(r.paid_at),
     items: list(r.items).map((i) => ({
@@ -168,12 +175,15 @@ export function orderNo(id: string): string {
 /**
  * The `POST /fan/orders` body rebuilt by type from what the browser sent: `event_id` (positive integer), then per item
  * `price_category_id` (id string), `qty` (positive integer) and `holders[{name, phone?, pays?}]` (strings; an empty
- * phone is left out; `pays` boolean, kept only when true: 04 §Split pay), channel WEB. Anything else is dropped. Null when a value has the wrong type or shape: the form never
+ * phone is left out; `pays` boolean, kept only when true: 04 §Split pay), channel WEB, and `promo_code` (Lot 5 step 4: a
+ * string, trimmed, left out when empty; its shape is the backend's, 422 on `promo_code`). Anything else is dropped. Null when a value has the wrong type or shape: the form never
  * sends that, so it is a tampered request (422). Name and phone rules are the backend's (422 with field paths).
  */
 export function orderPayload(body: Raw) {
   const posInt = (v: unknown) => Number.isSafeInteger(v) && (v as number) > 0
   if (!posInt(body.event_id) || !Array.isArray(body.items) || body.items.length === 0) return null
+  if (body.promo_code !== undefined && body.promo_code !== null && typeof body.promo_code !== 'string') return null
+  const promo = typeof body.promo_code === 'string' ? body.promo_code.trim() : ''
   const items = []
   for (const raw of body.items) {
     const i = obj(raw)
@@ -186,7 +196,7 @@ export function orderPayload(body: Raw) {
     }
     items.push({ price_category_id: i.price_category_id, qty: i.qty as number, holders })
   }
-  return { event_id: body.event_id as number, channel: 'WEB' as const, items }
+  return { event_id: body.event_id as number, channel: 'WEB' as const, items, ...(promo && { promo_code: promo }) }
 }
 
 /**

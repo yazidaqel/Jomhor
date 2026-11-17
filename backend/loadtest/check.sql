@@ -144,6 +144,35 @@ where pay.status = 'SUCCEEDED' and o.status not in ('PAID', 'REFUNDED')
 
 union all
 
+-- Promo codes (docs/04-api.md §Promo codes): an order's total is its places at list price less its discount. ref =
+-- the order id.
+select 'ORDER_TOTAL', o.event_id, o.id::text,
+       format('total %s, items %s, discount %s', o.total_mad, coalesce(i.gross, 0), o.discount_mad)
+from orders o
+left join (select organizer_id, order_id, sum(qty * unit_price_mad) as gross from order_items
+           group by organizer_id, order_id) i
+  on i.order_id = o.id and i.organizer_id = o.organizer_id
+where o.total_mad <> coalesce(i.gross, 0) - o.discount_mad
+
+union all
+
+-- Refunds of one order above what it was paid (docs/04-api.md §Promo codes Refunds). ref = the order id.
+select 'REFUNDS_OVER_TOTAL', o.event_id, o.id::text, format('refunds %s > total %s', r.amount, o.total_mad)
+from orders o
+join (select organizer_id, order_id, sum(amount_mad) as amount from refunds group by organizer_id, order_id) r
+  on r.order_id = o.id and r.organizer_id = o.organizer_id
+where r.amount > o.total_mad
+
+union all
+
+-- A refund of 0 written since V34 (docs/04-api.md refund: a FREE place's refund writes no row). ref = the refund id.
+select 'ZERO_REFUND', r.event_id, r.id::text, format('refund of 0 for ticket %s', r.ticket_id)
+from refunds r
+where r.amount_mad = 0
+  and r.requested_at > (select installed_on from flyway_schema_history where version = '34')
+
+union all
+
 -- Admission out of rank order: an entry admitted without a rank, or past the room's admitted_through.
 select 'ADMISSION_ORDER', w.event_id, q.id::text,
        format('admitted with rank %s, admitted_through %s', coalesce(q.rank::text, 'null'), w.admitted_through)

@@ -269,11 +269,17 @@ function TicketActionDialog({ kind, ticket, eventId, open, onOpenChange }: Actio
   const vars = { ticket: ticket.ticket_no }
   // 3b: a staff block on a ticket whose pass is suspended: unblocking lifts the staff block only, the ticket stays BLOCKED.
   const stillBlocked = kind === 'unblock' && passBlocked(ticket)
+  // A refund says what the server will have paid back (refund.amount_mad); no row means a FREE place, nothing owed.
+  const doneMessage = (after: TicketRow) => {
+    if (stillBlocked) return t('tickets.actions.unblock.doneStillBlocked', vars)
+    if (kind !== 'refund') return t(`tickets.actions.${kind}.done`, vars)
+    return after.refund ? t('tickets.actions.refund.done', { ...vars, amount: formatDh(after.refund.amount_mad, i18n.language) }) : t('tickets.actions.refund.doneNothing', vars)
+  }
   // A TICKET_STATUS or REFUND_FROZEN answer stays in the dialog (its copy says why); the list refetches behind it.
   const onSubmit = form.handleSubmit(({ reason }) =>
     run.mutateAsync({ kind, id: ticket.id, reason }).then(
-      () => {
-        toast.success(stillBlocked ? t('tickets.actions.unblock.doneStillBlocked', vars) : t(`tickets.actions.${kind}.done`, vars), { id: `ticket-${kind}-${ticket.id}` })
+      (after) => {
+        toast.success(doneMessage(after), { id: `ticket-${kind}-${ticket.id}` })
         onOpenChange(false)
       },
       (e: unknown) => {
@@ -295,7 +301,9 @@ function TicketActionDialog({ kind, ticket, eventId, open, onOpenChange }: Actio
         </DialogHeader>
         {kind === 'refund' && (
           <p className="rounded-lg border bg-muted/50 px-4 py-3 text-sm font-medium tabular-nums">
-            {t('tickets.actions.refund.amount', { amount: formatDh(ticket.unit_price_mad, i18n.language) })}
+            {/* The lookup only has the list price: a discounted order pays back less (04 §Promo codes Refunds). A free place
+                owes nothing either way; any other amount is only known once the server has refunded. */}
+            {ticket.unit_price_mad === 0 ? t('tickets.actions.refund.amount', { amount: formatDh(0, i18n.language) }) : t('tickets.actions.refund.amountByPayment')}
           </p>
         )}
         <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>

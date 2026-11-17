@@ -52,6 +52,8 @@
 | members price | tarif membres | سعر الأعضاء | for members who joined before the sale opened |
 | accreditation | accréditation | اعتماد | a free named ticket for press, staff or partners |
 | invitation | invitation | دعوة | — |
+| promo code | code promo | رمز التخفيض | — |
+| discount | remise | تخفيض | — |
 
 ## Scan result codes
 

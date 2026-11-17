@@ -17,16 +17,28 @@ export type EventSales = {
   paid: number
   held: number
   awaiting_cash: number
-  /** `paid` and `revenue_mad` still count refunded tickets (gross); net = `revenue_mad − refunded_mad`. */
+  /** `paid` and `revenue_mad` still count refunded tickets (gross); net = `revenue_mad − discount_mad − refunded_mad`. */
   refunded: number
   /** Σ refunds of the event, any status. */
   refunded_mad: number
   revenue_mad: number
+  /**
+   * Lot 5 step 4: Σ `discount_mad` of PAID orders (promo codes). `revenue_mad` stays at list prices. Optional: a
+   * backend before BE-65 doesn't send it, and B3 then reads it as 0.
+   */
+  discount_mad?: number
   zones: ZoneSales[]
   channels: ChannelSales[]
   methods: MethodSales[]
   refunds_required: RefundRequired[]
 }
+
+/**
+ * Net = revenue − discounts − refunds (04 /sales, Lot 5 step 4). The amounts arrive as JSON numbers, so a figure past
+ * 2^53 is already rounded on arrival; the bigint only keeps the subtraction itself from rounding again.
+ */
+export const netMad = (s: Pick<EventSales, 'revenue_mad' | 'discount_mad' | 'refunded_mad'>) =>
+  BigInt(s.revenue_mad) - BigInt(s.discount_mad ?? 0) - BigInt(s.refunded_mad)
 
 export const useSales = (eventId: string, options?: { refetchInterval?: number }) =>
   useOrgQuery<EventSales>(['events', eventId, 'sales'], path('org', 'events', eventId, 'sales'), options)

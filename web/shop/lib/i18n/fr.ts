@@ -231,6 +231,7 @@ export const fr = {
     line: '{qty} × {zone}',
     fee: 'Frais de service',
     total: 'Total',
+    listPrice: 'prix catalogue', // Lot 5 step 4: read before the struck list total once a code is held
     methodTitle: 'Moyen de paiement',
     CARD: 'Carte bancaire',
     WALLET: 'Wallet mobile',
@@ -270,8 +271,22 @@ export const fr = {
     friendLimit: 'Cette personne a déjà {held} billet(s) pour cet événement : {limit} maximum par compte.',
     membersOnly: 'Tarif réservé aux membres inscrits avant le {date}',
     membersOnlyPaid: 'Tarif réservé aux membres à jour de cotisation, inscrits avant le {date}',
+    // Lot 5 step 4 (DESIGN Screen 4 / W3): the promo code field.
+    promoOpen: 'J’ai un code promo',
+    promoLabel: 'Code promo',
+    promoRemove: 'Retirer',
+    promoReserve: 'Réserver avec le code',
+    promoLine: 'Code {code} · {discount}',
+    promoSplit: 'Le code s’applique à tes places',
+    promoRefused: {
+      UNKNOWN: 'Code inconnu ou expiré',
+      NOT_APPLICABLE: 'Ce code ne s’applique pas à ces places',
+      USED_UP: 'Ce code a atteint sa limite',
+      ACCOUNT_LIMIT: 'Tu as déjà utilisé ce code',
+    },
   },
   orderPage: {
+    promoLine: 'Code {code} · {discount}',
     metaTitle: 'Ta commande',
     banner: 'Places réservées jusqu’à {time} · encore {left}',
     left: '{m} min {s} s',

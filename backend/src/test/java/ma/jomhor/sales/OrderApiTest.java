@@ -42,10 +42,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 class OrderApiTest extends OrgApiTest {
 
-    private static final String[] RESERVED_KEYS = {"id", "status", "reserved_until", "total_mad", "items", "group"};
+    private static final String[] RESERVED_KEYS =
+            {"id", "status", "reserved_until", "total_mad", "items", "group", "promo_code", "discount_mad"};
     private static final String[] ORDER_KEYS =
             {"id", "event_id", "channel", "status", "payment_status", "total_mad", "reserved_until", "paid_at", "items",
-             "ticket_ids", "payment_method", "cash", "group", "product", "installment", "pass_id"};
+             "ticket_ids", "payment_method", "cash", "group", "product", "installment", "pass_id", "promo_code",
+             "discount_mad"};
     private static final String[] ITEM_KEYS =
             {"price_category_id", "zone_id", "zone_name", "name", "qty", "unit_price_mad", "holders"};
 

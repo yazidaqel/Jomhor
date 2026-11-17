@@ -27,6 +27,7 @@ import { useCanWrite, useOrganizer } from '@/features/auth/organizer'
 import { useVenue, useVenues } from '@/features/venues/api'
 import { RoomRuleRow } from '@/features/room/RoomPage'
 import { GateZoneMatrix } from '@/features/venues/GateZoneMatrix'
+import { PromosTab } from '@/features/promos/PromosTab'
 import { ApiError, path } from '@/lib/api'
 import { errorKey } from '@/lib/errors'
 import { showFormError } from '@/lib/forms'
@@ -52,12 +53,12 @@ import { DevicesTab } from './DevicesTab'
 import { PricesTab } from './PricesTab'
 import { SeriesField } from './SeriesField'
 
-type Tab = 'general' | 'prices' | 'gates' | 'devices' | 'rules'
+type Tab = 'general' | 'prices' | 'promos' | 'gates' | 'devices' | 'rules'
 // Règles fields; every other form field is on Général. Both tabs are one form (one save, one PATCH).
 const RULES_FIELDS: readonly string[] = ['per_account_limit']
 // These tabs need a saved event.
-const AFTER_SAVE: readonly Tab[] = ['prices', 'gates', 'devices']
-const ALL_TABS: readonly Tab[] = ['general', 'prices', 'gates', 'devices', 'rules']
+const AFTER_SAVE: readonly Tab[] = ['prices', 'promos', 'gates', 'devices']
+const ALL_TABS: readonly Tab[] = ['general', 'prices', 'promos', 'gates', 'devices', 'rules']
 const WALL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
 
 /** B2 Configuration événement: `/events/new` (create) and `/events/:id` (edit). */
@@ -421,6 +422,9 @@ function EventEditor({ event }: { event?: EventDetail }) {
         <TabsContent value="prices" forceMount className="data-[state=inactive]:hidden">
           {event && <PricesTab event={event} editable={editable} onEditingChange={setRowEditing} />}
         </TabsContent>
+
+        {/* Lot 5 step 4: FINANCE reads it too. */}
+        <TabsContent value="promos">{event && <PromosTab event={event} />}</TabsContent>
 
         <TabsContent value="gates">{event && <GatesTab venueId={event.venue_id} />}</TabsContent>
 

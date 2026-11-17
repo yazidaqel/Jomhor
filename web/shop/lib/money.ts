@@ -17,3 +17,6 @@ export function formatDh(centimes: number | bigint): string {
   const amount = rest === 0n ? whole : `${whole},${rest.toString().padStart(2, '0')}`
   return ltr(`${c < 0n ? '-' : ''}${amount}${NBSP}DH`)
 }
+
+/** A discount as shown (Lot 5 step 4 "Code X · −Y"): 6000 → "−60 DH", minus sign and amount kept together in RTL. */
+export const formatDiscount = (centimes: number) => ltr(`−${formatDh(centimes)}`)

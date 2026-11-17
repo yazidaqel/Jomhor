@@ -1,0 +1,13 @@
+{
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): POST /fan/orders with \"AB-12\" (outside ^[A-Z0-9]{4,20}$)",
+ "status": 422,
+ "body": {
+  "code": "VALIDATION_FAILED",
+  "message": "Invalid request body",
+  "details": {
+   "fields": {
+    "promo_code": "4-20 letters A-Z or digits"
+   }
+  }
+ }
+}

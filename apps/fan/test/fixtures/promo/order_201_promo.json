@@ -1,0 +1,31 @@
+{
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): POST /fan/orders, 2 x Plein tarif 150 DH with \"fl32pct20\" (PERCENT 20, scope Plein tarif): normalized promo_code, discount_mad 6 000, total_mad 24 000",
+ "status": 201,
+ "body": {
+  "id": "2e2ed8c9-f4a4-43df-b78e-885373c73376",
+  "status": "RESERVED",
+  "reserved_until": "2026-11-17T14:29:03.023587Z",
+  "total_mad": 24000,
+  "items": [
+   {
+    "price_category_id": "1ab881af-819f-4b4f-ac83-c63f9030116f",
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "Plein tarif",
+    "qty": 2,
+    "unit_price_mad": 15000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     },
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "group": null,
+  "promo_code": "FL32PCT20",
+  "discount_mad": 6000
+ }
+}

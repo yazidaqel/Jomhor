@@ -1817,4 +1817,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String orderPaidInstallmentBody(int seq, int n) {
     return 'Installment $seq/$n paid. Find your season pass and tickets in Tickets.';
   }
+
+  @override
+  String get promoToggle => 'I have a promo code';
+
+  @override
+  String get promoLabel => 'Promo code';
+
+  @override
+  String get promoRemove => 'Remove';
+
+  @override
+  String get promoReserveCta => 'Reserve with the code';
+
+  @override
+  String promoLine(String code, String discount) {
+    return 'Code $code · $discount';
+  }
+
+  @override
+  String promoRefused(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'NOT_APPLICABLE': 'This code doesn\'t apply to these seats',
+      'USED_UP': 'This code has reached its limit',
+      'ACCOUNT_LIMIT': 'You\'ve already used this code',
+      'other': 'Unknown or expired code',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get promoSplitCaption => 'The code applies to your seats';
 }

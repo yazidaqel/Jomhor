@@ -1,0 +1,31 @@
+{
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): POST /fan/orders, 2 x Plein tarif with \"fl32amt50\" (AMOUNT 5 000): discount_mad 5 000, total_mad 25 000",
+ "status": 201,
+ "body": {
+  "id": "638ce354-925d-4c4c-9842-eb366e757290",
+  "status": "RESERVED",
+  "reserved_until": "2026-11-17T14:29:03.703784Z",
+  "total_mad": 25000,
+  "items": [
+   {
+    "price_category_id": "1ab881af-819f-4b4f-ac83-c63f9030116f",
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "Plein tarif",
+    "qty": 2,
+    "unit_price_mad": 15000,
+    "holders": [
+     {
+      "label": "Karim I."
+     },
+     {
+      "label": "Karim I."
+     }
+    ]
+   }
+  ],
+  "group": null,
+  "promo_code": "FL32AMT50",
+  "discount_mad": 5000
+ }
+}

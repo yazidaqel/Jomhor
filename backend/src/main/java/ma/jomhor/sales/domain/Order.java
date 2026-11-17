@@ -8,10 +8,12 @@ import java.util.UUID;
  * An order with its items. Money in centimes. {@code groupOrderId}: set on a split-pay member order, the buyer's
  * order (docs/04-api.md §Split pay); null otherwise. {@code eventId} null: a product order (04 §Products), one item
  * with a {@code productId}; {@code passId}: its pass (a purchase, or with an event a pass ticket order), else null.
+ * {@code promoCode}: the code the buyer's order used (docs/04-api.md §Promo codes), else null; {@code totalMad} is after
+ * its {@code discountMad} (0 without a code), the items keep their list prices.
  */
 public record Order(UUID id, UUID organizerId, Integer eventId, UUID userId, Channel channel, Status status,
                     long totalMad, Instant reservedUntil, Instant paidAt, UUID groupOrderId, UUID passId,
-                    List<Item> items) {
+                    String promoCode, long discountMad, List<Item> items) {
 
     /** docs/06-glossary.md §Order statuses. */
     public enum Status { RESERVED, AWAITING_CASH, PAID, EXPIRED, CANCELLED, REFUNDED }
@@ -37,7 +39,7 @@ public record Order(UUID id, UUID organizerId, Integer eventId, UUID userId, Cha
 
     public Order withItems(List<Item> newItems) {
         return new Order(id, organizerId, eventId, userId, channel, status, totalMad, reservedUntil, paidAt, groupOrderId,
-                passId, newItems);
+                passId, promoCode, discountMad, newItems);
     }
 
     /** A product order (event_id null, 04 §Products): its one item's product. */

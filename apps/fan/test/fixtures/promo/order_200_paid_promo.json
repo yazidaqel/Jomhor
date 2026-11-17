@@ -1,0 +1,44 @@
+{
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): GET /fan/orders/{id} after \"Payer 240 DH\" by card, approved on the simulated gateway (which charged 24 000, the total_mad)",
+ "status": 200,
+ "body": {
+  "id": "2e2ed8c9-f4a4-43df-b78e-885373c73376",
+  "event_id": 49,
+  "channel": "APP",
+  "status": "PAID",
+  "payment_status": "SUCCEEDED",
+  "total_mad": 24000,
+  "reserved_until": "2026-11-17T14:29:03.023587Z",
+  "paid_at": "2026-11-17T14:21:03.416090Z",
+  "items": [
+   {
+    "price_category_id": "1ab881af-819f-4b4f-ac83-c63f9030116f",
+    "zone_id": 2,
+    "zone_name": "Est",
+    "name": "Plein tarif",
+    "qty": 2,
+    "unit_price_mad": 15000,
+    "holders": [
+     {
+      "label": "Yazid A."
+     },
+     {
+      "label": "Yazid A."
+     }
+    ]
+   }
+  ],
+  "ticket_ids": [
+   "9f652129-6619-4549-a8c8-5c070b4e09d1",
+   "a9ee97c3-188b-4073-b1ef-f2ca093604e4"
+  ],
+  "payment_method": "CARD",
+  "cash": null,
+  "group": null,
+  "product": null,
+  "installment": null,
+  "pass_id": null,
+  "promo_code": "FL32PCT20",
+  "discount_mad": 6000
+ }
+}

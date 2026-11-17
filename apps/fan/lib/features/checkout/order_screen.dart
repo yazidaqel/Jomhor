@@ -11,6 +11,7 @@ import 'package:jomhor_fan/features/checkout/member_pay.dart';
 import 'package:jomhor_fan/features/checkout/order.dart';
 import 'package:jomhor_fan/features/checkout/order_status.dart';
 import 'package:jomhor_fan/features/checkout/product_pay.dart';
+import 'package:jomhor_fan/features/checkout/promo_line.dart';
 import 'package:jomhor_fan/features/club/club_repository.dart' show membershipProvider;
 import 'package:jomhor_fan/features/passes/passes_repository.dart';
 import 'package:jomhor_fan/features/tickets/tickets_repository.dart';
@@ -176,6 +177,7 @@ class _OrderState extends ConsumerWidget {
           style: JomhorType.bodySmall.copyWith(color: JomhorColors.textMuted),
           textAlign: TextAlign.center,
         ),
+        PromoLine(order: order, alignment: Alignment.center), // Lot 5 step 4.
         if (again != PayAgain.no) ...[
           const SizedBox(height: JomhorSpace.xl),
           OutlinedButton(
@@ -278,6 +280,7 @@ class _Paid extends ConsumerWidget {
                 key: const Key('order.paidBody'),
                 textAlign: TextAlign.center,
               ),
+              PromoLine(order: order, alignment: Alignment.center), // Lot 5 step 4.
               const SizedBox(height: JomhorSpace.xl),
               switch ((order.product, order.passId)) {
                 (_?, final passId?) => FilledButton(

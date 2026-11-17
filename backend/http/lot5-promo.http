@@ -1,0 +1,384 @@
+### Lot 5 step 4b demo, promo codes (IntelliJ HTTP client): plan lot-5 §12.1 Exit 4b (1)-(8) on one instance;
+### Lot5PromoFlowTest runs the same flow in CI.
+#
+# Start the backend with the dev profile on port 8080, so @base and the card redirect (PUBLIC_BASE_URL, dev default
+# http://localhost:8080/v1) agree (dev seed: ATLAS FC with a cash point, Admin Dev +212600000001, Caissier Dev
+# +212600000002, Ops Dev +212600000003, Finance Dev +212600000004, Grand Stade with Est and Sud; the order expiry job
+# runs every 30 s; the simulated card gateway is on):
+#   docker compose up -d && SERVER_PORT=8080 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# Every phone logs in with the dev OTP 123456 (JOMHOR_DEV_FIXED_OTP, dev default). The fan phones are made up.
+# Card payments: open the response's redirect_url in a browser and click "Approuver" right away (8 min hold).
+# Each run makes a new match, so the codes start afresh (a code is unique per event) with the same phones. Step 2.6
+# needs Yazid's order PAID (2.4) first. Step 4.4 ends the third fan's hold at once with psql instead of waiting 8 min.
+# At the end, backend/loadtest/check.sql must print no rows:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor < loadtest/check.sql
+
+@base = http://localhost:8080/v1
+@org = a7a5fc00-0000-4000-8000-000000000001
+@venue = a7a5fc00-0000-4000-8000-000000000301
+@adminPhone = +212600000001
+@cashierPhone = +212600000002
+@opsPhone = +212600000003
+@financePhone = +212600000004
+@yazidPhone = +212611166001
+@karimPhone = +212611166002
+@thirdPhone = +212611166003
+@fourthPhone = +212611166004
+@typoPhone = +212611166005
+@code = 123456
+
+### ---------- (0) staff logins ----------
+
+### 0.1 OPS (Ops Dev): ask for a code
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}"}
+
+### 0.2 OPS: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{opsPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("orgToken", response.body.token); %}
+
+### 0.3 ADMIN (Admin Dev): ask for a code (refund, step 6)
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}"}
+
+### 0.4 ADMIN: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{adminPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("adminToken", response.body.token); %}
+
+### 0.5 CASHIER (Caissier Dev): ask for a code (Karim's cash code, step 3)
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}"}
+
+### 0.6 CASHIER: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{cashierPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("cashierToken", response.body.token); %}
+
+### 0.7 FINANCE (Finance Dev): ask for a code (the read-only code list, step 7)
+POST {{base}}/org/auth/otp
+Content-Type: application/json
+
+{"phone": "{{financePhone}}"}
+
+### 0.8 FINANCE: verify
+POST {{base}}/org/auth/verify
+Content-Type: application/json
+
+{"phone": "{{financePhone}}", "code": "{{code}}"}
+
+> {% client.global.set("financeToken", response.body.token); %}
+
+### ---------- (1) Set-up: the match, its tariffs and B2 "Codes promo" ----------
+
+### 1.1 OPS: the Grand Stade zones (Est, Sud)
+GET {{base}}/org/venues/{{venue}}
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+> {% client.global.set("estId", response.body.zones.find(z => z.code === "EST").id);
+     client.global.set("sudId", response.body.zones.find(z => z.code === "SUD").id); %}
+
+### 1.2 OPS: the match (DRAFT)
+POST {{base}}/org/events
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"venue_id": "{{venue}}", "event_type": "FOOTBALL_MATCH", "title": "ATLAS FC – Démo codes promo",
+ "starts_at": "2027-01-24T19:00:00Z", "metadata": {"opponent": "Démo"}}
+
+> {% client.global.set("match", response.body.id); %}
+
+### 1.3 OPS: "Plein tarif" in Est, 150 DH
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{estId}}, "name": "Plein tarif", "price_mad": 15000, "quota": 100}
+
+> {% client.global.set("pleinCat", response.body.id); %}
+
+### 1.4 OPS: "Virage" in Sud, 50 DH
+POST {{base}}/org/events/{{match}}/prices
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"zone_id": {{sudId}}, "name": "Virage", "price_mad": 5000, "quota": 100}
+
+> {% client.global.set("virageCat", response.body.id); %}
+
+### 1.5 OPS: publish (DRAFT -> ON_SALE)
+POST {{base}}/org/events/{{match}}/publish
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 1.6 OPS: "ABONNES20", 20 % on Plein tarif, 100 uses, 1 per account -> 201 {uses {held 0, paid 0}, discount_mad 0}
+POST {{base}}/org/events/{{match}}/promo-codes
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"code": "abonnes20", "kind": "PERCENT", "percent": 20, "price_category_id": "{{pleinCat}}", "max_uses": 100,
+ "per_account_max": 1}
+
+### 1.7 OPS: "DERBY50", 50 DH off the whole event, 2 uses -> 201
+POST {{base}}/org/events/{{match}}/promo-codes
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"code": "DERBY50", "kind": "AMOUNT", "amount_mad": 5000, "max_uses": 2}
+
+### 1.8 OPS: the same code again -> 422 VALIDATION_FAILED on code, reason TAKEN ("Code déjà utilisé pour cet événement")
+POST {{base}}/org/events/{{match}}/promo-codes
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"code": "Derby50", "kind": "PERCENT", "percent": 10}
+
+### ---------- (2) App: Yazid, 2 × 150 DH with "abonnes20" ----------
+
+### 2.1 Yazid: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}"}
+
+### 2.2 Yazid: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{yazidPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("yazidToken", response.body.token); %}
+
+### 2.3 Yazid: "Réserver avec le code" -> 201 {promo_code ABONNES20, discount_mad 6000, total_mad 24000}
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "promo_code": "abonnes20",
+ "items": [{"price_category_id": "{{pleinCat}}", "qty": 2,
+            "holders": [{"name": "Yazid Aqel"}, {"name": "Yazid Aqel"}]}]}
+
+> {% client.global.set("yazidOrder", response.body.id); %}
+
+### 2.4 Yazid: "Payer 240 DH" by card -> open redirect_url, "Approuver" (the gateway shows 240,00 DH)
+POST {{base}}/fan/orders/{{yazidOrder}}/pay
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"method": "CARD"}
+
+### 2.5 Yazid: the order -> PAID, promo_code ABONNES20, discount_mad 6000, 2 ticket_ids
+GET {{base}}/fan/orders/{{yazidOrder}}
+Authorization: Bearer {{yazidToken}}
+
+> {% client.global.set("yazidTicket", response.body.ticket_ids[0]); %}
+
+### 2.6 Yazid: a second order with the code -> 409 PROMO_REFUSED ACCOUNT_LIMIT ("Tu as déjà utilisé ce code"), no order
+POST {{base}}/fan/orders
+Authorization: Bearer {{yazidToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "promo_code": "ABONNES20",
+ "items": [{"price_category_id": "{{pleinCat}}", "qty": 1, "holders": [{"name": "Yazid Aqel"}]}]}
+
+### ---------- (3) Shop: Karim, DERBY50 on 300 DH, cash code paid at the till ----------
+
+### 3.1 Karim: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}"}
+
+### 3.2 Karim: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{karimPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("karimToken", response.body.token); %}
+
+### 3.3 Karim (W3, channel WEB): 2 × 150 DH with DERBY50 -> 201 {discount_mad 5000, total_mad 25000}
+POST {{base}}/fan/orders
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "WEB", "promo_code": "derby50",
+ "items": [{"price_category_id": "{{pleinCat}}", "qty": 2,
+            "holders": [{"name": "Karim El Idrissi"}, {"name": "Karim El Idrissi"}]}]}
+
+> {% client.global.set("karimOrder", response.body.id); %}
+
+### 3.4 Karim: a cash code -> 200 {pay_code, amount_mad 25000}
+POST {{base}}/fan/orders/{{karimOrder}}/pay
+Authorization: Bearer {{karimToken}}
+Content-Type: application/json
+
+{"method": "CASH_AGENCY"}
+
+> {% client.global.set("payCode", response.body.pay_code); %}
+
+### 3.5 CASHIER: open the till (201; already open -> 200 with it)
+POST {{base}}/org/pos/sessions
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"label": "Guichet Est"}
+
+### 3.6 CASHIER (B11): look the code up -> amount_mad 25000
+GET {{base}}/org/pos/codes/{{payCode}}
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+
+### 3.7 CASHIER: "Encaisser" 250 DH -> 200, Karim's order PAID
+POST {{base}}/org/pos/codes/{{payCode}}/collect
+Authorization: Bearer {{cashierToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"amount_mad": 25000}
+
+### ---------- (4) Caps: DERBY50's last use, freed by an expiry ----------
+
+### 4.1 Third fan: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{thirdPhone}}"}
+
+### 4.1b Third fan: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{thirdPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("thirdToken", response.body.token); %}
+
+### 4.2 Third fan: one Virage place with DERBY50 -> 201 {discount_mad 4900, total_mad 100}: the code's second use
+POST {{base}}/fan/orders
+Authorization: Bearer {{thirdToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "promo_code": "DERBY50",
+ "items": [{"price_category_id": "{{virageCat}}", "qty": 1, "holders": [{"name": "Salma Tazi"}]}]}
+
+> {% client.global.set("thirdOrder", response.body.id); %}
+
+### 4.3 Fourth fan: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{fourthPhone}}"}
+
+### 4.3b Fourth fan: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{fourthPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("fourthToken", response.body.token); %}
+
+### 4.4 Fourth fan: DERBY50 -> 409 PROMO_REFUSED USED_UP ("Ce code a atteint sa limite"). Then end the third fan's hold:
+#   docker compose exec -T postgres psql -U jomhor -d jomhor -c "update orders set reserved_until = now() - interval '1 second' where id = '<thirdOrder>'"
+# and wait for the expiry job (30 s): the order goes EXPIRED and frees its use. Run 4.4 again -> 201 {discount_mad 4900}.
+POST {{base}}/fan/orders
+Authorization: Bearer {{fourthToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "promo_code": "DERBY50",
+ "items": [{"price_category_id": "{{virageCat}}", "qty": 1, "holders": [{"name": "Hamza Chraibi"}]}]}
+
+### ---------- (5) Refusals: neither leaves an order ----------
+
+### 5.1 Typo fan: code
+POST {{base}}/fan/auth/otp
+Content-Type: application/json
+
+{"phone": "{{typoPhone}}"}
+
+### 5.1b Typo fan: verify
+POST {{base}}/fan/auth/verify
+Content-Type: application/json
+
+{"phone": "{{typoPhone}}", "code": "{{code}}"}
+
+> {% client.global.set("typoToken", response.body.token); %}
+
+### 5.2 A typo -> 409 PROMO_REFUSED UNKNOWN ("Code inconnu ou expiré")
+POST {{base}}/fan/orders
+Authorization: Bearer {{typoToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "promo_code": "ABONNES2O",
+ "items": [{"price_category_id": "{{pleinCat}}", "qty": 1, "holders": [{"name": "Nadia Berrada"}]}]}
+
+### 5.3 ABONNES20 on a Virage place -> 409 PROMO_REFUSED NOT_APPLICABLE ("Ce code ne s'applique pas à ces places")
+POST {{base}}/fan/orders
+Authorization: Bearer {{typoToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "promo_code": "ABONNES20",
+ "items": [{"price_category_id": "{{virageCat}}", "qty": 1, "holders": [{"name": "Nadia Berrada"}]}]}
+
+### 5.4 A bad shape -> 422 VALIDATION_FAILED on promo_code (checked with the body, before any SQL)
+POST {{base}}/fan/orders
+Authorization: Bearer {{typoToken}}
+Content-Type: application/json
+
+{"event_id": {{match}}, "channel": "APP", "promo_code": "AB-12",
+ "items": [{"price_category_id": "{{virageCat}}", "qty": 1, "holders": [{"name": "Nadia Berrada"}]}]}
+
+### 5.5 The typo fan's orders -> none
+GET {{base}}/fan/orders
+Authorization: Bearer {{typoToken}}
+
+### ---------- (6) Refund ----------
+
+### 6.1 ADMIN: refund one of Yazid's tickets -> 200 REFUNDED, refund {amount_mad 12000} (⌊15000 × 24000 ÷ 30000⌋)
+POST {{base}}/org/tickets/{{yazidTicket}}/refund
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+Content-Type: application/json
+
+{"reason": "Empêchement"}
+
+### 6.2 B12 "Remboursements à faire" -> one REQUIRED line of 120 DH on Yazid's order
+GET {{base}}/org/refunds?event_id={{match}}
+Authorization: Bearer {{adminToken}}
+X-Organizer-Id: {{org}}
+
+### ---------- (7) Figures ----------
+
+### 7.1 B3: /sales -> discount_mad 11000 ("Remises accordées −110 DH"), revenue_mad 60000, refunded_mad 12000
+GET {{base}}/org/events/{{match}}/sales
+Authorization: Bearer {{orgToken}}
+X-Organizer-Id: {{org}}
+
+### 7.2 B2 "Codes promo" (FINANCE, read-only) -> ABONNES20 {uses {paid 1, held 0}, discount_mad 6000},
+### DERBY50 {uses {paid 1, held 1}, discount_mad 5000}. Then (8): run check.sql (header): no rows.
+GET {{base}}/org/events/{{match}}/promo-codes
+Authorization: Bearer {{financeToken}}
+X-Organizer-Id: {{org}}

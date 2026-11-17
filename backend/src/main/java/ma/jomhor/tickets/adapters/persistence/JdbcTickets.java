@@ -162,7 +162,8 @@ class JdbcTickets implements Tickets {
     // organizer_id as well, so a lookup is one query.
     private static final String ROWS = """
             select t.id, t.status, t.zone_id, z.code as zone_code, z.name as zone_name, t.holder_name, i.unit_price_mad,
-                   t.order_id, o.channel, o.payment_method, t.issued_at,
+                   t.order_id, o.channel, o.payment_method, t.issued_at, o.total_mad as order_total_mad,
+                   o.discount_mad as order_discount_mad,
                    r.id as refund_id, r.status as refund_status, r.amount_mad as refund_amount_mad,
                    tt_to.new_ticket_id as transferred_to, tt_from.ticket_id as transferred_from,
                    case when p.user_id = t.holder_user_id then p.status::text end as pass_status,
@@ -187,7 +188,8 @@ class JdbcTickets implements Tickets {
             rs.getObject("issued_at", OffsetDateTime.class).toInstant(), rs.getObject("refund_id", UUID.class),
             rs.getString("refund_status"), rs.getObject("refund_amount_mad", Long.class),
             rs.getObject("transferred_to", UUID.class), rs.getObject("transferred_from", UUID.class),
-            rs.getBoolean("pass_blocked"), rs.getString("pass_status"));
+            rs.getBoolean("pass_blocked"), rs.getString("pass_status"), rs.getLong("order_total_mad"),
+            rs.getLong("order_discount_mad"));
 
     @Override
     public List<Tickets.Row> search(UUID org, int eventId, Match match, String value, int limit) {

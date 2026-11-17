@@ -5,9 +5,9 @@ import { CASH_HOLD_MS, cashOptions } from '@/lib/checkout'
 import { eventPath } from '@/lib/clubs'
 import { getEvent, type Organizer, type ShopEventDetail } from '@/lib/events'
 import { currentSession } from '@/lib/http'
-import { fmt } from '@/lib/i18n'
+import { fmt, ltr } from '@/lib/i18n'
 import { getI18n } from '@/lib/i18n/server'
-import { formatDh } from '@/lib/money'
+import { formatDh, formatDiscount } from '@/lib/money'
 import type { OnlineMethod } from '@/lib/order-client'
 import { getOrder, loginUrl, orderNo, SAFE_ID, type OrderView } from '@/lib/orders'
 import { getProduct, passesPath } from '@/lib/products'
@@ -155,6 +155,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <span>{formatDh(i.unit_price_mad * i.qty)}</span>
           </p>
         ))}
+        {/* Lot 5 step 4 (DESIGN W4): the code and the server's discount; the total below is already after it. */}
+        {order.discount_mad > 0 && (
+          <p data-promo className="text-sm font-semibold text-accent">
+            {fmt(d.orderPage.promoLine, { code: ltr(order.promo_code ?? ''), discount: formatDiscount(order.discount_mad) })}
+          </p>
+        )}
         <hr className="border-border" />
         <p className="flex items-baseline justify-between">
           <span className="font-semibold">{d.orderPage.total}</span>

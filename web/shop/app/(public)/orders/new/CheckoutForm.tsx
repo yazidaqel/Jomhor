@@ -13,8 +13,8 @@ import {
   type Row,
   type RowError,
 } from '@/lib/checkout'
-import { fmt, type Dict } from '@/lib/i18n'
-import { formatDh } from '@/lib/money'
+import { fmt, ltr, type Dict } from '@/lib/i18n'
+import { formatDh, formatDiscount } from '@/lib/money'
 import { errorCode, errorText, holderLimitText, pageClock, placeOrder, postJson, type PayMethod, type Result } from '@/lib/order-client'
 import { parseAdmission, saveAdmission, storedAdmission } from '@/lib/queue'
 import { formatShortDate, formatTime } from '@/lib/time'
@@ -37,6 +37,10 @@ const label = 'text-label uppercase text-text-secondary'
  * lib/order-client placeOrder: create (SALE_BUSY → wait and retry), pay with the method, then follow the hosted page
  * (card, wallet) or open the order page with the code (cash). A method refused with METHOD_NOT_AVAILABLE keeps the
  * fan here on the order just created (holders locked, hold countdown shown), to pay it another way. "Annuler" or leaving stops all of it.
+ * Lot 5 step 4 (DESIGN Screen 4 / W3): "J'ai un code promo" opens a code field. With a code, the CTA holds first
+ * (`promo_code` in the body, no `/pay`), then shows the server's "Code X · −Y" and total with the countdown, and the CTA
+ * pays that total. A refusal (409 PROMO_REFUSED, 422 on `promo_code`) leaves no order and shows its copy on the field.
+ * No amount is computed here: discount and total are the server's.
  */
 export function CheckoutForm(props: {
   eventId: number
@@ -75,7 +79,12 @@ export function CheckoutForm(props: {
   const [picked, setMethod] = useState<PayMethod | undefined>(props.methods[0])
   const method = picked && usable.includes(picked) ? picked : usable[0]
   // Created, but its /pay refused the method: the order id and its hold (`reserved_until`).
-  const [held, setHeld] = useState<{ id: string; until: string | null } | null>(null)
+  // Lot 5 step 4: `promo` = what the server answered for an order created with a code (held, not paid yet).
+  const [held, setHeld] = useState<{ id: string; until: string | null; promo?: { code: string | null; discountMad: number; totalMad: number } } | null>(null)
+  const [promoOpen, setPromoOpen] = useState(false)
+  const [promo, setPromo] = useState('')
+  const [promoError, setPromoError] = useState<string | null>(null)
+  const code = promoOpen ? promo.trim() : ''
   const orderId = held?.id ?? null
   const clock = useRef<(() => number) | null>(null) // monotonic ms since mount (pageClock)
   const [onPageMs, setOnPageMs] = useState(0)
@@ -88,6 +97,7 @@ export function CheckoutForm(props: {
   const abort = useRef<AbortController | null>(null)
   const leaving = useRef(false) // unmounting: the fan went elsewhere, don't navigate them back
   useEffect(() => {
+    leaving.current = false // a remount (React StrictMode in dev runs mount, unmount, mount) is on the page again
     clock.current = pageClock()
     return () => {
       leaving.current = true
@@ -140,14 +150,23 @@ export function CheckoutForm(props: {
       if (!orderId && shouldSaveName(v.holders[0]!.name, props.displayName)) {
         await postJson('/api/me', { display_name: v.holders[0]!.name }, 'PATCH', ctl.signal) // best effort
       }
-      const order = { event_id: props.eventId, items: [{ price_category_id: props.priceCategoryId, qty, holders: v.holders }] }
+      const holdFirst = !orderId && !!code
+      const order = { event_id: props.eventId, items: [{ price_category_id: props.priceCategoryId, qty, holders: v.holders }], ...(holdFirst && { promo_code: code }) }
       // The W8 turn still running on server time, if any (the backend decides: ADMISSION_REQUIRED sends the fan to W8).
       const admission = parseAdmission(storedAdmission(props.eventId), props.now + (clock.current?.() ?? 0))?.token
-      const placed = await placeOrder(order, method, setWait, ctl.signal, { existingId: orderId ?? undefined, admission })
+      const placed = await placeOrder(order, method, setWait, ctl.signal, { existingId: orderId ?? undefined, admission, holdFirst })
       setWait(null)
       if (placed.kind === 'failed') return fail(placed.result)
+      if (placed.kind === 'reserved') {
+        if (leaving.current) return
+        setPromoError(null)
+        setHeld({ id: placed.orderId, until: placed.reservedUntil, promo: { code: placed.promoCode, discountMad: placed.discountMad, totalMad: placed.totalMad } })
+        setOnPageMs(clock.current?.() ?? 0)
+        setPending(false)
+        return
+      }
       if (placed.kind === 'payFailed' && errorCode(placed.result) === 'METHOD_NOT_AVAILABLE' && !leaving.current) {
-        setHeld((h) => ({ id: placed.orderId, until: placed.reservedUntil ?? h?.until ?? null }))
+        setHeld((h) => ({ ...h, id: placed.orderId, until: placed.reservedUntil ?? h?.until ?? null }))
         setOnPageMs(clock.current?.() ?? 0)
         setRefused((r) => [...r, method])
         setPending(false)
@@ -176,6 +195,12 @@ export function CheckoutForm(props: {
     if (errorCode(r) === 'ADMISSION_REQUIRED' && props.queueHref) {
       saveAdmission(props.eventId, null)
       return router.push(props.queueHref)
+    }
+    const promoReason = promoRefusal(r)
+    if (promoReason) {
+      setPromoError(c.promoRefused[promoReason])
+      form.current?.querySelector<HTMLElement>('#promo')?.focus()
+      return
     }
     const errs = rowErrorsFrom422(r)
     if (errs.some((e) => e?.pays === 'TOO_LATE')) {
@@ -327,7 +352,68 @@ export function CheckoutForm(props: {
           <p className="font-semibold">{fmt(c.splitMine, { n: split.mine, total: formatDh(split.mineMad) })}</p>
           <p className="text-text-secondary">{fmt(c.splitFriends, { m: split.friends })}</p>
           <p className="text-xs text-text-muted">{c.splitCaption}</p>
+          {(code || held?.promo) && <p className="text-xs text-text-muted">{c.promoSplit}</p>}
         </div>
+      )}
+      {held?.promo ? (
+        <div data-promo className="flex flex-col gap-2 rounded-control border border-border bg-surface px-4 py-3.5 text-sm">
+          <p className="font-semibold text-accent">
+            {fmt(c.promoLine, { code: ltr(held.promo.code ?? code), discount: formatDiscount(held.promo.discountMad) })}
+          </p>
+          <p className="flex items-baseline justify-between gap-3">
+            <span className="font-semibold">{c.total}</span>
+            <span data-total className="font-display text-h2 font-extrabold">
+              {formatDh(held.promo.totalMad)}
+            </span>
+          </p>
+        </div>
+      ) : !orderId && !promoOpen ? (
+        <button
+          type="button"
+          onClick={() => setPromoOpen(true)}
+          disabled={pending}
+          className="flex min-h-touch-min items-center self-start text-body-small font-semibold text-accent hover:underline"
+        >
+          {c.promoOpen}
+        </button>
+      ) : (
+        !orderId && (
+          <div>
+            <label htmlFor="promo" className={label}>
+              {c.promoLabel}
+            </label>
+            <div className="flex items-end gap-3">
+              <input
+                id="promo"
+                autoFocus // opened by "J'ai un code promo": the fan types next
+                dir="ltr"
+                value={promo}
+                onChange={(e) => (setPromo(e.target.value.toUpperCase()), setPromoError(null))}
+                readOnly={pending} // not disabled: a refusal focuses it before the re-render that ends `pending`
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={40}
+                aria-invalid={!!promoError}
+                aria-describedby={promoError ? 'promo-error' : undefined}
+                className={`${input} font-mono tracking-[2px]`}
+              />
+              <button
+                type="button"
+                onClick={() => (setPromoOpen(false), setPromo(''), setPromoError(null))}
+                disabled={pending}
+                className="flex min-h-touch-min shrink-0 items-center text-body-small font-semibold text-accent hover:underline"
+              >
+                {c.promoRemove}
+              </button>
+            </div>
+            {promoError && (
+              <p id="promo-error" role="alert" className="mt-1.5 text-body-small text-danger">
+                {promoError}
+              </p>
+            )}
+          </div>
+        )
       )}
       <MethodRows
         methods={props.methods}
@@ -351,7 +437,13 @@ export function CheckoutForm(props: {
         ) : (
           <CtaIcon className="size-5" />
         )}
-        {pending && wait === null ? (method === 'CASH_AGENCY' ? c.creatingCode : c.paying) : ctaText(c, method, formatDh(split.mineMad))}
+        {code && !orderId
+          ? c.promoReserve
+          : pending && wait === null
+            ? method === 'CASH_AGENCY'
+              ? c.creatingCode
+              : c.paying
+            : ctaText(c, method, formatDh(held?.promo ? held.promo.totalMad : split.mineMad))}
       </button>
       {pending && (
         <button
@@ -369,6 +461,19 @@ export function CheckoutForm(props: {
       </p>
     </form>
   )
+}
+
+const PROMO_REASONS = ['UNKNOWN', 'NOT_APPLICABLE', 'USED_UP', 'ACCOUNT_LIMIT'] as const
+
+/**
+ * The field's refusal (04 PROMO_REFUSED `details.reason`), or null when the answer isn't about the code. A 422 on
+ * `promo_code` (a shape the backend refuses) reads as UNKNOWN, as does a reason this shop doesn't know.
+ */
+function promoRefusal(r: Result): (typeof PROMO_REASONS)[number] | null {
+  const details = (r.data?.details ?? {}) as Record<string, unknown>
+  if (errorCode(r) === 'PROMO_REFUSED') return PROMO_REASONS.find((x) => x === details.reason) ?? 'UNKNOWN'
+  const on422 = errorCode(r) === 'VALIDATION_FAILED' && (details.field === 'promo_code' || Object.hasOwn((details.fields ?? {}) as object, 'promo_code'))
+  return on422 ? 'UNKNOWN' : null
 }
 
 function heldText(c: Copy['checkout'], until: string, timezone: string, intl: string, serverNow: number) {

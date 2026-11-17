@@ -23,7 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
  * GET /org/events/{id}/sales (docs/04-api.md §Organizer): a read model over this module's orders, the event's
  * zones and quota from catalog's EventService, REFUNDED tickets from TicketService, and payments' refunds total
  * (PendingPayments) and refund flags (audit_log). Money in centimes. {@code paid} and {@code revenueMad} are gross:
- * they keep counting refunded tickets (net = revenueMad - refundedMad).
+ * they keep counting refunded tickets, and list prices: {@code discountMad} is what promo codes took off PAID orders
+ * (net = revenueMad - discountMad - refundedMad).
  */
 @Service
 public class SalesReport {
@@ -35,7 +36,7 @@ public class SalesReport {
     static final List<String> METHODS = Arrays.stream(Order.PaymentMethod.values()).map(Enum::name).toList();
 
     public record EventSales(int eventId, long quota, long paid, long held, long awaitingCash, long refunded,
-                             long revenueMad, long refundedMad, List<ZoneSales> zones, List<ChannelSales> channels,
+                             long revenueMad, long discountMad, long refundedMad, List<ZoneSales> zones, List<ChannelSales> channels,
                              List<MethodSales> methods, List<RefundRequired> refundsRequired) {}
 
     public record ZoneSales(int zoneId, String code, String name, long quota, long paid, long held, long awaitingCash,
@@ -81,7 +82,7 @@ public class SalesReport {
         return new EventSales(eventId, zones.stream().mapToLong(ZoneSales::quota).sum(), sum(lines, SalesLine::paid),
                 sum(lines, SalesLine::held), sum(lines, SalesLine::awaitingCash),
                 refunded.values().stream().mapToLong(Long::longValue).sum(), sum(lines, SalesLine::revenueMad),
-                payments.refundedMad(org, eventId), zones, channels, methods, orders.refundsRequired(org, eventId));
+                orders.discountMad(org, eventId), payments.refundedMad(org, eventId), zones, channels, methods, orders.refundsRequired(org, eventId));
     }
 
     private static <T> long sum(List<T> rows, ToLongFunction<T> f) {

@@ -1,0 +1,12 @@
+{
+ "source": "captured from the dev API (FL-32 real run, 2026-11-17): POST /fan/orders with FL32ONE (max_uses 1, held by another fan)",
+ "status": 409,
+ "body": {
+  "code": "PROMO_REFUSED",
+  "message": "This promo code can't be used",
+  "details": {
+   "field": "promo_code",
+   "reason": "USED_UP"
+  }
+ }
+}

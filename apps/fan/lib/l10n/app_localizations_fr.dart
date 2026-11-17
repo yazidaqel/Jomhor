@@ -1820,4 +1820,35 @@ class AppLocalizationsFr extends AppLocalizations {
   String orderPaidInstallmentBody(int seq, int n) {
     return 'Échéance $seq/$n payée. Retrouve ton abonnement et tes billets dans Billets.';
   }
+
+  @override
+  String get promoToggle => 'J\'ai un code promo';
+
+  @override
+  String get promoLabel => 'Code promo';
+
+  @override
+  String get promoRemove => 'Retirer';
+
+  @override
+  String get promoReserveCta => 'Réserver avec le code';
+
+  @override
+  String promoLine(String code, String discount) {
+    return 'Code $code · $discount';
+  }
+
+  @override
+  String promoRefused(String reason) {
+    String _temp0 = intl.Intl.selectLogic(reason, {
+      'NOT_APPLICABLE': 'Ce code ne s\'applique pas à ces places',
+      'USED_UP': 'Ce code a atteint sa limite',
+      'ACCOUNT_LIMIT': 'Tu as déjà utilisé ce code',
+      'other': 'Code inconnu ou expiré',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get promoSplitCaption => 'Le code s\'applique à tes places';
 }

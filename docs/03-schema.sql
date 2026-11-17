@@ -239,6 +239,27 @@ create unique index on passes (series_id, user_id) where status <> 'CANCELLED';
 -- one PASS-category place); see docs/04-api.md §Passes. A SUSPENDED pass's tickets read BLOCKED without
 -- any write to tickets rows (docs/04-api.md §Passes Effective status)
 
+-- ---------- sales: promo codes (Lot 5 step 4) ----------
+create type promo_kind as enum ('PERCENT','AMOUNT');
+
+create table promo_codes (                            -- docs/04-api.md §Promo codes
+  id                uuid primary key default gen_random_uuid(),
+  organizer_id      uuid not null references organizers(id),
+  event_id          integer not null references events(id),
+  price_category_id uuid references price_categories(id),   -- null = every ALL/MEMBERS category of the event
+  code              text not null check (code ~ '^[A-Z0-9]{4,20}$'),   -- uppercase; fans type any case
+  kind              promo_kind not null,
+  percent           smallint check (percent between 1 and 99),   -- PERCENT: floor(eligible × percent / 100)
+  amount_mad        bigint check (amount_mad > 0),               -- AMOUNT: centimes off, once per order
+  max_uses          integer check (max_uses > 0),                -- orders RESERVED/AWAITING_CASH/PAID with it; null = no cap
+  per_account_max   smallint not null default 1 check (per_account_max between 1 and 100),
+  active            boolean not null default true,
+  created_at        timestamptz not null default now(),
+  unique (event_id, code),
+  constraint promo_codes_kind check ((kind = 'PERCENT') = (percent is not null)
+                                     and (kind = 'AMOUNT') = (amount_mad is not null))
+);
+
 create table orders (
   id              uuid primary key default gen_random_uuid(),
   organizer_id    uuid not null references organizers(id),
@@ -257,9 +278,13 @@ create table orders (
   group_order_id  uuid references orders(id),  -- split pay: set on a member order, = the initiator's order (docs/04-api.md §Split pay)
   invited_by      uuid references staff(id),   -- an invitation (docs/04-api.md §Invitations): the staff who issued it;
                                                -- PAID, channel POS, user_id null, payment_method FREE, total 0
+  promo_code_id   uuid references promo_codes(id),   -- the code this (buyer's) order used
+  discount_mad    bigint not null default 0 check (discount_mad >= 0),
+                  -- centimes; total_mad = Σ qty × unit_price_mad − discount_mad (unit_price_mad stays the list price)
   constraint orders_product check (event_id is not null or (channel in ('APP','WEB') and group_order_id is null)),
   constraint orders_invited check (invited_by is null
-                                   or (event_id is not null and channel = 'POS' and user_id is null and pass_id is null))
+                                   or (event_id is not null and channel = 'POS' and user_id is null and pass_id is null)),
+  constraint orders_promo check (promo_code_id is not null or discount_mad = 0)
 );
 -- AWAITING_CASH: a cash code was issued; reserved_until = least(issue + 24 h, events.refund_cutoff_at).
 -- POS sale: channel POS, user_id null, created PAID. Ticket refunds leave the order PAID
@@ -270,6 +295,7 @@ create index on orders (group_order_id) where group_order_id is not null;
 create unique index on orders (pass_id, event_id) where pass_id is not null and event_id is not null;  -- one ticket order per pass per event
 create index on orders (pass_id) where pass_id is not null;
 create index on orders (event_id, created_at desc) where invited_by is not null;
+create index on orders (promo_code_id, status) where promo_code_id is not null;   -- caps (docs/04-api.md §Promo codes)
 
 create table order_items (
   id                uuid primary key default gen_random_uuid(),

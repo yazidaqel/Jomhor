@@ -49,8 +49,12 @@ public interface Orders {
     /** The channel of an order of this organizer. */
     Optional<Order.Channel> channel(UUID org, UUID orderId);
 
-    /** A RESERVED order held 8 min from now (database clock), with its items and their holders. */
-    Order insert(UUID org, int eventId, UUID userId, Order.Channel channel, long totalMad, List<Order.Item> items);
+    /**
+     * A RESERVED order held 8 min from now (database clock), with its items and their holders; {@code promoCodeId} (null:
+     * none) and its {@code discountMad} (04 §Promo codes), {@code totalMad} being after it.
+     */
+    Order insert(UUID org, int eventId, UUID userId, Order.Channel channel, long totalMad, List<Order.Item> items,
+                 UUID promoCodeId, long discountMad);
 
     /**
      * A split-pay member order (04 §Split pay Orders): RESERVED until {@code reservedUntil} (the buyer's), with
@@ -196,6 +200,9 @@ public interface Orders {
 
     record SalesLine(UUID priceCategoryId, String channel, String paymentMethod, long paid, long held,
                      long awaitingCash, long revenueMad) {}
+
+    /** Σ discount_mad of the event's PAID orders (04 GET /org/events/{id}/sales {@code discount_mad}). */
+    long discountMad(UUID org, int eventId);
 
     /** The event's payment.refund_required audit rows (matched on the order they name), newest first. */
     List<RefundRequired> refundsRequired(UUID org, int eventId);

@@ -21,6 +21,7 @@ import 'gate_test.dart' show entryJson, gatedTicket, kickoff, loadJson;
 import 'goldens.dart';
 import 'helpers.dart';
 import 'passes_test.dart' show PassSale, passId, passTicketJson, productId, productOrderId;
+import 'promo_test.dart' show PromoSale;
 import 'split_pay_test.dart' show SplitBackend, buyerId, karimId, memberId, omarId, saraId;
 import 'tickets_test.dart' show otherId, slotStart, ticketId, ticketJson;
 import 'transfer_test.dart' show openTicketJson, transferredJson;
@@ -37,7 +38,8 @@ import 'waitlist_test.dart' show WaitlistSale;
 /// (bell then avatar at the end side, the left in AR). FL-26: screen 12 (pre-queue, waiting, the turn, not eligible)
 /// and screen 2 with a room. FL-28: the waitlist on screen 1's hero (to join, on the list) and screen 2 sold out.
 /// FL-29: screen 13 (buy, owned with one ticket issued and one to come) and screen 4's product variant. FL-30:
-/// screen 7 with the cotisation (unpaid, paid) and the Abonnements cards.
+/// screen 7 with the cotisation (unpaid, paid) and the Abonnements cards. FL-32: screen 4 with a promo code applied
+/// (held, the server's discount and total) and the cash order with its discount line.
 /// Recorded on Linux with the docker command at the top of goldens.dart.
 void main() {
   setUpAll(() async {
@@ -590,6 +592,70 @@ void main() {
         expect(find.text('المبلغ بالضبط: \u2066100\u00A0DH\u2069'), findsOneWidget);
       }
       await snap('$locale-cash-order');
+    });
+
+    // FL-32: a code applied on screen 4 (held: the line, the server's total, the countdown), then the order screen.
+    testWidgets('$locale · screen 4 with a promo code', (tester) async {
+      await phone(tester);
+      final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
+      final sale = PromoSale(clock, dir: 'goldens/promo');
+      final c = await pumpJomhor(
+        tester,
+        backend: sale.handle,
+        tokens: MemoryTokenStore('jwt'),
+        clock: clock,
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+      );
+      c.read(routerProvider).go('/events/1/checkout?price=pc-1-0&qty=2');
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('holder.1.name')), locale == 'ar' ? 'سارة بنعلي' : 'Sara Benali');
+      await tester.tap(find.byKey(const Key('promo.open')));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('promo.field')), 'ATLAS20');
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.ensureVisible(find.byKey(const Key('checkout.pay')));
+      await tester.tap(find.byKey(const Key('checkout.pay')));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView).last, const Offset(0, 2000)); // Back to the top.
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('checkout.hold')), findsOneWidget);
+      if (locale == 'ar') {
+        expectArabicRules(tester);
+        expect(
+          tester.widget<Text>(find.byKey(const Key('promo.line'))).data,
+          'الكود \u2066ATLAS20\u2069 · \u2066\u221220\u00A0DH\u2069',
+          reason: 'the code and the amount with its minus stay LTR isolates',
+        );
+      }
+      await snap('$locale-4-paiement-code');
+    });
+
+    testWidgets('$locale · cash order with a promo code', (tester) async {
+      await phone(tester);
+      final clock = TestClock(DateTime.utc(2027, 2, 20, 12));
+      final sale = PromoSale(clock, dir: 'goldens/promo')
+        ..coded = true
+        ..status = 'AWAITING_CASH'
+        ..paymentMethod = 'CASH_AGENCY'
+        ..paymentStatus = 'PENDING'
+        ..reservedUntil = clock.now.add(const Duration(hours: 24));
+      final c = await pumpJomhor(
+        tester,
+        backend: sale.handle,
+        tokens: MemoryTokenStore('jwt'),
+        clock: clock,
+        locale: Locale(locale),
+        overrides: [initialLocaleProvider.overrideWithValue(locale)],
+      );
+      c.read(routerProvider).go('/orders/$orderId');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('promo.line')), findsOneWidget);
+      if (locale == 'ar') {
+        expectArabicRules(tester);
+        expect(find.text('المبلغ بالضبط: \u206680\u00A0DH\u2069'), findsOneWidget);
+      }
+      await snap('$locale-cash-order-code');
     });
 
     // FL-21: split pay, each on a phone of its own (group.seen included).
