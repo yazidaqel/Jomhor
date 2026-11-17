@@ -9,8 +9,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -205,17 +203,5 @@ class Lot5InvitationsFlowTest extends ScanApiTest {
         try (var in = new GZIPInputStream(new ByteArrayInputStream(gz))) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
-    }
-
-    /** loadtest/check.sql scoped to the organizer's events and orders (the shared database holds other breaches). */
-    private List<Map<String, Object>> breaches(UUID organizer) throws Exception {
-        String check = Files.readString(Path.of("loadtest/check.sql")).strip();
-        return jdbc.sql("select * from (" + check.substring(0, check.length() - 1) + """
-
-                        ) c where c.event_id in (select id from events where organizer_id = ?)
-                           or (c.event_id is null and c.ref in (select id::text from orders where organizer_id = ?
-                                                                union all select id::text from products
-                                                                where organizer_id = ?))""")
-                .params(organizer, organizer, organizer).query().listOfRows();
     }
 }
