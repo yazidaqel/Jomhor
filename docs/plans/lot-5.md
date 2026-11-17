@@ -2232,6 +2232,7 @@ Gate API, manifest format, token and vectors: unchanged.
 | `finance.issue-delay` | `FINANCE_ISSUE_DELAY` | `1h` | wait after midnight |
 | `finance.payout-days` | `FINANCE_PAYOUT_DAYS` | `2` | weekend → Monday |
 | `finance.vat-rate-bp` | `FINANCE_VAT_RATE_BP` | `2000` | 20 % |
+| `finance.initial-delay` | `FINANCE_INITIAL_DELAY` | `1m` | First statement run after startup, so a restart catches up on due days without waiting a full tick |
 | `finance.issuer.{legal-name, legal-form, capital, address, rc, if, tp, ice}` | `FINANCE_ISSUER_*` | demo values in `dev`/`test` | **Required under `prod`: startup fails if any is blank or `ice` isn't 15 digits** |
 
 5a: none.
