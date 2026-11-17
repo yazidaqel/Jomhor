@@ -33,9 +33,8 @@ afterEach(() => {
   session.clear()
 })
 
-// Fixtures in the 04-api shapes. source: contract (§Invitations; POST/GET /org/events/{id}/invitations,
-// GET /org/invitations/{id}/tickets = the till's print shape; prices with audience INVITE). BO-25 is contract-first:
-// the real run replaces these with captured answers.
+// Fixtures: answers captured from the real API (BO-25 real run, `backend/http/lot5-invitations.http`): the press batch
+// (2 holders with phones, 1 without) before the revoke, its print data, the 201 issue answer and the event's prices.
 const CASA = 'Africa/Casablanca'
 const HOUR = 3_600_000
 const at = (ms: number) => new Date(Date.now() + ms).toISOString()
@@ -72,30 +71,75 @@ const EVENT: EventDetail = {
   metadata: {},
   created_at: '2026-11-01T10:00:00Z',
 }
-const PLEIN: Price = { id: 'p-plein', zone_id: 1, zone: { code: 'HONNEUR', name: "Tribune d'honneur" }, name: 'Plein tarif', price_mad: 20_000, quota: 3000, sold: 10, audience: 'ALL' }
-const PRESSE: Price = { id: 'p-presse', zone_id: 7, zone: { code: 'PRESSE', name: 'Tribune de presse' }, name: 'Presse', price_mad: 0, quota: 40, sold: 3, audience: 'INVITE' }
-const INVITES: Price = { id: 'p-invites', zone_id: 1, zone: { code: 'HONNEUR', name: "Tribune d'honneur" }, name: 'Invités', price_mad: 0, quota: 50, sold: 10, audience: 'INVITE' }
-const PRICES = [PLEIN, PRESSE, INVITES]
+const PRESSE: Price = { id: '62785eb0-04ef-46d0-84c2-7ac4d78edf3b', zone_id: 19, zone: { code: 'PRESSE', name: 'Tribune de presse' }, name: 'Presse', price_mad: 0, quota: 40, sold: 3, audience: 'INVITE' }
+const INVITES: Price = { id: '973fb980-6471-4774-a5f9-3c9c610c1b97', zone_id: 3, zone: { code: 'HONNEUR', name: 'Honneur' }, name: 'Invités', price_mad: 0, quota: 50, sold: 10, audience: 'INVITE' }
+const PLEIN: Price = { id: '2613e65a-8d58-489d-8c60-b3a041be752d', zone_id: 3, zone: { code: 'HONNEUR', name: 'Honneur' }, name: 'Plein tarif', price_mad: 30000, quota: 100, sold: 0, audience: 'ALL' }
+const PRICES = [INVITES, PLEIN, PRESSE]
+const SALMA = '52e24dc5-8160-466a-b47e-b0200c86c835'
+const NADIA = '7ede118d-c638-47ec-87fb-82960e1fc443'
+const KARIM = 'f032c6c5-3da6-4aab-808f-1001a7be969c' // the paper one
 const BATCH: Invitation = {
-  id: '0192f0aa-0000-7000-8000-00000000b7a1',
-  created_at: '2026-11-15T14:05:00Z',
-  invited_by: { id: 'st-1', name: 'Youssef Amrani' },
+  id: 'f8db84e6-8f94-4484-a542-cffd47c37cb2',
+  created_at: '2026-11-17T06:14:11.008719Z',
+  invited_by: { id: 'a7a5fc00-0000-4000-8000-000000000203', name: 'Ops Dev' },
   places: 3,
-  items: [{ price_category_id: PRESSE.id, name: 'Presse', zone: { id: 7, code: 'PRESSE', name: 'Tribune de presse' }, qty: 3 }],
+  items: [{ price_category_id: PRESSE.id, name: 'Presse', zone: { id: 19, code: 'PRESSE', name: 'Tribune de presse' }, qty: 3 }],
   tickets: [
-    { id: 't-1', ticket_no: '4D5C 6B7A', status: 'VALID', holder_name: 'Nadia Alaoui', holder_label: 'Nadia A.', delivery: 'WHATSAPP' },
-    { id: 't-2', ticket_no: '5E6F 7A8B', status: 'VALID', holder_name: 'Karim Tazi', holder_label: 'Karim T.', delivery: 'WHATSAPP' },
-    { id: 't-3', ticket_no: '6F7A 8B9C', status: 'VALID', holder_name: 'Omar Benali', holder_label: 'Omar B.', delivery: 'PAPER' },
+    { id: SALMA, ticket_no: '0C86 C835', status: 'VALID', holder_name: 'Salma Tazi', holder_label: 'Salma T.', delivery: 'WHATSAPP' },
+    { id: NADIA, ticket_no: '0E1F C443', status: 'VALID', holder_name: 'Nadia Berrada', holder_label: 'Nadia B.', delivery: 'WHATSAPP' },
+    { id: KARIM, ticket_no: 'A7BE 969C', status: 'VALID', holder_name: 'Karim El Idrissi', holder_label: 'Karim I.', delivery: 'PAPER' },
   ],
 }
+const presseSlip = (id: string, ticket_no: string, holder_label: string, qr: string): PrintData['tickets'][number] =>
+  ({ id, ticket_no, status: 'VALID', zone: { code: 'PRESSE', name: 'Tribune de presse' }, gate_codes: ['P1'], holder_label, unit_price_mad: 0, category: { name: 'Presse' }, qr })
+// Every ticket of the batch, WhatsApp ones included.
 const PRINT: PrintData = {
   order_id: BATCH.id,
-  event: { id: 1, title: SUMMARY.title, starts_at: STARTS, timezone: CASA, venue: { name: 'Grand Stade' } },
+  event: { id: 47, title: 'BO-25 real run ab7996', starts_at: '2027-01-24T19:00:00Z', timezone: CASA, venue: { name: 'Grand Stade' } },
   tickets: [
-    { id: 't-3', ticket_no: '6F7A 8B9C', status: 'VALID', zone: { code: 'PRESSE', name: 'Tribune de presse' }, gate_codes: ['P1'], holder_label: 'Omar B.', unit_price_mad: 0, category: { name: 'Presse' }, qr: 'AQAAAAHxyz-invite_one' },
+    presseSlip(SALMA, '0C86 C835', 'Salma T.', 'AQAAAC9S4k3FgWBGarR-sCAMhsg1ABMoeoMNqV5jgJPbHIjuJNuI'),
+    presseSlip(NADIA, '0E1F C443', 'Nadia B.', 'AQAAAC9-3hGNxjhH7If7gpYOH8RDABOn_G6KK2dAljm8mD7Rycxr'),
+    presseSlip(KARIM, 'A7BE 969C', 'Karim I.', 'AQAAAC_wMsbFPaZKq4CPEAGnvpacABON9VbRcQTfQmNTBLVQiRAq'),
   ],
 }
-const ORDER: SaleOrder = { id: '0192f0aa-0000-7000-8000-00000000b7a2', status: 'PAID', channel: 'POS', total_mad: 0, ticket_ids: ['t-10', 't-11', 't-12'] }
+// The §Point of sale sale answer; `items` is not read by B7.
+const ORDER = {
+  id: BATCH.id,
+  status: 'PAID',
+  channel: 'POS',
+  total_mad: 0,
+  items: [
+    {
+      price_category_id: PRESSE.id,
+      zone_id: 19,
+      zone_name: 'Tribune de presse',
+      name: 'Presse',
+      qty: 3,
+      unit_price_mad: 0,
+      holders: [{ label: 'Nadia B.' }, { label: 'Salma T.' }, { label: 'Karim I.' }],
+    },
+  ],
+  ticket_ids: [SALMA, NADIA, KARIM],
+} satisfies SaleOrder & { items: unknown[] }
+// ADMIN's revoke of Karim's paper accreditation: the lookup row, no refunds row (refund null).
+const REVOKED = {
+  id: KARIM,
+  ticket_no: 'A7BE 969C',
+  status: 'REFUNDED',
+  zone: { id: 19, code: 'PRESSE', name: 'Tribune de presse' },
+  holder_name: 'Karim El Idrissi',
+  holder_label: 'Karim I.',
+  unit_price_mad: 0,
+  order_id: BATCH.id,
+  channel: 'POS',
+  payment_method: 'FREE',
+  issued_at: '2026-11-17T06:14:11.008719Z',
+  refund: null,
+  transferred_to: null,
+  transferred_from: null,
+  pass: null,
+  staff_blocked: false,
+}
 const LIST = '/org/events/1/invitations'
 const PRINT_PATH = `/org/invitations/${BATCH.id}/tickets`
 
@@ -250,13 +294,13 @@ it('batches: date in the venue zone, émis par, category · zone, places; a row 
   const holders = within(screen.getByRole('list', { name: spaced(i18n.t('invitations.batches.holders', { date })) }))
   const items = holders.getAllByRole('listitem')
   expect(items).toHaveLength(3)
-  expect(items[0]!.textContent).toContain('Nadia Alaoui')
-  expect(items[0]!.textContent).toContain('4D5C 6B7A')
+  expect(items[0]!.textContent).toContain('Salma Tazi')
+  expect(items[0]!.textContent).toContain('0C86 C835')
   expect(within(items[0]!).getByText(fr.tickets.statuses.VALID)).toBeTruthy()
   expect(within(items[0]!).getByText(fr.invitations.delivery.WHATSAPP)).toBeTruthy()
   expect(within(items[2]!).getByText(fr.invitations.delivery.PAPER)).toBeTruthy()
   // OPS: no Révoquer (ADMIN only).
-  expect(holders.queryByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: '4D5C 6B7A' }) })).toBeNull()
+  expect(holders.queryByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: '0C86 C835' }) })).toBeNull()
 })
 
 it('"Imprimer" (a VALID paper ticket) opens the print route: GET /org/invitations/{id}/tickets, the B11 slips, back to B7', async () => {
@@ -267,12 +311,12 @@ it('"Imprimer" (a VALID paper ticket) opens the print route: GET /org/invitation
   await user.click(await screen.findByRole('link', { name: spaced(i18n.t('invitations.print.label', { date })) }))
   await waitFor(() => expect(router.state.location.pathname).toBe(`/events/1/invitations/${BATCH.id}/print`))
   const slips = await screen.findAllByRole('article')
-  expect(slips).toHaveLength(1)
-  expect(slips[0]!.textContent).toContain('Omar B.')
-  expect(slips[0]!.textContent).not.toContain('Omar Benali')
+  expect(slips).toHaveLength(3)
+  expect(slips[2]!.textContent).toContain('Karim I.')
+  expect(slips[2]!.textContent).not.toContain('Karim El Idrissi')
   // A 0 DH slip shows its kind in place of the price.
-  expect(within(slips[0]!).getByText('Presse', { selector: 'b' })).toBeTruthy()
-  expect(slips[0]!.textContent).not.toContain(fr.pos.print.price)
+  expect(within(slips[2]!).getByText('Presse', { selector: 'b' })).toBeTruthy()
+  expect(slips[2]!.textContent).not.toContain(fr.pos.print.price)
   expect(calls.filter((c) => c.path === PRINT_PATH)).toEqual([{ path: PRINT_PATH, org: 'org-a', method: 'GET', body: undefined }])
   await user.click(screen.getByRole('link', { name: fr.invitations.print.back }))
   expect(router.state.location.pathname).toBe('/events/1/invitations')
@@ -327,7 +371,7 @@ it('issue: one invitation_id (UUID) per invitation, the same on a retry after a 
   await user.click(submit(again, 1))
   await waitFor(() => expect(posts(calls)).toHaveLength(3))
   expect((posts(calls)[2]!.body as { invitation_id: string }).invitation_id).not.toBe(body.invitation_id)
-})
+}, 20_000) // two issues and a retry, typed: over 10 s under the full suite's load
 
 it('issue: "même nom" with no phone sends the name on every place, all on paper', async () => {
   const user = userEvent.setup()
@@ -347,7 +391,7 @@ it('issue: "même nom" with no phone sends the name on every place, all on paper
 it('issue refusals: SOLD_OUT says "Plus de places {category}"; CLOSED gives transfer_until in the venue zone; a 422 holder lands on its row', async () => {
   const user = userEvent.setup()
   const until = '2026-11-22T17:30:00Z'
-  let answer = conflict('SOLD_OUT', {})
+  let answer = conflict('SOLD_OUT', { price_category_id: PRESSE.id })
   stubApi('OPS', { [`POST ${LIST}`]: () => answer() })
   renderApp('/events/1/invitations')
   const sheet = await openSheet(user)
@@ -373,24 +417,24 @@ it('ADMIN revokes a ticket: POST /org/tickets/{id}/refund with the reason, the r
   let revoked = false
   const calls = stubApi('ADMIN', {
     [LIST]: () =>
-      Response.json({ invitations: [{ ...BATCH, tickets: BATCH.tickets.map((tk) => (revoked && tk.id === 't-3' ? { ...tk, status: 'REFUNDED' } : tk)) }] }),
-    'POST /org/tickets/t-3/refund': () => {
+      Response.json({ invitations: [{ ...BATCH, tickets: BATCH.tickets.map((tk) => (revoked && tk.id === KARIM ? { ...tk, status: 'REFUNDED' } : tk)) }] }),
+    [`POST /org/tickets/${KARIM}/refund`]: () => {
       revoked = true
-      return Response.json({ id: 't-3', status: 'REFUNDED' })
+      return Response.json(REVOKED)
     },
   })
   renderApp('/events/1/invitations')
   const date = formatDateTime(BATCH.created_at, 'fr', CASA)
   await user.click(await screen.findByRole('button', { name: spaced(i18n.t('invitations.batches.holders', { date })) }))
-  await user.click(screen.getByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: '6F7A 8B9C' }) }))
+  await user.click(screen.getByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: 'A7BE 969C' }) }))
   const dialog = within(await screen.findByRole('dialog'))
   expect(dialog.getByText(fr.invitations.revoke.body)).toBeTruthy()
   await user.type(dialog.getByLabelText(fr.tickets.reason), 'Journaliste non accrédité')
   await user.click(dialog.getByRole('button', { name: fr.invitations.revoke.confirm }))
-  await waitFor(() => expect(posts(calls)).toEqual([{ path: '/org/tickets/t-3/refund', org: 'org-a', method: 'POST', body: { reason: 'Journaliste non accrédité' } }]))
+  await waitFor(() => expect(posts(calls)).toEqual([{ path: `/org/tickets/${KARIM}/refund`, org: 'org-a', method: 'POST', body: { reason: 'Journaliste non accrédité' } }]))
   const item = (await screen.findByText(fr.tickets.statuses.REFUNDED)).closest('li')!
-  expect(item.textContent).toContain('Omar Benali')
-  expect(within(item).getByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: '6F7A 8B9C' }) })).toHaveProperty('disabled', true)
+  expect(item.textContent).toContain('Karim El Idrissi')
+  expect(within(item).getByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: 'A7BE 969C' }) })).toHaveProperty('disabled', true)
 })
 
 it('ADMIN after the refund cutoff: "Révoquer" is disabled and says why (Gel des remboursements)', async () => {
@@ -400,7 +444,7 @@ it('ADMIN after the refund cutoff: "Révoquer" is disabled and says why (Gel des
   renderApp('/events/1/invitations')
   const date = formatDateTime(BATCH.created_at, 'fr', CASA)
   await user.click(await screen.findByRole('button', { name: spaced(i18n.t('invitations.batches.holders', { date })) }))
-  const revoke = screen.getByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: '4D5C 6B7A' }) })
+  const revoke = screen.getByRole('button', { name: i18n.t('invitations.revoke.label', { ticket: '0C86 C835' }) })
   expect(revoke).toHaveProperty('disabled', true)
   const why = document.getElementById(revoke.getAttribute('aria-describedby')!)!
   expect(spaced(why.textContent!)).toBe(spaced(i18n.t('invitations.batches.frozen', { date: formatDateTime(cutoff, 'fr', CASA) })))
@@ -412,7 +456,7 @@ it('FINANCE reads only: no "Nouvelle invitation", no "Imprimer", no "Révoquer";
   const { router } = renderApp('/events/1/invitations')
   const date = formatDateTime(BATCH.created_at, 'fr', CASA)
   await user.click(await screen.findByRole('button', { name: spaced(i18n.t('invitations.batches.holders', { date })) }))
-  expect(screen.getByText('Nadia Alaoui')).toBeTruthy()
+  expect(screen.getByText('Nadia Berrada')).toBeTruthy()
   expect(screen.queryByRole('button', { name: fr.invitations.new })).toBeNull()
   expect(screen.queryByRole('link', { name: new RegExp(fr.invitations.print.action) })).toBeNull()
   expect(screen.queryByRole('button', { name: new RegExp(fr.invitations.revoke.action) })).toBeNull()

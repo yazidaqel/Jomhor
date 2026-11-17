@@ -99,7 +99,7 @@ const PRODUCT_LOOKUP: CodeLookup = {
   holders: ['Yazid A.'],
 }
 // `holder_name` is not in the print shape; a server sending it anyway must not get it on paper.
-// `category` (Lot 5 step 4) source: contract.
+// `category` (Lot 5 step 4): present on the real print data (BO-25 run, a POS order and an invitation).
 const PRINT = {
   order_id: '0192f0aa-0000-7000-8000-00004d5c6b7a',
   event: { id: 1, title: 'Atlas FC vs Rapid Oued', starts_at: '2026-11-14T19:00:00Z', timezone: CASA, venue: { name: 'Grand Stade' } },
@@ -811,7 +811,7 @@ it('B11 close: only the gap value is a live region', async () => {
   expect(live[0]!.textContent).toBe(fr.pos.close.noGap)
 })
 
-// PASS: season-pass places (Lot 5 step 3); INVITE: invitation places (step 4, source: contract). Both 0 DH, never sold.
+// PASS: season-pass places (Lot 5 step 3); INVITE: invitation places (step 4; real prices carry `audience: 'INVITE'`). Both 0 DH, never sold.
 it.each(['PASS', 'INVITE'] as const)('B11 Vente: a %s category is never offered or sent at the till', async (audience) => {
   const user = userEvent.setup()
   const pass: Price = { id: 'p-pass', zone_id: 4, zone: { code: 'SUD', name: 'Virage Sud' }, name: 'Abonnés', price_mad: 0, quota: 50, sold: 0, audience }

@@ -1893,3 +1893,4 @@ None. The 500-place limit is a 04 rule, not a knob.
 | Multi-zone / re-entry accreditations | post-V1 (scanner and manifest change) | Q203 |
 | CSV paste for bulk invitations, generated single-use codes, codes at the till | when the club asks | §12.8 |
 | Plan header line 3 says "next migration V29" | W0-1 | P154 |
+| B7 "Imprimer" prints every ticket of a batch (WhatsApp ones and revoked ones too, the latter as "non valable"); print only `PAPER` tickets if clubs ask (add `delivery` to the print data) | when a club asks | BO-25 real run |

@@ -1223,7 +1223,7 @@ it('série: `pass_tickets` from the server → the select starts disabled with i
   expect(writes(calls)).toEqual([])
 })
 
-// Lot 5 step 4 (BO-25), source: contract (04 prices rows INVITE, INVITE_PRICE, INVITE_SOLD).
+// Lot 5 step 4 (BO-25): the real API took this body (201, audience INVITE) and answered the two 422s below.
 it('prices: "Accès · Invitations" fixes the price at 0 with its helper and sends audience INVITE, price_mad 0', async () => {
   const user = userEvent.setup()
   const calls = stubB2()
@@ -1250,12 +1250,14 @@ it('prices: "Accès · Invitations" fixes the price at 0 with its helper and sen
 })
 
 it.each([
-  ['INVITE_SOLD', 'audience', fr.events.prices.inviteSold],
-  ['INVITE_PRICE', 'price_mad', fr.events.prices.invitePrice],
-] as const)('prices: %s lands on its field with its copy', async (reason, fieldName, copy) => {
+  ['INVITE_SOLD', 'audience', "can't move to or from INVITE once places are sold", fr.events.prices.inviteSold],
+  ['INVITE_PRICE', 'price_mad', 'must be 0 for INVITE places', fr.events.prices.invitePrice],
+] as const)('prices: %s lands on its field with its copy', async (reason, fieldName, real, copy) => {
   const user = userEvent.setup()
   stubB2('ADMIN', (c) =>
-    c.method === 'PATCH' ? Response.json({ code: 'VALIDATION_FAILED', message: 'x', details: { reason, fields: { [fieldName]: 'x' } } }, { status: 422 }) : undefined,
+    c.method === 'PATCH'
+      ? Response.json({ code: 'VALIDATION_FAILED', message: 'Invalid request body', details: { reason, fields: { [fieldName]: real } } }, { status: 422 })
+      : undefined,
   )
   renderApp('/events/1')
   const panel = await openTab(user, fr.events.tabs.prices)
