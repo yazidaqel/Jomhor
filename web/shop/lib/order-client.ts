@@ -79,13 +79,16 @@ export type Placed =
   | { kind: 'failed'; result: Result }
   | { kind: 'payFailed'; orderId: string; result: Result; reservedUntil?: string | null }
   | { kind: 'held'; orderId: string }
+  | { kind: 'reserved'; orderId: string; reservedUntil: string | null; totalMad: number; discountMad: number; promoCode: string | null }
 
 /**
  * W3: create the order (SALE_BUSY → wait and retry; `admission` = the W8 token, sent as `X-Admission-Token`), unless `existingId` names one already created, then pay it with
  * `method`. `redirect` = go to the hosted page (card, wallet); `cash` = the code was issued, show the order page;
  * `payFailed` = the order exists (places held, until `reservedUntil` when created here) but /pay failed; `failed` = no order; `held` = the order exists and
  * `signal` aborted after it was created (never paid nor followed, but not lost: its page can show it). An abort while
- * the order request itself is in flight rejects.
+ * the order request itself is in flight rejects. Lot 5 step 4, `holdFirst` (an order with a promo code): stop after the
+ * create, before `/pay`, with `reserved` = the server's `total_mad` (after the discount), `discount_mad` and code, as
+ * sent: the client never computes an amount.
  */
 export async function placeOrder(
   order: unknown,
@@ -97,7 +100,8 @@ export async function placeOrder(
     existingId,
     admission,
     create = '/api/orders',
-  }: { random?: () => number; existingId?: string; admission?: string; /** Lot 5 step 3: `/api/product-orders`. */ create?: string } = {},
+    holdFirst = false,
+  }: { random?: () => number; existingId?: string; admission?: string; /** Lot 5 step 3: `/api/product-orders`. */ create?: string; holdFirst?: boolean } = {},
 ): Promise<Placed> {
   let orderId = existingId
   let reservedUntil: string | null | undefined // the hold of an order created here
@@ -107,6 +111,11 @@ export async function placeOrder(
     if (!created.ok) return { kind: 'failed', result: created }
     orderId = String(created.data!.id)
     reservedUntil = typeof created.data!.reserved_until === 'string' ? created.data!.reserved_until : null
+    if (holdFirst) {
+      const d = created.data!
+      const int = (v: unknown) => (Number.isSafeInteger(v) ? (v as number) : 0)
+      return { kind: 'reserved', orderId, reservedUntil, totalMad: int(d.total_mad), discountMad: int(d.discount_mad), promoCode: typeof d.promo_code === 'string' ? d.promo_code : null }
+    }
   }
   if (signal.aborted) return { kind: 'held', orderId }
   let paid: Result

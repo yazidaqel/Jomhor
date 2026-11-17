@@ -73,7 +73,7 @@ it('create: cookie token → Bearer, holders nested per item, only whitelisted f
   const text = await res.text()
   expect(text).not.toContain(TOKEN)
   expect(text).not.toContain('SECRET')
-  expect(JSON.parse(text)).toEqual({ id: ORDER_ID, status: 'RESERVED', reserved_until: '2026-02-01T12:08:00Z', total_mad: 10000 })
+  expect(JSON.parse(text)).toEqual({ id: ORDER_ID, status: 'RESERVED', reserved_until: '2026-02-01T12:08:00Z', total_mad: 10000, promo_code: null, discount_mad: 0 })
   expect(res.headers.get('set-cookie')).toBeNull()
   const s = sent()
   expect(s.url).toBe('http://backend.test/v1/fan/orders')
